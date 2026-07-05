@@ -9,6 +9,7 @@ import { Production } from './pages/Production'
 import { Molds } from './pages/Molds'
 import { Customers } from './pages/Customers'
 import { Admin } from './pages/Admin'
+import { Settings } from './pages/Settings'
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
               <Route path="/molds" element={<Molds />} />
               <Route path="/customers" element={<Customers />} />
               <Route path="/admin" element={<Admin />} />
+              <Route path="/settings" element={<Settings />} />
             </Routes>
           </main>
         </div>

@@ -183,6 +183,24 @@ export async function startDashboard(registry: AgentRegistry, orchestrator: Orch
     }
   })
 
+  server.get('/api/settings', { preHandler: [authMiddleware('operator')] }, async () => {
+    const { getAllSettings } = await import('../../shared/infrastructure/persistence/settings-repository')
+    const rows = await getAllSettings()
+    const groups: Record<string, Array<{ key: string; value: string; secure: boolean; updatedAt: string }>> = {}
+    for (const r of rows) {
+      const g = r.group as string
+      if (!groups[g]) groups[g] = []
+      groups[g].push({ key: r.key, value: r.secure ? '••••••••' : r.value, secure: !!r.secure, updatedAt: r.updatedAt })
+    }
+    return groups
+  })
+
+  server.put<{ Body: { settings: Array<{ key: string; value: string }> } }>('/api/settings', { preHandler: [authMiddleware('operator')] }, async (req) => {
+    const { setSettingsBatch } = await import('../../shared/infrastructure/persistence/settings-repository')
+    await setSettingsBatch(req.body.settings)
+    return { status: 'saved', count: req.body.settings.length }
+  })
+
   await server.register(mercurius, {
     schema: typeDefs,
     resolvers,

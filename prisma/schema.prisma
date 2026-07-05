@@ -810,3 +810,15 @@ model KPIMetric {
 
   @@index([name, period])
 }
+
+model Setting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String   @default("")
+  group     String   @default("general")
+  secure    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([group])
+}

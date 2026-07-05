@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Package, Boxes, Factory, Drill, Users, Shield } from 'lucide-react'
+import { LayoutDashboard, Package, Boxes, Factory, Drill, Users, Shield, Sliders } from 'lucide-react'
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Overview' },
@@ -9,6 +9,7 @@ const navItems = [
   { to: '/molds', icon: Drill, label: 'Moldes & CNC' },
   { to: '/customers', icon: Users, label: 'Clientes' },
   { to: '/admin', icon: Shield, label: 'Admin' },
+  { to: '/settings', icon: Sliders, label: 'Config' },
 ]
 
 export function Sidebar() {
