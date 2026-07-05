@@ -103,7 +103,6 @@ export function startShopeeSync(intervalMs: number = 300000): void {
     }
   }, intervalMs)
   console.log(`[ShopeeSync] sync every ${intervalMs / 1000}s`)
-  // Run immediately on start
   syncShopeeProducts().then(r => console.log(`[ShopeeSync] initial sync: ${r.count} items`))
 }
 
@@ -111,5 +110,114 @@ export function stopShopeeSync(): void {
   if (syncInterval) {
     clearInterval(syncInterval)
     syncInterval = null
+  }
+}
+
+// ─── ShopeeOrder sync ─────────────────────────────────────────
+
+const INIT_ORDERS_SQL = `
+  CREATE TABLE IF NOT EXISTS "ShopeeOrder" (
+    "order_sn" TEXT PRIMARY KEY,
+    "order_status" TEXT NOT NULL,
+    "buyer" TEXT NOT NULL DEFAULT '',
+    "total_amount" DECIMAL(10,2) NOT NULL DEFAULT 0,
+    "currency" TEXT NOT NULL DEFAULT 'BRL',
+    "shipping_carrier" TEXT NOT NULL DEFAULT '',
+    "tracking_no" TEXT NOT NULL DEFAULT '',
+    "items" JSONB NOT NULL DEFAULT '[]',
+    "recipient" JSONB,
+    "ordered_at" TIMESTAMP WITH TIME ZONE,
+    "imported_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    "synced_to_athena" BOOLEAN NOT NULL DEFAULT false
+  );
+  CREATE INDEX IF NOT EXISTS "idx_shopee_order_status" ON "ShopeeOrder"("order_status");
+`
+
+export async function initShopeeOrdersTable(): Promise<void> {
+  try {
+    await query(INIT_ORDERS_SQL)
+  } catch (err) {
+    console.warn('[ShopeeOrders] init failed:', err)
+  }
+}
+
+export async function syncShopeeOrders(): Promise<{ imported: number; errors: string[] }> {
+  const errors: string[] = []
+  let imported = 0
+  try {
+    const statuses = ['READY_TO_SHIP', 'PROCESSED', 'SHIPPED', 'COMPLETED']
+    for (const status of statuses) {
+      const orders = await shopeeAdapter.getOrders(status, 50)
+      for (const o of orders) {
+        try {
+          const existing = await query(`SELECT "order_sn" FROM "ShopeeOrder" WHERE "order_sn"=$1`, [o.order_sn])
+          if (existing.length > 0) continue
+
+          const itemsJson = JSON.stringify(o.items.map(i => ({
+            item_id: i.item_id,
+            item_name: i.item_name,
+            item_sku: i.item_sku ?? '',
+            quantity: i.quantity,
+            model_original_price: i.model_original_price ?? 0,
+          })))
+
+          await query(`
+            INSERT INTO "ShopeeOrder" ("order_sn", "order_status", "buyer", "total_amount", "currency", "shipping_carrier", "tracking_no", "items", "recipient", "ordered_at")
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, to_timestamp($10))
+            ON CONFLICT ("order_sn") DO UPDATE SET
+              "order_status" = EXCLUDED."order_status",
+              "shipping_carrier" = EXCLUDED."shipping_carrier",
+              "tracking_no" = EXCLUDED."tracking_no"
+          `, [
+            o.order_sn, o.order_status, o.buyer_username,
+            o.total_amount, o.currency ?? 'BRL',
+            o.shipping_carrier ?? '', o.tracking_no ?? '',
+            itemsJson,
+            o.recipient_address ? JSON.stringify(o.recipient_address) : '{}',
+            o.create_time,
+          ])
+          imported++
+        } catch (err) {
+          errors.push(`Order ${o.order_sn}: ${err}`)
+        }
+      }
+    }
+    return { imported, errors }
+  } catch (err) {
+    return { imported: 0, errors: [String(err)] }
+  }
+}
+
+export async function getShopeeOrders(): Promise<any[]> {
+  return query(`SELECT * FROM "ShopeeOrder" ORDER BY "ordered_at" DESC NULLS LAST`)
+}
+
+export async function getShopeeOrder(orderSn: string): Promise<any | null> {
+  const rows = await query(`SELECT * FROM "ShopeeOrder" WHERE "order_sn"=$1`, [orderSn])
+  return rows[0] ?? null
+}
+
+let orderSyncInterval: ReturnType<typeof setInterval> | null = null
+
+export function startShopeeOrderSync(intervalMs: number = 60000): void {
+  if (orderSyncInterval) return
+  if (!shopeeAdapter.isConfigured) {
+    console.log('[ShopeeOrders] not configured, skipping auto-sync')
+    return
+  }
+  orderSyncInterval = setInterval(async () => {
+    const result = await syncShopeeOrders()
+    if (result.imported > 0 || result.errors.length > 0) {
+      console.log(`[ShopeeOrders] synced: ${result.imported} new, ${result.errors.length} errors`)
+    }
+  }, intervalMs)
+  console.log(`[ShopeeOrders] sync every ${intervalMs / 1000}s`)
+  syncShopeeOrders().then(r => console.log(`[ShopeeOrders] initial sync: ${r.imported} orders`))
+}
+
+export function stopShopeeOrderSync(): void {
+  if (orderSyncInterval) {
+    clearInterval(orderSyncInterval)
+    orderSyncInterval = null
   }
 }

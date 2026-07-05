@@ -207,6 +207,12 @@ export async function startDashboard(registry: AgentRegistry, orchestrator: Orch
     return result
   })
 
+  server.post('/api/shopee/orders/sync', async () => {
+    const { syncShopeeOrders } = await import('../../shared/infrastructure/integrations/shopee-stock-sync')
+    const result = await syncShopeeOrders()
+    return result
+  })
+
   server.post<{ Body: { orderId: string; items: Array<{ sku: string; quantity: number }> } }>('/api/stock/decrement', async (req) => {
     const { updateShopeeStockOnOrder } = await import('../../shared/infrastructure/integrations/shopee-stock-sync')
     await updateShopeeStockOnOrder(req.body.items)

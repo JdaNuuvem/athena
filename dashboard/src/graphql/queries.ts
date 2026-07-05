@@ -268,3 +268,26 @@ export const SYNC_SHOPEE = gql`
     }
   }
 `
+
+export const SHOPEE_ORDERS = gql`
+  query ShopeeOrders($status: String) {
+    shopeeOrders(status: $status) {
+      orderSn
+      orderStatus
+      buyer
+      totalAmount
+      currency
+      shippingCarrier
+      trackingNo
+      items {
+        itemId
+        name
+        sku
+        quantity
+        price
+      }
+      orderedAt
+      importedAt
+    }
+  }
+`

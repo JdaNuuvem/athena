@@ -57,7 +57,27 @@ export interface ShopeeOrder {
   create_time: number
   total_amount: number
   buyer_username: string
-  items: Array<{ item_id: number; item_name: string; quantity: number; model_price: number }>
+  shipping_carrier?: string
+  tracking_no?: string
+  currency?: string
+  recipient_address?: {
+    name: string
+    phone: string
+    full_address: string
+  }
+  estimated_shipping_fee?: number
+  items: Array<{
+    item_id: number
+    item_name: string
+    item_sku?: string
+    quantity: number
+    model_id?: number
+    model_quantity_purchased?: number
+    model_original_price?: number
+    model_promotion_price?: number
+    is_wholesale?: boolean
+    weight?: number
+  }>
 }
 
 export interface ShopeeUpdateStockRequest {
@@ -212,6 +232,20 @@ export class ShopeeAdapter {
     try {
       const resp = await this.client.post<{ response: { order_list: ShopeeOrder[] } }>(
         `/order/get_order_list${this.queryString('/api/v2/order/get_order_list')}`, { order_status: status, page_size: limit })
+      return resp.data.response?.order_list ?? []
+    } catch {
+      return []
+    }
+  }
+
+  async getOrdersByTimeRange(startTime: number, endTime: number, statuses: string[] = ['READY_TO_SHIP', 'PROCESSED'], limit: number = 50): Promise<ShopeeOrder[]> {
+    if (!this.isConfigured) return []
+    if (isDev && !this.partnerId) return []
+    try {
+      const resp = await this.client.post<{ response: { order_list: ShopeeOrder[] } }>(
+        `/order/get_order_list${this.queryString('/api/v2/order/get_order_list')}`,
+        { order_status: statuses.join(','), create_time_from: startTime, create_time_to: endTime, page_size: limit }
+      )
       return resp.data.response?.order_list ?? []
     } catch {
       return []

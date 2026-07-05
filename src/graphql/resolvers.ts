@@ -128,6 +128,57 @@ const resolvers = {
       }
     },
 
+    shopeeOrders: async (_: any, args: { status?: string }) => {
+      const { getShopeeOrders } = await import('../shared/infrastructure/integrations/shopee-stock-sync')
+      const rows = await getShopeeOrders()
+      let filtered = rows
+      if (args.status) filtered = rows.filter((r: any) => r.order_status === args.status)
+      return filtered.map((r: any) => ({
+        orderSn: r.order_sn,
+        orderStatus: r.order_status,
+        buyer: r.buyer,
+        totalAmount: Number(r.total_amount),
+        currency: r.currency,
+        shippingCarrier: r.shipping_carrier,
+        trackingNo: r.tracking_no || null,
+        items: (r.items || []).map((i: any) => ({
+          itemId: i.item_id,
+          name: i.item_name,
+          sku: i.item_sku,
+          quantity: i.quantity,
+          price: Number(i.model_original_price ?? 0),
+        })),
+        orderedAt: r.ordered_at,
+        importedAt: r.imported_at,
+        syncedToAthena: r.synced_to_athena,
+      }))
+    },
+
+    shopeeOrder: async (_: any, args: { orderSn: string }) => {
+      const { getShopeeOrder } = await import('../shared/infrastructure/integrations/shopee-stock-sync')
+      const r = await getShopeeOrder(args.orderSn)
+      if (!r) return null
+      return {
+        orderSn: r.order_sn,
+        orderStatus: r.order_status,
+        buyer: r.buyer,
+        totalAmount: Number(r.total_amount),
+        currency: r.currency,
+        shippingCarrier: r.shipping_carrier,
+        trackingNo: r.tracking_no || null,
+        items: (r.items || []).map((i: any) => ({
+          itemId: i.item_id,
+          name: i.item_name,
+          sku: i.item_sku,
+          quantity: i.quantity,
+          price: Number(i.model_original_price ?? 0),
+        })),
+        orderedAt: r.ordered_at,
+        importedAt: r.imported_at,
+        syncedToAthena: r.synced_to_athena,
+      }
+    },
+
     customers: async () => query(`SELECT id, name, email, phone, 'manual' as "channelOrigin", tier, 0 as "loyaltyPoints", 0 as "totalOrders", 0::float as "lifetimeValue", "createdAt" as "registeredAt" FROM "Customer"`),
 
     customer: async (_: any, args: { id: string }) => {

@@ -25,6 +25,8 @@ const typeDefs = /* GraphQL */ `
     # Shopee
     shopeeProducts(status: String): [ShopeeProduct!]!
     shopeeProduct(itemId: Int!): ShopeeProduct
+    shopeeOrders(status: String): [ShopeeOrderDetail!]!
+    shopeeOrder(orderSn: String!): ShopeeOrderDetail
 
     # Customers
     customers(tier: String): [Customer!]!
@@ -348,6 +350,28 @@ const typeDefs = /* GraphQL */ `
   type ShopeeSyncResult {
     count: Int!
     errors: [String!]!
+  }
+
+  type ShopeeOrderItem {
+    itemId: Int!
+    name: String!
+    sku: String!
+    quantity: Int!
+    price: Float!
+  }
+
+  type ShopeeOrderDetail {
+    orderSn: String!
+    orderStatus: String!
+    buyer: String!
+    totalAmount: Float!
+    currency: String!
+    shippingCarrier: String!
+    trackingNo: String
+    items: [ShopeeOrderItem!]!
+    orderedAt: String
+    importedAt: String!
+    syncedToAthena: Boolean!
   }
 
   type Subscription {
