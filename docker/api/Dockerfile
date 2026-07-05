@@ -5,6 +5,9 @@ WORKDIR /app
 COPY package.json package-lock.json tsconfig.json ./
 RUN npm install
 
+COPY dashboard/ ./dashboard/
+RUN cd dashboard && npm install && npm run build
+
 COPY src/ ./src/
 COPY prisma/ ./prisma/
 

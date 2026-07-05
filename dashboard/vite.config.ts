@@ -12,7 +12,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: '../src/api/rest/public',
+    outDir: '../dist/api/rest/public',
     emptyOutDir: true,
   },
 })
