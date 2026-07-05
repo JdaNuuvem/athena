@@ -18,8 +18,19 @@ export function registerBusinessRoutes(server: FastifyInstance, registry: AgentR
     return agent.handleTask({ type: 'check_stock', sku, warehouseId: 'default' })
   })
 
-  server.post('/api/business/orders', { preHandler: [authMiddleware('operator')] }, async (req) => {
-    const body = req.body as { orderId?: string; customerId?: string; skus?: string[]; amount?: number }
+  server.post('/api/business/orders', { preHandler: [authMiddleware('operator')] }, async (req, reply) => {
+    const body = req.body as { orderId?: string; customerId?: string; skus?: Array<{ sku: string; quantity: number }>; amount?: number }
+
+    // ponytail: validate stock before creating order
+    if (body.skus && body.skus.length > 0) {
+      const { decrementAndPushStock } = await import('../../shared/infrastructure/integrations/shopee-stock-sync')
+      const orderId = body.orderId || `ORD-${Date.now()}`
+      const check = await decrementAndPushStock(orderId, body.skus.map(s => ({ sku: s.sku, quantity: s.quantity })))
+      if (!check.success) {
+        return reply.status(409).send({ error: 'insufficient_stock', details: check.errors })
+      }
+    }
+
     const orderId = body.orderId || `ORD-${Date.now()}`
     const input = { orderId, customerId: body.customerId || 'unknown', skus: body.skus || [], amount: body.amount || 0 }
     const instance = await orchestrator.trigger('order-processing', input)

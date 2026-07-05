@@ -183,6 +183,22 @@ export class ShopeeAdapter {
     }
   }
 
+  async checkStock(itemId: number): Promise<{ available: number; reserved: number }> {
+    if (!this.isConfigured) return { available: 0, reserved: 0 }
+    if (isDev && !this.partnerId) return { available: 999, reserved: 0 }
+    try {
+      const items = await this.getItemBaseInfo([itemId])
+      if (!items[0]) return { available: 0, reserved: 0 }
+      const s = items[0].stock_info_v2
+      return {
+        available: s?.summary_info?.total_available_stock ?? s?.total_available_stock ?? s?.seller_stock?.[0]?.stock ?? 0,
+        reserved: s?.summary_info?.total_reserved_stock ?? s?.total_reserved_stock ?? 0,
+      }
+    } catch {
+      return { available: 0, reserved: 0 }
+    }
+  }
+
   async updateStock(req: ShopeeUpdateStockRequest): Promise<{ success: boolean; failureList?: Array<{ model_id?: number; failed_reason: string }> }> {
     if (!this.isConfigured) return { success: false }
     if (isDev && !this.partnerId) return { success: true }
@@ -279,12 +295,15 @@ export class ShopeeAdapter {
   }
 
   // Sync: fetch all items with stock from Shopee
-  async syncAllItems(): Promise<Array<{ item_id: number; sku: string; name: string; status: string; stock: number; reserved: number; hasModel: boolean }>> {
+  async syncAllItems(): Promise<Array<{ item_id: number; sku: string; name: string; status: string; stock: number; reserved: number; hasModel: boolean; price: number }>> {
     if (!this.isConfigured) return []
-    const all: Array<{ item_id: number; sku: string; name: string; status: string; stock: number; reserved: number; hasModel: boolean }> = []
+    const all: Array<{ item_id: number; sku: string; name: string; status: string; stock: number; reserved: number; hasModel: boolean; price: number }> = []
     let offset = 0
     let hasMore = true
-    while (hasMore) {
+    let iterations = 0
+    const MAX_PAGES = 50 // ponytail: guard against infinite loop, covers up to 5000 items
+    while (hasMore && iterations < MAX_PAGES) {
+      iterations++
       const page = await this.getItems('NORMAL', offset)
       if (page.items.length === 0) break
       const details = await this.getItemBaseInfo(page.items.map(i => i.item_id))
@@ -297,6 +316,7 @@ export class ShopeeAdapter {
           stock: d.stock_info_v2?.summary_info?.total_available_stock ?? d.stock_info_v2?.total_available_stock ?? d.stock_info_v2?.seller_stock?.[0]?.stock ?? 0,
           reserved: d.stock_info_v2?.summary_info?.total_reserved_stock ?? d.stock_info_v2?.total_reserved_stock ?? 0,
           hasModel: d.has_model,
+          price: d.price_info?.[0]?.current_price ?? 0,
         })
       }
       hasMore = page.hasMore
