@@ -138,6 +138,70 @@ export function createRealMarketplaceTools(): ToolDefinition[] {
   ]
 }
 
+export function createShopeeSyncTools(): ToolDefinition[] {
+  return [
+    {
+      name: 'shopee.syncAllItems',
+      description: 'Sincroniza todos os itens da Shopee com estoque - retorna lista completa',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ items: z.array(z.object({ item_id: z.number(), sku: z.string(), name: z.string(), status: z.string(), stock: z.number(), reserved: z.number(), hasModel: z.boolean() })), count: z.number() }),
+      handler: async () => {
+        if (!shopeeAdapter.isConfigured) return { items: [], count: 0, error: 'Shopee not configured' }
+        const items = await shopeeAdapter.syncAllItems()
+        return { items, count: items.length }
+      },
+    },
+    {
+      name: 'shopee.getItemBaseInfo',
+      description: 'Busca informações detalhadas de itens da Shopee por ID (até 50)',
+      inputSchema: z.object({ itemIds: z.array(z.number()) }),
+      outputSchema: z.object({ items: z.array(z.any()), count: z.number() }),
+      handler: async (input: unknown) => {
+        const d = input as { itemIds: number[] }
+        if (!shopeeAdapter.isConfigured) return { items: [], count: 0, error: 'Shopee not configured' }
+        const items = await shopeeAdapter.getItemBaseInfo(d.itemIds)
+        return { items, count: items.length }
+      },
+    },
+    {
+      name: 'shopee.getModelList',
+      description: 'Busca modelos (variações) de um item da Shopee com estoque por variação',
+      inputSchema: z.object({ itemId: z.number() }),
+      outputSchema: z.object({ models: z.array(z.any()), count: z.number() }),
+      handler: async (input: unknown) => {
+        const d = input as { itemId: number }
+        if (!shopeeAdapter.isConfigured) return { models: [], count: 0 }
+        const models = await shopeeAdapter.getModelList(d.itemId)
+        return { models, count: models.length }
+      },
+    },
+    {
+      name: 'shopee.updateStock',
+      description: 'Atualiza estoque de um item na Shopee com suporte a modelos (variações)',
+      inputSchema: z.object({
+        itemId: z.number(),
+        stockList: z.array(z.object({
+          modelId: z.number().optional(),
+          sellerStock: z.array(z.object({ locationId: z.string().optional(), stock: z.number() })),
+        })),
+      }),
+      outputSchema: z.object({ success: z.boolean(), failureList: z.any().optional() }),
+      handler: async (input: unknown) => {
+        const d = input as { itemId: number; stockList: Array<{ modelId?: number; sellerStock: Array<{ locationId?: string; stock: number }> }> }
+        if (!shopeeAdapter.isConfigured) return { success: false }
+        const result = await shopeeAdapter.updateStock({
+          item_id: d.itemId,
+          stock_list: d.stockList.map(sl => ({
+            model_id: sl.modelId,
+            seller_stock: sl.sellerStock.map(ss => ({ location_id: ss.locationId, stock: ss.stock })),
+          })),
+        })
+        return result
+      },
+    },
+  ]
+}
+
 export function createRealEmailTools(): ToolDefinition[] {
   return [
     {
