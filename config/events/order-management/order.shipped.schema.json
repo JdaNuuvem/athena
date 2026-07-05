@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "athena://events/order-management/v1/order.shipped",
+  "title": "OrderShipped",
+  "type": "object",
+  "required": ["eventId", "eventType", "eventVersion", "timestamp", "correlationId", "tenantId", "source", "payload", "metadata"],
+  "properties": {
+    "eventType": { "const": "order-management.v1.order.shipped" },
+    "payload": {
+      "type": "object",
+      "required": ["orderId", "carrierId", "trackingCode", "shippedAt"],
+      "properties": {
+        "orderId": { "type": "string" },
+        "carrierId": { "type": "string" },
+        "carrierName": { "type": "string" },
+        "trackingCode": { "type": "string" },
+        "trackingUrl": { "type": "string", "format": "uri" },
+        "shippedAt": { "type": "string", "format": "date-time" },
+        "estimatedDeliveryDate": { "type": "string", "format": "date" },
+        "packages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "packageId": { "type": "string" },
+              "weightG": { "type": "number" },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "sku": { "type": "string" },
+                    "quantity": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

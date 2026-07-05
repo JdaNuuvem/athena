@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "athena://events/product-engineering/v1/product.designed",
+  "title": "ProductDesigned",
+  "type": "object",
+  "required": ["eventId", "eventType", "eventVersion", "timestamp", "correlationId", "tenantId", "source", "payload", "metadata"],
+  "properties": {
+    "eventType": { "const": "product-engineering.v1.product.designed" },
+    "payload": {
+      "type": "object",
+      "required": ["productId", "sku", "name", "category", "materials"],
+      "properties": {
+        "productId": { "type": "string", "format": "uuid" },
+        "sku": { "type": "string" },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "materials": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["materialId", "name", "type"],
+            "properties": {
+              "materialId": { "type": "string" },
+              "name": { "type": "string" },
+              "type": { "type": "string" }
+            }
+          }
+        },
+        "dimensions": {
+          "type": "object",
+          "properties": {
+            "lengthMm": { "type": "number" },
+            "widthMm": { "type": "number" },
+            "heightMm": { "type": "number" },
+            "weightG": { "type": "number" }
+          }
+        },
+        "bomId": { "type": "string", "format": "uuid" }
+      }
+    }
+  }
+}

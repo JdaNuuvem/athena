@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "athena://events/catalog/v1/variant.created",
+  "title": "VariantCreated",
+  "type": "object",
+  "required": ["eventId", "eventType", "eventVersion", "timestamp", "correlationId", "tenantId", "source", "payload", "metadata"],
+  "properties": {
+    "eventType": { "const": "catalog.v1.variant.created" },
+    "payload": {
+      "type": "object",
+      "required": ["variantId", "productId", "sku", "attributes"],
+      "properties": {
+        "variantId": { "type": "string", "format": "uuid" },
+        "productId": { "type": "string", "format": "uuid" },
+        "sku": { "type": "string" },
+        "attributes": {
+          "type": "object",
+          "properties": {
+            "color": { "type": "string" },
+            "size": { "type": "string" },
+            "material": { "type": "string" },
+            "finish": { "type": "string" }
+          }
+        },
+        "price": { "type": "number", "minimum": 0 },
+        "stockQuantity": { "type": "integer", "minimum": 0 },
+        "isDefault": { "type": "boolean" }
+      }
+    }
+  }
+}

@@ -1,0 +1,35 @@
+id: "AG-001"
+name: "product-design-assistant"
+role: "observer"
+context: "product-engineering"
+
+prompt:
+  template: "product-design-assistant"
+  variables:
+    industry: "plastic-transformation"
+    language: "pt-BR"
+
+config:
+  modelProvider: "openai"
+  modelName: "gpt-4o-mini"
+  temperature: 0.3
+  maxTokens: 4096
+  retryPolicy:
+    maxRetries: 3
+    backoffMs: 1000
+  timeout: 60000
+  schedule: "*/5 * * * *"
+
+capabilities:
+  - name: "validate-product-specification"
+    description: "Valida especificacoes tecnicas de produto"
+    inputSchema: {}
+    outputSchema: {}
+  - name: "check-bom-completeness"
+    description: "Verifica completude da Bill of Materials"
+    inputSchema: {}
+    outputSchema: {}
+
+toolset:
+  - "validate-specification"
+  - "check-bom-completeness"

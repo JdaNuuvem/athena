@@ -1,0 +1,5879 @@
+{
+  "asyncapi": "3.0.0",
+  "id": "urn:athena:event-catalog",
+  "info": {
+    "title": "ATHENA Event Catalog — AsyncAPI 3.0",
+    "version": "0.1.0",
+    "description": "Catalog of domain events flowing between ATHENA bounded contexts (Phase 1). Generated from config/events/."
+  },
+  "defaultContentType": "application/json",
+  "servers": {
+    "kafka": {
+      "protocol": "kafka",
+      "url": "kafka.athena.local:9092",
+      "description": "Kafka broker — development environment"
+    }
+  },
+  "channels": {
+    "athena.analytics.events": {
+      "address": "athena.analytics.events",
+      "description": "analytics context events",
+      "messages": {
+        "analytics.alert": {
+          "$ref": "#/components/messages/analytics.alert"
+        },
+        "analytics.anomaly": {
+          "$ref": "#/components/messages/analytics.anomaly"
+        },
+        "analytics.executive": {
+          "$ref": "#/components/messages/analytics.executive"
+        },
+        "analytics.forecast": {
+          "$ref": "#/components/messages/analytics.forecast"
+        },
+        "analytics.trend": {
+          "$ref": "#/components/messages/analytics.trend"
+        }
+      }
+    },
+    "athena.catalog.events": {
+      "address": "athena.catalog.events",
+      "description": "catalog context events",
+      "messages": {
+        "catalog.media": {
+          "$ref": "#/components/messages/catalog.media"
+        },
+        "catalog.product": {
+          "$ref": "#/components/messages/catalog.product"
+        },
+        "catalog.variant": {
+          "$ref": "#/components/messages/catalog.variant"
+        }
+      }
+    },
+    "athena.cnc-machining.events": {
+      "address": "athena.cnc-machining.events",
+      "description": "cnc-machining context events",
+      "messages": {
+        "cnc-machining.job": {
+          "$ref": "#/components/messages/cnc-machining.job"
+        },
+        "cnc-machining.machine": {
+          "$ref": "#/components/messages/cnc-machining.machine"
+        },
+        "cnc-machining.machining": {
+          "$ref": "#/components/messages/cnc-machining.machining"
+        },
+        "cnc-machining.program": {
+          "$ref": "#/components/messages/cnc-machining.program"
+        },
+        "cnc-machining.quality": {
+          "$ref": "#/components/messages/cnc-machining.quality"
+        },
+        "cnc-machining.tool": {
+          "$ref": "#/components/messages/cnc-machining.tool"
+        }
+      }
+    },
+    "athena.customer.events": {
+      "address": "athena.customer.events",
+      "description": "customer context events",
+      "messages": {
+        "customer.churn": {
+          "$ref": "#/components/messages/customer.churn"
+        },
+        "customer.customer": {
+          "$ref": "#/components/messages/customer.customer"
+        },
+        "customer.tier": {
+          "$ref": "#/components/messages/customer.tier"
+        }
+      }
+    },
+    "athena.injection-molding.events": {
+      "address": "athena.injection-molding.events",
+      "description": "injection-molding context events",
+      "messages": {
+        "injection-molding.batch": {
+          "$ref": "#/components/messages/injection-molding.batch"
+        },
+        "injection-molding.cycle": {
+          "$ref": "#/components/messages/injection-molding.cycle"
+        },
+        "injection-molding.defect": {
+          "$ref": "#/components/messages/injection-molding.defect"
+        },
+        "injection-molding.machine": {
+          "$ref": "#/components/messages/injection-molding.machine"
+        },
+        "injection-molding.mold": {
+          "$ref": "#/components/messages/injection-molding.mold"
+        },
+        "injection-molding.parameter": {
+          "$ref": "#/components/messages/injection-molding.parameter"
+        },
+        "injection-molding.quality": {
+          "$ref": "#/components/messages/injection-molding.quality"
+        },
+        "injection-molding.run": {
+          "$ref": "#/components/messages/injection-molding.run"
+        },
+        "injection-molding.scrap": {
+          "$ref": "#/components/messages/injection-molding.scrap"
+        }
+      }
+    },
+    "athena.inventory.events": {
+      "address": "athena.inventory.events",
+      "description": "inventory context events",
+      "messages": {
+        "inventory.low": {
+          "$ref": "#/components/messages/inventory.low"
+        },
+        "inventory.stock": {
+          "$ref": "#/components/messages/inventory.stock"
+        }
+      }
+    },
+    "athena.marketplace-integration.events": {
+      "address": "athena.marketplace-integration.events",
+      "description": "marketplace-integration context events",
+      "messages": {
+        "marketplace-integration.channel": {
+          "$ref": "#/components/messages/marketplace-integration.channel"
+        },
+        "marketplace-integration.competitor": {
+          "$ref": "#/components/messages/marketplace-integration.competitor"
+        },
+        "marketplace-integration.listing": {
+          "$ref": "#/components/messages/marketplace-integration.listing"
+        },
+        "marketplace-integration.price": {
+          "$ref": "#/components/messages/marketplace-integration.price"
+        },
+        "marketplace-integration.sync": {
+          "$ref": "#/components/messages/marketplace-integration.sync"
+        }
+      }
+    },
+    "athena.mold-making.events": {
+      "address": "athena.mold-making.events",
+      "description": "mold-making context events",
+      "messages": {
+        "mold-making.cycle": {
+          "$ref": "#/components/messages/mold-making.cycle"
+        },
+        "mold-making.maintenance": {
+          "$ref": "#/components/messages/mold-making.maintenance"
+        },
+        "mold-making.mold": {
+          "$ref": "#/components/messages/mold-making.mold"
+        }
+      }
+    },
+    "athena.order-management.events": {
+      "address": "athena.order-management.events",
+      "description": "order-management context events",
+      "messages": {
+        "order-management.fulfillment": {
+          "$ref": "#/components/messages/order-management.fulfillment"
+        },
+        "order-management.order": {
+          "$ref": "#/components/messages/order-management.order"
+        },
+        "order-management.return": {
+          "$ref": "#/components/messages/order-management.return"
+        }
+      }
+    },
+    "athena.plastisol-processing.events": {
+      "address": "athena.plastisol-processing.events",
+      "description": "plastisol-processing context events",
+      "messages": {
+        "plastisol-processing.batch": {
+          "$ref": "#/components/messages/plastisol-processing.batch"
+        },
+        "plastisol-processing.coating": {
+          "$ref": "#/components/messages/plastisol-processing.coating"
+        },
+        "plastisol-processing.curing": {
+          "$ref": "#/components/messages/plastisol-processing.curing"
+        },
+        "plastisol-processing.dipping": {
+          "$ref": "#/components/messages/plastisol-processing.dipping"
+        },
+        "plastisol-processing.formulation": {
+          "$ref": "#/components/messages/plastisol-processing.formulation"
+        },
+        "plastisol-processing.qc": {
+          "$ref": "#/components/messages/plastisol-processing.qc"
+        },
+        "plastisol-processing.viscosity": {
+          "$ref": "#/components/messages/plastisol-processing.viscosity"
+        }
+      }
+    },
+    "athena.pricing.events": {
+      "address": "athena.pricing.events",
+      "description": "pricing context events",
+      "messages": {
+        "pricing.discount": {
+          "$ref": "#/components/messages/pricing.discount"
+        },
+        "pricing.elasticity": {
+          "$ref": "#/components/messages/pricing.elasticity"
+        },
+        "pricing.margin": {
+          "$ref": "#/components/messages/pricing.margin"
+        },
+        "pricing.price": {
+          "$ref": "#/components/messages/pricing.price"
+        },
+        "pricing.promotion": {
+          "$ref": "#/components/messages/pricing.promotion"
+        }
+      }
+    },
+    "athena.product-engineering.events": {
+      "address": "athena.product-engineering.events",
+      "description": "product-engineering context events",
+      "messages": {
+        "product-engineering.bom": {
+          "$ref": "#/components/messages/product-engineering.bom"
+        },
+        "product-engineering.product": {
+          "$ref": "#/components/messages/product-engineering.product"
+        },
+        "product-engineering.revision": {
+          "$ref": "#/components/messages/product-engineering.revision"
+        }
+      }
+    },
+    "athena.retail-operations.events": {
+      "address": "athena.retail-operations.events",
+      "description": "retail-operations context events",
+      "messages": {
+        "retail-operations.inventory": {
+          "$ref": "#/components/messages/retail-operations.inventory"
+        },
+        "retail-operations.register": {
+          "$ref": "#/components/messages/retail-operations.register"
+        },
+        "retail-operations.sale": {
+          "$ref": "#/components/messages/retail-operations.sale"
+        }
+      }
+    },
+    "athena.shipping.events": {
+      "address": "athena.shipping.events",
+      "description": "shipping context events",
+      "messages": {
+        "shipping.carrier": {
+          "$ref": "#/components/messages/shipping.carrier"
+        },
+        "shipping.delivered": {
+          "$ref": "#/components/messages/shipping.delivered"
+        },
+        "shipping.delivery": {
+          "$ref": "#/components/messages/shipping.delivery"
+        },
+        "shipping.label": {
+          "$ref": "#/components/messages/shipping.label"
+        },
+        "shipping.rate": {
+          "$ref": "#/components/messages/shipping.rate"
+        },
+        "shipping.return": {
+          "$ref": "#/components/messages/shipping.return"
+        },
+        "shipping.shipment": {
+          "$ref": "#/components/messages/shipping.shipment"
+        },
+        "shipping.tracking": {
+          "$ref": "#/components/messages/shipping.tracking"
+        }
+      }
+    },
+    "athena.telegram-commerce.events": {
+      "address": "athena.telegram-commerce.events",
+      "description": "telegram-commerce context events",
+      "messages": {
+        "telegram-commerce.conversation": {
+          "$ref": "#/components/messages/telegram-commerce.conversation"
+        },
+        "telegram-commerce.order": {
+          "$ref": "#/components/messages/telegram-commerce.order"
+        },
+        "telegram-commerce.payment": {
+          "$ref": "#/components/messages/telegram-commerce.payment"
+        }
+      }
+    }
+  },
+  "components": {
+    "messages": {
+      "analytics.alert": {
+        "name": "analytics.alert",
+        "title": "AlertTriggered",
+        "summary": "analytics — alert",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/analytics.alert"
+        }
+      },
+      "analytics.anomaly": {
+        "name": "analytics.anomaly",
+        "title": "AnomalyDetected",
+        "summary": "analytics — anomaly",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/analytics.anomaly"
+        }
+      },
+      "analytics.executive": {
+        "name": "analytics.executive",
+        "title": "ExecutiveDigestSent",
+        "summary": "analytics — executive",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/analytics.executive"
+        }
+      },
+      "analytics.forecast": {
+        "name": "analytics.forecast",
+        "title": "ForecastUpdated",
+        "summary": "analytics — forecast",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/analytics.forecast"
+        }
+      },
+      "analytics.trend": {
+        "name": "analytics.trend",
+        "title": "TrendAnalyzed",
+        "summary": "analytics — trend",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/analytics.trend"
+        }
+      },
+      "catalog.media": {
+        "name": "catalog.media",
+        "title": "MediaAdded",
+        "summary": "catalog — media",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/catalog.media"
+        }
+      },
+      "catalog.product": {
+        "name": "catalog.product",
+        "title": "ProductUpdated",
+        "summary": "catalog — product",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/catalog.product"
+        }
+      },
+      "catalog.variant": {
+        "name": "catalog.variant",
+        "title": "VariantCreated",
+        "summary": "catalog — variant",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/catalog.variant"
+        }
+      },
+      "cnc-machining.job": {
+        "name": "cnc-machining.job",
+        "title": "JobScheduled",
+        "summary": "cnc-machining — job",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/cnc-machining.job"
+        }
+      },
+      "cnc-machining.machine": {
+        "name": "cnc-machining.machine",
+        "title": "MachineDowntimeStarted",
+        "summary": "cnc-machining — machine",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/cnc-machining.machine"
+        }
+      },
+      "cnc-machining.machining": {
+        "name": "cnc-machining.machining",
+        "title": "MachiningStarted",
+        "summary": "cnc-machining — machining",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/cnc-machining.machining"
+        }
+      },
+      "cnc-machining.program": {
+        "name": "cnc-machining.program",
+        "title": "NCProgramUploaded",
+        "summary": "cnc-machining — program",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/cnc-machining.program"
+        }
+      },
+      "cnc-machining.quality": {
+        "name": "cnc-machining.quality",
+        "title": "QualityInspectionPassed",
+        "summary": "cnc-machining — quality",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/cnc-machining.quality"
+        }
+      },
+      "cnc-machining.tool": {
+        "name": "cnc-machining.tool",
+        "title": "ToolWearAlert",
+        "summary": "cnc-machining — tool",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/cnc-machining.tool"
+        }
+      },
+      "customer.churn": {
+        "name": "customer.churn",
+        "title": "ChurnRiskDetected",
+        "summary": "customer — churn",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/customer.churn"
+        }
+      },
+      "customer.customer": {
+        "name": "customer.customer",
+        "title": "CustomerSegmented",
+        "summary": "customer — customer",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/customer.customer"
+        }
+      },
+      "customer.tier": {
+        "name": "customer.tier",
+        "title": "TierChanged",
+        "summary": "customer — tier",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/customer.tier"
+        }
+      },
+      "injection-molding.batch": {
+        "name": "injection-molding.batch",
+        "title": "BatchCompleted",
+        "summary": "injection-molding — batch",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/injection-molding.batch"
+        }
+      },
+      "injection-molding.cycle": {
+        "name": "injection-molding.cycle",
+        "title": "CycleCompleted",
+        "summary": "injection-molding — cycle",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/injection-molding.cycle"
+        }
+      },
+      "injection-molding.defect": {
+        "name": "injection-molding.defect",
+        "title": "DefectDetected",
+        "summary": "injection-molding — defect",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/injection-molding.defect"
+        }
+      },
+      "injection-molding.machine": {
+        "name": "injection-molding.machine",
+        "title": "MachineStopped",
+        "summary": "injection-molding — machine",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/injection-molding.machine"
+        }
+      },
+      "injection-molding.mold": {
+        "name": "injection-molding.mold",
+        "title": "MoldChangeCompleted",
+        "summary": "injection-molding — mold",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/injection-molding.mold"
+        }
+      },
+      "injection-molding.parameter": {
+        "name": "injection-molding.parameter",
+        "title": "ParameterChanged",
+        "summary": "injection-molding — parameter",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/injection-molding.parameter"
+        }
+      },
+      "injection-molding.quality": {
+        "name": "injection-molding.quality",
+        "title": "QualityCheckPassed",
+        "summary": "injection-molding — quality",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/injection-molding.quality"
+        }
+      },
+      "injection-molding.run": {
+        "name": "injection-molding.run",
+        "title": "RunStarted",
+        "summary": "injection-molding — run",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/injection-molding.run"
+        }
+      },
+      "injection-molding.scrap": {
+        "name": "injection-molding.scrap",
+        "title": "ScrapRecorded",
+        "summary": "injection-molding — scrap",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/injection-molding.scrap"
+        }
+      },
+      "inventory.low": {
+        "name": "inventory.low",
+        "title": "LowStockAlert",
+        "summary": "inventory — low",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/inventory.low"
+        }
+      },
+      "inventory.stock": {
+        "name": "inventory.stock",
+        "title": "StockShipped",
+        "summary": "inventory — stock",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/inventory.stock"
+        }
+      },
+      "marketplace-integration.channel": {
+        "name": "marketplace-integration.channel",
+        "title": "ChannelOrderReceived",
+        "summary": "marketplace-integration — channel",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/marketplace-integration.channel"
+        }
+      },
+      "marketplace-integration.competitor": {
+        "name": "marketplace-integration.competitor",
+        "title": "CompetitorPriceChanged",
+        "summary": "marketplace-integration — competitor",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/marketplace-integration.competitor"
+        }
+      },
+      "marketplace-integration.listing": {
+        "name": "marketplace-integration.listing",
+        "title": "ListingPublished",
+        "summary": "marketplace-integration — listing",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/marketplace-integration.listing"
+        }
+      },
+      "marketplace-integration.price": {
+        "name": "marketplace-integration.price",
+        "title": "PriceRepriced",
+        "summary": "marketplace-integration — price",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/marketplace-integration.price"
+        }
+      },
+      "marketplace-integration.sync": {
+        "name": "marketplace-integration.sync",
+        "title": "SyncCompleted",
+        "summary": "marketplace-integration — sync",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/marketplace-integration.sync"
+        }
+      },
+      "mold-making.cycle": {
+        "name": "mold-making.cycle",
+        "title": "CycleLimitReached",
+        "summary": "mold-making — cycle",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/mold-making.cycle"
+        }
+      },
+      "mold-making.maintenance": {
+        "name": "mold-making.maintenance",
+        "title": "MaintenanceScheduled",
+        "summary": "mold-making — maintenance",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/mold-making.maintenance"
+        }
+      },
+      "mold-making.mold": {
+        "name": "mold-making.mold",
+        "title": "MoldInstalled",
+        "summary": "mold-making — mold",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/mold-making.mold"
+        }
+      },
+      "order-management.fulfillment": {
+        "name": "order-management.fulfillment",
+        "title": "FulfillmentRouted",
+        "summary": "order-management — fulfillment",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/order-management.fulfillment"
+        }
+      },
+      "order-management.order": {
+        "name": "order-management.order",
+        "title": "OrderShipped",
+        "summary": "order-management — order",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/order-management.order"
+        }
+      },
+      "order-management.return": {
+        "name": "order-management.return",
+        "title": "ReturnRequested",
+        "summary": "order-management — return",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/order-management.return"
+        }
+      },
+      "plastisol-processing.batch": {
+        "name": "plastisol-processing.batch",
+        "title": "BatchCompleted",
+        "summary": "plastisol-processing — batch",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/plastisol-processing.batch"
+        }
+      },
+      "plastisol-processing.coating": {
+        "name": "plastisol-processing.coating",
+        "title": "CoatingSpecUpdated",
+        "summary": "plastisol-processing — coating",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/plastisol-processing.coating"
+        }
+      },
+      "plastisol-processing.curing": {
+        "name": "plastisol-processing.curing",
+        "title": "CuringStarted",
+        "summary": "plastisol-processing — curing",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/plastisol-processing.curing"
+        }
+      },
+      "plastisol-processing.dipping": {
+        "name": "plastisol-processing.dipping",
+        "title": "DippingStarted",
+        "summary": "plastisol-processing — dipping",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/plastisol-processing.dipping"
+        }
+      },
+      "plastisol-processing.formulation": {
+        "name": "plastisol-processing.formulation",
+        "title": "FormulationMixed",
+        "summary": "plastisol-processing — formulation",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/plastisol-processing.formulation"
+        }
+      },
+      "plastisol-processing.qc": {
+        "name": "plastisol-processing.qc",
+        "title": "QCResultRecorded",
+        "summary": "plastisol-processing — qc",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/plastisol-processing.qc"
+        }
+      },
+      "plastisol-processing.viscosity": {
+        "name": "plastisol-processing.viscosity",
+        "title": "ViscosityAdjusted",
+        "summary": "plastisol-processing — viscosity",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/plastisol-processing.viscosity"
+        }
+      },
+      "pricing.discount": {
+        "name": "pricing.discount",
+        "title": "DiscountApplied",
+        "summary": "pricing — discount",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/pricing.discount"
+        }
+      },
+      "pricing.elasticity": {
+        "name": "pricing.elasticity",
+        "title": "ElasticityAnalyzed",
+        "summary": "pricing — elasticity",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/pricing.elasticity"
+        }
+      },
+      "pricing.margin": {
+        "name": "pricing.margin",
+        "title": "MarginAlert",
+        "summary": "pricing — margin",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/pricing.margin"
+        }
+      },
+      "pricing.price": {
+        "name": "pricing.price",
+        "title": "PriceUpdated",
+        "summary": "pricing — price",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/pricing.price"
+        }
+      },
+      "pricing.promotion": {
+        "name": "pricing.promotion",
+        "title": "PromotionExpired",
+        "summary": "pricing — promotion",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/pricing.promotion"
+        }
+      },
+      "product-engineering.bom": {
+        "name": "product-engineering.bom",
+        "title": "BOMUpdated",
+        "summary": "product-engineering — bom",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/product-engineering.bom"
+        }
+      },
+      "product-engineering.product": {
+        "name": "product-engineering.product",
+        "title": "ProductDesigned",
+        "summary": "product-engineering — product",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/product-engineering.product"
+        }
+      },
+      "product-engineering.revision": {
+        "name": "product-engineering.revision",
+        "title": "RevisionApproved",
+        "summary": "product-engineering — revision",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/product-engineering.revision"
+        }
+      },
+      "retail-operations.inventory": {
+        "name": "retail-operations.inventory",
+        "title": "InventoryCounted",
+        "summary": "retail-operations — inventory",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/retail-operations.inventory"
+        }
+      },
+      "retail-operations.register": {
+        "name": "retail-operations.register",
+        "title": "RegisterClosed",
+        "summary": "retail-operations — register",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/retail-operations.register"
+        }
+      },
+      "retail-operations.sale": {
+        "name": "retail-operations.sale",
+        "title": "SaleCompleted",
+        "summary": "retail-operations — sale",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/retail-operations.sale"
+        }
+      },
+      "shipping.carrier": {
+        "name": "shipping.carrier",
+        "title": "CarrierSelected",
+        "summary": "shipping — carrier",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/shipping.carrier"
+        }
+      },
+      "shipping.delivered": {
+        "name": "shipping.delivered",
+        "title": "Delivered",
+        "summary": "shipping — delivered",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/shipping.delivered"
+        }
+      },
+      "shipping.delivery": {
+        "name": "shipping.delivery",
+        "title": "DeliveryFailed",
+        "summary": "shipping — delivery",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/shipping.delivery"
+        }
+      },
+      "shipping.label": {
+        "name": "shipping.label",
+        "title": "LabelGenerated",
+        "summary": "shipping — label",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/shipping.label"
+        }
+      },
+      "shipping.rate": {
+        "name": "shipping.rate",
+        "title": "RateCalculated",
+        "summary": "shipping — rate",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/shipping.rate"
+        }
+      },
+      "shipping.return": {
+        "name": "shipping.return",
+        "title": "ReturnLabelGenerated",
+        "summary": "shipping — return",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/shipping.return"
+        }
+      },
+      "shipping.shipment": {
+        "name": "shipping.shipment",
+        "title": "ShipmentCreated",
+        "summary": "shipping — shipment",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/shipping.shipment"
+        }
+      },
+      "shipping.tracking": {
+        "name": "shipping.tracking",
+        "title": "TrackingUpdated",
+        "summary": "shipping — tracking",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/shipping.tracking"
+        }
+      },
+      "telegram-commerce.conversation": {
+        "name": "telegram-commerce.conversation",
+        "title": "ConversationStarted",
+        "summary": "telegram-commerce — conversation",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/telegram-commerce.conversation"
+        }
+      },
+      "telegram-commerce.order": {
+        "name": "telegram-commerce.order",
+        "title": "OrderConfirmedViaChat",
+        "summary": "telegram-commerce — order",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/telegram-commerce.order"
+        }
+      },
+      "telegram-commerce.payment": {
+        "name": "telegram-commerce.payment",
+        "title": "PaymentCompleted",
+        "summary": "telegram-commerce — payment",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/telegram-commerce.payment"
+        }
+      }
+    },
+    "schemas": {
+      "analytics.alert": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "AlertTriggered",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "analytics.v1.alert.triggered"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "alertId",
+              "title",
+              "severity",
+              "triggeredAt"
+            ],
+            "properties": {
+              "alertId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "title": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "warning",
+                  "critical",
+                  "emergency"
+                ]
+              },
+              "category": {
+                "type": "string",
+                "enum": [
+                  "production",
+                  "quality",
+                  "inventory",
+                  "sales",
+                  "margin",
+                  "customer",
+                  "shipping"
+                ]
+              },
+              "recipients": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "triggeredAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "acknowledged": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "analytics.anomaly": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "athena://events/analytics/v1/anomaly.detected",
+        "title": "AnomalyDetected",
+        "type": "object",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "analytics.v1.anomaly.detected"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "anomalyId",
+              "metric",
+              "detectedAt"
+            ],
+            "properties": {
+              "anomalyId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "context": {
+                "type": "string"
+              },
+              "metric": {
+                "type": "string"
+              },
+              "currentValue": {
+                "type": "number"
+              },
+              "expectedValue": {
+                "type": "number"
+              },
+              "deviationPercent": {
+                "type": "number"
+              },
+              "zScore": {
+                "type": "number"
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high",
+                  "critical"
+                ]
+              },
+              "detectedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "relatedEventIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "analytics.executive": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "ExecutiveDigestSent",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "analytics.v1.executive.digest.sent"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "digestId",
+              "type",
+              "sentAt"
+            ],
+            "properties": {
+              "digestId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "daily",
+                  "weekly",
+                  "monthly"
+                ]
+              },
+              "period": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "end": {
+                    "type": "string",
+                    "format": "date"
+                  }
+                }
+              },
+              "channels": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "kpiSummary": {
+                "type": "object",
+                "properties": {
+                  "totalRevenue": {
+                    "type": "number"
+                  },
+                  "totalOrders": {
+                    "type": "integer"
+                  },
+                  "totalProduction": {
+                    "type": "integer"
+                  },
+                  "avgMargin": {
+                    "type": "number"
+                  },
+                  "oee": {
+                    "type": "number"
+                  },
+                  "customerSatisfaction": {
+                    "type": "number"
+                  }
+                }
+              },
+              "sentAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "analytics.forecast": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "ForecastUpdated",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "analytics.v1.forecast.updated"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "forecastId",
+              "metric",
+              "generatedAt"
+            ],
+            "properties": {
+              "forecastId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "context": {
+                "type": "string"
+              },
+              "metric": {
+                "type": "string"
+              },
+              "forecastType": {
+                "type": "string",
+                "enum": [
+                  "demand",
+                  "sales",
+                  "production",
+                  "inventory"
+                ]
+              },
+              "forecastHorizonDays": {
+                "type": "integer"
+              },
+              "predictions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "date": {
+                      "type": "string",
+                      "format": "date"
+                    },
+                    "value": {
+                      "type": "number"
+                    },
+                    "lowerBound": {
+                      "type": "number"
+                    },
+                    "upperBound": {
+                      "type": "number"
+                    }
+                  }
+                }
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "generatedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "analytics.trend": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "TrendAnalyzed",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "analytics.v1.trend.analyzed"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "trendId",
+              "context",
+              "metric",
+              "analyzedAt"
+            ],
+            "properties": {
+              "trendId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "context": {
+                "type": "string"
+              },
+              "metric": {
+                "type": "string"
+              },
+              "direction": {
+                "type": "string",
+                "enum": [
+                  "up",
+                  "down",
+                  "stable"
+                ]
+              },
+              "slope": {
+                "type": "number"
+              },
+              "seasonality": {
+                "type": "boolean"
+              },
+              "changePoints": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "date": {
+                      "type": "string",
+                      "format": "date"
+                    },
+                    "description": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "analyzedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "catalog.media": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "athena://events/catalog/v1/media.added",
+        "title": "MediaAdded",
+        "type": "object",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "catalog.v1.media.added"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "mediaId",
+              "productId",
+              "type",
+              "url"
+            ],
+            "properties": {
+              "mediaId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "productId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "image",
+                  "video",
+                  "manual",
+                  "spec_sheet",
+                  "certificate"
+                ]
+              },
+              "url": {
+                "type": "string",
+                "format": "uri"
+              },
+              "filename": {
+                "type": "string"
+              },
+              "sortOrder": {
+                "type": "integer"
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "isMain": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "catalog.product": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "athena://events/catalog/v1/product.updated",
+        "title": "ProductUpdated",
+        "type": "object",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "catalog.v1.product.updated"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "productId",
+              "changedFields"
+            ],
+            "properties": {
+              "productId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "sku": {
+                "type": "string"
+              },
+              "changedFields": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "newValues": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "price": {
+                    "type": "number"
+                  },
+                  "categoryId": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "catalog.variant": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "athena://events/catalog/v1/variant.created",
+        "title": "VariantCreated",
+        "type": "object",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "catalog.v1.variant.created"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "variantId",
+              "productId",
+              "sku",
+              "attributes"
+            ],
+            "properties": {
+              "variantId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "productId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "sku": {
+                "type": "string"
+              },
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "color": {
+                    "type": "string"
+                  },
+                  "size": {
+                    "type": "string"
+                  },
+                  "material": {
+                    "type": "string"
+                  },
+                  "finish": {
+                    "type": "string"
+                  }
+                }
+              },
+              "price": {
+                "type": "number",
+                "minimum": 0
+              },
+              "stockQuantity": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "isDefault": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "cnc-machining.job": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "JobScheduled",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "cnc-machining.v1.job.scheduled"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "jobId",
+              "machineId",
+              "programId",
+              "scheduledAt"
+            ],
+            "properties": {
+              "jobId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "machineId": {
+                "type": "string"
+              },
+              "machineName": {
+                "type": "string"
+              },
+              "programId": {
+                "type": "string"
+              },
+              "programCode": {
+                "type": "string"
+              },
+              "materialType": {
+                "type": "string"
+              },
+              "materialBlock": {
+                "type": "string"
+              },
+              "estimatedMachiningTimeMin": {
+                "type": "number"
+              },
+              "priority": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "normal",
+                  "high",
+                  "urgent"
+                ]
+              },
+              "scheduledAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "scheduledBy": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "cnc-machining.machine": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "MachineDowntimeStarted",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "cnc-machining.v1.machine.downtime.started"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "downtimeId",
+              "machineId",
+              "reason",
+              "startedAt"
+            ],
+            "properties": {
+              "downtimeId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "machineId": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "tool_change",
+                  "maintenance",
+                  "setup",
+                  "material_unavailable",
+                  "machine_failure",
+                  "operator_unavailable"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "startedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "reportedBy": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "cnc-machining.machining": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "MachiningStarted",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "cnc-machining.v1.machining.started"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "jobId",
+              "machineId",
+              "startedAt"
+            ],
+            "properties": {
+              "jobId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "machineId": {
+                "type": "string"
+              },
+              "programId": {
+                "type": "string"
+              },
+              "operatorId": {
+                "type": "string"
+              },
+              "stockMaterial": {
+                "type": "string"
+              },
+              "initialToolCount": {
+                "type": "integer"
+              },
+              "startedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "cnc-machining.program": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "NCProgramUploaded",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "cnc-machining.v1.program.uploaded"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "programId",
+              "machineId",
+              "fileName",
+              "uploadedAt"
+            ],
+            "properties": {
+              "programId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "machineId": {
+                "type": "string"
+              },
+              "fileName": {
+                "type": "string"
+              },
+              "fileHash": {
+                "type": "string"
+              },
+              "toolCount": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "estimatedRuntimeMin": {
+                "type": "number"
+              },
+              "validationStatus": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "valid",
+                  "invalid"
+                ]
+              },
+              "uploadedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "uploadedBy": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "cnc-machining.quality": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "QualityInspectionPassed",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "cnc-machining.v1.quality.inspection.passed"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "inspectionId",
+              "jobId",
+              "inspectedAt"
+            ],
+            "properties": {
+              "inspectionId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "jobId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "partsInspected": {
+                "type": "integer"
+              },
+              "partsPassed": {
+                "type": "integer"
+              },
+              "partsFailed": {
+                "type": "integer"
+              },
+              "dimensionalToleranceOk": {
+                "type": "boolean"
+              },
+              "surfaceFinishOk": {
+                "type": "boolean"
+              },
+              "inspectedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "inspectedBy": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "cnc-machining.tool": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "ToolWearAlert",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "cnc-machining.v1.tool.wear.alert"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "toolId",
+              "machineId",
+              "wearMicrons",
+              "thresholdMicrons",
+              "detectedAt"
+            ],
+            "properties": {
+              "toolId": {
+                "type": "string"
+              },
+              "toolNumber": {
+                "type": "integer"
+              },
+              "toolName": {
+                "type": "string"
+              },
+              "machineId": {
+                "type": "string"
+              },
+              "wearMicrons": {
+                "type": "number"
+              },
+              "thresholdMicrons": {
+                "type": "number"
+              },
+              "currentJobId": {
+                "type": "string"
+              },
+              "cyclesCompleted": {
+                "type": "integer"
+              },
+              "estimatedCyclesRemaining": {
+                "type": "integer"
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "warning",
+                  "critical",
+                  "immediate"
+                ]
+              },
+              "detectedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "customer.churn": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "athena://events/customer/v1/churn.risk.detected",
+        "title": "ChurnRiskDetected",
+        "type": "object",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "customer.v1.churn.risk.detected"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "customerId",
+              "riskScore",
+              "detectedAt"
+            ],
+            "properties": {
+              "customerId": {
+                "type": "string"
+              },
+              "riskScore": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "riskLevel": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high",
+                  "critical"
+                ]
+              },
+              "factors": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "factor": {
+                      "type": "string"
+                    },
+                    "contribution": {
+                      "type": "number"
+                    }
+                  }
+                }
+              },
+              "daysSinceLastOrder": {
+                "type": "number"
+              },
+              "detectedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "recommendedAction": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "customer.customer": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "athena://events/customer/v1/customer.segmented",
+        "title": "CustomerSegmented",
+        "type": "object",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "customer.v1.customer.segmented"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "customerId",
+              "segment",
+              "segmentedAt"
+            ],
+            "properties": {
+              "customerId": {
+                "type": "string"
+              },
+              "segment": {
+                "type": "string"
+              },
+              "rfmScore": {
+                "type": "object",
+                "properties": {
+                  "recency": {
+                    "type": "integer"
+                  },
+                  "frequency": {
+                    "type": "integer"
+                  },
+                  "monetary": {
+                    "type": "integer"
+                  },
+                  "total": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "segmentedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "segmentChanged": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "customer.tier": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "athena://events/customer/v1/tier.changed",
+        "title": "TierChanged",
+        "type": "object",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "customer.v1.tier.changed"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "customerId",
+              "previousTier",
+              "newTier",
+              "changedAt"
+            ],
+            "properties": {
+              "customerId": {
+                "type": "string"
+              },
+              "previousTier": {
+                "type": "string",
+                "enum": [
+                  "bronze",
+                  "silver",
+                  "gold",
+                  "diamond"
+                ]
+              },
+              "newTier": {
+                "type": "string",
+                "enum": [
+                  "bronze",
+                  "silver",
+                  "gold",
+                  "diamond"
+                ]
+              },
+              "reason": {
+                "type": "string"
+              },
+              "lifetimeValue": {
+                "type": "number"
+              },
+              "totalOrders": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "changedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "injection-molding.batch": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "BatchCompleted",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "injection-molding.v1.batch.completed"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "batchId",
+              "runId",
+              "productId",
+              "completedAt"
+            ],
+            "properties": {
+              "batchId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "runId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "productId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "totalCycles": {
+                "type": "integer"
+              },
+              "totalPartsProduced": {
+                "type": "integer"
+              },
+              "defectiveParts": {
+                "type": "integer"
+              },
+              "scrapRatePercent": {
+                "type": "number"
+              },
+              "materialUsedKg": {
+                "type": "number"
+              },
+              "avgCycleTimeSec": {
+                "type": "number"
+              },
+              "oee": {
+                "type": "number"
+              },
+              "completedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "qualityStatus": {
+                "type": "string",
+                "enum": [
+                  "approved",
+                  "quarantine",
+                  "rejected"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "injection-molding.cycle": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "CycleCompleted",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "injection-molding.v1.cycle.completed"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "cycleId",
+              "runId",
+              "machineId",
+              "cycleNumber",
+              "completedAt"
+            ],
+            "properties": {
+              "cycleId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "runId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "machineId": {
+                "type": "string"
+              },
+              "cycleNumber": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "cycleTimeSec": {
+                "type": "number"
+              },
+              "shotWeightG": {
+                "type": "number"
+              },
+              "meltTempC": {
+                "type": "number"
+              },
+              "injectionPressureBar": {
+                "type": "number"
+              },
+              "cushionMm": {
+                "type": "number"
+              },
+              "partsProduced": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "defectsDetected": {
+                "type": "boolean"
+              },
+              "completedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "injection-molding.defect": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "DefectDetected",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "injection-molding.v1.defect.detected"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "defectId",
+              "runId",
+              "cycleId",
+              "defectType",
+              "detectedAt"
+            ],
+            "properties": {
+              "defectId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "runId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "cycleId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "machineId": {
+                "type": "string"
+              },
+              "moldId": {
+                "type": "string"
+              },
+              "defectType": {
+                "type": "string",
+                "enum": [
+                  "flash",
+                  "short_shot",
+                  "sink_mark",
+                  "warpage",
+                  "burn",
+                  "bubble",
+                  "color_streak",
+                  "contamination"
+                ]
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "cosmetic",
+                  "functional",
+                  "critical"
+                ]
+              },
+              "quantity": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "possibleCause": {
+                "type": "string"
+              },
+              "photoUrl": {
+                "type": "string",
+                "format": "uri"
+              },
+              "detectedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "detectedBy": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "injection-molding.machine": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "MachineStopped",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "injection-molding.v1.machine.stopped"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "stopId",
+              "machineId",
+              "runId",
+              "reason",
+              "stoppedAt"
+            ],
+            "properties": {
+              "stopId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "machineId": {
+                "type": "string"
+              },
+              "runId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "scheduled_end",
+                  "mold_change",
+                  "material_out",
+                  "maintenance",
+                  "emergency",
+                  "quality_hold"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "productionStopped": {
+                "type": "boolean"
+              },
+              "stoppedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "stoppedBy": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "injection-molding.mold": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "MoldChangeCompleted",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "injection-molding.v1.mold.change.completed"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "changeId",
+              "machineId",
+              "oldMoldId",
+              "newMoldId",
+              "completedAt"
+            ],
+            "properties": {
+              "changeId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "machineId": {
+                "type": "string"
+              },
+              "oldMoldId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "newMoldId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "downtimeMin": {
+                "type": "number"
+              },
+              "setupVerified": {
+                "type": "boolean"
+              },
+              "completedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "completedBy": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "injection-molding.parameter": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "ParameterChanged",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "injection-molding.v1.parameter.changed"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "changeId",
+              "runId",
+              "machineId",
+              "changes",
+              "changedAt"
+            ],
+            "properties": {
+              "changeId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "runId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "machineId": {
+                "type": "string"
+              },
+              "changes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "parameter",
+                    "oldValue",
+                    "newValue"
+                  ],
+                  "properties": {
+                    "parameter": {
+                      "type": "string"
+                    },
+                    "oldValue": {
+                      "type": "number"
+                    },
+                    "newValue": {
+                      "type": "number"
+                    }
+                  }
+                }
+              },
+              "reason": {
+                "type": "string"
+              },
+              "changedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "changedBy": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "injection-molding.quality": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "QualityCheckPassed",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "injection-molding.v1.quality.check.passed"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "checkId",
+              "batchId",
+              "checkedAt"
+            ],
+            "properties": {
+              "checkId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "batchId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "samplesChecked": {
+                "type": "integer"
+              },
+              "samplesPassed": {
+                "type": "integer"
+              },
+              "tests": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "testName": {
+                      "type": "string"
+                    },
+                    "result": {
+                      "type": "string",
+                      "enum": [
+                        "pass",
+                        "fail"
+                      ]
+                    },
+                    "measuredValue": {
+                      "type": "number"
+                    },
+                    "toleranceMin": {
+                      "type": "number"
+                    },
+                    "toleranceMax": {
+                      "type": "number"
+                    }
+                  }
+                }
+              },
+              "checkedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "checkedBy": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "injection-molding.run": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "athena://events/injection-molding/v1/run.started",
+        "title": "RunStarted",
+        "type": "object",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "injection-molding.v1.run.started"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "runId",
+              "machineId",
+              "moldId",
+              "productId",
+              "startedAt"
+            ],
+            "properties": {
+              "runId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "machineId": {
+                "type": "string"
+              },
+              "machineName": {
+                "type": "string"
+              },
+              "moldId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "productId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "materialLot": {
+                "type": "string"
+              },
+              "targetCycles": {
+                "type": "integer"
+              },
+              "startedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "operatorId": {
+                "type": "string"
+              },
+              "initialParameters": {
+                "type": "object",
+                "properties": {
+                  "meltTempC": {
+                    "type": "number"
+                  },
+                  "moldTempC": {
+                    "type": "number"
+                  },
+                  "injectionPressureBar": {
+                    "type": "number"
+                  },
+                  "holdingPressureBar": {
+                    "type": "number"
+                  },
+                  "coolingTimeSec": {
+                    "type": "number"
+                  },
+                  "cycleTimeSec": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "injection-molding.scrap": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "ScrapRecorded",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "injection-molding.v1.scrap.recorded"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "scrapId",
+              "runId",
+              "productId",
+              "quantity",
+              "reason",
+              "recordedAt"
+            ],
+            "properties": {
+              "scrapId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "runId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "batchId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "productId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "quantity": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "weightKg": {
+                "type": "number"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "recyclable": {
+                "type": "boolean"
+              },
+              "recordedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "inventory.low": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "athena://events/inventory/v1/low.stock.alert",
+        "title": "LowStockAlert",
+        "type": "object",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "inventory.v1.low.stock.alert"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "sku",
+              "warehouseId",
+              "currentQuantity",
+              "reorderPoint",
+              "triggeredAt"
+            ],
+            "properties": {
+              "sku": {
+                "type": "string"
+              },
+              "productName": {
+                "type": "string"
+              },
+              "warehouseId": {
+                "type": "string"
+              },
+              "warehouseName": {
+                "type": "string"
+              },
+              "currentQuantity": {
+                "type": "integer"
+              },
+              "reorderPoint": {
+                "type": "integer"
+              },
+              "safetyStock": {
+                "type": "integer"
+              },
+              "averageDailyDemand": {
+                "type": "number"
+              },
+              "daysUntilStockout": {
+                "type": "number"
+              },
+              "triggeredAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "warning",
+                  "critical",
+                  "stockout"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "inventory.stock": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "athena://events/inventory/v1/stock.shipped",
+        "title": "StockShipped",
+        "type": "object",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "inventory.v1.stock.shipped"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "movementId",
+              "orderId",
+              "warehouseId",
+              "items",
+              "shippedAt"
+            ],
+            "properties": {
+              "movementId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "orderId": {
+                "type": "string"
+              },
+              "warehouseId": {
+                "type": "string"
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "sku",
+                    "quantity"
+                  ],
+                  "properties": {
+                    "sku": {
+                      "type": "string"
+                    },
+                    "quantity": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "batchLot": {
+                      "type": "string"
+                    },
+                    "location": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "shippedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "carrierId": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "marketplace-integration.channel": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "athena://events/marketplace-integration/v1/channel.order.received",
+        "title": "ChannelOrderReceived",
+        "type": "object",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "marketplace-integration.v1.channel.order.received"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "channelOrderId",
+              "channel",
+              "items",
+              "customer",
+              "totals",
+              "receivedAt"
+            ],
+            "properties": {
+              "channelOrderId": {
+                "type": "string"
+              },
+              "channel": {
+                "type": "string",
+                "enum": [
+                  "mercadolivre",
+                  "shopee",
+                  "amazon",
+                  "magalu"
+                ]
+              },
+              "channelAccountId": {
+                "type": "string"
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "channelSku",
+                    "quantity",
+                    "unitPrice"
+                  ],
+                  "properties": {
+                    "channelSku": {
+                      "type": "string"
+                    },
+                    "internalSku": {
+                      "type": "string"
+                    },
+                    "quantity": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "unitPrice": {
+                      "type": "number"
+                    },
+                    "total": {
+                      "type": "number"
+                    }
+                  }
+                }
+              },
+              "customer": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "shippingAddress"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "phone": {
+                    "type": "string"
+                  },
+                  "shippingAddress": {
+                    "type": "object",
+                    "required": [
+                      "city",
+                      "state",
+                      "zipCode"
+                    ],
+                    "properties": {
+                      "recipientName": {
+                        "type": "string"
+                      },
+                      "street": {
+                        "type": "string"
+                      },
+                      "number": {
+                        "type": "string"
+                      },
+                      "neighborhood": {
+                        "type": "string"
+                      },
+                      "city": {
+                        "type": "string"
+                      },
+                      "state": {
+                        "type": "string"
+                      },
+                      "zipCode": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              },
+              "totals": {
+                "type": "object",
+                "required": [
+                  "grandTotal",
+                  "currency"
+                ],
+                "properties": {
+                  "subtotal": {
+                    "type": "number"
+                  },
+                  "shipping": {
+                    "type": "number"
+                  },
+                  "discount": {
+                    "type": "number"
+                  },
+                  "grandTotal": {
+                    "type": "number"
+                  },
+                  "currency": {
+                    "type": "string",
+                    "default": "BRL"
+                  }
+                }
+              },
+              "receivedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "estimatedShipDeadline": {
+                "type": "string",
+                "format": "date"
+              }
+            }
+          }
+        }
+      },
+      "marketplace-integration.competitor": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "athena://events/marketplace-integration/v1/competitor.price.changed",
+        "title": "CompetitorPriceChanged",
+        "type": "object",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "marketplace-integration.v1.competitor.price.changed"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "sku",
+              "channel",
+              "competitorId",
+              "newPrice",
+              "detectedAt"
+            ],
+            "properties": {
+              "sku": {
+                "type": "string"
+              },
+              "channel": {
+                "type": "string",
+                "enum": [
+                  "mercadolivre",
+                  "shopee",
+                  "amazon",
+                  "magalu"
+                ]
+              },
+              "competitorId": {
+                "type": "string"
+              },
+              "competitorName": {
+                "type": "string"
+              },
+              "previousPrice": {
+                "type": "number"
+              },
+              "newPrice": {
+                "type": "number",
+                "minimum": 0
+              },
+              "ourPrice": {
+                "type": "number"
+              },
+              "priceDifferencePercent": {
+                "type": "number"
+              },
+              "detectedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "marketplace-integration.listing": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "athena://events/marketplace-integration/v1/listing.published",
+        "title": "ListingPublished",
+        "type": "object",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "marketplace-integration.v1.listing.published"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "listingId",
+              "channel",
+              "productId",
+              "channelSku",
+              "publishedAt"
+            ],
+            "properties": {
+              "listingId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "channel": {
+                "type": "string",
+                "enum": [
+                  "mercadolivre",
+                  "shopee",
+                  "amazon",
+                  "magalu"
+                ]
+              },
+              "productId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "channelSku": {
+                "type": "string"
+              },
+              "channelListingId": {
+                "type": "string"
+              },
+              "channelUrl": {
+                "type": "string",
+                "format": "uri"
+              },
+              "publishedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "price": {
+                "type": "number",
+                "minimum": 0
+              },
+              "stockQuantity": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "active",
+                  "paused",
+                  "closed"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "marketplace-integration.price": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "athena://events/marketplace-integration/v1/price.repriced",
+        "title": "PriceRepriced",
+        "type": "object",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "marketplace-integration.v1.price.repriced"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "listingId",
+              "channel",
+              "sku",
+              "oldPrice",
+              "newPrice",
+              "repricedAt"
+            ],
+            "properties": {
+              "listingId": {
+                "type": "string"
+              },
+              "channel": {
+                "type": "string",
+                "enum": [
+                  "mercadolivre",
+                  "shopee",
+                  "amazon",
+                  "magalu"
+                ]
+              },
+              "sku": {
+                "type": "string"
+              },
+              "oldPrice": {
+                "type": "number"
+              },
+              "newPrice": {
+                "type": "number"
+              },
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "competitor_undercut",
+                  "margin_protection",
+                  "promotion",
+                  "liquidation",
+                  "manual"
+                ]
+              },
+              "marginPercent": {
+                "type": "number"
+              },
+              "repricedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "agentId": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "marketplace-integration.sync": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "athena://events/marketplace-integration/v1/sync.completed",
+        "title": "SyncCompleted",
+        "type": "object",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "marketplace-integration.v1.sync.completed"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "syncId",
+              "channel",
+              "syncType",
+              "completedAt"
+            ],
+            "properties": {
+              "syncId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "channel": {
+                "type": "string",
+                "enum": [
+                  "mercadolivre",
+                  "shopee",
+                  "amazon",
+                  "magalu"
+                ]
+              },
+              "syncType": {
+                "type": "string",
+                "enum": [
+                  "full",
+                  "incremental",
+                  "event_driven"
+                ]
+              },
+              "listingsSynced": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "listingsFailed": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "errors": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "durationSeconds": {
+                "type": "number"
+              },
+              "completedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "mold-making.cycle": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "CycleLimitReached",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "mold-making.v1.cycle.limit.reached"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "moldId",
+              "currentCycles",
+              "maxCycles",
+              "detectedAt"
+            ],
+            "properties": {
+              "moldId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "currentCycles": {
+                "type": "integer"
+              },
+              "maxCycles": {
+                "type": "integer"
+              },
+              "overPercent": {
+                "type": "number"
+              },
+              "materialProcessedKg": {
+                "type": "number"
+              },
+              "detectedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "actionRequired": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "mold-making.maintenance": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "MaintenanceScheduled",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "mold-making.v1.maintenance.scheduled"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "maintenanceId",
+              "moldId",
+              "scheduledDate",
+              "type"
+            ],
+            "properties": {
+              "maintenanceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "moldId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "preventive",
+                  "corrective",
+                  "inspection"
+                ]
+              },
+              "scheduledDate": {
+                "type": "string",
+                "format": "date"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "currentCycleCount": {
+                "type": "integer"
+              },
+              "cycleCountAtSchedule": {
+                "type": "integer"
+              },
+              "assignedTechnician": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "mold-making.mold": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "MoldInstalled",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "mold-making.v1.mold.installed"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "moldId",
+              "machineId",
+              "installedAt"
+            ],
+            "properties": {
+              "moldId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "machineId": {
+                "type": "string"
+              },
+              "machineName": {
+                "type": "string"
+              },
+              "installedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "installedBy": {
+                "type": "string"
+              },
+              "setupSheetId": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "order-management.fulfillment": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "athena://events/order-management/v1/fulfillment.routed",
+        "title": "FulfillmentRouted",
+        "type": "object",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "order-management.v1.fulfillment.routed"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "orderId",
+              "warehouseId",
+              "routedAt"
+            ],
+            "properties": {
+              "orderId": {
+                "type": "string"
+              },
+              "warehouseId": {
+                "type": "string"
+              },
+              "warehouseName": {
+                "type": "string"
+              },
+              "routedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "routingStrategy": {
+                "type": "string"
+              },
+              "estimatedPickTimeMinutes": {
+                "type": "number"
+              },
+              "distanceKm": {
+                "type": "number"
+              }
+            }
+          }
+        }
+      },
+      "order-management.order": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "athena://events/order-management/v1/order.shipped",
+        "title": "OrderShipped",
+        "type": "object",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "order-management.v1.order.shipped"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "orderId",
+              "carrierId",
+              "trackingCode",
+              "shippedAt"
+            ],
+            "properties": {
+              "orderId": {
+                "type": "string"
+              },
+              "carrierId": {
+                "type": "string"
+              },
+              "carrierName": {
+                "type": "string"
+              },
+              "trackingCode": {
+                "type": "string"
+              },
+              "trackingUrl": {
+                "type": "string",
+                "format": "uri"
+              },
+              "shippedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "estimatedDeliveryDate": {
+                "type": "string",
+                "format": "date"
+              },
+              "packages": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "packageId": {
+                      "type": "string"
+                    },
+                    "weightG": {
+                      "type": "number"
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "sku": {
+                            "type": "string"
+                          },
+                          "quantity": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "order-management.return": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "athena://events/order-management/v1/return.requested",
+        "title": "ReturnRequested",
+        "type": "object",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "order-management.v1.return.requested"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "returnId",
+              "orderId",
+              "reason",
+              "requestedAt"
+            ],
+            "properties": {
+              "returnId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "orderId": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "reasonDetail": {
+                "type": "string"
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "sku",
+                    "quantity"
+                  ],
+                  "properties": {
+                    "sku": {
+                      "type": "string"
+                    },
+                    "quantity": {
+                      "type": "integer"
+                    },
+                    "returnReason": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "requestedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "refundExpected": {
+                "type": "boolean"
+              },
+              "returnLabelGenerated": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "plastisol-processing.batch": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "BatchCompleted",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "plastisol-processing.v1.batch.completed"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "batchId",
+              "formulationId",
+              "productId",
+              "completedAt"
+            ],
+            "properties": {
+              "batchId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "formulationId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "productId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "quantityProduced": {
+                "type": "integer"
+              },
+              "defectives": {
+                "type": "integer"
+              },
+              "firstPassYieldPercent": {
+                "type": "number"
+              },
+              "materialUsageL": {
+                "type": "number"
+              },
+              "avgGelThicknessMm": {
+                "type": "number"
+              },
+              "avgHardnessShoreA": {
+                "type": "number"
+              },
+              "completedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "qualityStatus": {
+                "type": "string",
+                "enum": [
+                  "approved",
+                  "quarantine",
+                  "rejected"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "plastisol-processing.coating": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "CoatingSpecUpdated",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "plastisol-processing.v1.coating.spec.updated"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "specId",
+              "productId",
+              "updatedAt"
+            ],
+            "properties": {
+              "specId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "productId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "changes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "field",
+                    "oldValue",
+                    "newValue"
+                  ],
+                  "properties": {
+                    "field": {
+                      "type": "string"
+                    },
+                    "oldValue": {
+                      "type": "string"
+                    },
+                    "newValue": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "updatedBy": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "plastisol-processing.curing": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "CuringStarted",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "plastisol-processing.v1.curing.started"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "curingId",
+              "dippingId",
+              "ovenId",
+              "startedAt"
+            ],
+            "properties": {
+              "curingId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "dippingId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "ovenId": {
+                "type": "string"
+              },
+              "targetTempC": {
+                "type": "number"
+              },
+              "targetDurationMin": {
+                "type": "number"
+              },
+              "curingProfile": {
+                "type": "string"
+              },
+              "startedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "plastisol-processing.dipping": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "DippingStarted",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "plastisol-processing.v1.dipping.started"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "dippingId",
+              "formulationId",
+              "lineId",
+              "productId",
+              "quantity",
+              "startedAt"
+            ],
+            "properties": {
+              "dippingId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "formulationId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "lineId": {
+                "type": "string"
+              },
+              "productId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "quantity": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "moldType": {
+                "type": "string"
+              },
+              "preheatTempC": {
+                "type": "number"
+              },
+              "startedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "operatorId": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "plastisol-processing.formulation": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "FormulationMixed",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "plastisol-processing.v1.formulation.mixed"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "formulationId",
+              "productId",
+              "batchSizeL",
+              "mixedAt"
+            ],
+            "properties": {
+              "formulationId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "productId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "batchSizeL": {
+                "type": "number"
+              },
+              "components": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "name",
+                    "quantityL",
+                    "lotNumber"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "resin",
+                        "plasticizer",
+                        "stabilizer",
+                        "pigment",
+                        "filler",
+                        "additive"
+                      ]
+                    },
+                    "quantityL": {
+                      "type": "number"
+                    },
+                    "lotNumber": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "targetViscosityCp": {
+                "type": "number"
+              },
+              "actualViscosityCp": {
+                "type": "number"
+              },
+              "mixedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "mixedBy": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "plastisol-processing.qc": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "QCResultRecorded",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "plastisol-processing.v1.qc.result.recorded"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "qcId",
+              "batchId",
+              "result",
+              "testedAt"
+            ],
+            "properties": {
+              "qcId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "batchId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "result": {
+                "type": "string",
+                "enum": [
+                  "passed",
+                  "failed",
+                  "conditional"
+                ]
+              },
+              "tests": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "testType",
+                    "passed",
+                    "measured"
+                  ],
+                  "properties": {
+                    "testType": {
+                      "type": "string",
+                      "enum": [
+                        "thickness",
+                        "hardness",
+                        "adhesion",
+                        "color",
+                        "gloss",
+                        "tensile",
+                        "tear"
+                      ]
+                    },
+                    "passed": {
+                      "type": "boolean"
+                    },
+                    "measured": {
+                      "type": "number"
+                    },
+                    "specMin": {
+                      "type": "number"
+                    },
+                    "specMax": {
+                      "type": "number"
+                    }
+                  }
+                }
+              },
+              "notes": {
+                "type": "string"
+              },
+              "testedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "testedBy": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "plastisol-processing.viscosity": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "ViscosityAdjusted",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "plastisol-processing.v1.viscosity.adjusted"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "formulationId",
+              "oldViscosityCp",
+              "newViscosityCp",
+              "adjustedAt"
+            ],
+            "properties": {
+              "formulationId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "oldViscosityCp": {
+                "type": "number"
+              },
+              "newViscosityCp": {
+                "type": "number"
+              },
+              "adjustmentMethod": {
+                "type": "string"
+              },
+              "additiveUsed": {
+                "type": "string"
+              },
+              "quantityAddedL": {
+                "type": "number"
+              },
+              "adjustedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "adjustedBy": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "pricing.discount": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "DiscountApplied",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "pricing.v1.discount.applied"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "discountId",
+              "orderId",
+              "amount",
+              "appliedAt"
+            ],
+            "properties": {
+              "discountId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "orderId": {
+                "type": "string"
+              },
+              "promotionId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "type": {
+                "type": "string"
+              },
+              "amount": {
+                "type": "number"
+              },
+              "description": {
+                "type": "string"
+              },
+              "appliedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "pricing.elasticity": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "ElasticityAnalyzed",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "pricing.v1.elasticity.analyzed"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "analysisId",
+              "productId",
+              "coefficient",
+              "analyzedAt"
+            ],
+            "properties": {
+              "analysisId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "productId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "sku": {
+                "type": "string"
+              },
+              "coefficient": {
+                "type": "number"
+              },
+              "interpretation": {
+                "type": "string",
+                "enum": [
+                  "elastic",
+                  "inelastic",
+                  "unitary"
+                ]
+              },
+              "optimalPrice": {
+                "type": "number"
+              },
+              "confidenceScore": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "dataPoints": {
+                "type": "integer"
+              },
+              "analyzedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "pricing.margin": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "MarginAlert",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "pricing.v1.margin.alert"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "alertId",
+              "productId",
+              "currentMarginPercent",
+              "thresholdPercent",
+              "triggeredAt"
+            ],
+            "properties": {
+              "alertId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "productId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "sku": {
+                "type": "string"
+              },
+              "channel": {
+                "type": "string"
+              },
+              "cost": {
+                "type": "number"
+              },
+              "currentPrice": {
+                "type": "number"
+              },
+              "currentMarginPercent": {
+                "type": "number"
+              },
+              "thresholdPercent": {
+                "type": "number"
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "warning",
+                  "critical"
+                ]
+              },
+              "triggeredAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "pricing.price": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "PriceUpdated",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "pricing.v1.price.updated"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "priceId",
+              "productId",
+              "newPrice",
+              "updatedAt"
+            ],
+            "properties": {
+              "priceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "productId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "sku": {
+                "type": "string"
+              },
+              "oldPrice": {
+                "type": "number"
+              },
+              "newPrice": {
+                "type": "number",
+                "minimum": 0
+              },
+              "channel": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "cost_change",
+                  "competition",
+                  "promotion",
+                  "seasonal",
+                  "manual"
+                ]
+              },
+              "marginPercent": {
+                "type": "number"
+              },
+              "cost": {
+                "type": "number"
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "updatedBy": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "pricing.promotion": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "PromotionExpired",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "pricing.v1.promotion.expired"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "promotionId",
+              "expiredAt"
+            ],
+            "properties": {
+              "promotionId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "name": {
+                "type": "string"
+              },
+              "totalUses": {
+                "type": "integer"
+              },
+              "revenueImpact": {
+                "type": "number"
+              },
+              "expiredAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "product-engineering.bom": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "athena://events/product-engineering/v1/bom.updated",
+        "title": "BOMUpdated",
+        "type": "object",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "product-engineering.v1.bom.updated"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "bomId",
+              "productId",
+              "components"
+            ],
+            "properties": {
+              "bomId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "productId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "revisionNumber": {
+                "type": "string"
+              },
+              "components": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "componentId",
+                    "name",
+                    "quantity"
+                  ],
+                  "properties": {
+                    "componentId": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "quantity": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "materialSpec": {
+                      "type": "string"
+                    },
+                    "notes": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "totalComponents": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "product-engineering.product": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "athena://events/product-engineering/v1/product.designed",
+        "title": "ProductDesigned",
+        "type": "object",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "product-engineering.v1.product.designed"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "productId",
+              "sku",
+              "name",
+              "category",
+              "materials"
+            ],
+            "properties": {
+              "productId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "sku": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": {
+                "type": "string"
+              },
+              "category": {
+                "type": "string"
+              },
+              "materials": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "materialId",
+                    "name",
+                    "type"
+                  ],
+                  "properties": {
+                    "materialId": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "dimensions": {
+                "type": "object",
+                "properties": {
+                  "lengthMm": {
+                    "type": "number"
+                  },
+                  "widthMm": {
+                    "type": "number"
+                  },
+                  "heightMm": {
+                    "type": "number"
+                  },
+                  "weightG": {
+                    "type": "number"
+                  }
+                }
+              },
+              "bomId": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          }
+        }
+      },
+      "product-engineering.revision": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "athena://events/product-engineering/v1/revision.approved",
+        "title": "RevisionApproved",
+        "type": "object",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "product-engineering.v1.revision.approved"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "revisionId",
+              "productId",
+              "revisionNumber",
+              "approvedBy"
+            ],
+            "properties": {
+              "revisionId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "productId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "revisionNumber": {
+                "type": "string"
+              },
+              "changesDescription": {
+                "type": "string"
+              },
+              "approvedBy": {
+                "type": "string"
+              },
+              "approvedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "cadFileHash": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "retail-operations.inventory": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "athena://events/retail-operations/v1/inventory.counted",
+        "title": "InventoryCounted",
+        "type": "object",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "retail-operations.v1.inventory.counted"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "countId",
+              "storeId",
+              "countedAt"
+            ],
+            "properties": {
+              "countId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "storeId": {
+                "type": "string"
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "sku",
+                    "systemQuantity",
+                    "physicalQuantity",
+                    "difference"
+                  ],
+                  "properties": {
+                    "sku": {
+                      "type": "string"
+                    },
+                    "systemQuantity": {
+                      "type": "integer"
+                    },
+                    "physicalQuantity": {
+                      "type": "integer"
+                    },
+                    "difference": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              },
+              "countedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "countedBy": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "in_progress",
+                  "completed",
+                  "requires_recount"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "retail-operations.register": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "athena://events/retail-operations/v1/register.closed",
+        "title": "RegisterClosed",
+        "type": "object",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "retail-operations.v1.register.closed"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "registerId",
+              "storeId",
+              "closedAt"
+            ],
+            "properties": {
+              "registerId": {
+                "type": "string"
+              },
+              "storeId": {
+                "type": "string"
+              },
+              "openingBalance": {
+                "type": "number"
+              },
+              "closingBalance": {
+                "type": "number"
+              },
+              "expectedBalance": {
+                "type": "number"
+              },
+              "difference": {
+                "type": "number"
+              },
+              "totalSales": {
+                "type": "number"
+              },
+              "saleCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "closedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "closedBy": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "retail-operations.sale": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "athena://events/retail-operations/v1/sale.completed",
+        "title": "SaleCompleted",
+        "type": "object",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "retail-operations.v1.sale.completed"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "saleId",
+              "storeId",
+              "items",
+              "totals",
+              "completedAt"
+            ],
+            "properties": {
+              "saleId": {
+                "type": "string"
+              },
+              "storeId": {
+                "type": "string"
+              },
+              "registerId": {
+                "type": "string"
+              },
+              "sellerId": {
+                "type": "string"
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "sku",
+                    "quantity",
+                    "unitPrice"
+                  ],
+                  "properties": {
+                    "sku": {
+                      "type": "string"
+                    },
+                    "quantity": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "unitPrice": {
+                      "type": "number"
+                    },
+                    "total": {
+                      "type": "number"
+                    },
+                    "discount": {
+                      "type": "number"
+                    }
+                  }
+                }
+              },
+              "totals": {
+                "type": "object",
+                "required": [
+                  "subtotal",
+                  "grandTotal"
+                ],
+                "properties": {
+                  "subtotal": {
+                    "type": "number"
+                  },
+                  "discount": {
+                    "type": "number"
+                  },
+                  "grandTotal": {
+                    "type": "number"
+                  },
+                  "currency": {
+                    "type": "string",
+                    "default": "BRL"
+                  }
+                }
+              },
+              "paymentMethod": {
+                "type": "string"
+              },
+              "completedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "shipping.carrier": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "CarrierSelected",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "shipping.v1.carrier.selected"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "shipmentId",
+              "carrier",
+              "cost",
+              "estimatedDays",
+              "selectedAt"
+            ],
+            "properties": {
+              "shipmentId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "carrier": {
+                "type": "string"
+              },
+              "alternativeCarriers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "cost": {
+                      "type": "number"
+                    },
+                    "estimatedDays": {
+                      "type": "number"
+                    }
+                  }
+                }
+              },
+              "cost": {
+                "type": "number"
+              },
+              "estimatedDays": {
+                "type": "number"
+              },
+              "selectedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "selectionStrategy": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "shipping.delivered": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "Delivered",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "shipping.v1.delivered"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "shipmentId",
+              "deliveredAt"
+            ],
+            "properties": {
+              "shipmentId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "orderId": {
+                "type": "string"
+              },
+              "trackingCode": {
+                "type": "string"
+              },
+              "deliveredAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "receivedBy": {
+                "type": "string"
+              },
+              "deliveryProof": {
+                "type": "string"
+              },
+              "onTime": {
+                "type": "boolean"
+              },
+              "deliveryAttempts": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "shipping.delivery": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "DeliveryFailed",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "shipping.v1.delivery.failed"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "shipmentId",
+              "reason",
+              "failedAt"
+            ],
+            "properties": {
+              "shipmentId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "orderId": {
+                "type": "string"
+              },
+              "trackingCode": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "address_not_found",
+                  "recipient_absent",
+                  "refused",
+                  "damaged",
+                  "lost",
+                  "other"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "failedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "returnInitiated": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "shipping.label": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "LabelGenerated",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "shipping.v1.label.generated"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "labelId",
+              "shipmentId",
+              "carrier",
+              "trackingCode",
+              "generatedAt"
+            ],
+            "properties": {
+              "labelId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "shipmentId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "carrier": {
+                "type": "string"
+              },
+              "carrierCode": {
+                "type": "string"
+              },
+              "trackingCode": {
+                "type": "string"
+              },
+              "trackingUrl": {
+                "type": "string",
+                "format": "uri"
+              },
+              "shippingCost": {
+                "type": "number"
+              },
+              "estimatedDeliveryDate": {
+                "type": "string",
+                "format": "date"
+              },
+              "generatedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "shipping.rate": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "RateCalculated",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "shipping.v1.rate.calculated"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "rateId",
+              "shipmentId",
+              "calculatedAt"
+            ],
+            "properties": {
+              "rateId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "shipmentId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "rates": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "carrier",
+                    "service",
+                    "cost",
+                    "estimatedDays"
+                  ],
+                  "properties": {
+                    "carrier": {
+                      "type": "string"
+                    },
+                    "service": {
+                      "type": "string"
+                    },
+                    "cost": {
+                      "type": "number"
+                    },
+                    "estimatedDays": {
+                      "type": "number"
+                    }
+                  }
+                }
+              },
+              "calculatedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "shipping.return": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "ReturnLabelGenerated",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "shipping.v1.return.label.generated"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "returnLabelId",
+              "shipmentId",
+              "returnOrderId",
+              "trackingCode",
+              "generatedAt"
+            ],
+            "properties": {
+              "returnLabelId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "shipmentId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "returnOrderId": {
+                "type": "string"
+              },
+              "carrier": {
+                "type": "string"
+              },
+              "trackingCode": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "generatedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "shipping.shipment": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "athena://events/shipping/v1/shipment.created",
+        "title": "ShipmentCreated",
+        "type": "object",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "shipping.v1.shipment.created"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "shipmentId",
+              "orderId",
+              "items",
+              "createdAt"
+            ],
+            "properties": {
+              "shipmentId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "orderId": {
+                "type": "string"
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "sku",
+                    "quantity"
+                  ],
+                  "properties": {
+                    "sku": {
+                      "type": "string"
+                    },
+                    "quantity": {
+                      "type": "integer"
+                    },
+                    "weightG": {
+                      "type": "number"
+                    }
+                  }
+                }
+              },
+              "shippingAddress": {
+                "type": "object",
+                "required": [
+                  "recipientName",
+                  "city",
+                  "state",
+                  "zipCode"
+                ],
+                "properties": {
+                  "recipientName": {
+                    "type": "string"
+                  },
+                  "street": {
+                    "type": "string"
+                  },
+                  "number": {
+                    "type": "string"
+                  },
+                  "complement": {
+                    "type": "string"
+                  },
+                  "neighborhood": {
+                    "type": "string"
+                  },
+                  "city": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "type": "string"
+                  },
+                  "zipCode": {
+                    "type": "string"
+                  }
+                }
+              },
+              "packageConfig": {
+                "type": "object",
+                "properties": {
+                  "totalWeightG": {
+                    "type": "number"
+                  },
+                  "totalPackages": {
+                    "type": "integer"
+                  },
+                  "dimensions": {
+                    "type": "object",
+                    "properties": {
+                      "lengthCm": {
+                        "type": "number"
+                      },
+                      "widthCm": {
+                        "type": "number"
+                      },
+                      "heightCm": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "shipping.tracking": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "TrackingUpdated",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "shipping.v1.tracking.updated"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "shipmentId",
+              "trackingCode",
+              "status",
+              "location",
+              "updatedAt"
+            ],
+            "properties": {
+              "shipmentId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "trackingCode": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "statusDetail": {
+                "type": "string"
+              },
+              "location": {
+                "type": "string"
+              },
+              "city": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string"
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "carrier": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "telegram-commerce.conversation": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "athena://events/telegram-commerce/v1/conversation.started",
+        "title": "ConversationStarted",
+        "type": "object",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "telegram-commerce.v1.conversation.started"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "chatId",
+              "telegramUserId",
+              "startedAt"
+            ],
+            "properties": {
+              "chatId": {
+                "type": "string"
+              },
+              "telegramUserId": {
+                "type": "string"
+              },
+              "username": {
+                "type": "string"
+              },
+              "firstName": {
+                "type": "string"
+              },
+              "languageCode": {
+                "type": "string"
+              },
+              "entryPoint": {
+                "type": "string",
+                "enum": [
+                  "direct",
+                  "inline_query",
+                  "group",
+                  "referral"
+                ]
+              },
+              "startedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "telegram-commerce.order": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "athena://events/telegram-commerce/v1/order.confirmed",
+        "title": "OrderConfirmedViaChat",
+        "type": "object",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "telegram-commerce.v1.order.confirmed"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "chatOrderId",
+              "telegramUserId",
+              "chatId",
+              "items",
+              "totals",
+              "confirmedAt"
+            ],
+            "properties": {
+              "chatOrderId": {
+                "type": "string"
+              },
+              "telegramUserId": {
+                "type": "string"
+              },
+              "chatId": {
+                "type": "string"
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "sku",
+                    "quantity",
+                    "unitPrice"
+                  ],
+                  "properties": {
+                    "sku": {
+                      "type": "string"
+                    },
+                    "quantity": {
+                      "type": "integer"
+                    },
+                    "unitPrice": {
+                      "type": "number"
+                    },
+                    "total": {
+                      "type": "number"
+                    }
+                  }
+                }
+              },
+              "shippingAddress": {
+                "type": "object",
+                "required": [
+                  "recipientName",
+                  "city",
+                  "state",
+                  "zipCode"
+                ],
+                "properties": {
+                  "recipientName": {
+                    "type": "string"
+                  },
+                  "street": {
+                    "type": "string"
+                  },
+                  "number": {
+                    "type": "string"
+                  },
+                  "neighborhood": {
+                    "type": "string"
+                  },
+                  "city": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "type": "string"
+                  },
+                  "zipCode": {
+                    "type": "string"
+                  }
+                }
+              },
+              "totals": {
+                "type": "object",
+                "required": [
+                  "subtotal",
+                  "grandTotal",
+                  "currency"
+                ],
+                "properties": {
+                  "subtotal": {
+                    "type": "number"
+                  },
+                  "shipping": {
+                    "type": "number"
+                  },
+                  "discount": {
+                    "type": "number"
+                  },
+                  "grandTotal": {
+                    "type": "number"
+                  },
+                  "currency": {
+                    "type": "string",
+                    "default": "BRL"
+                  }
+                }
+              },
+              "confirmedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "telegram-commerce.payment": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "athena://events/telegram-commerce/v1/payment.completed",
+        "title": "PaymentCompleted",
+        "type": "object",
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "timestamp",
+          "correlationId",
+          "tenantId",
+          "source",
+          "payload",
+          "metadata"
+        ],
+        "properties": {
+          "eventType": {
+            "const": "telegram-commerce.v1.payment.completed"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "paymentId",
+              "chatOrderId",
+              "amount",
+              "method",
+              "completedAt"
+            ],
+            "properties": {
+              "paymentId": {
+                "type": "string"
+              },
+              "chatOrderId": {
+                "type": "string"
+              },
+              "amount": {
+                "type": "number"
+              },
+              "method": {
+                "type": "string",
+                "enum": [
+                  "pix",
+                  "credit_card",
+                  "boleto",
+                  "wallet"
+                ]
+              },
+              "installments": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "transactionId": {
+                "type": "string"
+              },
+              "completedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

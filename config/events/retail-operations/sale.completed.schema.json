@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "athena://events/retail-operations/v1/sale.completed",
+  "title": "SaleCompleted",
+  "type": "object",
+  "required": ["eventId", "eventType", "eventVersion", "timestamp", "correlationId", "tenantId", "source", "payload", "metadata"],
+  "properties": {
+    "eventType": { "const": "retail-operations.v1.sale.completed" },
+    "payload": {
+      "type": "object",
+      "required": ["saleId", "storeId", "items", "totals", "completedAt"],
+      "properties": {
+        "saleId": { "type": "string" },
+        "storeId": { "type": "string" },
+        "registerId": { "type": "string" },
+        "sellerId": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["sku", "quantity", "unitPrice"],
+            "properties": {
+              "sku": { "type": "string" },
+              "quantity": { "type": "integer", "minimum": 1 },
+              "unitPrice": { "type": "number" },
+              "total": { "type": "number" },
+              "discount": { "type": "number" }
+            }
+          }
+        },
+        "totals": {
+          "type": "object",
+          "required": ["subtotal", "grandTotal"],
+          "properties": {
+            "subtotal": { "type": "number" },
+            "discount": { "type": "number" },
+            "grandTotal": { "type": "number" },
+            "currency": { "type": "string", "default": "BRL" }
+          }
+        },
+        "paymentMethod": { "type": "string" },
+        "completedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

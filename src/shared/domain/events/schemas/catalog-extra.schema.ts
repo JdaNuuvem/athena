@@ -1,0 +1,3 @@
+import { z } from 'zod'
+export const CategoryReorganizedPayload = z.object({ categoryId:z.string().min(1), action:z.enum(['moved','renamed','merged','split']), oldParentId:z.string().optional(), newParentId:z.string().optional(), affectedProducts:z.number().int().optional(), reorganizedAt:z.string().datetime() })
+export const SEOOptimizedPayload = z.object({ productId:z.string().uuid(), oldTitle:z.string().optional(), newTitle:z.string().optional(), oldDescription:z.string().optional(), newDescription:z.string().optional(), keywordChanges:z.array(z.object({keyword:z.string(),action:z.enum(['added','removed'])})).optional(), optimizedAt:z.string().datetime() })

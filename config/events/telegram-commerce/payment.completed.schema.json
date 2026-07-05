@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "athena://events/telegram-commerce/v1/payment.completed",
+  "title": "PaymentCompleted",
+  "type": "object",
+  "required": ["eventId", "eventType", "eventVersion", "timestamp", "correlationId", "tenantId", "source", "payload", "metadata"],
+  "properties": {
+    "eventType": { "const": "telegram-commerce.v1.payment.completed" },
+    "payload": {
+      "type": "object",
+      "required": ["paymentId", "chatOrderId", "amount", "method", "completedAt"],
+      "properties": {
+        "paymentId": { "type": "string" },
+        "chatOrderId": { "type": "string" },
+        "amount": { "type": "number" },
+        "method": { "type": "string", "enum": ["pix", "credit_card", "boleto", "wallet"] },
+        "installments": { "type": "integer", "minimum": 1 },
+        "transactionId": { "type": "string" },
+        "completedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

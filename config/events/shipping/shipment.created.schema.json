@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "athena://events/shipping/v1/shipment.created",
+  "title": "ShipmentCreated",
+  "type": "object",
+  "required": ["eventId", "eventType", "eventVersion", "timestamp", "correlationId", "tenantId", "source", "payload", "metadata"],
+  "properties": {
+    "eventType": { "const": "shipping.v1.shipment.created" },
+    "payload": {
+      "type": "object",
+      "required": ["shipmentId", "orderId", "items", "createdAt"],
+      "properties": {
+        "shipmentId": { "type": "string", "format": "uuid" },
+        "orderId": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["sku", "quantity"],
+            "properties": {
+              "sku": { "type": "string" },
+              "quantity": { "type": "integer" },
+              "weightG": { "type": "number" }
+            }
+          }
+        },
+        "shippingAddress": {
+          "type": "object",
+          "required": ["recipientName", "city", "state", "zipCode"],
+          "properties": {
+            "recipientName": { "type": "string" },
+            "street": { "type": "string" },
+            "number": { "type": "string" },
+            "complement": { "type": "string" },
+            "neighborhood": { "type": "string" },
+            "city": { "type": "string" },
+            "state": { "type": "string" },
+            "zipCode": { "type": "string" }
+          }
+        },
+        "packageConfig": {
+          "type": "object",
+          "properties": {
+            "totalWeightG": { "type": "number" },
+            "totalPackages": { "type": "integer" },
+            "dimensions": {
+              "type": "object",
+              "properties": {
+                "lengthCm": { "type": "number" },
+                "widthCm": { "type": "number" },
+                "heightCm": { "type": "number" }
+              }
+            }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

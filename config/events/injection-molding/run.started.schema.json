@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "athena://events/injection-molding/v1/run.started",
+  "title": "RunStarted",
+  "type": "object",
+  "required": ["eventId", "eventType", "eventVersion", "timestamp", "correlationId", "tenantId", "source", "payload", "metadata"],
+  "properties": {
+    "eventType": { "const": "injection-molding.v1.run.started" },
+    "payload": {
+      "type": "object",
+      "required": ["runId", "machineId", "moldId", "productId", "startedAt"],
+      "properties": {
+        "runId": { "type": "string", "format": "uuid" },
+        "machineId": { "type": "string" },
+        "machineName": { "type": "string" },
+        "moldId": { "type": "string", "format": "uuid" },
+        "productId": { "type": "string", "format": "uuid" },
+        "materialLot": { "type": "string" },
+        "targetCycles": { "type": "integer" },
+        "startedAt": { "type": "string", "format": "date-time" },
+        "operatorId": { "type": "string" },
+        "initialParameters": {
+          "type": "object",
+          "properties": {
+            "meltTempC": { "type": "number" },
+            "moldTempC": { "type": "number" },
+            "injectionPressureBar": { "type": "number" },
+            "holdingPressureBar": { "type": "number" },
+            "coolingTimeSec": { "type": "number" },
+            "cycleTimeSec": { "type": "number" }
+          }
+        }
+      }
+    }
+  }
+}

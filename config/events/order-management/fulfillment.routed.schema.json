@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "athena://events/order-management/v1/fulfillment.routed",
+  "title": "FulfillmentRouted",
+  "type": "object",
+  "required": ["eventId", "eventType", "eventVersion", "timestamp", "correlationId", "tenantId", "source", "payload", "metadata"],
+  "properties": {
+    "eventType": { "const": "order-management.v1.fulfillment.routed" },
+    "payload": {
+      "type": "object",
+      "required": ["orderId", "warehouseId", "routedAt"],
+      "properties": {
+        "orderId": { "type": "string" },
+        "warehouseId": { "type": "string" },
+        "warehouseName": { "type": "string" },
+        "routedAt": { "type": "string", "format": "date-time" },
+        "routingStrategy": { "type": "string" },
+        "estimatedPickTimeMinutes": { "type": "number" },
+        "distanceKm": { "type": "number" }
+      }
+    }
+  }
+}

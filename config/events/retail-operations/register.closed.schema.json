@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "athena://events/retail-operations/v1/register.closed",
+  "title": "RegisterClosed",
+  "type": "object",
+  "required": ["eventId", "eventType", "eventVersion", "timestamp", "correlationId", "tenantId", "source", "payload", "metadata"],
+  "properties": {
+    "eventType": { "const": "retail-operations.v1.register.closed" },
+    "payload": {
+      "type": "object",
+      "required": ["registerId", "storeId", "closedAt"],
+      "properties": {
+        "registerId": { "type": "string" },
+        "storeId": { "type": "string" },
+        "openingBalance": { "type": "number" },
+        "closingBalance": { "type": "number" },
+        "expectedBalance": { "type": "number" },
+        "difference": { "type": "number" },
+        "totalSales": { "type": "number" },
+        "saleCount": { "type": "integer", "minimum": 0 },
+        "closedAt": { "type": "string", "format": "date-time" },
+        "closedBy": { "type": "string" }
+      }
+    }
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "athena://events/order-management/v1/fulfillment.completed",
+  "title": "FulfillmentCompleted",
+  "type": "object",
+  "required": ["eventId", "eventType", "eventVersion", "timestamp", "correlationId", "tenantId", "source", "payload", "metadata"],
+  "properties": {
+    "eventType": { "const": "order-management.v1.fulfillment.completed" },
+    "payload": {
+      "type": "object",
+      "required": ["fulfillmentId", "orderId", "warehouseId", "completedAt"],
+      "properties": {
+        "fulfillmentId": { "type": "string", "format": "uuid" },
+        "orderId": { "type": "string" },
+        "warehouseId": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["sku", "quantityPicked", "quantityOrdered"],
+            "properties": {
+              "sku": { "type": "string" },
+              "quantityPicked": { "type": "integer" },
+              "quantityOrdered": { "type": "integer" }
+            }
+          }
+        },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "completedBy": { "type": "string" },
+        "durationSeconds": { "type": "number" }
+      }
+    }
+  }
+}

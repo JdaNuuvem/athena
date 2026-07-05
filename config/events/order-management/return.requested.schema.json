@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "athena://events/order-management/v1/return.requested",
+  "title": "ReturnRequested",
+  "type": "object",
+  "required": ["eventId", "eventType", "eventVersion", "timestamp", "correlationId", "tenantId", "source", "payload", "metadata"],
+  "properties": {
+    "eventType": { "const": "order-management.v1.return.requested" },
+    "payload": {
+      "type": "object",
+      "required": ["returnId", "orderId", "reason", "requestedAt"],
+      "properties": {
+        "returnId": { "type": "string", "format": "uuid" },
+        "orderId": { "type": "string" },
+        "reason": { "type": "string" },
+        "reasonDetail": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["sku", "quantity"],
+            "properties": {
+              "sku": { "type": "string" },
+              "quantity": { "type": "integer" },
+              "returnReason": { "type": "string" }
+            }
+          }
+        },
+        "requestedAt": { "type": "string", "format": "date-time" },
+        "refundExpected": { "type": "boolean" },
+        "returnLabelGenerated": { "type": "boolean" }
+      }
+    }
+  }
+}

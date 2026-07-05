@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "athena://events/analytics/v1/anomaly.detected",
+  "title": "AnomalyDetected",
+  "type": "object",
+  "required": ["eventId", "eventType", "eventVersion", "timestamp", "correlationId", "tenantId", "source", "payload", "metadata"],
+  "properties": {
+    "eventType": { "const": "analytics.v1.anomaly.detected" },
+    "payload": {
+      "type": "object",
+      "required": ["anomalyId", "metric", "detectedAt"],
+      "properties": {
+        "anomalyId": { "type": "string", "format": "uuid" },
+        "context": { "type": "string" },
+        "metric": { "type": "string" },
+        "currentValue": { "type": "number" },
+        "expectedValue": { "type": "number" },
+        "deviationPercent": { "type": "number" },
+        "zScore": { "type": "number" },
+        "severity": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+        "detectedAt": { "type": "string", "format": "date-time" },
+        "relatedEventIds": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

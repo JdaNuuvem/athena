@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "athena://events/customer/v1/customer.segmented",
+  "title": "CustomerSegmented",
+  "type": "object",
+  "required": ["eventId", "eventType", "eventVersion", "timestamp", "correlationId", "tenantId", "source", "payload", "metadata"],
+  "properties": {
+    "eventType": { "const": "customer.v1.customer.segmented" },
+    "payload": {
+      "type": "object",
+      "required": ["customerId", "segment", "segmentedAt"],
+      "properties": {
+        "customerId": { "type": "string" },
+        "segment": { "type": "string" },
+        "rfmScore": {
+          "type": "object",
+          "properties": {
+            "recency": { "type": "integer" },
+            "frequency": { "type": "integer" },
+            "monetary": { "type": "integer" },
+            "total": { "type": "integer" }
+          }
+        },
+        "segmentedAt": { "type": "string", "format": "date-time" },
+        "segmentChanged": { "type": "boolean" }
+      }
+    }
+  }
+}

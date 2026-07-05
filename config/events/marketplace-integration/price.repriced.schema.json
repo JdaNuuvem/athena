@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "athena://events/marketplace-integration/v1/price.repriced",
+  "title": "PriceRepriced",
+  "type": "object",
+  "required": ["eventId", "eventType", "eventVersion", "timestamp", "correlationId", "tenantId", "source", "payload", "metadata"],
+  "properties": {
+    "eventType": { "const": "marketplace-integration.v1.price.repriced" },
+    "payload": {
+      "type": "object",
+      "required": ["listingId", "channel", "sku", "oldPrice", "newPrice", "repricedAt"],
+      "properties": {
+        "listingId": { "type": "string" },
+        "channel": { "type": "string", "enum": ["mercadolivre", "shopee", "amazon", "magalu"] },
+        "sku": { "type": "string" },
+        "oldPrice": { "type": "number" },
+        "newPrice": { "type": "number" },
+        "reason": { "type": "string", "enum": ["competitor_undercut", "margin_protection", "promotion", "liquidation", "manual"] },
+        "marginPercent": { "type": "number" },
+        "repricedAt": { "type": "string", "format": "date-time" },
+        "agentId": { "type": "string" }
+      }
+    }
+  }
+}

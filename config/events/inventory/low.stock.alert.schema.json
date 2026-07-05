@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "athena://events/inventory/v1/low.stock.alert",
+  "title": "LowStockAlert",
+  "type": "object",
+  "required": ["eventId", "eventType", "eventVersion", "timestamp", "correlationId", "tenantId", "source", "payload", "metadata"],
+  "properties": {
+    "eventType": { "const": "inventory.v1.low.stock.alert" },
+    "payload": {
+      "type": "object",
+      "required": ["sku", "warehouseId", "currentQuantity", "reorderPoint", "triggeredAt"],
+      "properties": {
+        "sku": { "type": "string" },
+        "productName": { "type": "string" },
+        "warehouseId": { "type": "string" },
+        "warehouseName": { "type": "string" },
+        "currentQuantity": { "type": "integer" },
+        "reorderPoint": { "type": "integer" },
+        "safetyStock": { "type": "integer" },
+        "averageDailyDemand": { "type": "number" },
+        "daysUntilStockout": { "type": "number" },
+        "triggeredAt": { "type": "string", "format": "date-time" },
+        "severity": { "type": "string", "enum": ["warning", "critical", "stockout"] }
+      }
+    }
+  }
+}

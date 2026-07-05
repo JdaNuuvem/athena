@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "athena://events/telegram-commerce/v1/conversation.started",
+  "title": "ConversationStarted",
+  "type": "object",
+  "required": ["eventId", "eventType", "eventVersion", "timestamp", "correlationId", "tenantId", "source", "payload", "metadata"],
+  "properties": {
+    "eventType": { "const": "telegram-commerce.v1.conversation.started" },
+    "payload": {
+      "type": "object",
+      "required": ["chatId", "telegramUserId", "startedAt"],
+      "properties": {
+        "chatId": { "type": "string" },
+        "telegramUserId": { "type": "string" },
+        "username": { "type": "string" },
+        "firstName": { "type": "string" },
+        "languageCode": { "type": "string" },
+        "entryPoint": { "type": "string", "enum": ["direct", "inline_query", "group", "referral"] },
+        "startedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}
