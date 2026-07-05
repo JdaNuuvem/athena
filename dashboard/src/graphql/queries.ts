@@ -243,3 +243,28 @@ export const SHIPMENTS = gql`
     }
   }
 `
+
+export const SHOPEE_PRODUCTS = gql`
+  query ShopeeProducts {
+    shopeeProducts {
+      itemId
+      itemSku
+      itemName
+      itemStatus
+      stock
+      reservedStock
+      hasModel
+      price
+      lastSyncedAt
+    }
+  }
+`
+
+export const SYNC_SHOPEE = gql`
+  mutation SyncShopeeStock {
+    syncShopeeStock {
+      count
+      errors
+    }
+  }
+`

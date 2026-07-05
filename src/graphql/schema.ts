@@ -22,6 +22,10 @@ const typeDefs = /* GraphQL */ `
     stockItem(sku: String!, warehouseId: String!): StockItem
     stockMovements(sku: String, type: String, limit: Int): [StockMovement!]!
 
+    # Shopee
+    shopeeProducts(status: String): [ShopeeProduct!]!
+    shopeeProduct(itemId: Int!): ShopeeProduct
+
     # Customers
     customers(tier: String): [Customer!]!
     customer(id: String!): Customer
@@ -324,6 +328,27 @@ const typeDefs = /* GraphQL */ `
   }
 
   scalar JSON
+
+  type ShopeeProduct {
+    itemId: Int!
+    itemSku: String!
+    itemName: String!
+    itemStatus: String!
+    stock: Int!
+    reservedStock: Int!
+    hasModel: Boolean!
+    price: Float!
+    lastSyncedAt: String!
+  }
+
+  type Mutation {
+    syncShopeeStock: ShopeeSyncResult!
+  }
+
+  type ShopeeSyncResult {
+    count: Int!
+    errors: [String!]!
+  }
 
   type Subscription {
     orderUpdated: Order!

@@ -8,6 +8,7 @@ import { setupWSBroadcast } from '../shared/infrastructure/websocket/ws-broadcas
 import { logger } from '../shared/infrastructure/observability/logger'
 import { getRedisEventBus, disconnectRedisEventBus } from '../shared/infrastructure/messaging/redis-event-bus'
 import { initSettingsTable, loadSettingsToEnv } from '../shared/infrastructure/persistence/settings-repository'
+import { initShopeeTable, startShopeeSync } from '../shared/infrastructure/integrations/shopee-stock-sync'
 import type { EventEnvelope } from '../shared/domain/events'
 import { DefaultAgentRegistry } from '../agents/registry/agent-registry'
 import { DefaultCapabilityRegistry } from '../agents/registry/capability-registry'
@@ -70,6 +71,8 @@ async function initInfrastructure(): Promise<void> {
   try { getRedisEventBus(); console.log('  Redis    Pub/Sub ready') } catch { console.warn('  Redis    Pub/Sub offline') }
   try { await initSettingsTable(); console.log('  Settings ready') } catch { console.warn('  Settings  offline') }
   try { await loadSettingsToEnv(); console.log('  Env      loaded from DB') } catch { console.warn('  Env      failed to load') }
+  try { await initShopeeTable(); console.log('  Shopee   table ready') } catch { console.warn('  Shopee   table offline') }
+  try { startShopeeSync(300000); console.log('  Shopee   sync started (5min)') } catch { console.warn('  Shopee   sync skipped') }
 }
 
 function createAllAgents(): AgentProcess[] {

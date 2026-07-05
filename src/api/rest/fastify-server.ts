@@ -201,6 +201,24 @@ export async function startDashboard(registry: AgentRegistry, orchestrator: Orch
     return { status: 'saved', count: req.body.settings.length }
   })
 
+  server.post('/api/shopee/sync', async () => {
+    const { syncShopeeProducts } = await import('../../shared/infrastructure/integrations/shopee-stock-sync')
+    const result = await syncShopeeProducts()
+    return result
+  })
+
+  server.post<{ Body: { orderId: string; items: Array<{ sku: string; quantity: number }> } }>('/api/stock/decrement', async (req) => {
+    const { updateShopeeStockOnOrder } = await import('../../shared/infrastructure/integrations/shopee-stock-sync')
+    await updateShopeeStockOnOrder(req.body.items)
+
+    const pool = new (await import('pg')).Pool({ connectionString: process.env['DATABASE_URL'] ?? 'postgresql://athena:athena@localhost:5433/athena', max: 5 })
+    for (const item of req.body.items) {
+      await pool.query(`UPDATE "StockItem" SET quantity = GREATEST(quantity - $1, 0) WHERE sku=$2`, [item.quantity, item.sku])
+      await pool.query(`INSERT INTO "StockMovement" (id, type, sku, "warehouseId", quantity, reference, timestamp) VALUES (gen_random_uuid()::text, 'out', $1, 'shopee', $2, $3, NOW())`, [item.sku, item.quantity, `order:${req.body.orderId}`])
+    }
+    return { status: 'decremented', items: req.body.items.length }
+  })
+
   await server.register(mercurius, {
     schema: typeDefs,
     resolvers,

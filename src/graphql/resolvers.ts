@@ -95,6 +95,39 @@ const resolvers = {
 
     stockMovements: async () => query(`SELECT * FROM "StockMovement" ORDER BY timestamp DESC LIMIT 50`),
 
+    shopeeProducts: async () => {
+      const { getShopeeProducts } = await import('../shared/infrastructure/integrations/shopee-stock-sync')
+      const rows = await getShopeeProducts()
+      return rows.map((r: any) => ({
+        itemId: Number(r.item_id),
+        itemSku: r.item_sku,
+        itemName: r.item_name,
+        itemStatus: r.item_status,
+        stock: Number(r.stock),
+        reservedStock: Number(r.reserved_stock),
+        hasModel: r.has_model,
+        price: Number(r.price),
+        lastSyncedAt: r.last_synced_at,
+      }))
+    },
+
+    shopeeProduct: async (_: any, args: { itemId: number }) => {
+      const { getShopeeProduct } = await import('../shared/infrastructure/integrations/shopee-stock-sync')
+      const r = await getShopeeProduct(args.itemId)
+      if (!r) return null
+      return {
+        itemId: Number(r.item_id),
+        itemSku: r.item_sku,
+        itemName: r.item_name,
+        itemStatus: r.item_status,
+        stock: Number(r.stock),
+        reservedStock: Number(r.reserved_stock),
+        hasModel: r.has_model,
+        price: Number(r.price),
+        lastSyncedAt: r.last_synced_at,
+      }
+    },
+
     customers: async () => query(`SELECT id, name, email, phone, 'manual' as "channelOrigin", tier, 0 as "loyaltyPoints", 0 as "totalOrders", 0::float as "lifetimeValue", "createdAt" as "registeredAt" FROM "Customer"`),
 
     customer: async (_: any, args: { id: string }) => {
@@ -167,6 +200,14 @@ const resolvers = {
 
   ProductionRun: {
     qualityChecks: async (parent: any) => query(`SELECT * FROM "QualityCheck" WHERE "runId"=$1`, [parent.id]),
+  },
+
+  Mutation: {
+    syncShopeeStock: async () => {
+      const { syncShopeeProducts } = await import('../shared/infrastructure/integrations/shopee-stock-sync')
+      const result = await syncShopeeProducts()
+      return result
+    },
   },
 
   Subscription: {

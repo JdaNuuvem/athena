@@ -1,5 +1,5 @@
 import { useQuery, useSubscription } from '@apollo/client/react'
-import { STOCK_ITEMS, STOCK_MOVEMENTS } from '../graphql/queries'
+import { STOCK_ITEMS, STOCK_MOVEMENTS, SHOPEE_PRODUCTS } from '../graphql/queries'
 import { INVENTORY_CHANGED } from '../graphql/subscriptions'
 import { StockChart } from '../components/StockChart'
 import { StatusBadge } from '../components/StatusBadge'
@@ -100,6 +100,77 @@ export function Inventory() {
           </div>
         </div>
       </div>
+
+      <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
+        <div className="p-3 border-b border-slate-700 flex items-center justify-between">
+          <h3 className="text-slate-400 text-xs uppercase tracking-wider">Shopee — Produtos Sincronizados</h3>
+          <button
+            onClick={() => { (async () => {
+              try {
+                await fetch('/api/shopee/sync', { method: 'POST' })
+                window.location.reload()
+              } catch { /* ignore */ }
+            })() }}
+            className="text-xs text-sky-400 hover:text-sky-300 border border-sky-500/30 px-2 py-1 rounded"
+          >
+            Sincronizar Agora
+          </button>
+        </div>
+        <ShopeeProductTable />
+      </div>
+    </div>
+  )
+}
+
+function ShopeeProductTable() {
+  const { data, loading } = useQuery<{ shopeeProducts: any[] }>(SHOPEE_PRODUCTS, { pollInterval: 60000 })
+  const products = data?.shopeeProducts ?? []
+
+  const lowStock = products.filter(p => p.stock <= 5)
+
+  return (
+    <div className="overflow-x-auto">
+      {lowStock.length > 0 && (
+        <div className="px-3 py-2 bg-red-500/10 border-b border-red-500/20 text-xs text-red-400">
+          ⚠️ {lowStock.length} produto(s) com estoque crítico (≤5)
+        </div>
+      )}
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-slate-700 text-slate-400 text-xs uppercase">
+            <th className="text-left p-3">SKU</th>
+            <th className="text-left p-3">Produto</th>
+            <th className="text-left p-3">Status</th>
+            <th className="text-right p-3">Estoque</th>
+            <th className="text-right p-3">Reservado</th>
+            <th className="text-right p-3">Preço</th>
+            <th className="text-right p-3">Variações</th>
+            <th className="text-right p-3">Última Sinc.</th>
+          </tr>
+        </thead>
+        <tbody>
+          {loading ? (
+            <tr><td colSpan={8} className="p-4 text-center text-slate-500">Carregando...</td></tr>
+          ) : products.length === 0 ? (
+            <tr><td colSpan={8} className="p-4 text-center text-slate-500">
+              Nenhum produto sincronizado. Configure as credenciais Shopee e clique em "Sincronizar Agora".
+            </td></tr>
+          ) : (
+            products.map((p: any) => (
+              <tr key={p.itemId} className={`border-b border-slate-700/50 ${p.stock <= 5 ? 'bg-red-500/5' : ''}`}>
+                <td className="p-3 font-mono text-xs text-sky-400">{p.itemSku || p.itemId}</td>
+                <td className="p-3 text-slate-200">{p.itemName}</td>
+                <td className="p-3"><StatusBadge status={p.itemStatus} /></td>
+                <td className={`p-3 text-right font-medium ${p.stock <= 5 ? 'text-red-400' : 'text-slate-200'}`}>{p.stock}</td>
+                <td className="p-3 text-right text-slate-400">{p.reservedStock}</td>
+                <td className="p-3 text-right text-slate-200">R$ {Number(p.price).toFixed(2)}</td>
+                <td className="p-3 text-right text-slate-400">{p.hasModel ? 'Sim' : '—'}</td>
+                <td className="p-3 text-right text-slate-400 text-xs">{new Date(p.lastSyncedAt).toLocaleTimeString('pt-BR')}</td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
     </div>
   )
 }
