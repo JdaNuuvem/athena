@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { StatusBadge } from '../components/StatusBadge'
-import { Activity, Clock, ShieldCheck, Server } from 'lucide-react'
+import { Activity, Clock, ShieldCheck, Server, Database } from 'lucide-react'
 
 interface Agent {
   id: string
@@ -83,6 +83,31 @@ export function Admin() {
           </div>
           <span className="text-2xl font-bold text-sky-400">{loading ? '—' : health?.env ?? '—'}</span>
         </div>
+      </div>
+
+      <div className="flex items-center gap-2 p-3 bg-slate-800 border border-slate-700 rounded-lg">
+        <Database size={16} className="text-slate-400 shrink-0" />
+        <span className="text-sm text-slate-400 flex-1">Banco vazio? Clique para popular com dados de exemplo (produtos, clientes, pedidos).</span>
+        <button
+          onClick={async () => {
+            if (!confirm('Popular banco com dados de exemplo? Isso vai criar produtos, clientes, pedidos e moldes.')) return
+            try {
+              const token = localStorage.getItem('athena_token')
+              const resp = await fetch('/api/system/seed', { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {} })
+              const data = await resp.json()
+              if (resp.ok) {
+                const tables = data.tables?.map((t: string) => `- ${t}: ${data.counts?.[t] ?? 'ok'}`).join('\n')
+                alert(`✅ Seed concluido!\n\n${tables}\n\nRecarregue a pagina para ver os dados.`)
+                window.location.reload()
+              } else {
+                alert(`Erro: ${data.error || resp.statusText}`)
+              }
+            } catch (err: any) { alert('Erro de conexao: ' + (err.message || 'servidor offline')) }
+          }}
+          className="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-3 py-1.5 rounded hover:bg-emerald-500/20 transition-colors"
+        >
+          Rodar Seed
+        </button>
       </div>
 
       <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
