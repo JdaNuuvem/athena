@@ -10,6 +10,8 @@ import { Molds } from './pages/Molds'
 import { Customers } from './pages/Customers'
 import { Admin } from './pages/Admin'
 import { Settings } from './pages/Settings'
+import { Finance } from './pages/Finance'
+import { TaxIntelligence } from './pages/TaxIntelligence'
 
 export default function App() {
   return (
@@ -27,6 +29,8 @@ export default function App() {
               <Route path="/customers" element={<Customers />} />
               <Route path="/admin" element={<Admin />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/finance" element={<Finance />} />
+              <Route path="/tax-intelligence" element={<TaxIntelligence />} />
             </Routes>
           </main>
         </div>
