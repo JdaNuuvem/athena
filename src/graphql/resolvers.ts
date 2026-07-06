@@ -3,7 +3,7 @@ import { athenaPubSub } from './pubsub'
 import { Pool } from 'pg'
 import DataLoader from 'dataloader'
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL || 'postgresql://athena:athena@localhost:5433/athena', max: 10 })
+const pool = new Pool({ connectionString: process.env['DATABASE_URL'] || 'postgresql://athena:athena@localhost:5433/athena', max: 10 })
 
 async function query(text: string, params?: unknown[]) {
   const result = await pool.query(text, params)
