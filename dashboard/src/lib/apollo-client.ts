@@ -4,8 +4,8 @@ import { GraphQLWsLink } from '@apollo/client/link/subscriptions'
 import { getMainDefinition } from '@apollo/client/utilities'
 import { createClient } from 'graphql-ws'
 
-const httpUri = `${window.location.protocol}//${window.location.hostname}:3000/graphql`
-const wsUri = `ws://${window.location.hostname}:3000/graphql`
+const httpUri = '/graphql'
+const wsUri = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/graphql`
 
 const httpLink = new HttpLink({ uri: httpUri })
 
