@@ -16,8 +16,9 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   GROQ_API_KEY: z.string().optional(),
+  DEEPSEEK_API_KEY: z.string().optional(),
 
-  LLM_PROVIDER: z.enum(['openai', 'anthropic', 'groq', 'ollama']).default('openai'),
+  LLM_PROVIDER: z.enum(['openai', 'anthropic', 'groq', 'ollama', 'deepseek']).default('openai'),
   LLM_MODEL: z.string().default('gpt-4o-mini'),
   LLM_TEMPERATURE: z.coerce.number().default(0.3),
   LLM_MAX_TOKENS: z.coerce.number().default(4096),

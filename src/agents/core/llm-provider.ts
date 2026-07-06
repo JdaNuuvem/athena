@@ -74,6 +74,31 @@ function createProvider(config: AgentConfig): LLMProvider {
         },
       }
     }
+    case 'deepseek': {
+      const client = new OpenAI({
+        apiKey: appConfig.DEEPSEEK_API_KEY || 'sk-placeholder',
+        baseURL: 'https://api.deepseek.com',
+      })
+      return {
+        async complete(messages, options) {
+          const resp = await client.chat.completions.create({
+            model: model || 'deepseek-chat',
+            messages: messages.map(m => ({ role: m.role as 'system' | 'user' | 'assistant', content: m.content })),
+            temperature: options?.temperature ?? config.temperature ?? 0.3,
+            max_tokens: options?.maxTokens ?? config.maxTokens ?? 4096,
+          })
+          return {
+            content: resp.choices[0]?.message?.content ?? '',
+            model: resp.model,
+            usage: resp.usage ? { promptTokens: resp.usage.prompt_tokens, completionTokens: resp.usage.completion_tokens, totalTokens: resp.usage.total_tokens } : undefined,
+            finishReason: resp.choices[0]?.finish_reason ?? 'stop',
+          }
+        },
+        async embedding(_text) {
+          return new Array(1536).fill(0) as number[]
+        },
+      }
+    }
     case 'groq': {
       const client = new Groq({ apiKey: appConfig.GROQ_API_KEY || 'gsk-placeholder' })
       return {

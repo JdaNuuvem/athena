@@ -20,7 +20,7 @@ export interface AgentDefinition {
 }
 
 export interface AgentConfig {
-  modelProvider: 'openai' | 'anthropic' | 'groq' | 'ollama'
+  modelProvider: 'openai' | 'anthropic' | 'groq' | 'ollama' | 'deepseek'
   modelName: string
   temperature: number
   maxTokens: number

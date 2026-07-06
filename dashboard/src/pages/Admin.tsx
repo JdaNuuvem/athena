@@ -27,9 +27,12 @@ export function Admin() {
   useEffect(() => {
     async function fetchData() {
       try {
+        const token = localStorage.getItem('athena_token')
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+        if (token) headers['Authorization'] = `Bearer ${token}`
         const [agentsRes, healthRes] = await Promise.all([
-          fetch('/api/agents'),
-          fetch('/api/health'),
+          fetch('/api/agents', { headers }),
+          fetch('/api/health', { headers }),
         ])
         const agentsData = await agentsRes.json()
         const healthData = await healthRes.json()
@@ -42,7 +45,7 @@ export function Admin() {
       }
     }
     fetchData()
-    const interval = setInterval(fetchData, 15000)
+    const interval = setInterval(fetchData, 30000)
     return () => clearInterval(interval)
   }, [])
 

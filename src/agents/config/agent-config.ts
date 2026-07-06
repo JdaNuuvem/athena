@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 export const AgentConfigSchema = z.object({
-  modelProvider: z.enum(['openai', 'anthropic', 'groq', 'ollama']).default('openai'),
+  modelProvider: z.enum(['openai', 'anthropic', 'groq', 'ollama', 'deepseek']).default('openai'),
   modelName: z.string().default('gpt-4o-mini'),
   temperature: z.number().min(0).max(2).default(0.3),
   maxTokens: z.number().int().positive().default(4096),
