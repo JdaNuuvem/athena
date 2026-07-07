@@ -225,12 +225,49 @@ export async function startDashboard(registry: AgentRegistry, orchestrator: Orch
   server.post('/api/hermes/chat', async (req, reply) => {
     const { user_id, mensagem, nome } = req.body as { user_id?: string; mensagem?: string; nome?: string }
     if (!user_id || !mensagem) return reply.status(400).send({ error: 'user_id and mensagem required' })
+    const envio = { user_id, mensagem, nome: nome ?? '' }
+
+    // Try direct Hermes API (within Docker network via Coolify proxy)
+    for (const base of [
+      'http://hermes:5000',
+      'http://localhost:5000',
+      'http://hermeswebui-w9hn3qezdgivens9g1o7r3of.177.7.45.242.sslip.io',
+    ]) {
+      try {
+        const resp = await fetch(`${base}/api/agent/ag_06_telegram/processar`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(envio),
+          signal: AbortSignal.timeout(3000),
+        })
+        if (resp.ok) return await resp.json()
+      } catch { /* try next */ }
+    }
+
+    // Fallback: answer using Athena's own agent data
     try {
-      const resp = await fetch(`http://hermeswebui-w9hn3qezdgivens9g1o7r3of.177.7.45.242.sslip.io/api/agent/ag_06_telegram/processar`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id, mensagem, nome: nome ?? '' }),
-      })
+      const health = registry.list()
+      const stats = { total: health.length, running: health.filter(a => a.status === 'running').length }
+      const msg = mensagem.toLowerCase()
+      let resposta = ''
+      if (msg.includes('agente') || msg.includes('agente')) {
+        resposta = `Tenho ${stats.total} agentes no total, ${stats.running} rodando.`
+      } else if (msg.includes('pedido') || msg.includes('venda')) {
+        resposta = 'Consulte a página Pedidos para detalhes completos.'
+      } else if (msg.includes('estoque') || msg.includes('estoque')) {
+        resposta = 'Consulte a página Estoque para ver o nível atual.'
+      } else if (msg.includes('producao') || msg.includes('produção')) {
+        resposta = 'Consulte a página Produção para ver o status da fábrica.'
+      } else if (msg.includes('molde') || msg.includes('cnc')) {
+        resposta = 'Consulte a página Moldes & CNC para ver o status.'
+      } else {
+        resposta = `Sou o assistente do Athena OS. Tenho ${stats.total} agentes de inteligência empresarial. Como posso ajudar?`
+      }
+      return { resposta, fonte: 'athena-local' }
+    } catch {
+      return { resposta: 'Erro ao processar mensagem.' }
+    }
+  })
       if (!resp.ok) return reply.status(502).send({ error: 'Hermes error', status: resp.status })
       const data = await resp.json()
       return data
