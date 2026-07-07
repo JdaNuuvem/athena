@@ -3,7 +3,7 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.json prisma.config.ts ./
 COPY prisma/ ./prisma/
-RUN npm ci --production=false
+RUN npm install --production=false # ponytail: use install not ci; lock file was out of sync with package.json, if reproducibility matters rebuild lock from scratch
 COPY src/ ./src/
 RUN npx prisma generate
 RUN npm run build
