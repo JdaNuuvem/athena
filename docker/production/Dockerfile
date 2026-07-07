@@ -1,7 +1,7 @@
 FROM node:22-alpine AS builder
 
 WORKDIR /app
-COPY package.json package-lock.json tsconfig.json prisma.config.ts ./
+COPY package.json tsconfig.json prisma.config.ts ./
 COPY prisma/ ./prisma/
 RUN npm install --production=false
 COPY src/ ./src/
@@ -10,7 +10,7 @@ RUN npm run build
 RUN npm prune --production
 
 # Build React dashboard
-COPY dashboard/package.json dashboard/package-lock.json ./dashboard/
+COPY dashboard/package.json ./dashboard/
 RUN cd dashboard && npm install
 COPY dashboard/ ./dashboard/
 RUN cd dashboard && npm run build
@@ -19,7 +19,7 @@ FROM node:22-alpine AS runner
 
 RUN apk add --no-cache curl
 WORKDIR /app
-COPY --from=builder /app/package.json /app/package-lock.json ./
+COPY --from=builder /app/package.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
