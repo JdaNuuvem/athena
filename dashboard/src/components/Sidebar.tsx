@@ -1,5 +1,5 @@
 ﻿import { NavLink } from "react-router-dom"
-import { LayoutDashboard, Package, Boxes, Factory, Drill, Users, Shield, Sliders, DollarSign, Scale, LogOut } from "lucide-react"
+import { LayoutDashboard, Package, Boxes, Factory, Drill, Users, Shield, Sliders, DollarSign, Scale, MessageSquare, LogOut } from "lucide-react"
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Overview" },
@@ -12,6 +12,7 @@ const navItems = [
   { to: "/tax-intelligence", icon: Scale, label: "Tributario" },
   { to: "/admin", icon: Shield, label: "Admin" },
   { to: "/settings", icon: Sliders, label: "Config" },
+  { to: "/chat", icon: MessageSquare, label: "Chat Hermes" },
 ]
 
 export function Sidebar() {

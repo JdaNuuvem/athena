@@ -222,6 +222,23 @@ export async function startDashboard(registry: AgentRegistry, orchestrator: Orch
     return { status: 'decremented', items: req.body.items.length }
   })
 
+  server.post('/api/hermes/chat', async (req, reply) => {
+    const { user_id, mensagem, nome } = req.body as { user_id?: string; mensagem?: string; nome?: string }
+    if (!user_id || !mensagem) return reply.status(400).send({ error: 'user_id and mensagem required' })
+    try {
+      const resp = await fetch(`http://hermeswebui-w9hn3qezdgivens9g1o7r3of.177.7.45.242.sslip.io/api/agent/ag_06_telegram/processar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id, mensagem, nome: nome ?? '' }),
+      })
+      if (!resp.ok) return reply.status(502).send({ error: 'Hermes error', status: resp.status })
+      const data = await resp.json()
+      return data
+    } catch (e) {
+      return reply.status(502).send({ error: 'Hermes unreachable', detail: String(e) })
+    }
+  })
+
   await server.register(mercurius, {
     schema: typeDefs,
     resolvers,
