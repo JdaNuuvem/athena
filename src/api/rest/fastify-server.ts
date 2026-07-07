@@ -222,6 +222,22 @@ export async function startDashboard(registry: AgentRegistry, orchestrator: Orch
     return { status: 'decremented', items: req.body.items.length }
   })
 
+  server.get('/api/shopee/oauth/callback', async (req, reply) => {
+    const { code, shop_id } = req.query as { code?: string; shop_id?: string }
+    if (!code || !shop_id) return reply.status(400).send({ error: 'code and shop_id required' })
+    try {
+      const { setSettingsBatch } = await import('../../shared/infrastructure/persistence/settings-repository')
+      await setSettingsBatch([
+        { key: 'shopee_oauth_code', value: code },
+        { key: 'shopee_shop_id', value: shop_id },
+      ])
+      console.log(`[Shopee] OAuth callback: shop_id=${shop_id}, code received`)
+      return reply.redirect('/settings?shopee=ok')
+    } catch (e) {
+      return reply.status(500).send({ error: 'OAuth failed', detail: String(e) })
+    }
+  })
+
   server.post('/api/hermes/chat', async (req, reply) => {
     const { user_id, mensagem, nome } = req.body as { user_id?: string; mensagem?: string; nome?: string }
     if (!user_id || !mensagem) return reply.status(400).send({ error: 'user_id and mensagem required' })
@@ -266,13 +282,6 @@ export async function startDashboard(registry: AgentRegistry, orchestrator: Orch
       return { resposta, fonte: 'athena-local' }
     } catch {
       return { resposta: 'Erro ao processar mensagem.' }
-    }
-  })
-      if (!resp.ok) return reply.status(502).send({ error: 'Hermes error', status: resp.status })
-      const data = await resp.json()
-      return data
-    } catch (e) {
-      return reply.status(502).send({ error: 'Hermes unreachable', detail: String(e) })
     }
   })
 
