@@ -285,6 +285,56 @@ export async function startDashboard(registry: AgentRegistry, orchestrator: Orch
     }
   })
 
+  // Shopee Product Management
+  server.get('/api/shopee/products', async (req, reply) => {
+    const { ShopeeAdapter } = await import('../../shared/infrastructure/integrations/shopee-adapter')
+    const { status, offset, limit } = req.query as { status?: string; offset?: string; limit?: string }
+    const adapter = new ShopeeAdapter()
+    if (!adapter.isConfigured) return reply.status(503).send({ error: 'Shopee not configured. Authorize via Settings.' })
+    const result = await adapter.getItems(status ?? 'NORMAL', Number(offset ?? 0), Number(limit ?? 50))
+    return result
+  })
+
+  server.get<{ Params: { id: string } }>('/api/shopee/products/:id', async (req, reply) => {
+    const { ShopeeAdapter } = await import('../../shared/infrastructure/integrations/shopee-adapter')
+    const adapter = new ShopeeAdapter()
+    if (!adapter.isConfigured) return reply.status(503).send({ error: 'Shopee not configured' })
+    const items = await adapter.getItemBaseInfo([Number(req.params.id)])
+    const item = items[0]
+    if (!item) return reply.status(404).send({ error: 'Product not found' })
+    let models: any[] = []
+    if (item.has_model) models = await adapter.getModelList(Number(req.params.id))
+    return { ...item, models }
+  })
+
+  server.post<{ Body: { item_name: string; description: string; price: number; stock: number; category_id: number; weight: number; images: string[] } }>('/api/shopee/products', async (req, reply) => {
+    const { ShopeeAdapter } = await import('../../shared/infrastructure/integrations/shopee-adapter')
+    const adapter = new ShopeeAdapter()
+    if (!adapter.isConfigured) return reply.status(503).send({ error: 'Shopee not configured' })
+    const result = await adapter.publishProduct(req.body as any)
+    if (!result) return reply.status(502).send({ error: 'Failed to publish product' })
+    return { status: 'published', item_id: result.item_id }
+  })
+
+  server.put<{ Params: { id: string }; Body: { stock: number; model_id?: number } }>('/api/shopee/products/:id/stock', async (req, reply) => {
+    const { ShopeeAdapter } = await import('../../shared/infrastructure/integrations/shopee-adapter')
+    const adapter = new ShopeeAdapter()
+    if (!adapter.isConfigured) return reply.status(503).send({ error: 'Shopee not configured' })
+    const result = await adapter.updateStock({
+      item_id: Number(req.params.id),
+      stock_list: [{ model_id: req.body.model_id ? Number(req.body.model_id) : undefined, seller_stock: [{ stock: Number(req.body.stock) }] }],
+    })
+    return result
+  })
+
+  server.put<{ Params: { id: string }; Body: { price: number } }>('/api/shopee/products/:id/price', async (req, reply) => {
+    const { ShopeeAdapter } = await import('../../shared/infrastructure/integrations/shopee-adapter')
+    const adapter = new ShopeeAdapter()
+    if (!adapter.isConfigured) return reply.status(503).send({ error: 'Shopee not configured' })
+    const ok = await adapter.updatePrice(Number(req.params.id), req.body.price)
+    return { success: ok }
+  })
+
   await server.register(mercurius, {
     schema: typeDefs,
     resolvers,

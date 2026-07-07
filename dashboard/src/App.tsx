@@ -13,6 +13,7 @@ import { Settings } from './pages/Settings'
 import { Finance } from './pages/Finance'
 import { TaxIntelligence } from './pages/TaxIntelligence'
 import { Chat } from './pages/Chat'
+import { Products } from './pages/Products'
 
 export default function App() {
   return (
@@ -33,6 +34,7 @@ export default function App() {
               <Route path="/finance" element={<Finance />} />
               <Route path="/tax-intelligence" element={<TaxIntelligence />} />
               <Route path="/chat" element={<Chat />} />
+              <Route path="/products" element={<Products />} />
             </Routes>
           </main>
         </div>
