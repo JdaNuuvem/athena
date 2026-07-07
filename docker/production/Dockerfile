@@ -3,11 +3,17 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.json prisma.config.ts ./
 COPY prisma/ ./prisma/
-RUN npm install --production=false # ponytail: use install not ci; lock file was out of sync with package.json, if reproducibility matters rebuild lock from scratch
+RUN npm install --production=false
 COPY src/ ./src/
 RUN npx prisma generate
 RUN npm run build
 RUN npm prune --production
+
+# Build React dashboard
+COPY dashboard/package.json dashboard/package-lock.json ./dashboard/
+RUN cd dashboard && npm install
+COPY dashboard/ ./dashboard/
+RUN cd dashboard && npm run build
 
 FROM node:22-alpine AS runner
 
