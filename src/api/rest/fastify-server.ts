@@ -226,13 +226,42 @@ export async function startDashboard(registry: AgentRegistry, orchestrator: Orch
     const { code, shop_id } = req.query as { code?: string; shop_id?: string }
     if (!code || !shop_id) return reply.status(400).send({ error: 'code and shop_id required' })
     try {
-      const { setSettingsBatch } = await import('../../shared/infrastructure/persistence/settings-repository')
-      await setSettingsBatch([
-        { key: 'shopee_oauth_code', value: code },
-        { key: 'shopee_shop_id', value: shop_id },
-      ])
-      console.log(`[Shopee] OAuth callback: shop_id=${shop_id}, code received`)
-      return reply.redirect('/settings?shopee=ok')
+      const { createHmac } = await import('crypto')
+      const partnerId = process.env['SHOPEE_PARTNER_ID'] ?? ''
+      const partnerKey = process.env['SHOPEE_PARTNER_KEY'] ?? ''
+
+      // Exchange code for access_token (Shopee API v2 sign: partner_id + path + timestamp + partner_key, NO access_token/shop_id)
+      const path = '/api/v2/auth/token/get'
+      const timestamp = Math.floor(Date.now() / 1000)
+      const signStr = `${partnerId}${path}${timestamp}${partnerKey}`
+      const sign = createHmac('sha256', partnerKey).update(signStr).digest('hex')
+
+      const baseApi = process.env['SHOPEE_SANDBOX'] !== 'false'
+        ? 'https://openplatform.sandbox.test-stable.shopee.sg'
+        : (process.env['SHOPEE_REGION'] === 'br' ? 'https://partner.shopeemobile.com.br' : 'https://partner.shopeemobile.com')
+
+      const tokenResp = await fetch(`${baseApi}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, partner_id: Number(partnerId), shop_id: Number(shop_id), sign, timestamp }),
+      })
+      const tokenData: any = await tokenResp.json()
+      console.log(`[Shopee] OAuth token exchange:`, { shop_id, error: tokenData?.error })
+
+      if (tokenData?.access_token) {
+        const { setSettingsBatch } = await import('../../shared/infrastructure/persistence/settings-repository')
+        await setSettingsBatch([
+          { key: 'shopee_shop_id', value: shop_id },
+          { key: 'shopee_access_token', value: tokenData.access_token },
+          { key: 'shopee_refresh_token', value: tokenData.refresh_token ?? '' },
+        ])
+        process.env['SHOPEE_SHOP_ID'] = shop_id
+        process.env['SHOPEE_ACCESS_TOKEN'] = tokenData.access_token
+        console.log(`[Shopee] OAuth complete: shop_id=${shop_id}`)
+        return reply.redirect('/products?shopee=ok')
+      }
+
+      return reply.send({ success: false, error: tokenData?.error ?? 'token_exchange_failed', detail: tokenData })
     } catch (e) {
       return reply.status(500).send({ error: 'OAuth failed', detail: String(e) })
     }
