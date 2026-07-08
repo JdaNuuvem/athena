@@ -1,0 +1,58 @@
+groups:
+  - name: athena-alerts
+    rules:
+      - alert: AthenaAgentsDown
+        expr: athena_agents_running < 51
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "ATHENA agents down"
+          description: "{{ $value }} agents running, expected 51"
+
+      - alert: AthenaAgentsErrored
+        expr: athena_agents_errored > 0
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: "ATHENA agents in error state"
+          description: "{{ $value }} agents in error state"
+
+      - alert: AthenaHighTaskErrorRate
+        expr: rate(athena_agent_tasks_total{status="error"}[5m]) / rate(athena_agent_tasks_total[5m]) > 0.1
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "High agent task error rate"
+          description: "Agent {{ $labels.agent_id }} has >10% error rate"
+
+      - alert: AthenaHighLatency
+        expr: histogram_quantile(0.95, rate(athena_agent_task_duration_seconds_bucket[5m])) > 30
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "High agent task latency"
+          description: "Agent {{ $labels.agent_id }} p95 latency > 30s"
+
+      - alert: AthenaKafkaLag
+        expr: athena_kafka_messages_consumed_total offset 5m == athena_kafka_messages_consumed_total
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "Kafka consumer stalled"
+          description: "No Kafka messages consumed in 5 minutes"
+
+      - alert: AthenaWorkflowFailed
+        expr: rate(athena_workflow_executions_total{status="failed"}[5m]) > 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "Workflow execution failed"
+          description: "Workflow {{ $labels.workflow_name }} has failed executions"
+
+      - alert: AthenaHighMemory
+        expr: process_heap_bytes{job="athena"} / process_heap_limit_bytes{job="athena"} > 0.85
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "ATHENA high memory usage"
+          description: "Heap usage > 85%"

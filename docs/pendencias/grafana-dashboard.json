@@ -1,0 +1,79 @@
+{
+  "title": "ATHENA OS — Dashboard",
+  "uid": "athena-main",
+  "tags": ["athena", "agents", "production"],
+  "refresh": "10s",
+  "panels": [
+    {
+      "title": "Agents Running",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+      "targets": [{ "expr": "athena_agents_running", "legendFormat": "Running" }],
+      "fieldConfig": { "defaults": { "thresholds": { "steps": [{ "value": 0, "color": "red" }, { "value": 20, "color": "orange" }, { "value": 45, "color": "green" }] } } }
+    },
+    {
+      "title": "Agents Errored",
+      "type": "stat",
+      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+      "targets": [{ "expr": "athena_agents_errored", "legendFormat": "Errored" }],
+      "fieldConfig": { "defaults": { "thresholds": { "steps": [{ "value": 0, "color": "green" }, { "value": 1, "color": "orange" }, { "value": 5, "color": "red" }] } } }
+    },
+    {
+      "title": "Agent Tasks / sec",
+      "type": "graph",
+      "gridPos": { "x": 8, "y": 0, "w": 8, "h": 4 },
+      "targets": [{ "expr": "rate(athena_agent_tasks_total[1m])", "legendFormat": "{{agent_id}} — {{status}}" }]
+    },
+    {
+      "title": "Agent Task Duration (p95)",
+      "type": "graph",
+      "gridPos": { "x": 16, "y": 0, "w": 8, "h": 4 },
+      "targets": [{ "expr": "histogram_quantile(0.95, rate(athena_agent_task_duration_seconds_bucket[5m]))", "legendFormat": "{{agent_id}}" }]
+    },
+    {
+      "title": "HTTP Requests / sec",
+      "type": "graph",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 6 },
+      "targets": [{ "expr": "rate(athena_http_requests_total[1m])", "legendFormat": "{{method}} {{route}} — {{status_code}}" }]
+    },
+    {
+      "title": "HTTP Request Duration (p95)",
+      "type": "graph",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 6 },
+      "targets": [{ "expr": "histogram_quantile(0.95, rate(athena_http_request_duration_seconds_bucket[5m]))", "legendFormat": "{{method}} {{route}}" }]
+    },
+    {
+      "title": "Kafka Messages / sec",
+      "type": "graph",
+      "gridPos": { "x": 0, "y": 10, "w": 8, "h": 6 },
+      "targets": [{ "expr": "rate(athena_kafka_messages_consumed_total[1m])", "legendFormat": "{{event_type}}" }]
+    },
+    {
+      "title": "Domain Events Handled",
+      "type": "graph",
+      "gridPos": { "x": 8, "y": 10, "w": 8, "h": 6 },
+      "targets": [{ "expr": "rate(athena_domain_events_handled_total[1m])", "legendFormat": "{{event_type}} — {{status}}" }]
+    },
+    {
+      "title": "Workflow Executions",
+      "type": "graph",
+      "gridPos": { "x": 16, "y": 10, "w": 8, "h": 6 },
+      "targets": [{ "expr": "rate(athena_workflow_executions_total[1m])", "legendFormat": "{{workflow_name}} — {{status}}" }]
+    },
+    {
+      "title": "Workflow Step Duration (p95)",
+      "type": "graph",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 6 },
+      "targets": [{ "expr": "histogram_quantile(0.95, rate(athena_workflow_step_duration_seconds_bucket[5m]))", "legendFormat": "{{workflow_name}}/{{step_id}}" }]
+    },
+    {
+      "title": "Memory Usage",
+      "type": "graph",
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 6 },
+      "targets": [
+        { "expr": "process_heap_bytes{job=\"athena\"} / 1024 / 1024", "legendFormat": "Heap MB" },
+        { "expr": "process_resident_memory_bytes{job=\"athena\"} / 1024 / 1024", "legendFormat": "RSS MB" }
+      ]
+    }
+  ]
+}

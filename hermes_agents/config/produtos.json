@@ -1,0 +1,27 @@
+{
+  "shopee": [
+    {"nome": "Organizador de Gaveta Modular Plástico", "preco": 29.90, "vendas_mes": 8500, "concorrentes": 120},
+    {"nome": "Porta Tempero Giratório 3 Andares", "preco": 49.90, "vendas_mes": 6200, "concorrentes": 45},
+    {"nome": "Cabo USB-C Trançado 2m 100W", "preco": 35.00, "vendas_mes": 15000, "concorrentes": 300},
+    {"nome": "Suporte de Parede para Celular Cozinha", "preco": 22.90, "vendas_mes": 4100, "concorrentes": 25},
+    {"nome": "Kit Potes Herméticos 10 Peças", "preco": 89.90, "vendas_mes": 9800, "concorrentes": 80},
+    {"nome": "Escorredor de Louça Dobrável Silicone", "preco": 39.90, "vendas_mes": 7200, "concorrentes": 35}
+  ],
+  "mercado_livre": [
+    {"nome": "Suporte Ajustável para Notebook Alumínio", "preco": 79.90, "vendas_mes": 5500, "concorrentes": 90},
+    {"nome": "Luminária LED Recarregável Toque", "preco": 45.00, "vendas_mes": 11000, "concorrentes": 150},
+    {"nome": "Ventilador USB Clip Mesa Silencioso", "preco": 55.00, "vendas_mes": 4300, "concorrentes": 40}
+  ],
+  "amazon": [
+    {"nome": "Capa Impermeável para Sofá 3 Lugares", "preco": 119.90, "vendas_mes": 3200, "concorrentes": 55},
+    {"nome": "Filtro de Água Torneira Purificador", "preco": 69.90, "vendas_mes": 7800, "concorrentes": 65}
+  ],
+  "temu": [
+    {"nome": "Mini Ventilador Portátil USB Recarregável", "preco": 15.90, "vendas_mes": 25000, "concorrentes": 500},
+    {"nome": "Cabo Organizador Clip Fio Mesa", "preco": 8.90, "vendas_mes": 18000, "concorrentes": 200}
+  ],
+  "tiktok_shop": [
+    {"nome": "Espelho Adesivo Decorativo Formato Geométrico", "preco": 25.00, "vendas_mes": 35000, "concorrentes": 80},
+    {"nome": "Caneca Térmica com Tampa Bomba 500ml", "preco": 59.90, "vendas_mes": 12000, "concorrentes": 50}
+  ]
+}

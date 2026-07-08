@@ -1,0 +1,82 @@
+name: CI — Test & Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  quality:
+    name: Typecheck + Lint + Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: athena
+          POSTGRES_PASSWORD: athena
+          POSTGRES_DB: athena_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://athena:athena@localhost:5432/athena_test
+      REDIS_URL: redis://localhost:6379
+      NODE_ENV: test
+      OPENAI_API_KEY: sk-ci-placeholder
+      ANTHROPIC_API_KEY: sk-ant-ci-placeholder
+      GROQ_API_KEY: gsk-ci-placeholder
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: athena/package-lock.json
+
+      - name: Install
+        run: npm ci
+        working-directory: athena
+
+      - name: Generate Prisma
+        run: npx prisma generate
+        working-directory: athena
+
+      - name: Typecheck
+        run: npm run typecheck
+        working-directory: athena
+
+      - name: Build
+        run: npm run build
+        working-directory: athena
+
+      - name: Test
+        run: npm test -- --ci --coverage --maxWorkers=2
+        working-directory: athena
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: athena/coverage/

@@ -1,2 +1,0 @@
-export interface PlastisolFormulation { id: string; productId: string; batchSizeL: number; viscosityCp: number; status: 'mixed'|'in_use'|'expired'; components: Array<{name:string;type:string;quantityL:number;lotNumber:string}>; mixedAt: string }
-export interface CoatingBatch { id: string; formulationId: string; productId: string; quantityProduced: number; defectives: number; avgGelThicknessMm: number; avgHardnessShoreA: number; qualityStatus: 'approved'|'quarantine'|'rejected'; completedAt: string }

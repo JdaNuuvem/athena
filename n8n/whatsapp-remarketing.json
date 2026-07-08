@@ -1,0 +1,308 @@
+{
+  "name": "WhatsApp Remarketing — ATHENA OS",
+  "nodes": [
+    {
+      "id": "cron-trigger",
+      "name": "Agendamento Diário",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 300],
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "hours", "hoursInterval": 6 }]
+        }
+      }
+    },
+    {
+      "id": "fetch-abandoned-carts",
+      "name": "Buscar Carrinhos Abandonados",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [450, 250],
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/graphql",
+        "authentication": "none",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "query", "value": "query AbandonedCarts {\n  orders(status: \"draft\") {\n    id\n    channel\n    customer {\n      id\n      name\n      email\n      phone\n    }\n    items {\n      sku\n      quantity\n      unitPrice\n    }\n    totals {\n      grandTotal\n    }\n    createdAt\n  }\n}" }
+          ]
+        },
+        "options": {
+          "timeout": 10000,
+          "response": { "response": { "responseFormat": "json" } }
+        }
+      }
+    },
+    {
+      "id": "filter-recent-carts",
+      "name": "Filtrar Carrinhos (>2h)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 250],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const data = $input.first().json;\nconst orders = data?.data?.orders || [];\nconst now = Date.now();\nconst twoHours = 2 * 60 * 60 * 1000;\n\nconst abandoned = orders.filter(o => {\n  const created = new Date(o.createdAt).getTime();\n  return (now - created) > twoHours && o.customer?.phone;\n});\n\nreturn abandoned.map(o => ({\n  json: {\n    orderId: o.id,\n    phone: o.customer.phone,\n    customerName: o.customer.name,\n    items: o.items || [],\n    total: o.totals?.grandTotal || 0,\n    productName: (o.items || [])[0]?.sku || 'seu pedido',\n    channel: o.channel,\n    createdAt: o.createdAt\n  }\n}));\n\nif (abandoned.length === 0) {\n  return [{ json: { status: 'no_carts', message: 'Nenhum carrinho abandonado encontrado' } }];\n}"
+      }
+    },
+    {
+      "id": "send-whatsapp-cart-reminder",
+      "name": "Enviar Lembrete Carrinho",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [850, 250],
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:3000/api/whatsapp/remarketing/trigger",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-api-key", "value": "athena-internal-dev-key" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "type", "value": "abandoned_cart" },
+            { "name": "phone", "value": "={{ $json.phone }}" },
+            { "name": "customerName", "value": "={{ $json.customerName }}" },
+            { "name": "productName", "value": "={{ $json.productName }}" },
+            { "name": "total", "value": "={{ $json.total }}" }
+          ]
+        },
+        "options": {
+          "timeout": 10000,
+          "continueOnFail": true
+        }
+      }
+    },
+    {
+      "id": "fetch-inactive-customers",
+      "name": "Buscar Clientes Inativos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [450, 500],
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/graphql",
+        "authentication": "none",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "query", "value": "query InactiveCustomers {\n  customers {\n    id\n    name\n    email\n    phone\n    tier\n    totalOrders\n    lifetimeValue\n    registeredAt\n  }\n}" }
+          ]
+        },
+        "options": {
+          "timeout": 10000,
+          "response": { "response": { "responseFormat": "json" } }
+        }
+      }
+    },
+    {
+      "id": "filter-inactive-7d",
+      "name": "Filtrar Inativos (7+ dias)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 500],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const data = $input.first().json;\nconst customers = data?.data?.customers || [];\nconst now = Date.now();\nconst sevenDays = 7 * 24 * 60 * 60 * 1000;\n\nconst inactive = customers.filter(c => {\n  if (!c.phone) return false;\n  const registered = new Date(c.registeredAt).getTime();\n  return (now - registered) > sevenDays && c.totalOrders <= 1;\n});\n\nreturn inactive.slice(0, 10).map(c => ({\n  json: {\n    customerId: c.id,\n    phone: c.phone,\n    name: c.name,\n    tier: c.tier,\n    totalOrders: c.totalOrders,\n    type: 'reengagement'\n  }\n}));\n\nif (inactive.length === 0) {\n  return [{ json: { status: 'no_inactive', message: 'Nenhum cliente inativo' } }];\n}"
+      }
+    },
+    {
+      "id": "send-reengagement-promo",
+      "name": "Enviar Promoção Reengajamento",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [850, 500],
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:3000/api/whatsapp/remarketing/trigger",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-api-key", "value": "athena-internal-dev-key" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "type", "value": "reengagement" },
+            { "name": "phone", "value": "={{ $json.phone }}" },
+            { "name": "customerName", "value": "={{ $json.name }}" },
+            { "name": "couponCode", "value": "VOLTEI15" }
+          ]
+        },
+        "options": {
+          "timeout": 10000,
+          "continueOnFail": true
+        }
+      }
+    },
+    {
+      "id": "fetch-top-customers",
+      "name": "Buscar Clientes VIP",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [450, 750],
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/graphql",
+        "authentication": "none",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "query", "value": "query TopCustomers {\n  customers(tier: \"gold\") {\n    id\n    name\n    email\n    phone\n    tier\n    totalOrders\n    lifetimeValue\n  }\n}" }
+          ]
+        },
+        "options": {
+          "timeout": 10000,
+          "response": { "response": { "responseFormat": "json" } }
+        }
+      }
+    },
+    {
+      "id": "send-vip-promo",
+      "name": "Enviar Oferta VIP",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 750],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const data = $input.first().json;\nconst customers = data?.data?.customers || [];\n\nreturn customers.filter(c => c.phone).map(c => ({\n  json: {\n    customerId: c.id,\n    phone: c.phone,\n    name: c.name,\n    tier: c.tier,\n    lifetimeValue: c.lifetimeValue,\n    type: 'vip_offer'\n  }\n}));\n\nif (customers.length === 0) {\n  return [{ json: { status: 'no_vip', message: 'Nenhum cliente VIP sem telefone' } }];\n}"
+      }
+    },
+    {
+      "id": "send-vip-whatsapp",
+      "name": "Enviar Oferta VIP WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [850, 750],
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:3000/api/whatsapp/remarketing/trigger",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-api-key", "value": "athena-internal-dev-key" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "type", "value": "promotion" },
+            { "name": "phone", "value": "={{ $json.phone }}" },
+            { "name": "customerName", "value": "={{ $json.name }}" },
+            { "name": "title", "value": "Oferta VIP Exclusiva" },
+            { "name": "message", "value": "={{ 'Como cliente VIP, você tem acesso antecipado à nossa nova linha de produtos!\\n\\n🎫 Cupom exclusivo: *VIP20* — 20% OFF\\n📦 Primeira remessa garantida\\n📞 Atendimento prioritário\\n\\nResponda *NOVOS* para ver os lançamentos!' }}" }
+          ]
+        },
+        "options": {
+          "timeout": 10000,
+          "continueOnFail": true
+        }
+      }
+    },
+    {
+      "id": "aggregate-results",
+      "name": "Agregar Resultados",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 450],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const items = $input.all();\nlet cartsSent = 0, reengagementSent = 0, vipSent = 0;\n\nfor (const item of items) {\n  const d = item.json;\n  if (d.orderId) cartsSent++;\n  else if (d.type === 'reengagement') reengagementSent++;\n  else if (d.type === 'vip_offer') vipSent++;\n}\n\nreturn {\n  timestamp: new Date().toISOString(),\n  abandonedCartsSent: cartsSent,\n  reengagementSent: reengagementSent,\n  vipOffersSent: vipSent,\n  total: cartsSent + reengagementSent + vipSent\n};"
+      }
+    },
+    {
+      "id": "log-to-athena",
+      "name": "Registrar no ATHENA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1250, 450],
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:3000/api/remarketing/run",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-api-key", "value": "athena-internal-dev-key" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "dryRun", "value": "false" }
+          ]
+        },
+        "options": {
+          "timeout": 5000,
+          "continueOnFail": true
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Agendamento Diário": {
+      "main": [
+        [{ "node": "Buscar Carrinhos Abandonados", "type": "main", "index": 0 }],
+        [{ "node": "Buscar Clientes Inativos", "type": "main", "index": 0 }],
+        [{ "node": "Buscar Clientes VIP", "type": "main", "index": 0 }]
+      ]
+    },
+    "Buscar Carrinhos Abandonados": {
+      "main": [[{ "node": "Filtrar Carrinhos (>2h)", "type": "main", "index": 0 }]]
+    },
+    "Filtrar Carrinhos (>2h)": {
+      "main": [[{ "node": "Enviar Lembrete Carrinho", "type": "main", "index": 0 }]]
+    },
+    "Enviar Lembrete Carrinho": {
+      "main": [[{ "node": "Agregar Resultados", "type": "main", "index": 0 }]]
+    },
+    "Buscar Clientes Inativos": {
+      "main": [[{ "node": "Filtrar Inativos (7+ dias)", "type": "main", "index": 0 }]]
+    },
+    "Filtrar Inativos (7+ dias)": {
+      "main": [[{ "node": "Enviar Promoção Reengajamento", "type": "main", "index": 0 }]]
+    },
+    "Enviar Promoção Reengajamento": {
+      "main": [[{ "node": "Agregar Resultados", "type": "main", "index": 0 }]]
+    },
+    "Buscar Clientes VIP": {
+      "main": [[{ "node": "Enviar Oferta VIP", "type": "main", "index": 0 }]]
+    },
+    "Enviar Oferta VIP": {
+      "main": [[{ "node": "Enviar Oferta VIP WhatsApp", "type": "main", "index": 0 }]]
+    },
+    "Enviar Oferta VIP WhatsApp": {
+      "main": [[{ "node": "Agregar Resultados", "type": "main", "index": 0 }]]
+    },
+    "Agregar Resultados": {
+      "main": [[{ "node": "Registrar no ATHENA", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionOrder": "v1",
+    "timezone": "America/Sao_Paulo"
+  },
+  "staticData": null,
+  "tags": [
+    { "name": "whatsapp" },
+    { "name": "remarketing" },
+    { "name": "athena" }
+  ]
+}
