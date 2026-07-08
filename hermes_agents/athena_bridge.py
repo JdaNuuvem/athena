@@ -155,19 +155,39 @@ CORS(app)
 # Autenticação e Health Check (Athena OS)
 # ===========================================================================
 
+USUARIOS = {
+    "admin": {"password": "athena-admin-2026", "role": "admin", "name": "Admin"},
+    "joao": {"password": "joao2026", "role": "produto", "name": "João (Produtos)"},
+    "maria": {"password": "maria2026", "role": "financeiro", "name": "Maria (Financeiro)"},
+    "pedro": {"password": "pedro2026", "role": "operador", "name": "Pedro (Marketplaces)"},
+}
+
 @app.route('/api/auth/login', methods=['POST'])
 def simple_login():
-    """Login com username/password ou API key."""
+    """Login com username/password por perfil."""
     data = request.json or {}
-    username = data.get('username', '')
+    username = data.get('username', '').lower()
     password = data.get('password', '')
     api_key = data.get('api_key', '')
 
-    if username == 'admin' and password == 'athena-admin-2026':
-        return jsonify({"token": API_TOKEN, "role": "admin", "name": "Athena Admin"})
+    user = USUARIOS.get(username, {})
+    if user and user["password"] == password:
+        return jsonify({"token": API_TOKEN, "role": user["role"], "name": user["name"]})
     if api_key and api_key == API_TOKEN:
-        return jsonify({"token": API_TOKEN, "role": "admin", "name": "Athena Admin"})
+        return jsonify({"token": API_TOKEN, "role": "admin", "name": "Admin"})
     return jsonify({"error": "Invalid credentials"}), 401
+
+@app.route('/api/me', methods=['GET'])
+def current_user():
+    """Retorna dados do usuário logado."""
+    auth = request.headers.get("Authorization", "")
+    if auth != f"Bearer {API_TOKEN}":
+        return jsonify({"error": "Unauthorized"}), 401
+    return jsonify({"name": "Admin", "role": "admin", "permissoes": [
+        "ver_produtos", "ver_estoque", "ver_financeiro", "ver_tributario",
+        "ver_lojas", "ver_marketplaces", "ver_integracoes", "exportar",
+        "gerenciar_usuarios"
+    ]})
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
@@ -1333,6 +1353,229 @@ def test_telegram():
         "webhook_url": webhook_url,
         "token_prefixo": token[:10] + "***" if token else ""
     })
+
+# ===========================================================================
+# API Multiloja — Produtos, Lojas, KPIs (PRD Dashboard Multiloja)
+# ===========================================================================
+
+@app.route('/api/produtos', methods=['GET'])
+def listar_produtos():
+    """Catálogo com busca, filtros e estoque por loja."""
+    busca = request.args.get("busca", "").strip()
+    loja = request.args.get("loja", "")
+    categoria = request.args.get("categoria", "")
+    status = request.args.get("status", "")
+    margem_min = request.args.get("margem_min", type=float)
+    pagina = request.args.get("pagina", 1, type=int)
+    por_pagina = request.args.get("por_pagina", 50, type=int)
+
+    async def _go():
+        db = await get_db()
+        where = ["1=1"]
+        params = []
+        i = 1
+        if busca:
+            where.append(f"(f.sku ILIKE ${i} OR f.descricao ILIKE ${i})")
+            params.append(f"%{busca}%")
+            i += 1
+        if loja:
+            where.append(f"a.marketplace = ${i}")
+            params.append(loja)
+            i += 1
+        if margem_min is not None:
+            where.append(f"COALESCE(m.margem_pct, 0) >= ${i}")
+            params.append(margem_min)
+            i += 1
+
+        offset = (pagina - 1) * por_pagina
+        sql_where = " AND ".join(where)
+        count = await db.fetchval(f"SELECT COUNT(*) FROM fichas_tecnicas f WHERE {sql_where}", *params)
+        rows = await db.fetch(f"""
+            SELECT f.id, f.sku, f.descricao AS nome, f.peso_gramas, f.material_principal,
+                   f.tempo_ciclo_segundos, f.created_at,
+                   COALESCE(m.margem_pct, 0) AS margem_pct,
+                   COALESCE(m.receita_total, 0) AS receita_30d,
+                   COALESCE(m.quantidade_vendida, 0) AS vendidos_30d
+            FROM fichas_tecnicas f
+            LEFT JOIN margens_diarias m ON m.sku = f.sku AND m.data = CURRENT_DATE
+            WHERE {sql_where}
+            ORDER BY m.quantidade_vendida DESC NULLS LAST
+            LIMIT ${i} OFFSET ${i+1}
+        """, *params, por_pagina, offset)
+        produtos = [dict(r) for r in rows]
+
+        # Buscar estoque por loja pra cada produto
+        skus = [p["sku"] for p in produtos]
+        estoques = {}
+        if skus:
+            estoque_rows = await db.fetch("""
+                SELECT sku, marketplace, preco, status FROM anuncios
+                WHERE sku = ANY($1::varchar[])
+            """, skus)
+            for e in estoque_rows:
+                s = estoques.setdefault(e["sku"], [])
+                s.append({"loja": e["marketplace"], "preco": float(e["preco"]) if e["preco"] else 0, "status": e["status"]})
+
+        for p in produtos:
+            p["estoque_lojas"] = estoques.get(p["sku"], [])
+            p["total_lojas"] = len(p["estoque_lojas"])
+        return {"produtos": produtos, "total": count, "pagina": pagina, "por_pagina": por_pagina}
+    return jsonify(run_async(_go()))
+
+@app.route('/api/produtos/<sku>', methods=['GET'])
+def detalhe_produto(sku):
+    """Detalhes do produto com histórico de preços e estoque."""
+    async def _go():
+        db = await get_db()
+        produto = await db.fetchrow("""
+            SELECT f.*, COALESCE(m.margem_pct, 0) AS margem_pct,
+                   COALESCE(m.receita_total, 0) AS receita_30d,
+                   COALESCE(m.quantidade_vendida, 0) AS vendidos_30d,
+                   COALESCE(m.lucro_liquido, 0) AS lucro_30d
+            FROM fichas_tecnicas f
+            LEFT JOIN margens_diarias m ON m.sku = f.sku AND m.data = CURRENT_DATE
+            WHERE f.sku = $1
+        """, sku)
+        if not produto:
+            return {"error": "Produto não encontrado"}, 404
+        p = dict(produto)
+
+        estoque = await db.fetch("SELECT marketplace, preco, posicao_busca, avaliacao_media, status FROM anuncios WHERE sku = $1", sku)
+        p["estoque_lojas"] = [dict(r) for r in estoque]
+
+        vendas = await db.fetch("""
+            SELECT data, marketplace, quantidade, preco_venda, receita_bruta
+            FROM vendas WHERE sku = $1 ORDER BY data DESC LIMIT 90
+        """, sku)
+        p["vendas_30d"] = [dict(r) for r in vendas]
+
+        precos = await db.fetch("""
+            SELECT data, preco_venda FROM vendas
+            WHERE sku = $1 ORDER BY data ASC
+        """, sku)
+        p["historico_precos"] = [{"data": str(r["data"]), "preco": float(r["preco_venda"])} for r in precos]
+
+        return p
+    return jsonify(run_async(_go()))
+
+@app.route('/api/lojas', methods=['GET'])
+def listar_lojas():
+    """Performance de todas as lojas (físicas + marketplaces)."""
+    async def _go():
+        db = await get_db()
+
+        # Lojas físicas fixas
+        fisicas = [
+            {"id": 1, "nome": "Loja Centro", "tipo": "fisica", "endereco": "Rua XV, 123"},
+            {"id": 2, "nome": "Loja Shopping", "tipo": "fisica", "endereco": "Shopping Center, loja 45"},
+            {"id": 3, "nome": "Loja Norte", "tipo": "fisica", "endereco": "Av. Norte, 789"},
+            {"id": 4, "nome": "Loja Sul", "tipo": "fisica", "endereco": "Av. Sul, 456"},
+            {"id": 5, "nome": "Loja Leste", "tipo": "fisica", "endereco": "Av. Leste, 321"},
+        ]
+
+        # Marketplaces do banco
+        mps = await db.fetch("SELECT DISTINCT marketplace FROM vendas WHERE marketplace IS NOT NULL")
+        marketplaces = [{"id": 10 + i, "nome": r["marketplace"], "tipo": "digital"} for i, r in enumerate(mps)]
+        if not mps:
+            marketplaces = [
+                {"id": 10, "nome": "shopee", "tipo": "digital"},
+                {"id": 11, "nome": "mercado_livre", "tipo": "digital"},
+            ]
+
+        todas = fisicas + marketplaces
+        resultado = []
+        for loja in todas:
+            periodo = request.args.get("periodo", 30, type=int)
+            if loja["tipo"] == "fisica":
+                v = await db.fetchrow("""
+                    SELECT COALESCE(SUM(receita_bruta), 0) AS receita,
+                           COALESCE(SUM(quantidade), 0) AS pedidos,
+                           COALESCE(SUM(receita_bruta) / NULLIF(SUM(quantidade), 0), 0) AS ticket
+                    FROM vendas WHERE loja_id = $1
+                    AND data >= CURRENT_DATE - $2::integer
+                """, loja["id"], periodo)
+            else:
+                v = await db.fetchrow("""
+                    SELECT COALESCE(SUM(receita_bruta), 0) AS receita,
+                           COALESCE(SUM(quantidade), 0) AS pedidos,
+                           COALESCE(SUM(receita_bruta) / NULLIF(SUM(quantidade), 0), 0) AS ticket
+                    FROM vendas WHERE marketplace = $1
+                    AND data >= CURRENT_DATE - $2::integer
+                """, loja["nome"], periodo)
+
+            resultado.append({
+                **loja,
+                "receita": float(v["receita"]) if v else 0,
+                "pedidos": v["pedidos"] if v else 0,
+                "ticket_medio": float(v["ticket"]) if v else 0,
+                "margem": 0,
+                "tendencia": "estavel",
+            })
+
+        # Totais consolidados
+        total_receita = sum(r["receita"] for r in resultado)
+        resultado.insert(0, {
+            "id": 0, "nome": "📊 Consolidado", "tipo": "consolidado",
+            "receita": total_receita,
+            "pedidos": sum(r["pedidos"] for r in resultado),
+            "ticket_medio": round(total_receita / max(sum(r["pedidos"] for r in resultado), 1), 2),
+            "margem": 0, "tendencia": "estavel",
+        })
+
+        return resultado
+    return jsonify(run_async(_go()))
+
+@app.route('/api/kpi/overview', methods=['GET'])
+def kpi_overview():
+    """KPIs consolidados para página inicial."""
+    async def _go():
+        db = await get_db()
+        periodo = request.args.get("periodo", 30, type=int)
+
+        total_receita = await db.fetchval(
+            "SELECT COALESCE(SUM(receita_bruta), 0) FROM vendas WHERE data >= CURRENT_DATE - $1::integer", periodo)
+        total_pedidos = await db.fetchval(
+            "SELECT COALESCE(SUM(quantidade), 0) FROM vendas WHERE data >= CURRENT_DATE - $1::integer", periodo)
+        total_produtos = await db.fetchval("SELECT COUNT(*) FROM fichas_tecnicas")
+        total_anuncios = await db.fetchval("SELECT COUNT(*) FROM anuncios WHERE status = 'ativo'")
+
+        receita_shopee = await db.fetchval(
+            "SELECT COALESCE(SUM(receita_bruta), 0) FROM vendas WHERE marketplace ILIKE '%shopee%' AND data >= CURRENT_DATE - $1::integer", periodo)
+        receita_ml = await db.fetchval(
+            "SELECT COALESCE(SUM(receita_bruta), 0) FROM vendas WHERE marketplace ILIKE '%mercado_livre%' AND data >= CURRENT_DATE - $1::integer", periodo)
+
+        top_skus = await db.fetch("""
+            SELECT v.sku, f.descricao AS nome, SUM(v.quantidade) AS qtd,
+                   SUM(v.receita_bruta) AS receita,
+                   COALESCE(m.margem_pct, 0) AS margem
+            FROM vendas v
+            JOIN fichas_tecnicas f ON f.sku = v.sku
+            LEFT JOIN margens_diarias m ON m.sku = v.sku AND m.data = CURRENT_DATE
+            WHERE v.data >= CURRENT_DATE - $1::integer
+            GROUP BY v.sku, f.descricao, m.margem_pct
+            ORDER BY SUM(v.receita_bruta) DESC LIMIT 10
+        """, periodo)
+
+        receita_por_dia = await db.fetch("""
+            SELECT data, SUM(receita_bruta) AS receita
+            FROM vendas WHERE data >= CURRENT_DATE - 14
+            GROUP BY data ORDER BY data
+        """)
+
+        return {
+            "receita_total": float(total_receita),
+            "total_pedidos": total_pedidos,
+            "total_produtos": total_produtos,
+            "total_anuncios": total_anuncios,
+            "ticket_medio": round(float(total_receita) / max(total_pedidos, 1), 2),
+            "receita_por_canal": {
+                "shopee": float(receita_shopee),
+                "mercado_livre": float(receita_ml),
+            },
+            "top_skus": [dict(r) for r in top_skus],
+            "receita_por_dia": [{"data": str(r["data"]), "receita": float(r["receita"])} for r in receita_por_dia],
+        }
+    return jsonify(run_async(_go()))
 
 # ===========================================================================
 # Rota padrão — SPA fallback: serve index.html pra qualquer rota do frontend
