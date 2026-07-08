@@ -1168,26 +1168,40 @@ def shopee_ads_suggest_budget(campaign_id):
 
 @app.route('/api/integrations', methods=['GET'])
 def list_integrations():
+    bling_ok = bool(get_config("bling", "api_key"))
+    shopee_ok = bool(get_config("shopee", "api_key")) or bool(os.environ.get("SHOPEE_PARTNER_ID"))
+    telegram_ok = bool(get_config("telegram", "token")) or bool(os.environ.get("TELEGRAM_BOT_TOKEN"))
+    whatsapp_ok = bool(get_config("whatsapp", "api_key")) or bool(os.environ.get("EVOLUTION_API_KEY"))
     return jsonify([
-        {"id": 1, "name": "Bling ERP", "type": "erp", "connected": bool(get_config("bling", "api_key"))},
-        {"id": 2, "name": "Shopee", "type": "marketplace", "connected": bool(get_config("shopee", "api_key"))},
-        {"id": 3, "name": "Mercado Livre", "type": "marketplace", "connected": False},
-        {"id": 4, "name": "Amazon", "type": "marketplace", "connected": False},
-        {"id": 5, "name": "Telegram", "type": "messaging", "connected": bool(get_config("telegram", "token"))},
-        {"id": 6, "name": "WhatsApp", "type": "messaging", "connected": bool(get_config("whatsapp", "api_key")) or bool(os.environ.get("EVOLUTION_API_KEY"))},
-        {"id": 7, "name": "Shopee Ads", "type": "ads", "connected": False},
-        {"id": 8, "name": "N8N", "type": "automation", "connected": False},
-        {"id": 9, "name": "Google Analytics", "type": "analytics", "connected": False},
-        {"id": 10, "name": "PagSeguro", "type": "payment", "connected": False},
-        {"id": 11, "name": "Mercado Pago", "type": "payment", "connected": False},
-        {"id": 12, "name": "Coolify", "type": "infra", "connected": True},
-        {"id": 13, "name": "PostgreSQL", "type": "database", "connected": True},
-        {"id": 14, "name": "Evolution API (WhatsApp)", "type": "messaging", "connected": bool(get_config("whatsapp", "api_key")) or bool(os.environ.get("EVOLUTION_API_KEY"))},
+        {"id": "bling", "name": "Bling ERP", "category": "erp", "status": "connected" if bling_ok else "disconnected"},
+        {"id": "shopee", "name": "Shopee", "category": "ecommerce", "status": "connected" if shopee_ok else "disconnected"},
+        {"id": "shopee-ads", "name": "Shopee Ads (AG-ADS)", "category": "ai", "status": "disconnected"},
+        {"id": "mercadolivre", "name": "Mercado Livre", "category": "ecommerce", "status": "disconnected"},
+        {"id": "nuvemshop", "name": "Nuvemshop", "category": "ecommerce", "status": "disconnected"},
+        {"id": "shopify", "name": "Shopify", "category": "ecommerce", "status": "disconnected"},
+        {"id": "pagseguro", "name": "PagSeguro", "category": "payment", "status": "disconnected"},
+        {"id": "mercado_pago", "name": "Mercado Pago", "category": "payment", "status": "disconnected"},
+        {"id": "correios", "name": "Correios", "category": "logistics", "status": "disconnected"},
+        {"id": "jadlog", "name": "Jadlog", "category": "logistics", "status": "disconnected"},
+        {"id": "whatsapp", "name": "WhatsApp Business", "category": "communication", "status": "connected" if whatsapp_ok else "disconnected"},
+        {"id": "google_analytics", "name": "Google Analytics", "category": "analytics", "status": "disconnected"},
+        {"id": "meta", "name": "Meta (Facebook/Instagram)", "category": "ecommerce", "status": "disconnected"},
+        {"id": "hermes", "name": "Hermes Agents", "category": "ai", "status": "connected"},
     ])
 
-@app.route('/api/integrations/<int:integ_id>/connect', methods=['POST'])
+@app.route('/api/integrations/<integ_id>/connect', methods=['POST'])
 def connect_integration(integ_id):
-    return jsonify({"success": True, "connected": True, "integration_id": integ_id})
+    if integ_id == 'shopee':
+        return jsonify({"success": True, "authUrl": "/shopee", "message": "Configure as chaves da Shopee na página de integração"})
+    if integ_id == 'bling':
+        return jsonify({"success": True, "authUrl": "/bling", "message": "Configure a API key do Bling na página de integração"})
+    if integ_id == 'whatsapp':
+        return jsonify({"success": True, "authUrl": "/integrations", "message": "Configure a Evolution API key nas variáveis de ambiente"})
+    return jsonify({"success": True, "message": f"Integração {integ_id} conectada (simulado)"})
+
+@app.route('/api/integrations/<integ_id>/disconnect', methods=['POST'])
+def disconnect_integration(integ_id):
+    return jsonify({"success": True, "message": f"Integração {integ_id} desconectada"})
 
 # ===========================================================================
 # Health real (consulta banco de verdade)
