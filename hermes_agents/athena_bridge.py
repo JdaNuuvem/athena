@@ -4,9 +4,10 @@ ATHENA OS tem 52 agentes, 40+ queries GraphQL, 30+ endpoints REST.
 """
 import os, sys, json, urllib.request
 from typing import Optional
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from core import run_async, get_db
+from pathlib import Path
 
 ATHENA_URL = os.environ.get("ATHENA_URL", "http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io")
 GRAPHQL_URL = f"{ATHENA_URL}/graphql"
@@ -1316,6 +1317,40 @@ def test_telegram():
         "webhook_url": webhook_url,
         "token_prefixo": token[:10] + "***" if token else ""
     })
+
+# ===========================================================================
+# Rota padrão — serve frontend ou landing page
+# ===========================================================================
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_frontend(path):
+    static_dir = Path(__file__).parent / 'dashboard'
+    target = static_dir / (path or 'index.html')
+    if target.exists() and target.is_file():
+        return send_from_directory(static_dir, path or 'index.html')
+    if not path:
+        return '<!DOCTYPE html><html lang=pt-BR>' \
+            '<head><meta charset=utf-8><title>ATHENA OS</title>' \
+            '<style>body{font-family:sans-serif;max-width:800px;margin:auto;padding:2em;background:#0f172a;color:#e2e8f0}' \
+            'a{color:#38bdf8}h1{color:#38bdf8}.card{background:#1e293b;border-radius:8px;padding:1em;margin:1em 0}</style>' \
+            '</head><body>' \
+            '<h1>🏛️ ATHENA OS — Hermes API</h1>' \
+            '<p>API rodando em <strong>https://athena.zoikom.site</strong></p>' \
+            '<div class=card>' \
+            '<h3>📡 Endpoints Principais</h3>' \
+            '<ul>' \
+            '<li><a href=/api/health>/api/health</a> — Status do sistema</li>' \
+            '<li><a href=/api/agents>/api/agents</a> — Lista de agentes</li>' \
+            '<li><a href=/api/hermes/agents>/api/hermes/agents</a> — Agentes Hermes</li>' \
+            '<li><a href=/api/integrations>/api/integrations</a> — Integrações</li>' \
+            '<li><a href=/api/business/inventory/PT-0001-A>/api/business/inventory/&lt;sku&gt;</a> — Estoque</li>' \
+            '</ul></div>' \
+            '<div class=card>' \
+            '<h3>🔧 Serviços</h3>' \
+            '<p>Dashboard: <code>frontend/</code> (npm run dev na porta 5173)</p>' \
+            '<p>Coolify: <a href=http://177.7.45.242:8000>http://177.7.45.242:8000</a></p>' \
+            '</div></body></html>', 200, {'Content-Type': 'text/html; charset=utf-8'}
+    return {'error': 'Not found', 'path': path}, 404
 
 if __name__ == "__main__":
     # Rodar como servidor Flask
