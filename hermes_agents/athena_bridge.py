@@ -1426,155 +1426,124 @@ def listar_produtos():
 def detalhe_produto(sku):
     """Detalhes do produto com histórico de preços e estoque."""
     async def _go():
-        db = await get_db()
-        produto = await db.fetchrow("""
-            SELECT f.*, COALESCE(m.margem_pct, 0) AS margem_pct,
-                   COALESCE(m.receita_total, 0) AS receita_30d,
-                   COALESCE(m.quantidade_vendida, 0) AS vendidos_30d,
-                   COALESCE(m.lucro_liquido, 0) AS lucro_30d
-            FROM fichas_tecnicas f
-            LEFT JOIN margens_diarias m ON m.sku = f.sku AND m.data = CURRENT_DATE
-            WHERE f.sku = $1
-        """, sku)
-        if not produto:
-            return {"error": "Produto não encontrado"}, 404
-        p = dict(produto)
-
-        estoque = await db.fetch("SELECT marketplace, preco, posicao_busca, avaliacao_media, status FROM anuncios WHERE sku = $1", sku)
-        p["estoque_lojas"] = [dict(r) for r in estoque]
-
-        vendas = await db.fetch("""
-            SELECT data, marketplace, quantidade, preco_venda, receita_bruta
-            FROM vendas WHERE sku = $1 ORDER BY data DESC LIMIT 90
-        """, sku)
-        p["vendas_30d"] = [dict(r) for r in vendas]
-
-        precos = await db.fetch("""
-            SELECT data, preco_venda FROM vendas
-            WHERE sku = $1 ORDER BY data ASC
-        """, sku)
-        p["historico_precos"] = [{"data": str(r["data"]), "preco": float(r["preco_venda"])} for r in precos]
-
-        return p
+        try:
+            db = await get_db()
+            produto = await db.fetchrow("""
+                SELECT f.*, COALESCE(m.margem_pct, 0) AS margem_pct,
+                       COALESCE(m.receita_total, 0) AS receita_30d,
+                       COALESCE(m.quantidade_vendida, 0) AS vendidos_30d,
+                       COALESCE(m.lucro_liquido, 0) AS lucro_30d
+                FROM fichas_tecnicas f
+                LEFT JOIN margens_diarias m ON m.sku = f.sku AND m.data = CURRENT_DATE
+                WHERE f.sku = $1
+            """, sku)
+            if not produto:
+                return {"sku": sku, "nome": sku, "descricao": "", "margem_pct": 0}
+            p = dict(produto)
+            try:
+                estoque = await db.fetch("SELECT marketplace, preco, posicao_busca, avaliacao_media, status FROM anuncios WHERE sku = $1", sku)
+                p["estoque_lojas"] = [dict(r) for r in estoque]
+            except: p["estoque_lojas"] = []
+            try:
+                vendas = await db.fetch("SELECT data, marketplace, quantidade, preco_venda, receita_bruta FROM vendas WHERE sku = $1 ORDER BY data DESC LIMIT 90", sku)
+                p["vendas_30d"] = [dict(r) for r in vendas]
+            except: p["vendas_30d"] = []
+            try:
+                precos = await db.fetch("SELECT data, preco_venda FROM vendas WHERE sku = $1 ORDER BY data ASC", sku)
+                p["historico_precos"] = [{"data": str(r["data"]), "preco": float(r["preco_venda"])} for r in precos]
+            except: p["historico_precos"] = []
+            return p
+        except Exception as e:
+            return {"sku": sku, "erro": str(e), "estoque_lojas": [], "vendas_30d": []}
     return jsonify(run_async(_go()))
 
 @app.route('/api/lojas', methods=['GET'])
 def listar_lojas():
     """Performance de todas as lojas (físicas + marketplaces)."""
     async def _go():
-        db = await get_db()
-
-        # Lojas físicas fixas
-        fisicas = [
-            {"id": 1, "nome": "Loja Centro", "tipo": "fisica", "endereco": "Rua XV, 123"},
-            {"id": 2, "nome": "Loja Shopping", "tipo": "fisica", "endereco": "Shopping Center, loja 45"},
-            {"id": 3, "nome": "Loja Norte", "tipo": "fisica", "endereco": "Av. Norte, 789"},
-            {"id": 4, "nome": "Loja Sul", "tipo": "fisica", "endereco": "Av. Sul, 456"},
-            {"id": 5, "nome": "Loja Leste", "tipo": "fisica", "endereco": "Av. Leste, 321"},
-        ]
-
-        # Marketplaces do banco
-        mps = await db.fetch("SELECT DISTINCT marketplace FROM vendas WHERE marketplace IS NOT NULL")
-        marketplaces = [{"id": 10 + i, "nome": r["marketplace"], "tipo": "digital"} for i, r in enumerate(mps)]
-        if not mps:
-            marketplaces = [
-                {"id": 10, "nome": "shopee", "tipo": "digital"},
-                {"id": 11, "nome": "mercado_livre", "tipo": "digital"},
+        try:
+            db = await get_db()
+            fisicas = [
+                {"id": 1, "nome": "Loja Centro", "tipo": "fisica"},
+                {"id": 2, "nome": "Loja Shopping", "tipo": "fisica"},
+                {"id": 3, "nome": "Loja Norte", "tipo": "fisica"},
+                {"id": 4, "nome": "Loja Sul", "tipo": "fisica"},
+                {"id": 5, "nome": "Loja Leste", "tipo": "fisica"},
             ]
-
-        todas = fisicas + marketplaces
-        resultado = []
-        for loja in todas:
             periodo = request.args.get("periodo", 30, type=int)
-            if loja["tipo"] == "fisica":
-                v = await db.fetchrow("""
-                    SELECT COALESCE(SUM(receita_bruta), 0) AS receita,
-                           COALESCE(SUM(quantidade), 0) AS pedidos,
-                           COALESCE(SUM(receita_bruta) / NULLIF(SUM(quantidade), 0), 0) AS ticket
-                    FROM vendas WHERE loja_id = $1
-                    AND data >= CURRENT_DATE - $2::integer
-                """, loja["id"], periodo)
-            else:
-                v = await db.fetchrow("""
-                    SELECT COALESCE(SUM(receita_bruta), 0) AS receita,
-                           COALESCE(SUM(quantidade), 0) AS pedidos,
-                           COALESCE(SUM(receita_bruta) / NULLIF(SUM(quantidade), 0), 0) AS ticket
-                    FROM vendas WHERE marketplace = $1
-                    AND data >= CURRENT_DATE - $2::integer
-                """, loja["nome"], periodo)
+            try:
+                mps = await db.fetch("SELECT DISTINCT marketplace FROM vendas WHERE marketplace IS NOT NULL")
+                marketplaces = [{"id": 10 + i, "nome": r["marketplace"], "tipo": "digital"} for i, r in enumerate(mps)] if mps else []
+            except:
+                marketplaces = []
+            if not marketplaces:
+                marketplaces = [
+                    {"id": 10, "nome": "shopee", "tipo": "digital"},
+                    {"id": 11, "nome": "mercado_livre", "tipo": "digital"},
+                ]
+            todas = fisicas + marketplaces
+            resultado = []
+            for loja in todas:
+                try:
+                    if loja["tipo"] == "fisica":
+                        v = await db.fetchrow("SELECT COALESCE(SUM(receita_bruta),0) AS receita, COALESCE(SUM(quantidade),0) AS pedidos FROM vendas WHERE loja_id=$1 AND data>=CURRENT_DATE-$2::integer", loja["id"], periodo)
+                    else:
+                        v = await db.fetchrow("SELECT COALESCE(SUM(receita_bruta),0) AS receita, COALESCE(SUM(quantidade),0) AS pedidos FROM vendas WHERE marketplace=$1 AND data>=CURRENT_DATE-$2::integer", loja["nome"], periodo)
+                    receita = float(v["receita"]) if v else 0
+                    pedidos = v["pedidos"] if v else 0
+                except:
+                    receita, pedidos = 0, 0
+                resultado.append({**loja, "receita": receita, "pedidos": pedidos, "ticket_medio": round(receita/max(pedidos,1),2)})
 
-            resultado.append({
-                **loja,
-                "receita": float(v["receita"]) if v else 0,
-                "pedidos": v["pedidos"] if v else 0,
-                "ticket_medio": float(v["ticket"]) if v else 0,
-                "margem": 0,
-                "tendencia": "estavel",
-            })
-
-        # Totais consolidados
-        total_receita = sum(r["receita"] for r in resultado)
-        resultado.insert(0, {
-            "id": 0, "nome": "📊 Consolidado", "tipo": "consolidado",
-            "receita": total_receita,
-            "pedidos": sum(r["pedidos"] for r in resultado),
-            "ticket_medio": round(total_receita / max(sum(r["pedidos"] for r in resultado), 1), 2),
-            "margem": 0, "tendencia": "estavel",
-        })
-
-        return resultado
+            total_receita = sum(r["receita"] for r in resultado)
+            resultado.insert(0, {"id":0,"nome":"📊 Consolidado","tipo":"consolidado","receita":total_receita,"pedidos":sum(r["pedidos"] for r in resultado),"ticket_medio":round(total_receita/max(sum(r["pedidos"] for r in resultado),1),2)})
+            return resultado
+        except Exception as e:
+            return [{"id":0,"nome":"📊 Consolidado","tipo":"consolidado","receita":0,"pedidos":0,"ticket_medio":0,"erro":str(e)}]
     return jsonify(run_async(_go()))
 
 @app.route('/api/kpi/overview', methods=['GET'])
 def kpi_overview():
     """KPIs consolidados para página inicial."""
     async def _go():
-        db = await get_db()
-        periodo = request.args.get("periodo", 30, type=int)
+        try:
+            db = await get_db()
+            periodo = request.args.get("periodo", 30, type=int)
 
-        total_receita = await db.fetchval(
-            "SELECT COALESCE(SUM(receita_bruta), 0) FROM vendas WHERE data >= CURRENT_DATE - $1::integer", periodo)
-        total_pedidos = await db.fetchval(
-            "SELECT COALESCE(SUM(quantidade), 0) FROM vendas WHERE data >= CURRENT_DATE - $1::integer", periodo)
-        total_produtos = await db.fetchval("SELECT COUNT(*) FROM fichas_tecnicas")
-        total_anuncios = await db.fetchval("SELECT COUNT(*) FROM anuncios WHERE status = 'ativo'")
-
-        receita_shopee = await db.fetchval(
-            "SELECT COALESCE(SUM(receita_bruta), 0) FROM vendas WHERE marketplace ILIKE '%shopee%' AND data >= CURRENT_DATE - $1::integer", periodo)
-        receita_ml = await db.fetchval(
-            "SELECT COALESCE(SUM(receita_bruta), 0) FROM vendas WHERE marketplace ILIKE '%mercado_livre%' AND data >= CURRENT_DATE - $1::integer", periodo)
-
-        top_skus = await db.fetch("""
-            SELECT v.sku, f.descricao AS nome, SUM(v.quantidade) AS qtd,
-                   SUM(v.receita_bruta) AS receita,
-                   COALESCE(m.margem_pct, 0) AS margem
-            FROM vendas v
-            JOIN fichas_tecnicas f ON f.sku = v.sku
-            LEFT JOIN margens_diarias m ON m.sku = v.sku AND m.data = CURRENT_DATE
-            WHERE v.data >= CURRENT_DATE - $1::integer
-            GROUP BY v.sku, f.descricao, m.margem_pct
-            ORDER BY SUM(v.receita_bruta) DESC LIMIT 10
-        """, periodo)
-
-        receita_por_dia = await db.fetch("""
-            SELECT data, SUM(receita_bruta) AS receita
-            FROM vendas WHERE data >= CURRENT_DATE - 14
-            GROUP BY data ORDER BY data
-        """)
-
-        return {
-            "receita_total": float(total_receita),
-            "total_pedidos": total_pedidos,
-            "total_produtos": total_produtos,
-            "total_anuncios": total_anuncios,
-            "ticket_medio": round(float(total_receita) / max(total_pedidos, 1), 2),
-            "receita_por_canal": {
-                "shopee": float(receita_shopee),
-                "mercado_livre": float(receita_ml),
-            },
-            "top_skus": [dict(r) for r in top_skus],
-            "receita_por_dia": [{"data": str(r["data"]), "receita": float(r["receita"])} for r in receita_por_dia],
-        }
+            def f(v, d=0):
+                return float(v) if v is not None else d
+            try:
+                total_receita = f(await db.fetchval("SELECT COALESCE(SUM(receita_bruta),0) FROM vendas WHERE data>=CURRENT_DATE-$1::integer", periodo))
+                total_pedidos = await db.fetchval("SELECT COALESCE(SUM(quantidade),0) FROM vendas WHERE data>=CURRENT_DATE-$1::integer", periodo) or 0
+            except:
+                total_receita, total_pedidos = 0, 0
+            try:
+                total_produtos = await db.fetchval("SELECT COUNT(*) FROM fichas_tecnicas") or 0
+            except:
+                total_produtos = 0
+            try:
+                total_anuncios = await db.fetchval("SELECT COUNT(*) FROM anuncios WHERE status='ativo'") or 0
+            except:
+                total_anuncios = 0
+            try:
+                receita_shopee = f(await db.fetchval("SELECT COALESCE(SUM(receita_bruta),0) FROM vendas WHERE marketplace ILIKE '%shopee%' AND data>=CURRENT_DATE-$1::integer", periodo))
+                receita_ml = f(await db.fetchval("SELECT COALESCE(SUM(receita_bruta),0) FROM vendas WHERE marketplace ILIKE '%mercado_livre%' AND data>=CURRENT_DATE-$1::integer", periodo))
+            except:
+                receita_shopee, receita_ml = 0, 0
+            try:
+                top = await db.fetch("SELECT v.sku,f.descricao AS nome,SUM(v.quantidade) AS qtd,SUM(v.receita_bruta) AS receita,COALESCE(m.margem_pct,0) AS margem FROM vendas v JOIN fichas_tecnicas f ON f.sku=v.sku LEFT JOIN margens_diarias m ON m.sku=v.sku AND m.data=CURRENT_DATE WHERE v.data>=CURRENT_DATE-$1::integer GROUP BY v.sku,f.descricao,m.margem_pct ORDER BY SUM(v.receita_bruta) DESC LIMIT 10", periodo)
+                top_skus = [dict(r) for r in top]
+            except:
+                top_skus = []
+            return {
+                "receita_total": total_receita, "total_pedidos": total_pedidos,
+                "total_produtos": total_produtos, "total_anuncios": total_anuncios,
+                "ticket_medio": round(total_receita / max(total_pedidos, 1), 2),
+                "receita_por_canal": {"shopee": receita_shopee, "mercado_livre": receita_ml},
+                "top_skus": top_skus,
+            }
+        except Exception as e:
+            return {"erro": str(e), "receita_total": 0, "total_pedidos": 0, "total_produtos": 0, "total_anuncios": 0}
     return jsonify(run_async(_go()))
 
 # ===========================================================================
