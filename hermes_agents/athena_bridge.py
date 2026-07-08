@@ -704,20 +704,26 @@ def set_telegram_config():
 
 @app.route('/api/config/bling', methods=['POST'])
 def set_bling_config():
-    """Configura Bling."""
+    """Configura Bling (api_key legado + OAuth v3)."""
     from core.config import set_config
+    data = request.json or {}
     
-    api_key = request.json.get('apiKey', '')
-    api_url = request.json.get('apiUrl', '')
-    
-    if not api_key:
-        return jsonify({"error": "API key não fornecida"}), 400
-    
-    set_config("bling", "api_key", api_key)
+    api_key = data.get('apiKey', '')
+    api_url = data.get('apiUrl', '')
+    client_id = data.get('clientId', '') or data.get('client_id', '')
+    client_secret = data.get('clientSecret', '') or data.get('client_secret', '')
+
+    if client_id:
+        set_config("bling", "client_id", client_id)
+    if client_secret:
+        set_config("bling", "client_secret", client_secret)
+    if api_key:
+        set_config("bling", "api_key", api_key)
     if api_url:
         set_config("bling", "api_url", api_url)
-    
-    return jsonify({"success": True, "configurado": True})
+
+    from bling_erp import CLIENT_ID, CLIENT_SECRET
+    return jsonify({"success": True, "oauth_setado": bool(CLIENT_ID or client_id), "client_id": CLIENT_ID or client_id})
 
 @app.route('/api/config/shopee', methods=['POST'])
 def set_shopee_config():
