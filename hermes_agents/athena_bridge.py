@@ -1313,15 +1313,73 @@ def shopee_pedido_webhook():
 # Endpoints de teste das integrações
 # ===========================================================================
 
+# ===========================================================================
+# Bling ERP v3 — OAuth2 + Webhooks
+# ===========================================================================
+
+@app.route('/api/bling/auth', methods=['GET'])
+def bling_auth_url():
+    from bling_erp import get_auth_url, status
+    return jsonify({"auth_url": get_auth_url(), **status()})
+
+@app.route('/api/bling/oauth/callback', methods=['GET'])
+def bling_oauth_callback():
+    from bling_erp import exchange_code
+    code = request.args.get("code", "")
+    state = request.args.get("state", "")
+    if not code:
+        return jsonify({"error": "No code provided"}), 400
+    resultado = exchange_code(code)
+    if resultado.get("success"):
+        return '<html><body><h2>✅ Bling conectado!</h2><p>Pode fechar esta janela e voltar ao dashboard.</p><script>setTimeout(()=>{window.close()},2000)</script></body></html>'
+    return jsonify({"error": "Falha na autenticação", "detalhe": resultado}), 400
+
+@app.route('/api/bling/status', methods=['GET'])
+def bling_status():
+    from bling_erp import status
+    return jsonify(status())
+
+@app.route('/api/bling/sync', methods=['POST'])
+def bling_sync():
+    from bling_erp import sincronizar_produtos, sincronizar_pedidos
+    produtos = sincronizar_produtos()
+    pedidos = sincronizar_pedidos()
+    return jsonify({"produtos": produtos, "pedidos": pedidos})
+
+@app.route('/api/bling/webhook/registrar', methods=['POST'])
+def bling_webhook_registrar():
+    from bling_erp import registrar_webhook
+    data = request.json or {}
+    return jsonify(registrar_webhook(data.get("tipo", "pedido"), data.get("url")))
+
+@app.route('/webhook/bling/pedido', methods=['POST'])
+def bling_webhook_pedido():
+    from datetime import date, timedelta
+    async def _go():
+        try:
+            db = await get_db()
+            payload = request.json or {}
+            pedido = payload.get("pedido", payload)
+            for item in pedido.get("itens", []):
+                sku = item.get("codigo", "")
+                qtd = int(item.get("quantidade", 1))
+                preco = float(item.get("valorUnitario", 0))
+                await db.execute(
+                    "INSERT INTO vendas (data, sku, marketplace, quantidade, preco_venda, receita_bruta) VALUES ($1,$2,'bling',$3,$4,$5)",
+                    date.today(), sku, qtd, preco, preco * qtd)
+            from ag_04_planejador import adicionar_pedido_producao
+            for item in pedido.get("itens", []):
+                adicionar_pedido_producao(sku=item.get("codigo", ""), quantidade=int(item.get("quantidade", 1)),
+                    prazo=date.today() + timedelta(days=3), prioridade=5, cliente_id=pedido.get("contato", {}).get("nome", ""))
+            return {"success": True, "itens": len(pedido.get("itens", []))}
+        except Exception as e:
+            return {"error": str(e)}
+    return jsonify(run_async(_go()))
+
 @app.route('/api/test/bling', methods=['GET'])
 def test_bling():
-    """Testa conexão com Bling."""
-    from bling_erp import get_api_key, get_api_url
-    
-    return jsonify({
-        "configurado": bool(get_api_key()),
-        "api_url": get_api_url()
-    })
+    from bling_erp import status
+    return jsonify(status())
 
 @app.route('/api/test/shopee', methods=['GET'])
 def test_shopee():
