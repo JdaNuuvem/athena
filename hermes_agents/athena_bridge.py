@@ -6,6 +6,7 @@ import os, sys, json, urllib.request
 from typing import Optional
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from core import run_async, get_db
 
 ATHENA_URL = os.environ.get("ATHENA_URL", "http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io")
 GRAPHQL_URL = f"{ATHENA_URL}/graphql"
