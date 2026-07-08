@@ -1,0 +1,67 @@
+- generic [ref=f18e3]:
+  - banner [ref=f18e4]:
+    - heading "🏛️ Hermes Dashboard" [level=1] [ref=f18e5]
+    - paragraph [ref=f18e6]: "Fase 2-3: Produção + Cadeia de Manufatura | Servidor: 177.7.45.242:8000"
+  - generic [ref=f18e7]:
+    - heading "⚙️ Configurações" [level=2] [ref=f18e8]
+    - generic [ref=f18e9]:
+      - heading "📱 Telegram" [level=3] [ref=f18e10]
+      - generic [ref=f18e11]:
+        - generic [ref=f18e12]:
+          - text: Bot Token
+          - textbox "Token do @BotFather" [ref=f18e13]
+        - generic [ref=f18e14]:
+          - text: Webhook URL (opcional)
+          - textbox "https://177.7.45.242:8000/telegram/webhook" [ref=f18e15]
+    - generic [ref=f18e16]:
+      - heading "💼 Bling ERP" [level=3] [ref=f18e17]
+      - generic [ref=f18e18]:
+        - generic [ref=f18e19]:
+          - text: API Key
+          - textbox "API Key do Bling" [ref=f18e20]
+        - generic [ref=f18e21]:
+          - text: API URL (opcional)
+          - textbox "https://bling.com.br/Api/v3" [ref=f18e22]
+    - generic [ref=f18e23]:
+      - heading "🛒 Shopee Marketplace" [level=3] [ref=f18e24]
+      - generic [ref=f18e25]:
+        - generic [ref=f18e26]:
+          - text: Partner ID
+          - textbox "ID do parceiro" [ref=f18e27]
+        - generic [ref=f18e28]:
+          - text: Shop ID
+          - textbox "ID da loja" [ref=f18e29]
+        - generic [ref=f18e30]:
+          - text: API Key
+          - textbox "Chave da API" [ref=f18e31]
+    - button "💾 Salvar Todas as Configurações" [ref=f18e33]
+  - generic [ref=f18e34]:
+    - heading "📊 Estatísticas Telegram" [level=2] [ref=f18e35]
+    - generic [ref=f18e36]: Carregando...
+  - generic [ref=f18e37]:
+    - heading "🏭 Produção" [level=2] [ref=f18e38]
+    - generic [ref=f18e39]: Carregando...
+  - generic [ref=f18e40]:
+    - heading "✅ Controle de Qualidade" [level=2] [ref=f18e41]
+    - generic [ref=f18e42]: Carregando...
+  - generic [ref=f18e43]:
+    - heading "🔧 Gestão de Manutenção" [level=2] [ref=f18e44]
+    - generic [ref=f18e45]: Carregando...
+  - generic [ref=f18e46]:
+    - heading "🤖 Machine Learning" [level=2] [ref=f18e47]
+    - generic [ref=f18e48]: Carregando...
+  - generic [ref=f18e49]:
+    - heading "🔗 Links Rápidos" [level=2] [ref=f18e50]
+    - generic [ref=f18e51]:
+      - link "📊 Análise Pareto de Defeitos" [ref=f18e52] [cursor=pointer]:
+        - /url: https://177.7.45.242:8000/api/agent/ag_11_qualidade/pareto?periodo=30
+      - link "🔧 KPIs de Manutenção" [ref=f18e53] [cursor=pointer]:
+        - /url: https://177.7.45.242:8000/api/manutencao/kpi?periodo=30
+      - link "🤖 Treinar Modelo ML" [ref=f18e54] [cursor=pointer]:
+        - /url: https://177.7.45.242:8000/api/ml/treinar
+      - link "💼 Acessar Bling ERP" [ref=f18e55] [cursor=pointer]:
+        - /url: https://bling.com.br
+      - link "🛒 Acessar Shopee Seller" [ref=f18e56] [cursor=pointer]:
+        - /url: https://seller.shopee.com.br
+      - link "📱 Criar Bot Telegram" [ref=f18e57] [cursor=pointer]:
+        - /url: https://t.me/botfather

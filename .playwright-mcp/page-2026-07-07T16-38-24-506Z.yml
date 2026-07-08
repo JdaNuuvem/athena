@@ -1,0 +1,81 @@
+- generic [active] [ref=f12e1]:
+  - generic [ref=f12e2]:
+    - generic [ref=f12e3]:
+      - generic [ref=f12e4]:
+        - link "Coolify" [ref=f12e5] [cursor=pointer]:
+          - /url: /
+        - combobox [ref=f12e9]:
+          - option "Switch team" [disabled]
+          - option "Root Team" [selected]
+      - button "Open sidebar" [ref=f12e10]:
+        - generic [ref=f12e11]: Open sidebar
+        - img [ref=f12e12]
+    - main [ref=f12e14]:
+      - generic [ref=f12e15]:
+        - generic [ref=f12e17]:
+          - generic [ref=f12e19]:
+            - heading "The latest configuration has not been applied" [level=4] [ref=f12e20]
+            - generic [ref=f12e22]:
+              - text: 4 unapplied configuration changes detected. A rebuild is required.
+              - button "View changes" [ref=f12e23]
+          - button [ref=f12e24]:
+            - img [ref=f12e25]
+        - heading "Logs" [level=1] [ref=f12e27]
+        - navigation [ref=f12e28]:
+          - navigation [ref=f12e29]:
+            - list [ref=f12e30]:
+              - listitem [ref=f12e31]:
+                - generic [ref=f12e32]:
+                  - link "My first project" [ref=f12e33] [cursor=pointer]:
+                    - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o
+                  - button [ref=f12e34]:
+                    - img [ref=f12e35]
+              - listitem [ref=f12e37]:
+                - generic [ref=f12e38]:
+                  - link "production" [ref=f12e39] [cursor=pointer]:
+                    - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr
+                  - button [ref=f12e40]:
+                    - img [ref=f12e41]
+              - listitem [ref=f12e43]:
+                - link "athena:main-k2h04qpg9n76ymy8mcfnw9sf (localhost)" [ref=f12e44] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi
+              - generic [ref=f12e45]:
+                - generic [ref=f12e47]:
+                  - link "Running" [ref=f12e50] [cursor=pointer]:
+                    - /url: https://github.com/JdaNuuvem/athena/commit/c1236edfcbb04d149c53120b44e9b62018d80a47
+                  - generic [ref=f12e51]: (unknown)
+                - button "Refresh Status" [ref=f12e52]:
+                  - img [ref=f12e53]
+          - generic [ref=f12e55]:
+            - navigation [ref=f12e56]:
+              - link "Configuration" [ref=f12e57] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi
+              - link "Deployments" [ref=f12e58] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/deployment
+              - link "Logs" [ref=f12e59] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/logs
+                - generic [ref=f12e60]: Logs
+              - link "Terminal" [ref=f12e61] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/terminal
+              - button "Links" [ref=f12e64]:
+                - generic [ref=f12e65]: Links
+                - img [ref=f12e66]
+            - generic [ref=f12e69]:
+              - button "Advanced" [ref=f12e72]:
+                - generic [ref=f12e73]: Advanced
+                - img [ref=f12e74]
+              - generic [ref=f12e76]:
+                - button "Redeploy" [ref=f12e77] [cursor=pointer]:
+                  - img [ref=f12e78]
+                  - text: Redeploy
+                - button "Restart" [ref=f12e80] [cursor=pointer]:
+                  - img [ref=f12e81]
+                  - text: Restart
+                - button "Stop" [ref=f12e86] [cursor=pointer]:
+                  - img [ref=f12e87]
+                  - text: Stop
+        - generic [ref=f12e89]:
+          - heading "Logs" [level=2] [ref=f12e90]
+          - generic [ref=f12e91]: Loading containers...
+  - img
+  - list

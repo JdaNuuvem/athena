@@ -1,0 +1,127 @@
+- generic [active] [ref=f46e1]:
+  - generic [ref=f46e2]:
+    - generic [ref=f46e3]:
+      - generic [ref=f46e4]:
+        - link "Coolify" [ref=f46e5] [cursor=pointer]:
+          - /url: /
+        - combobox [ref=f46e9]:
+          - option "Switch team" [disabled]
+          - option "Root Team" [selected]
+      - button "Open sidebar" [ref=f46e10]:
+        - generic [ref=f46e11]: Open sidebar
+        - img [ref=f46e12]
+    - main [ref=f46e14]:
+      - generic [ref=f46e15]:
+        - generic [ref=f46e16]:
+          - generic [ref=f46e17]:
+            - heading "Server" [level=1] [ref=f46e18]
+            - generic [ref=f46e20]:
+              - generic [ref=f46e24]: Proxy Running
+              - button "Refresh Status" [ref=f46e25]:
+                - img [ref=f46e26]
+            - generic [ref=f46e33]: Sentinel In Sync
+          - generic [ref=f46e34]: localhost
+          - generic [ref=f46e35]:
+            - navigation [ref=f46e36]:
+              - link "Configuration" [ref=f46e37] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp
+              - link "Proxy" [ref=f46e38] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/proxy
+              - link "Sentinel" [ref=f46e39] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/sentinel
+              - link "Resources" [ref=f46e40] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/resources
+              - link "Terminal" [ref=f46e41] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/terminal
+              - link "Security" [ref=f46e42] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/security/patches
+            - generic [ref=f46e45]:
+              - button "Restart Proxy" [ref=f46e47] [cursor=pointer]:
+                - img [ref=f46e48]
+                - text: Restart Proxy
+              - button "Stop Proxy" [ref=f46e53] [cursor=pointer]:
+                - img [ref=f46e54]
+                - text: Stop Proxy
+        - generic [ref=f46e56]:
+          - generic [ref=f46e57]:
+            - link "Configuration" [ref=f46e58] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/proxy
+              - generic [ref=f46e59]: Configuration
+            - link "Dynamic Configurations" [ref=f46e60] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/proxy/dynamic
+              - generic [ref=f46e61]: Dynamic Configurations
+            - link "Logs" [ref=f46e62] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/proxy/logs
+              - generic [ref=f46e63]: Logs
+          - generic [ref=f46e67]:
+            - generic [ref=f46e68]:
+              - heading "Configuration" [level=2] [ref=f46e69]
+              - button "Switch Proxy" [ref=f46e70] [cursor=pointer]
+              - button "Save" [ref=f46e71] [cursor=pointer]
+            - generic [ref=f46e72]: Configure your proxy settings and advanced options.
+            - heading "Advanced" [level=3] [ref=f46e73]
+            - generic [ref=f46e74]:
+              - generic [ref=f46e76]:
+                - generic [ref=f46e77]:
+                  - text: Generate labels only for Traefik
+                  - img [ref=f46e80] [cursor=pointer]
+                - checkbox "Generate labels only for Traefik" [ref=f46e82] [cursor=pointer]
+              - generic [ref=f46e84]:
+                - generic [ref=f46e85]:
+                  - text: Override default request handler
+                  - img [ref=f46e88] [cursor=pointer]
+                - checkbox "Override default request handler" [checked] [ref=f46e90] [cursor=pointer]
+              - generic [ref=f46e91]:
+                - generic [ref=f46e92]: Redirect to (optional)
+                - textbox "https://app.coolify.io" [ref=f46e93]
+            - generic [ref=f46e95]:
+              - heading "Traefik (Coolify Proxy)" [level=3] [ref=f46e96]
+              - button "Reset Configuration" [ref=f46e98] [cursor=pointer]
+            - generic [ref=f46e100]:
+              - generic [ref=f46e101]: Configuration file ( /data/coolify/proxy/docker-compose.yml )
+              - code [ref=f46e106]:
+                - generic [ref=f46e107]:
+                  - generic [ref=f46e109]:
+                    - generic [ref=f46e112]: "1"
+                    - generic [ref=f46e114]: "2"
+                    - generic [ref=f46e116]: "3"
+                    - generic [ref=f46e118]: "4"
+                    - generic [ref=f46e120]: "5"
+                    - generic [ref=f46e122]: "6"
+                    - generic [ref=f46e124]: "7"
+                    - generic [ref=f46e126]: "8"
+                    - generic [ref=f46e128]: "9"
+                    - generic [ref=f46e130]: "10"
+                    - generic [ref=f46e132]: "11"
+                    - generic [ref=f46e134]: "12"
+                    - generic [ref=f46e136]: "13"
+                    - generic [ref=f46e138]: "14"
+                    - generic [ref=f46e140]: "15"
+                    - generic [ref=f46e142]: "16"
+                    - generic [ref=f46e144]: "17"
+                    - generic [ref=f46e146]: "18"
+                  - generic [ref=f46e201]:
+                    - generic [ref=f46e203]: "name: coolify-proxy"
+                    - generic [ref=f46e205]: "networks:"
+                    - generic [ref=f46e207]: "coolify:"
+                    - generic [ref=f46e209]: "external: true"
+                    - generic [ref=f46e211]: "services:"
+                    - generic [ref=f46e213]: "traefik:"
+                    - generic [ref=f46e215]: "container_name: coolify-proxy"
+                    - generic [ref=f46e217]: "image: 'traefik:v3.6'"
+                    - generic [ref=f46e219]: "restart: unless-stopped"
+                    - generic [ref=f46e221]: "extra_hosts:"
+                    - generic [ref=f46e223]: "- 'host.docker.internal:host-gateway'"
+                    - generic [ref=f46e225]: "networks:"
+                    - generic [ref=f46e227]: "- coolify"
+                    - generic [ref=f46e229]: "ports:"
+                    - generic [ref=f46e231]: "- '80:80'"
+                    - generic [ref=f46e233]: "- '443:443'"
+                    - generic [ref=f46e235]: "- '443:443/udp'"
+                    - generic [ref=f46e237]: "- '8080:8080'"
+                  - textbox "Editor content" [ref=f46e239]
+  - img
+  - list
+  - generic [ref=f46e240]:
+    - alert
+    - alert

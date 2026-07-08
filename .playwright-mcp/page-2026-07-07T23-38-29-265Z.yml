@@ -1,0 +1,198 @@
+- generic [ref=f19e149]:
+  - generic [ref=f19e150]:
+    - generic [ref=f19e151]:
+      - generic [ref=f19e152]:
+        - link [ref=f19e446] [cursor=pointer]:
+          - /url: /
+          - text: Coolify
+        - combobox [ref=f19e157]
+      - button [ref=f19e447]:
+        - generic [ref=f19e159]: Open sidebar
+        - img [ref=f19e160]
+    - main [ref=f19e162]:
+      - generic [ref=f19e163]:
+        - generic [ref=f19e164]:
+          - generic [ref=f19e165]:
+            - heading [level=1] [ref=f19e448]: Server
+            - generic [ref=f19e168]:
+              - generic [ref=f19e172]: Proxy Running
+              - button [ref=f19e449]:
+                - img [ref=f19e174]
+            - generic [ref=f19e181]: Sentinel In Sync
+          - generic [ref=f19e182]: localhost
+          - generic [ref=f19e183]:
+            - navigation [ref=f19e184]:
+              - link [ref=f19e450] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp
+                - text: Configuration
+              - link [ref=f19e451] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/proxy
+                - text: Proxy
+              - link [ref=f19e452] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/sentinel
+                - text: Sentinel
+              - link [ref=f19e453] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/resources
+                - text: Resources
+              - link [ref=f19e454] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/terminal
+                - text: Terminal
+              - link [ref=f19e455] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/security/patches
+                - text: Security
+            - generic [ref=f19e193]:
+              - button [ref=f19e456] [cursor=pointer]:
+                - img [ref=f19e196]
+                - text: Restart Proxy
+              - button [ref=f19e457] [cursor=pointer]:
+                - img [ref=f19e202]
+                - text: Stop Proxy
+        - generic [ref=f19e204]:
+          - generic [ref=f19e205]:
+            - link [ref=f19e458] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/proxy
+              - generic [ref=f19e207]: Configuration
+            - link [ref=f19e459] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/proxy/dynamic
+              - generic [ref=f19e209]: Dynamic Configurations
+            - link [ref=f19e460] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/proxy/logs
+              - generic [ref=f19e211]: Logs
+          - generic [ref=f19e215]:
+            - generic [ref=f19e216]:
+              - heading [level=2] [ref=f19e461]: Configuration
+              - button [ref=f19e462] [cursor=pointer]: Switch Proxy
+              - button [ref=f19e463] [cursor=pointer]: Save
+            - generic [ref=f19e220]: Configure your proxy settings and advanced options.
+            - heading [level=3] [ref=f19e464]: Advanced
+            - generic [ref=f19e222]:
+              - generic [ref=f19e224]:
+                - generic [ref=f19e225]:
+                  - text: Generate labels only for Traefik
+                  - img [ref=f19e228] [cursor=pointer]
+                - checkbox [ref=f19e515] [cursor=pointer]
+              - generic [ref=f19e232]:
+                - generic [ref=f19e233]:
+                  - text: Override default request handler
+                  - img [ref=f19e236] [cursor=pointer]
+                - checkbox [checked] [ref=f19e516] [cursor=pointer]
+              - generic [ref=f19e239]:
+                - generic [ref=f19e240]: Redirect to (optional)
+                - textbox [ref=f19e517]:
+                  - /placeholder: https://app.coolify.io
+            - generic [ref=f19e243]:
+              - heading [level=3] [ref=f19e468]: Traefik (Coolify Proxy)
+              - button [ref=f19e469] [cursor=pointer]: Reset Configuration
+            - generic [ref=f19e248]:
+              - generic [ref=f19e249]: Configuration file ( /data/coolify/proxy/docker-compose.yml )
+              - code [ref=f19e522]:
+                - generic [ref=f19e523]:
+                  - generic [ref=f19e525]:
+                    - generic [ref=f19e680]: "1"
+                    - generic [ref=f19e681]:
+                      - generic [ref=f19e682] [cursor=pointer]: 
+                      - generic [ref=f19e683]: "2"
+                    - generic [ref=f19e684]:
+                      - generic [ref=f19e685] [cursor=pointer]: 
+                      - generic [ref=f19e686]: "3"
+                    - generic [ref=f19e688]: "4"
+                    - generic [ref=f19e689]:
+                      - generic [ref=f19e690] [cursor=pointer]: 
+                      - generic [ref=f19e691]: "5"
+                    - generic [ref=f19e692]:
+                      - generic [ref=f19e693] [cursor=pointer]: 
+                      - generic [ref=f19e694]: "6"
+                    - generic [ref=f19e696]: "7"
+                    - generic [ref=f19e698]: "8"
+                    - generic [ref=f19e700]: "9"
+                    - generic [ref=f19e701]:
+                      - generic [ref=f19e702] [cursor=pointer]: 
+                      - generic [ref=f19e703]: "10"
+                    - generic [ref=f19e705]: "11"
+                    - generic [ref=f19e706]:
+                      - generic [ref=f19e707] [cursor=pointer]: 
+                      - generic [ref=f19e708]: "12"
+                    - generic [ref=f19e710]: "13"
+                    - generic [ref=f19e711]:
+                      - generic [ref=f19e712] [cursor=pointer]: 
+                      - generic [ref=f19e713]: "14"
+                    - generic [ref=f19e715]: "15"
+                    - generic [ref=f19e717]: "16"
+                    - generic [ref=f19e719]: "17"
+                    - generic [ref=f19e721]: "18"
+                  - generic [ref=f19e624]:
+                    - generic [ref=f19e776]: "name: coolify-proxy"
+                    - generic [ref=f19e778]: "networks:"
+                    - generic [ref=f19e780]: "coolify:"
+                    - generic [ref=f19e782]: "external: true"
+                    - generic [ref=f19e784]: "services:"
+                    - generic [ref=f19e786]: "traefik:"
+                    - generic [ref=f19e788]: "container_name: coolify-proxy"
+                    - generic [ref=f19e790]: "image: 'traefik:v3.6'"
+                    - generic [ref=f19e792]: "restart: unless-stopped"
+                    - generic [ref=f19e794]: "extra_hosts:"
+                    - generic [ref=f19e796]: "- 'host.docker.internal:host-gateway'"
+                    - generic [ref=f19e798]: "networks:"
+                    - generic [ref=f19e800]: "- coolify"
+                    - generic [ref=f19e802]: "ports:"
+                    - generic [ref=f19e804]: "- '80:80'"
+                    - generic [ref=f19e806]: "- '443:443'"
+                    - generic [ref=f19e808]: "- '443:443/udp'"
+                    - generic [ref=f19e810]: "- '8080:8080'"
+                  - textbox [ref=f19e662]
+  - list [ref=f19e663]
+  - generic [ref=f19e813]:
+    - generic [ref=f19e814]:
+      - heading [level=3] [ref=f19e815]: Confirm Proxy Restart?
+      - button [active] [ref=f19e816]:
+        - img [ref=f19e817]
+    - generic [ref=f19e820]:
+      - generic [ref=f19e822]:
+        - img [ref=f19e824]
+        - generic [ref=f19e826]:
+          - generic [ref=f19e827]: Warning
+          - generic [ref=f19e828]: This operation is permanent and cannot be undone. Please think again before proceeding!
+      - generic [ref=f19e829]: "The following actions will be performed:"
+      - list [ref=f19e830]:
+        - listitem [ref=f19e831]:
+          - img [ref=f19e832]
+          - generic [ref=f19e834]: This proxy will be stopped and started again.
+        - listitem [ref=f19e835]:
+          - img [ref=f19e836]
+          - generic [ref=f19e838]: All resources hosted on coolify will be unavailable during the restart.
+      - generic [ref=f19e839]:
+        - button [ref=f19e840] [cursor=pointer]: Cancel
+        - button [ref=f19e841] [cursor=pointer]:
+          - generic [ref=f19e842]: Restart Proxy
+  - generic [ref=f19e473]:
+    - generic [ref=f19e474]:
+      - heading [level=3] [ref=f19e843]: Reset Proxy Configuration?
+      - button [ref=f19e476]:
+        - img [ref=f19e477]
+    - generic [ref=f19e480]:
+      - generic [ref=f19e482]:
+        - img [ref=f19e484]
+        - generic [ref=f19e486]:
+          - generic [ref=f19e487]: Warning
+          - generic [ref=f19e488]: This operation is permanent and cannot be undone. Please think again before proceeding!
+      - generic [ref=f19e489]: "The following actions will be performed:"
+      - list [ref=f19e490]:
+        - listitem [ref=f19e491]:
+          - img [ref=f19e492]
+          - generic [ref=f19e494]: Reset proxy configuration to default settings
+        - listitem [ref=f19e495]:
+          - img [ref=f19e496]
+          - generic [ref=f19e498]: All custom configurations will be lost
+        - listitem [ref=f19e499]:
+          - img [ref=f19e500]
+          - generic [ref=f19e502]: Custom ports and entrypoints will be removed
+      - generic [ref=f19e503]:
+        - heading [level=4] [ref=f19e844]: Confirm Actions
+        - paragraph [ref=f19e505]: Please confirm by entering the server name below
+        - textbox [ref=f19e508]: localhost
+        - generic [ref=f19e509]: Server Name
+        - textbox [ref=f19e510]
+      - generic [ref=f19e511]:
+        - button [ref=f19e845] [cursor=pointer]: Cancel
+        - button [disabled] [ref=f19e846]:
+          - generic [ref=f19e514]: Reset Configuration

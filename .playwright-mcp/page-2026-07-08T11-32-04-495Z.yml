@@ -1,0 +1,98 @@
+- generic [ref=f8e3]:
+  - complementary [ref=f8e4]:
+    - generic [ref=f8e6]:
+      - generic [ref=f8e8]: A
+      - generic [ref=f8e9]:
+        - heading "ATHENA OS" [level=1] [ref=f8e10]
+        - paragraph [ref=f8e11]: Dashboard
+    - navigation [ref=f8e12]:
+      - link "Overview" [ref=f8e13] [cursor=pointer]:
+        - /url: /
+        - img [ref=f8e14]
+        - generic [ref=f8e19]: Overview
+      - link "Pedidos" [ref=f8e20] [cursor=pointer]:
+        - /url: /orders
+        - img [ref=f8e21]
+        - generic [ref=f8e25]: Pedidos
+      - link "Estoque" [ref=f8e26] [cursor=pointer]:
+        - /url: /inventory
+        - img [ref=f8e27]
+        - generic [ref=f8e37]: Estoque
+      - link "Producao" [ref=f8e38] [cursor=pointer]:
+        - /url: /production
+        - img [ref=f8e39]
+        - generic [ref=f8e41]: Producao
+      - link "Moldes & CNC" [ref=f8e42] [cursor=pointer]:
+        - /url: /molds
+        - img [ref=f8e43]
+        - generic [ref=f8e49]: Moldes & CNC
+      - link "Clientes" [ref=f8e50] [cursor=pointer]:
+        - /url: /customers
+        - img [ref=f8e51]
+        - generic [ref=f8e56]: Clientes
+      - link "Financeiro" [ref=f8e57] [cursor=pointer]:
+        - /url: /finance
+        - img [ref=f8e58]
+        - generic [ref=f8e60]: Financeiro
+      - link "Tributario" [ref=f8e61] [cursor=pointer]:
+        - /url: /tax-intelligence
+        - img [ref=f8e62]
+        - generic [ref=f8e66]: Tributario
+      - link "Admin" [active] [ref=f8e67] [cursor=pointer]:
+        - /url: /admin
+        - img [ref=f8e68]
+        - generic [ref=f8e70]: Admin
+      - link "Config" [ref=f8e71] [cursor=pointer]:
+        - /url: /settings
+        - img [ref=f8e72]
+        - generic [ref=f8e73]: Config
+      - link "Chat Hermes" [ref=f8e74] [cursor=pointer]:
+        - /url: /chat
+        - img [ref=f8e75]
+        - generic [ref=f8e77]: Chat Hermes
+      - link "Produtos Shopee" [ref=f8e78] [cursor=pointer]:
+        - /url: /products
+        - img [ref=f8e79]
+        - generic [ref=f8e82]: Produtos Shopee
+  - main [ref=f8e83]:
+    - generic [ref=f8e171]:
+      - heading "Admin" [level=2] [ref=f8e172]
+      - generic [ref=f8e173]:
+        - generic [ref=f8e174]:
+          - generic [ref=f8e175]:
+            - img [ref=f8e176]
+            - text: Agentes
+          - text: —
+        - generic [ref=f8e178]:
+          - generic [ref=f8e179]:
+            - img [ref=f8e180]
+            - text: Running
+          - text: —
+        - generic [ref=f8e183]:
+          - generic [ref=f8e184]:
+            - img [ref=f8e185]
+            - text: Uptime
+          - text: —
+        - generic [ref=f8e188]:
+          - generic [ref=f8e189]:
+            - img [ref=f8e190]
+            - text: Env
+          - text: —
+      - generic [ref=f8e193]:
+        - img [ref=f8e194]
+        - generic [ref=f8e198]: Banco vazio? Clique para popular com dados de exemplo (produtos, clientes, pedidos).
+        - button "Rodar Seed" [ref=f8e199]
+      - generic [ref=f8e200]:
+        - heading "Agentes (0)" [level=3] [ref=f8e202]
+        - table [ref=f8e204]:
+          - rowgroup [ref=f8e205]:
+            - row "ID Nome Role Status Contexto Tarefas" [ref=f8e206]:
+              - columnheader "ID" [ref=f8e207]
+              - columnheader "Nome" [ref=f8e208]
+              - columnheader "Role" [ref=f8e209]
+              - columnheader "Status" [ref=f8e210]
+              - columnheader "Contexto" [ref=f8e211]
+              - columnheader "Tarefas" [ref=f8e212]
+          - rowgroup [ref=f8e213]:
+            - row "Carregando..." [ref=f8e214]:
+              - cell "Carregando..." [ref=f8e215]

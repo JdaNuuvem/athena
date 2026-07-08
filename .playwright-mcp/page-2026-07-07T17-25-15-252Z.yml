@@ -1,0 +1,466 @@
+- generic [active] [ref=f22e1]:
+  - generic [ref=f22e2]:
+    - generic [ref=f22e3]:
+      - navigation [ref=f22e5]:
+        - generic [ref=f22e6]:
+          - generic [ref=f22e7]:
+            - link "Coolify" [ref=f22e8] [cursor=pointer]:
+              - /url: /
+            - link "v4.1.2" [ref=f22e9] [cursor=pointer]:
+              - /url: https://github.com/coollabsio/coolify/releases/tag/v4.1.2
+          - button / [ref=f22e11]:
+            - img [ref=f22e12]
+            - generic [ref=f22e14]: /
+        - combobox [ref=f22e19]:
+          - option "Switch team" [disabled]
+          - option "Root Team" [selected]
+        - list [ref=f22e20]:
+          - listitem [ref=f22e21]:
+            - list [ref=f22e22]:
+              - listitem [ref=f22e23]:
+                - link "Dashboard" [ref=f22e24] [cursor=pointer]:
+                  - /url: /
+                  - img [ref=f22e25]
+                  - generic [ref=f22e27]: Dashboard
+              - listitem [ref=f22e28]:
+                - link "Projects" [ref=f22e29] [cursor=pointer]:
+                  - /url: /projects
+                  - img [ref=f22e30]
+                  - generic [ref=f22e35]: Projects
+              - listitem [ref=f22e36]:
+                - link "Servers" [ref=f22e37] [cursor=pointer]:
+                  - /url: /servers
+                  - img [ref=f22e38]
+                  - generic [ref=f22e43]: Servers
+              - listitem [ref=f22e44]:
+                - link "Sources" [ref=f22e45] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/sources
+                  - img [ref=f22e46]
+                  - generic [ref=f22e48]: Sources
+              - listitem [ref=f22e49]:
+                - link "Destinations" [ref=f22e50] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/destinations
+                  - img [ref=f22e51]
+                  - generic [ref=f22e53]: Destinations
+              - listitem [ref=f22e54]:
+                - link "S3 Storages" [ref=f22e55] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/storages
+                  - img [ref=f22e56]
+                  - generic [ref=f22e61]: S3 Storages
+              - listitem [ref=f22e62]:
+                - link "Shared Variables" [ref=f22e63] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/shared-variables
+                  - img [ref=f22e64]
+                  - generic [ref=f22e68]: Shared Variables
+              - listitem [ref=f22e69]:
+                - link "Notifications" [ref=f22e70] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/notifications/email
+                  - img [ref=f22e71]
+                  - generic [ref=f22e73]: Notifications
+              - listitem [ref=f22e74]:
+                - link "Keys & Tokens" [ref=f22e75] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/security/private-key
+                  - img [ref=f22e76]
+                  - generic [ref=f22e78]: Keys & Tokens
+              - listitem [ref=f22e79]:
+                - link "Tags" [ref=f22e80] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/tags
+                  - img [ref=f22e81]
+                  - generic [ref=f22e85]: Tags
+              - listitem [ref=f22e86]:
+                - link "Terminal" [ref=f22e87] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/terminal
+                  - img [ref=f22e88]
+                  - generic [ref=f22e91]: Terminal
+              - listitem [ref=f22e92]:
+                - link "Profile" [ref=f22e93] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/profile
+                  - img [ref=f22e94]
+                  - generic [ref=f22e99]: Profile
+              - listitem [ref=f22e100]:
+                - link "Teams" [ref=f22e101] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/team
+                  - img [ref=f22e102]
+                  - generic [ref=f22e110]: Teams
+              - listitem [ref=f22e111]:
+                - link "Settings" [ref=f22e112] [cursor=pointer]:
+                  - /url: /settings
+                  - img [ref=f22e113]
+                  - generic [ref=f22e117]: Settings
+              - listitem [ref=f22e118]:
+                - button "What's New" [ref=f22e120]:
+                  - img [ref=f22e121]
+                  - generic [ref=f22e123]: What's New
+                  - generic "10 unread changelog entries" [ref=f22e124]: 9+
+              - listitem [ref=f22e125]:
+                - generic "Theme switcher" [ref=f22e126]:
+                  - img [ref=f22e127]
+                  - generic [ref=f22e129]: Theme
+                  - generic [ref=f22e130]:
+                    - button "Use light theme" [ref=f22e131]:
+                      - img [ref=f22e132]
+                    - button "Use system theme" [ref=f22e134]:
+                      - img [ref=f22e135]
+                    - button "Use dark theme" [ref=f22e137]:
+                      - img [ref=f22e138]
+              - generic:
+                - listitem:
+                  - generic "No upgrade available"
+              - listitem [ref=f22e140]:
+                - link "Sponsor us" [ref=f22e141] [cursor=pointer]:
+                  - /url: https://coolify.io/sponsorships
+                  - img [ref=f22e142]
+                  - generic [ref=f22e146]: Sponsor us
+              - listitem [ref=f22e147]:
+                - generic "Send us feedback or get help!" [ref=f22e150] [cursor=pointer]:
+                  - img [ref=f22e151]
+                  - generic [ref=f22e153]: Feedback
+              - listitem [ref=f22e154]:
+                - button "Logout" [ref=f22e156]:
+                  - img [ref=f22e157]
+                  - generic [ref=f22e159]: Logout
+      - button "Collapse sidebar" [ref=f22e160]:
+        - img [ref=f22e161]
+    - main [ref=f22e163]:
+      - generic [ref=f22e164]:
+        - heading "Deployment" [level=1] [ref=f22e165]
+        - generic [ref=f22e167]:
+          - generic [ref=f22e168]:
+            - img [ref=f22e169]
+            - generic [ref=f22e171]:
+              - heading "The latest configuration has not been applied" [level=4] [ref=f22e172]
+              - generic [ref=f22e174]:
+                - text: 4 unapplied configuration changes detected. A rebuild is required.
+                - button "View changes" [ref=f22e175]
+          - button [ref=f22e176]:
+            - img [ref=f22e177]
+        - navigation [ref=f22e179]:
+          - navigation [ref=f22e180]:
+            - list [ref=f22e181]:
+              - listitem [ref=f22e182]:
+                - generic [ref=f22e183]:
+                  - link "My first project" [ref=f22e184] [cursor=pointer]:
+                    - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o
+                  - button [ref=f22e185]:
+                    - img [ref=f22e186]
+              - listitem [ref=f22e188]:
+                - generic [ref=f22e189]:
+                  - link "production" [ref=f22e190] [cursor=pointer]:
+                    - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr
+                  - button [ref=f22e191]:
+                    - img [ref=f22e192]
+              - listitem [ref=f22e194]:
+                - link "athena:main-k2h04qpg9n76ymy8mcfnw9sf (localhost)" [ref=f22e195] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi
+              - generic [ref=f22e196]:
+                - generic [ref=f22e198]:
+                  - link "Running" [ref=f22e201] [cursor=pointer]:
+                    - /url: https://github.com/JdaNuuvem/athena/commit/73b0084dafbbe6b115685fe8bc70578de06a2309
+                  - generic [ref=f22e202]: (unknown)
+                  - img [ref=f22e206] [cursor=pointer]
+                - button "Refresh Status" [ref=f22e207]:
+                  - img [ref=f22e208]
+          - generic [ref=f22e210]:
+            - navigation [ref=f22e211]:
+              - link "Configuration" [ref=f22e212] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi
+              - link "Deployments" [ref=f22e213] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/deployment
+              - link "Logs" [ref=f22e214] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/logs
+                - generic [ref=f22e215]: Logs
+              - link "Terminal" [ref=f22e216] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/terminal
+              - button "Links" [ref=f22e219]:
+                - generic [ref=f22e220]: Links
+                - img [ref=f22e221]
+            - generic [ref=f22e224]:
+              - button "Advanced" [ref=f22e227]:
+                - generic [ref=f22e228]: Advanced
+                - img [ref=f22e229]
+              - generic [ref=f22e231]:
+                - button "Redeploy" [ref=f22e232] [cursor=pointer]:
+                  - img [ref=f22e233]
+                  - text: Redeploy
+                - button "Restart" [ref=f22e235] [cursor=pointer]:
+                  - img [ref=f22e236]
+                  - text: Restart
+                - button "Stop" [ref=f22e241] [cursor=pointer]:
+                  - img [ref=f22e242]
+                  - text: Stop
+        - generic [ref=f22e244]:
+          - heading "Deployment Log" [level=2] [ref=f22e246]
+          - generic [ref=f22e248]:
+            - generic [ref=f22e249]:
+              - generic [ref=f22e251]:
+                - generic [ref=f22e252]: Deployment is
+                - generic [ref=f22e253]: Failed
+              - generic [ref=f22e254]:
+                - generic [ref=f22e255]:
+                  - img [ref=f22e256]
+                  - textbox "Find in logs" [ref=f22e258]
+                - generic [ref=f22e259]:
+                  - button "Copy Logs" [ref=f22e260]:
+                    - img [ref=f22e261]
+                  - button "Download Logs" [ref=f22e264]:
+                    - img [ref=f22e265]
+                  - button "Toggle Timestamps" [ref=f22e267]:
+                    - img [ref=f22e268]
+                  - button "Show Debug Logs" [ref=f22e270]:
+                    - img [ref=f22e271]
+                  - button "Follow Logs" [ref=f22e273]:
+                    - img [ref=f22e274]
+                  - button "Fullscreen" [ref=f22e276]:
+                    - img [ref=f22e277]
+            - generic [ref=f22e282]:
+              - generic [ref=f22e283]:
+                - generic [ref=f22e284]: 2026-Jul-07 17:24:07.761259
+                - generic [ref=f22e285]: Docker 29.6.1 with BuildKit and Buildx detected on deployment server (localhost).
+              - generic [ref=f22e286]:
+                - generic [ref=f22e287]: 2026-Jul-07 17:24:07.767083
+                - generic [ref=f22e288]: Starting deployment of JdaNuuvem/athena:master to localhost.
+              - generic [ref=f22e289]:
+                - generic [ref=f22e290]: 2026-Jul-07 17:24:08.013830
+                - generic [ref=f22e291]: "Preparing container with helper image: ghcr.io/coollabsio/coolify-helper:1.0.14"
+              - generic [ref=f22e292]:
+                - generic [ref=f22e293]: 2026-Jul-07 17:24:08.828112
+                - generic [ref=f22e294]: "----------------------------------------"
+              - generic [ref=f22e295]:
+                - generic [ref=f22e296]: 2026-Jul-07 17:24:08.832880
+                - generic [ref=f22e297]: Importing JdaNuuvem/athena:master (commit sha bdc6000027726a5e59c13e23a96265d0a8a1e48a) to /artifacts/ot22yajm1p46kcm8u8i3txvn.
+              - generic [ref=f22e298]:
+                - generic [ref=f22e299]: 2026-Jul-07 17:24:10.065063
+                - generic [ref=f22e300]: Image not found (a181zp5xj2ety5z82mopyqzi:bdc6000027726a5e59c13e23a96265d0a8a1e48a). Building new image.
+              - generic [ref=f22e301]:
+                - generic [ref=f22e302]: 2026-Jul-07 17:24:11.495891
+                - generic [ref=f22e303]: "----------------------------------------"
+              - generic [ref=f22e304]:
+                - generic [ref=f22e305]: 2026-Jul-07 17:24:11.507728
+                - generic [ref=f22e306]: Building docker image started.
+              - generic [ref=f22e307]:
+                - generic [ref=f22e308]: 2026-Jul-07 17:24:11.513672
+                - generic [ref=f22e309]: To check the current progress, click on Show Debug Logs.
+              - generic [ref=f22e310]:
+                - generic [ref=f22e311]: 2026-Jul-07 17:24:13.030774
+                - generic [ref=f22e312]: ========================================
+              - generic [ref=f22e313]:
+                - generic [ref=f22e314]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e315]: "Deployment failed: Command execution failed (exit code 1): docker exec ot22yajm1p46kcm8u8i3txvn bash -c 'bash /artifacts/build.sh'"
+              - generic [ref=f22e316]:
+                - generic [ref=f22e317]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e318]: "Error: #0 building with \"default\" instance using docker driver"
+              - generic [ref=f22e320]: 2026-Jul-07 17:24:13.035496
+              - generic [ref=f22e321]:
+                - generic [ref=f22e322]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e323]: "#1 [internal] load build definition from Dockerfile"
+              - generic [ref=f22e324]:
+                - generic [ref=f22e325]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e326]: "#1 transferring dockerfile: 2.29kB done"
+              - generic [ref=f22e327]:
+                - generic [ref=f22e328]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e329]: "#1 DONE 0.0s"
+              - generic [ref=f22e331]: 2026-Jul-07 17:24:13.035496
+              - generic [ref=f22e332]:
+                - generic [ref=f22e333]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e334]: "#2 [internal] load metadata for docker.io/library/node:22-alpine"
+              - generic [ref=f22e335]:
+                - generic [ref=f22e336]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e337]: "#2 DONE 0.8s"
+              - generic [ref=f22e339]: 2026-Jul-07 17:24:13.035496
+              - generic [ref=f22e340]:
+                - generic [ref=f22e341]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e342]: "#3 [internal] load .dockerignore"
+              - generic [ref=f22e343]:
+                - generic [ref=f22e344]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e345]: "#3 transferring context: 2B done"
+              - generic [ref=f22e346]:
+                - generic [ref=f22e347]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e348]: "#3 DONE 0.0s"
+              - generic [ref=f22e350]: 2026-Jul-07 17:24:13.035496
+              - generic [ref=f22e351]:
+                - generic [ref=f22e352]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e353]: "#4 [internal] load build context"
+              - generic [ref=f22e354]:
+                - generic [ref=f22e355]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e356]: "#4 transferring context: 249.56kB done"
+              - generic [ref=f22e357]:
+                - generic [ref=f22e358]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e359]: "#4 DONE 0.0s"
+              - generic [ref=f22e361]: 2026-Jul-07 17:24:13.035496
+              - generic [ref=f22e362]:
+                - generic [ref=f22e363]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e364]: "#5 [runner 7/8] COPY --from=builder /app/prisma ./prisma"
+              - generic [ref=f22e365]:
+                - generic [ref=f22e366]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e367]: "#5 CACHED"
+              - generic [ref=f22e369]: 2026-Jul-07 17:24:13.035496
+              - generic [ref=f22e370]:
+                - generic [ref=f22e371]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e372]: "#6 [runner 4/8] COPY --from=builder /app/package.json /app/package-lock.json ./"
+              - generic [ref=f22e373]:
+                - generic [ref=f22e374]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e375]: "#6 CACHED"
+              - generic [ref=f22e377]: 2026-Jul-07 17:24:13.035496
+              - generic [ref=f22e378]:
+                - generic [ref=f22e379]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e380]: "#7 [builder 3/9] COPY package.json package-lock.json tsconfig.json prisma.config.ts ./"
+              - generic [ref=f22e381]:
+                - generic [ref=f22e382]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e383]: "#7 CACHED"
+              - generic [ref=f22e385]: 2026-Jul-07 17:24:13.035496
+              - generic [ref=f22e386]:
+                - generic [ref=f22e387]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e388]: "#8 [builder 5/9] RUN npm ci --production=false"
+              - generic [ref=f22e389]:
+                - generic [ref=f22e390]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e391]: "#8 CACHED"
+              - generic [ref=f22e393]: 2026-Jul-07 17:24:13.035496
+              - generic [ref=f22e394]:
+                - generic [ref=f22e395]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e396]: "#9 [builder 2/9] WORKDIR /app"
+              - generic [ref=f22e397]:
+                - generic [ref=f22e398]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e399]: "#9 CACHED"
+              - generic [ref=f22e401]: 2026-Jul-07 17:24:13.035496
+              - generic [ref=f22e402]:
+                - generic [ref=f22e403]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e404]: "#10 [builder 9/9] RUN npm prune --production"
+              - generic [ref=f22e405]:
+                - generic [ref=f22e406]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e407]: "#10 CACHED"
+              - generic [ref=f22e409]: 2026-Jul-07 17:24:13.035496
+              - generic [ref=f22e410]:
+                - generic [ref=f22e411]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e412]: "#11 [builder 6/9] COPY src/ ./src/"
+              - generic [ref=f22e413]:
+                - generic [ref=f22e414]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e415]: "#11 CACHED"
+              - generic [ref=f22e417]: 2026-Jul-07 17:24:13.035496
+              - generic [ref=f22e418]:
+                - generic [ref=f22e419]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e420]: "#12 [runner 3/8] WORKDIR /app"
+              - generic [ref=f22e421]:
+                - generic [ref=f22e422]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e423]: "#12 CACHED"
+              - generic [ref=f22e425]: 2026-Jul-07 17:24:13.035496
+              - generic [ref=f22e426]:
+                - generic [ref=f22e427]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e428]: "#13 [builder 4/9] COPY prisma/ ./prisma/"
+              - generic [ref=f22e429]:
+                - generic [ref=f22e430]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e431]: "#13 CACHED"
+              - generic [ref=f22e433]: 2026-Jul-07 17:24:13.035496
+              - generic [ref=f22e434]:
+                - generic [ref=f22e435]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e436]: "#14 [runner 6/8] COPY --from=builder /app/dist ./dist"
+              - generic [ref=f22e437]:
+                - generic [ref=f22e438]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e439]: "#14 CACHED"
+              - generic [ref=f22e441]: 2026-Jul-07 17:24:13.035496
+              - generic [ref=f22e442]:
+                - generic [ref=f22e443]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e444]: "#15 [runner 2/8] RUN apk add --no-cache curl"
+              - generic [ref=f22e445]:
+                - generic [ref=f22e446]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e447]: "#15 CACHED"
+              - generic [ref=f22e449]: 2026-Jul-07 17:24:13.035496
+              - generic [ref=f22e450]:
+                - generic [ref=f22e451]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e452]: "#16 [builder 7/9] RUN npx prisma generate"
+              - generic [ref=f22e453]:
+                - generic [ref=f22e454]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e455]: "#16 CACHED"
+              - generic [ref=f22e457]: 2026-Jul-07 17:24:13.035496
+              - generic [ref=f22e458]:
+                - generic [ref=f22e459]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e460]: "#17 [runner 5/8] COPY --from=builder /app/node_modules ./node_modules"
+              - generic [ref=f22e461]:
+                - generic [ref=f22e462]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e463]: "#17 CACHED"
+              - generic [ref=f22e465]: 2026-Jul-07 17:24:13.035496
+              - generic [ref=f22e466]:
+                - generic [ref=f22e467]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e468]: "#18 [builder 8/9] RUN npm run build"
+              - generic [ref=f22e469]:
+                - generic [ref=f22e470]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e471]: "#18 CACHED"
+              - generic [ref=f22e473]: 2026-Jul-07 17:24:13.035496
+              - generic [ref=f22e474]:
+                - generic [ref=f22e475]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e476]: "#19 [runner 8/8] COPY prisma.config.ts ./"
+              - generic [ref=f22e477]:
+                - generic [ref=f22e478]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e479]: "#19 ERROR: failed to calculate checksum of ref 8jk0doifqt5yljyg9maszmhpv::veufml2fjlo11mr3w2pqdkv1z: \"/prisma.config.ts\": not found"
+              - generic [ref=f22e481]: 2026-Jul-07 17:24:13.035496
+              - generic [ref=f22e482]:
+                - generic [ref=f22e483]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e484]: "#20 [builder 1/9] FROM docker.io/library/node:22-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2"
+              - generic [ref=f22e485]:
+                - generic [ref=f22e486]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e487]: "#20 resolve docker.io/library/node:22-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2 0.0s done"
+              - generic [ref=f22e488]:
+                - generic [ref=f22e489]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e490]: "#20 DONE 0.0s"
+              - generic [ref=f22e491]:
+                - generic [ref=f22e492]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e493]: "------"
+              - generic [ref=f22e494]:
+                - generic [ref=f22e495]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e496]: "> [runner 8/8] COPY prisma.config.ts ./:"
+              - generic [ref=f22e497]:
+                - generic [ref=f22e498]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e499]: "------"
+              - generic [ref=f22e501]: 2026-Jul-07 17:24:13.035496
+              - generic [ref=f22e502]:
+                - generic [ref=f22e503]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e504]: "4 warnings found (use docker --debug to expand):"
+              - generic [ref=f22e505]:
+                - generic [ref=f22e506]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e507]: "- SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ARG \"DEEPSEEK_API_KEY\") (line 6)"
+              - generic [ref=f22e508]:
+                - generic [ref=f22e509]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e510]: "- SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ARG \"OPENAI_API_KEY\") (line 9)"
+              - generic [ref=f22e511]:
+                - generic [ref=f22e512]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e513]: "- SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ARG \"DEEPSEEK_API_KEY\") (line 30)"
+              - generic [ref=f22e514]:
+                - generic [ref=f22e515]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e516]: "- SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ARG \"OPENAI_API_KEY\") (line 33)"
+              - generic [ref=f22e517]:
+                - generic [ref=f22e518]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e519]: Dockerfile:46
+              - generic [ref=f22e520]:
+                - generic [ref=f22e521]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e522]: "--------------------"
+              - generic [ref=f22e523]:
+                - generic [ref=f22e524]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e525]: 44 | COPY --from=builder /app/dist ./dist
+              - generic [ref=f22e526]:
+                - generic [ref=f22e527]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e528]: 45 | COPY --from=builder /app/prisma ./prisma
+              - generic [ref=f22e529]:
+                - generic [ref=f22e530]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e531]: 46 | >>> COPY prisma.config.ts ./
+              - generic [ref=f22e532]:
+                - generic [ref=f22e533]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e534]: 47 |
+              - generic [ref=f22e535]:
+                - generic [ref=f22e536]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e537]: 48 | ENV NODE_ENV=production
+              - generic [ref=f22e538]:
+                - generic [ref=f22e539]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e540]: "--------------------"
+              - generic [ref=f22e541]:
+                - generic [ref=f22e542]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e543]: "ERROR: failed to build: failed to solve: failed to compute cache key: failed to calculate checksum of ref 8jk0doifqt5yljyg9maszmhpv::veufml2fjlo11mr3w2pqdkv1z: \"/prisma.config.ts\": not found"
+              - generic [ref=f22e544]:
+                - generic [ref=f22e545]: 2026-Jul-07 17:24:13.035496
+                - generic [ref=f22e546]: exit status 1
+              - generic [ref=f22e547]:
+                - generic [ref=f22e548]: 2026-Jul-07 17:24:13.089288
+                - generic [ref=f22e549]: ========================================
+              - generic [ref=f22e550]:
+                - generic [ref=f22e551]: 2026-Jul-07 17:24:13.095441
+                - generic [ref=f22e552]: Deployment failed. Removing the new version of your application.
+  - img
+  - list

@@ -1,0 +1,251 @@
+- generic [active] [ref=f68e409]:
+  - generic [ref=f68e410]:
+    - generic [ref=f68e411]:
+      - navigation [ref=f68e413]:
+        - generic [ref=f68e414]:
+          - generic [ref=f68e415]:
+            - link "Coolify" [ref=f68e416] [cursor=pointer]:
+              - /url: /
+            - link "v4.1.2" [ref=f68e417] [cursor=pointer]:
+              - /url: https://github.com/coollabsio/coolify/releases/tag/v4.1.2
+          - button / [ref=f68e419]:
+            - img [ref=f68e420]
+            - generic [ref=f68e422]: /
+        - combobox [ref=f68e427]:
+          - option "Switch team" [disabled]
+          - option "Root Team" [selected]
+        - list [ref=f68e428]:
+          - listitem [ref=f68e429]:
+            - list [ref=f68e430]:
+              - listitem [ref=f68e431]:
+                - link "Dashboard" [ref=f68e432] [cursor=pointer]:
+                  - /url: /
+                  - img [ref=f68e433]
+                  - generic [ref=f68e435]: Dashboard
+              - listitem [ref=f68e436]:
+                - link "Projects" [ref=f68e437] [cursor=pointer]:
+                  - /url: /projects
+                  - img [ref=f68e438]
+                  - generic [ref=f68e443]: Projects
+              - listitem [ref=f68e444]:
+                - link "Servers" [ref=f68e445] [cursor=pointer]:
+                  - /url: /servers
+                  - img [ref=f68e446]
+                  - generic [ref=f68e451]: Servers
+              - listitem [ref=f68e452]:
+                - link "Sources" [ref=f68e453] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/sources
+                  - img [ref=f68e454]
+                  - generic [ref=f68e456]: Sources
+              - listitem [ref=f68e457]:
+                - link "Destinations" [ref=f68e458] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/destinations
+                  - img [ref=f68e459]
+                  - generic [ref=f68e461]: Destinations
+              - listitem [ref=f68e462]:
+                - link "S3 Storages" [ref=f68e463] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/storages
+                  - img [ref=f68e464]
+                  - generic [ref=f68e469]: S3 Storages
+              - listitem [ref=f68e470]:
+                - link "Shared Variables" [ref=f68e471] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/shared-variables
+                  - img [ref=f68e472]
+                  - generic [ref=f68e476]: Shared Variables
+              - listitem [ref=f68e477]:
+                - link "Notifications" [ref=f68e478] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/notifications/email
+                  - img [ref=f68e479]
+                  - generic [ref=f68e481]: Notifications
+              - listitem [ref=f68e482]:
+                - link "Keys & Tokens" [ref=f68e483] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/security/private-key
+                  - img [ref=f68e484]
+                  - generic [ref=f68e486]: Keys & Tokens
+              - listitem [ref=f68e487]:
+                - link "Tags" [ref=f68e488] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/tags
+                  - img [ref=f68e489]
+                  - generic [ref=f68e493]: Tags
+              - listitem [ref=f68e494]:
+                - link "Terminal" [ref=f68e495] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/terminal
+                  - img [ref=f68e496]
+                  - generic [ref=f68e499]: Terminal
+              - listitem [ref=f68e500]:
+                - link "Profile" [ref=f68e501] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/profile
+                  - img [ref=f68e502]
+                  - generic [ref=f68e507]: Profile
+              - listitem [ref=f68e508]:
+                - link "Teams" [ref=f68e509] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/team
+                  - img [ref=f68e510]
+                  - generic [ref=f68e518]: Teams
+              - listitem [ref=f68e519]:
+                - link "Settings" [ref=f68e520] [cursor=pointer]:
+                  - /url: /settings
+                  - img [ref=f68e521]
+                  - generic [ref=f68e525]: Settings
+              - listitem [ref=f68e526]:
+                - button "What's New" [ref=f68e528]:
+                  - img [ref=f68e529]
+                  - generic [ref=f68e531]: What's New
+                  - generic "10 unread changelog entries" [ref=f68e532]: 9+
+              - listitem [ref=f68e533]:
+                - generic "Theme switcher" [ref=f68e534]:
+                  - img [ref=f68e535]
+                  - generic [ref=f68e537]: Theme
+                  - generic [ref=f68e538]:
+                    - button "Use light theme" [ref=f68e539]:
+                      - img [ref=f68e540]
+                    - button "Use system theme" [ref=f68e542]:
+                      - img [ref=f68e543]
+                    - button "Use dark theme" [ref=f68e545]:
+                      - img [ref=f68e546]
+              - generic:
+                - listitem:
+                  - generic "No upgrade available"
+              - listitem [ref=f68e548]:
+                - link "Sponsor us" [ref=f68e549] [cursor=pointer]:
+                  - /url: https://coolify.io/sponsorships
+                  - img [ref=f68e550]
+                  - generic [ref=f68e554]: Sponsor us
+              - listitem [ref=f68e555]:
+                - generic "Send us feedback or get help!" [ref=f68e558] [cursor=pointer]:
+                  - img [ref=f68e559]
+                  - generic [ref=f68e561]: Feedback
+              - listitem [ref=f68e562]:
+                - button "Logout" [ref=f68e564]:
+                  - img [ref=f68e565]
+                  - generic [ref=f68e567]: Logout
+      - button "Collapse sidebar" [ref=f68e568]:
+        - img [ref=f68e569]
+    - main [ref=f68e571]:
+      - generic [ref=f68e572]:
+        - generic [ref=f68e573]:
+          - heading "Configuration" [level=1] [ref=f68e574]
+          - navigation [ref=f68e575]:
+            - list [ref=f68e576]:
+              - listitem [ref=f68e577]:
+                - generic [ref=f68e578]:
+                  - link "My first project" [ref=f68e579] [cursor=pointer]:
+                    - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o
+                  - button [ref=f68e580]:
+                    - img [ref=f68e581]
+              - listitem [ref=f68e583]:
+                - generic [ref=f68e584]:
+                  - link "production" [ref=f68e585] [cursor=pointer]:
+                    - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr
+                  - button [ref=f68e586]:
+                    - img [ref=f68e587]
+              - listitem [ref=f68e589]:
+                - link "hermes-agent-with-webui-w9hn3qezdgivens9g1o7r3of (localhost)" [ref=f68e590] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/service/w9hn3qezdgivens9g1o7r3of
+              - generic [ref=f68e591]:
+                - generic [ref=f68e595]: Running (healthy)
+                - button "Refresh Status" [ref=f68e596]:
+                  - img [ref=f68e597]
+          - generic [ref=f68e599]:
+            - navigation [ref=f68e600]:
+              - link "Configuration" [ref=f68e601] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/service/w9hn3qezdgivens9g1o7r3of
+                - button "Configuration" [ref=f68e602]
+              - link "Logs" [ref=f68e603] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/service/w9hn3qezdgivens9g1o7r3of/logs
+                - button "Logs" [ref=f68e604]
+              - link "Terminal" [ref=f68e605] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/service/w9hn3qezdgivens9g1o7r3of/terminal
+                - button "Terminal" [ref=f68e606]
+              - button "Links" [ref=f68e609]:
+                - generic [ref=f68e610]: Links
+                - img [ref=f68e611]
+            - generic [ref=f68e614]:
+              - button "Advanced" [ref=f68e616]:
+                - generic [ref=f68e617]: Advanced
+                - img [ref=f68e618]
+              - button "Restart" [ref=f68e620] [cursor=pointer]:
+                - img [ref=f68e621]
+                - text: Restart
+              - button "Stop" [ref=f68e626] [cursor=pointer]:
+                - img [ref=f68e627]
+                - text: Stop
+        - generic [ref=f68e629]:
+          - generic [ref=f68e630]:
+            - link "Documentation" [ref=f68e631] [cursor=pointer]:
+              - /url: https://github.com/nesquena/hermes-webui?utm_source=coolify.io
+              - generic [ref=f68e632]: Documentation
+              - img [ref=f68e633]
+            - link "General" [ref=f68e635] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/service/w9hn3qezdgivens9g1o7r3of
+              - generic [ref=f68e636]: General
+            - link "Environment Variables" [ref=f68e637] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/service/w9hn3qezdgivens9g1o7r3of/environment-variables
+              - generic [ref=f68e638]: Environment Variables
+            - link "Persistent Storages" [ref=f68e639] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/service/w9hn3qezdgivens9g1o7r3of/storages
+              - generic [ref=f68e640]: Persistent Storages
+            - link "Scheduled Tasks" [ref=f68e641] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/service/w9hn3qezdgivens9g1o7r3of/scheduled-tasks
+              - generic [ref=f68e642]: Scheduled Tasks
+            - link "Webhooks" [ref=f68e643] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/service/w9hn3qezdgivens9g1o7r3of/webhooks
+              - generic [ref=f68e644]: Webhooks
+            - link "Resource Operations" [ref=f68e645] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/service/w9hn3qezdgivens9g1o7r3of/resource-operations
+              - generic [ref=f68e646]: Resource Operations
+            - link "Tags" [ref=f68e647] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/service/w9hn3qezdgivens9g1o7r3of/tags
+              - generic [ref=f68e648]: Tags
+            - link "Danger Zone" [ref=f68e649] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/service/w9hn3qezdgivens9g1o7r3of/danger
+              - generic [ref=f68e650]: Danger Zone
+          - generic [ref=f68e651]:
+            - generic [ref=f68e652]:
+              - generic [ref=f68e653]:
+                - generic [ref=f68e654]:
+                  - heading "Service Stack" [level=2] [ref=f68e655]
+                  - button "Save" [ref=f68e656] [cursor=pointer]
+                  - button "Edit Compose File" [ref=f68e658] [cursor=pointer]
+                  - button "Details" [ref=f68e660] [cursor=pointer]
+                - generic [ref=f68e661]: Configuration
+              - generic [ref=f68e662]:
+                - generic [ref=f68e663]:
+                  - generic [ref=f68e664]:
+                    - text: Service Name
+                    - generic [ref=f68e665]: "*"
+                  - textbox "My super WordPress site" [ref=f68e666]: hermes-agent-with-webui-w9hn3qezdgivens9g1o7r3of
+                - generic [ref=f68e667]:
+                  - generic [ref=f68e668]: Description
+                  - textbox [ref=f68e669]
+              - heading "Network" [level=3] [ref=f68e671]
+              - generic [ref=f68e674]:
+                - generic [ref=f68e675]:
+                  - text: Connect To Predefined Network
+                  - img [ref=f68e678] [cursor=pointer]
+                - checkbox "Connect To Predefined Network" [checked] [ref=f68e680] [cursor=pointer]
+            - heading "Services" [level=3] [ref=f68e681]
+            - generic [ref=f68e682]:
+              - generic [ref=f68e684]:
+                - generic [ref=f68e685]:
+                  - generic [ref=f68e686]: Hermes Agent (nousresearch/hermes-agent@sha256:2f1f2f1725e5dc9a61cf6a2dea5aca52a776ec4d022cb29679e6aa3ff303e77a)
+                  - generic [ref=f68e687]: Running (healthy)
+                - generic [ref=f68e688]:
+                  - link "Settings" [ref=f68e689] [cursor=pointer]:
+                    - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/service/w9hn3qezdgivens9g1o7r3of/gts1yayq8ymd1n2j1qsvip7j
+                  - button "Restart" [ref=f68e691] [cursor=pointer]
+              - generic [ref=f68e693]:
+                - generic [ref=f68e694]:
+                  - generic [ref=f68e695]: Hermes Webui (ghcr.io/nesquena/hermes-webui:0.51.92)
+                  - generic [ref=f68e696]:
+                    - text: http://hermeswebui-w9hn3qezdgivens9g1o7r3of.177.7.45.242.ssl...
+                    - img [ref=f68e700] [cursor=pointer]
+                  - generic [ref=f68e704]: Running (healthy)
+                - generic [ref=f68e705]:
+                  - link "Settings" [ref=f68e706] [cursor=pointer]:
+                    - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/service/w9hn3qezdgivens9g1o7r3of/mrcyi27xaggjqok9mrft4gnj
+                  - button "Restart" [ref=f68e708] [cursor=pointer]
+  - list
+  - generic [ref=f68e709]:
+    - alert
+    - alert

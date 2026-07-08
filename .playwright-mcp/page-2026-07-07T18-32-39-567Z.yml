@@ -1,0 +1,58 @@
+- generic [ref=f64e3]:
+  - complementary [ref=f64e4]:
+    - generic [ref=f64e6]:
+      - generic [ref=f64e8]: A
+      - generic [ref=f64e9]:
+        - heading "ATHENA OS" [level=1] [ref=f64e10]
+        - paragraph [ref=f64e11]: Dashboard
+    - navigation [ref=f64e12]:
+      - link "Overview" [ref=f64e13] [cursor=pointer]:
+        - /url: /
+        - img [ref=f64e14]
+        - generic [ref=f64e19]: Overview
+      - link "Pedidos" [ref=f64e20] [cursor=pointer]:
+        - /url: /orders
+        - img [ref=f64e21]
+        - generic [ref=f64e25]: Pedidos
+      - link "Estoque" [ref=f64e26] [cursor=pointer]:
+        - /url: /inventory
+        - img [ref=f64e27]
+        - generic [ref=f64e37]: Estoque
+      - link "Producao" [ref=f64e38] [cursor=pointer]:
+        - /url: /production
+        - img [ref=f64e39]
+        - generic [ref=f64e41]: Producao
+      - link "Moldes & CNC" [ref=f64e42] [cursor=pointer]:
+        - /url: /molds
+        - img [ref=f64e43]
+        - generic [ref=f64e49]: Moldes & CNC
+      - link "Clientes" [ref=f64e50] [cursor=pointer]:
+        - /url: /customers
+        - img [ref=f64e51]
+        - generic [ref=f64e56]: Clientes
+      - link "Financeiro" [ref=f64e57] [cursor=pointer]:
+        - /url: /finance
+        - img [ref=f64e58]
+        - generic [ref=f64e60]: Financeiro
+      - link "Tributario" [ref=f64e61] [cursor=pointer]:
+        - /url: /tax-intelligence
+        - img [ref=f64e62]
+        - generic [ref=f64e66]: Tributario
+      - link "Admin" [ref=f64e67] [cursor=pointer]:
+        - /url: /admin
+        - img [ref=f64e68]
+        - generic [ref=f64e70]: Admin
+      - link "Config" [ref=f64e71] [cursor=pointer]:
+        - /url: /settings
+        - img [ref=f64e72]
+        - generic [ref=f64e73]: Config
+      - link "Chat Hermes" [ref=f64e74] [cursor=pointer]:
+        - /url: /chat
+        - img [ref=f64e75]
+        - generic [ref=f64e77]: Chat Hermes
+  - main [ref=f64e78]:
+    - generic [ref=f64e79]:
+      - heading "Overview" [level=2] [ref=f64e80]
+      - generic [ref=f64e88]:
+        - heading "Pedidos por Status" [level=3] [ref=f64e90]
+        - heading "Pedidos Recentes" [level=3] [ref=f64e93]

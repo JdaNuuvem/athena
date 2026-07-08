@@ -1,0 +1,266 @@
+- generic [active] [ref=f14e1]:
+  - generic [ref=f14e2]:
+    - generic [ref=f14e3]:
+      - generic [ref=f14e4]:
+        - link "Coolify" [ref=f14e5] [cursor=pointer]:
+          - /url: /
+        - combobox [ref=f14e9]:
+          - option "Switch team" [disabled]
+          - option "Root Team" [selected]
+      - button "Open sidebar" [ref=f14e10]:
+        - generic [ref=f14e11]: Open sidebar
+        - img [ref=f14e12]
+    - main [ref=f14e14]:
+      - generic [ref=f14e15]:
+        - heading "Configuration" [level=1] [ref=f14e16]
+        - generic [ref=f14e18]:
+          - generic [ref=f14e20]:
+            - heading "The latest configuration has not been applied" [level=4] [ref=f14e21]
+            - generic [ref=f14e23]:
+              - text: 4 unapplied configuration changes detected. A rebuild is required.
+              - button "View changes" [ref=f14e24]
+          - button [ref=f14e25]:
+            - img [ref=f14e26]
+        - navigation [ref=f14e28]:
+          - navigation [ref=f14e29]:
+            - list [ref=f14e30]:
+              - listitem [ref=f14e31]:
+                - generic [ref=f14e32]:
+                  - link "My first project" [ref=f14e33] [cursor=pointer]:
+                    - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o
+                  - button [ref=f14e34]:
+                    - img [ref=f14e35]
+              - listitem [ref=f14e37]:
+                - generic [ref=f14e38]:
+                  - link "production" [ref=f14e39] [cursor=pointer]:
+                    - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr
+                  - button [ref=f14e40]:
+                    - img [ref=f14e41]
+              - listitem [ref=f14e43]:
+                - link "athena:main-k2h04qpg9n76ymy8mcfnw9sf (localhost)" [ref=f14e44] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi
+              - generic [ref=f14e45]:
+                - generic [ref=f14e47]:
+                  - link "Running" [ref=f14e50] [cursor=pointer]:
+                    - /url: https://github.com/JdaNuuvem/athena/commit/c1236edfcbb04d149c53120b44e9b62018d80a47
+                  - generic [ref=f14e51]: (unknown)
+                - button "Refresh Status" [ref=f14e52]:
+                  - img [ref=f14e53]
+          - generic [ref=f14e55]:
+            - navigation [ref=f14e56]:
+              - link "Configuration" [ref=f14e57] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi
+              - link "Deployments" [ref=f14e58] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/deployment
+              - link "Logs" [ref=f14e59] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/logs
+                - generic [ref=f14e60]: Logs
+              - link "Terminal" [ref=f14e61] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/terminal
+              - button "Links" [ref=f14e64]:
+                - generic [ref=f14e65]: Links
+                - img [ref=f14e66]
+            - generic [ref=f14e69]:
+              - button "Advanced" [ref=f14e72]:
+                - generic [ref=f14e73]: Advanced
+                - img [ref=f14e74]
+              - generic [ref=f14e76]:
+                - button "Redeploy" [ref=f14e77] [cursor=pointer]:
+                  - img [ref=f14e78]
+                  - text: Redeploy
+                - button "Restart" [ref=f14e80] [cursor=pointer]:
+                  - img [ref=f14e81]
+                  - text: Restart
+                - button "Stop" [ref=f14e86] [cursor=pointer]:
+                  - img [ref=f14e87]
+                  - text: Stop
+        - generic [ref=f14e89]:
+          - generic [ref=f14e90]:
+            - link "General" [ref=f14e91] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi
+              - generic [ref=f14e92]: General
+            - link "Advanced" [ref=f14e93] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/advanced
+              - generic [ref=f14e94]: Advanced
+            - link "Environment Variables" [ref=f14e95] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/environment-variables
+              - generic [ref=f14e96]: Environment Variables
+            - link "Persistent Storage" [ref=f14e97] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/persistent-storage
+              - generic [ref=f14e98]: Persistent Storage
+            - link "Git Source" [ref=f14e99] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/source
+              - generic [ref=f14e100]: Git Source
+            - link "Servers" [ref=f14e101] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/servers
+              - generic [ref=f14e102]: Servers
+            - link "Scheduled Tasks" [ref=f14e103] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/scheduled-tasks
+              - generic [ref=f14e104]: Scheduled Tasks
+            - link "Webhooks" [ref=f14e105] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/webhooks
+              - generic [ref=f14e106]: Webhooks
+            - link "Preview Deployments" [ref=f14e107] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/preview-deployments
+              - generic [ref=f14e108]: Preview Deployments
+            - link "Healthcheck" [ref=f14e109] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/healthcheck
+              - generic [ref=f14e110]: Healthcheck
+            - link "Rollback" [ref=f14e111] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/rollback
+              - generic [ref=f14e112]: Rollback
+            - link "Resource Limits" [ref=f14e113] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/resource-limits
+              - generic [ref=f14e114]: Resource Limits
+            - link "Resource Operations" [ref=f14e115] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/resource-operations
+              - generic [ref=f14e116]: Resource Operations
+            - link "Metrics" [ref=f14e117] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/metrics
+              - generic [ref=f14e118]: Metrics
+            - link "Tags" [ref=f14e119] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/tags
+              - generic [ref=f14e120]: Tags
+            - link "Danger Zone" [ref=f14e121] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/danger
+              - generic [ref=f14e122]: Danger Zone
+          - generic [ref=f14e125]:
+            - generic [ref=f14e126]:
+              - heading "General" [level=2] [ref=f14e127]
+              - button "Save" [ref=f14e128] [cursor=pointer]
+              - button "Details" [ref=f14e130] [cursor=pointer]
+            - generic [ref=f14e131]: General configuration for your application.
+            - generic [ref=f14e132]:
+              - generic [ref=f14e133]:
+                - generic [ref=f14e134]:
+                  - generic [ref=f14e135]:
+                    - text: Name
+                    - generic [ref=f14e136]: "*"
+                  - textbox [ref=f14e137]: athena:main-k2h04qpg9n76ymy8mcfnw9sf
+                - generic [ref=f14e138]:
+                  - generic [ref=f14e139]: Description
+                  - textbox [ref=f14e140]
+              - generic [ref=f14e143]:
+                - generic [ref=f14e144]:
+                  - text: Build Pack
+                  - generic [ref=f14e145]: "*"
+                - combobox [ref=f14e146]:
+                  - option "Nixpacks"
+                  - option "Railpack (Beta)"
+                  - option "Static"
+                  - option "Dockerfile" [selected]
+                  - option "Docker Compose"
+              - generic [ref=f14e147]:
+                - generic [ref=f14e148]:
+                  - generic [ref=f14e149]:
+                    - text: Domains
+                    - img [ref=f14e152] [cursor=pointer]
+                  - textbox "https://coolify.io" [ref=f14e154]: http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io
+                - button "Generate Domain" [ref=f14e155] [cursor=pointer]
+              - generic [ref=f14e156]:
+                - generic [ref=f14e157]:
+                  - generic [ref=f14e158]:
+                    - text: Direction
+                    - generic [ref=f14e159]: "*"
+                    - img [ref=f14e162] [cursor=pointer]
+                  - combobox [ref=f14e164]:
+                    - option "Allow www & non-www." [selected]
+                    - option "Redirect to www."
+                    - option "Redirect to non-www."
+                - button "Set Direction" [ref=f14e166] [cursor=pointer]:
+                  - generic [ref=f14e167]: Set Direction
+              - generic [ref=f14e168]:
+                - heading "Docker Registry" [level=3] [ref=f14e169]
+                - img [ref=f14e172] [cursor=pointer]
+              - generic [ref=f14e174]:
+                - generic [ref=f14e175]:
+                  - generic [ref=f14e176]:
+                    - text: Docker Image
+                    - img [ref=f14e179] [cursor=pointer]
+                  - textbox "Empty means it won't push the image to a docker registry." [ref=f14e181]
+                - generic [ref=f14e182]:
+                  - generic [ref=f14e183]:
+                    - text: Docker Image Tag
+                    - img [ref=f14e186] [cursor=pointer]
+                  - textbox "Empty means only push commit sha tag." [ref=f14e188]
+              - generic [ref=f14e189]:
+                - heading "Build" [level=3] [ref=f14e190]
+                - generic [ref=f14e191]:
+                  - generic [ref=f14e192]:
+                    - generic [ref=f14e193]:
+                      - generic [ref=f14e194]:
+                        - text: Base Directory
+                        - img [ref=f14e197] [cursor=pointer]
+                      - textbox / [ref=f14e199]: /.
+                    - generic [ref=f14e200]:
+                      - generic [ref=f14e201]:
+                        - text: Dockerfile Location
+                        - img [ref=f14e204] [cursor=pointer]
+                      - textbox "/Dockerfile" [ref=f14e206]
+                    - generic [ref=f14e207]:
+                      - generic [ref=f14e208]:
+                        - text: Docker Build Stage Target
+                        - img [ref=f14e211] [cursor=pointer]
+                      - textbox [ref=f14e213]
+                  - generic [ref=f14e214]:
+                    - generic [ref=f14e215]:
+                      - text: Custom Docker Options
+                      - img [ref=f14e218] [cursor=pointer]
+                    - textbox "--cap-add SYS_ADMIN --device=/dev/fuse --security-opt apparmor:unconfined --ulimit nofile=1024:1024 --tmpfs /run:rw,noexec,nosuid,size=65536k --hostname=myapp" [ref=f14e220]
+                  - generic [ref=f14e223]:
+                    - generic [ref=f14e224]:
+                      - text: Use a Build Server?
+                      - img [ref=f14e227] [cursor=pointer]
+                    - checkbox "Use a Build Server?" [ref=f14e229] [cursor=pointer]
+              - heading "Network" [level=3] [ref=f14e230]
+              - generic [ref=f14e231]:
+                - generic [ref=f14e232]:
+                  - generic [ref=f14e233]:
+                    - text: Ports Exposes
+                    - img [ref=f14e236] [cursor=pointer]
+                  - textbox "3000,3001" [ref=f14e238]: "5173"
+                - generic [ref=f14e239]:
+                  - generic [ref=f14e240]:
+                    - text: Port Mappings
+                    - img [ref=f14e243] [cursor=pointer]
+                  - textbox "3000:3000" [ref=f14e245]: 5173:5173
+                - generic [ref=f14e246]:
+                  - generic [ref=f14e247]:
+                    - text: Network Aliases
+                    - img [ref=f14e250] [cursor=pointer]
+                  - textbox [ref=f14e252]
+              - heading "HTTP Basic Authentication" [level=3] [ref=f14e253]
+              - generic [ref=f14e257]:
+                - generic [ref=f14e258]:
+                  - text: Enable
+                  - img [ref=f14e261] [cursor=pointer]
+                - checkbox "Enable" [ref=f14e263] [cursor=pointer]
+              - heading "Labels" [level=3] [ref=f14e264]
+              - generic [ref=f14e265]:
+                - generic [ref=f14e266]: Container Labels
+                - generic [ref=f14e271]: Start typing here
+              - generic [ref=f14e272]:
+                - generic [ref=f14e274]:
+                  - generic [ref=f14e275]:
+                    - text: Readonly labels
+                    - img [ref=f14e278] [cursor=pointer]
+                  - checkbox "Readonly labels" [checked] [ref=f14e280] [cursor=pointer]
+                - generic [ref=f14e282]:
+                  - generic [ref=f14e283]:
+                    - text: Escape special characters in labels?
+                    - img [ref=f14e286] [cursor=pointer]
+                  - checkbox "Escape special characters in labels?" [checked] [ref=f14e288] [cursor=pointer]
+              - button "Reset Labels to Defaults" [ref=f14e290] [cursor=pointer]
+              - heading "Pre/Post Deployment Commands" [level=3] [ref=f14e291]
+              - generic [ref=f14e293]:
+                - generic [ref=f14e294]:
+                  - text: Pre-deployment
+                  - img [ref=f14e297] [cursor=pointer]
+                - textbox "php artisan migrate" [ref=f14e299]
+              - generic [ref=f14e301]:
+                - generic [ref=f14e302]:
+                  - text: Post-deployment
+                  - img [ref=f14e305] [cursor=pointer]
+                - textbox "php artisan migrate" [ref=f14e307]
+  - img
+  - list

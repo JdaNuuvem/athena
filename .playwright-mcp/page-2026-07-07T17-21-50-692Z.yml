@@ -1,0 +1,265 @@
+- generic [active] [ref=f20e1]:
+  - generic [ref=f20e2]:
+    - generic [ref=f20e3]:
+      - navigation [ref=f20e5]:
+        - generic [ref=f20e6]:
+          - generic [ref=f20e7]:
+            - link "Coolify" [ref=f20e8] [cursor=pointer]:
+              - /url: /
+            - link "v4.1.2" [ref=f20e9] [cursor=pointer]:
+              - /url: https://github.com/coollabsio/coolify/releases/tag/v4.1.2
+          - button / [ref=f20e11]:
+            - img [ref=f20e12]
+            - generic [ref=f20e14]: /
+        - combobox [ref=f20e19]:
+          - option "Switch team" [disabled]
+          - option "Root Team" [selected]
+        - list [ref=f20e20]:
+          - listitem [ref=f20e21]:
+            - list [ref=f20e22]:
+              - listitem [ref=f20e23]:
+                - link "Dashboard" [ref=f20e24] [cursor=pointer]:
+                  - /url: /
+                  - img [ref=f20e25]
+                  - generic [ref=f20e27]: Dashboard
+              - listitem [ref=f20e28]:
+                - link "Projects" [ref=f20e29] [cursor=pointer]:
+                  - /url: /projects
+                  - img [ref=f20e30]
+                  - generic [ref=f20e35]: Projects
+              - listitem [ref=f20e36]:
+                - link "Servers" [ref=f20e37] [cursor=pointer]:
+                  - /url: /servers
+                  - img [ref=f20e38]
+                  - generic [ref=f20e43]: Servers
+              - listitem [ref=f20e44]:
+                - link "Sources" [ref=f20e45] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/sources
+                  - img [ref=f20e46]
+                  - generic [ref=f20e48]: Sources
+              - listitem [ref=f20e49]:
+                - link "Destinations" [ref=f20e50] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/destinations
+                  - img [ref=f20e51]
+                  - generic [ref=f20e53]: Destinations
+              - listitem [ref=f20e54]:
+                - link "S3 Storages" [ref=f20e55] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/storages
+                  - img [ref=f20e56]
+                  - generic [ref=f20e61]: S3 Storages
+              - listitem [ref=f20e62]:
+                - link "Shared Variables" [ref=f20e63] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/shared-variables
+                  - img [ref=f20e64]
+                  - generic [ref=f20e68]: Shared Variables
+              - listitem [ref=f20e69]:
+                - link "Notifications" [ref=f20e70] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/notifications/email
+                  - img [ref=f20e71]
+                  - generic [ref=f20e73]: Notifications
+              - listitem [ref=f20e74]:
+                - link "Keys & Tokens" [ref=f20e75] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/security/private-key
+                  - img [ref=f20e76]
+                  - generic [ref=f20e78]: Keys & Tokens
+              - listitem [ref=f20e79]:
+                - link "Tags" [ref=f20e80] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/tags
+                  - img [ref=f20e81]
+                  - generic [ref=f20e85]: Tags
+              - listitem [ref=f20e86]:
+                - link "Terminal" [ref=f20e87] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/terminal
+                  - img [ref=f20e88]
+                  - generic [ref=f20e91]: Terminal
+              - listitem [ref=f20e92]:
+                - link "Profile" [ref=f20e93] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/profile
+                  - img [ref=f20e94]
+                  - generic [ref=f20e99]: Profile
+              - listitem [ref=f20e100]:
+                - link "Teams" [ref=f20e101] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/team
+                  - img [ref=f20e102]
+                  - generic [ref=f20e110]: Teams
+              - listitem [ref=f20e111]:
+                - link "Settings" [ref=f20e112] [cursor=pointer]:
+                  - /url: /settings
+                  - img [ref=f20e113]
+                  - generic [ref=f20e117]: Settings
+              - listitem [ref=f20e118]:
+                - button "What's New" [ref=f20e120]:
+                  - img [ref=f20e121]
+                  - generic [ref=f20e123]: What's New
+                  - generic "10 unread changelog entries" [ref=f20e124]: 9+
+              - listitem [ref=f20e125]:
+                - generic "Theme switcher" [ref=f20e126]:
+                  - img [ref=f20e127]
+                  - generic [ref=f20e129]: Theme
+                  - generic [ref=f20e130]:
+                    - button "Use light theme" [ref=f20e131]:
+                      - img [ref=f20e132]
+                    - button "Use system theme" [ref=f20e134]:
+                      - img [ref=f20e135]
+                    - button "Use dark theme" [ref=f20e137]:
+                      - img [ref=f20e138]
+              - generic:
+                - listitem:
+                  - generic "No upgrade available"
+              - listitem [ref=f20e140]:
+                - link "Sponsor us" [ref=f20e141] [cursor=pointer]:
+                  - /url: https://coolify.io/sponsorships
+                  - img [ref=f20e142]
+                  - generic [ref=f20e146]: Sponsor us
+              - listitem [ref=f20e147]:
+                - generic "Send us feedback or get help!" [ref=f20e150] [cursor=pointer]:
+                  - img [ref=f20e151]
+                  - generic [ref=f20e153]: Feedback
+              - listitem [ref=f20e154]:
+                - button "Logout" [ref=f20e156]:
+                  - img [ref=f20e157]
+                  - generic [ref=f20e159]: Logout
+      - button "Collapse sidebar" [ref=f20e160]:
+        - img [ref=f20e161]
+    - main [ref=f20e163]:
+      - generic [ref=f20e164]:
+        - heading "Deployment" [level=1] [ref=f20e165]
+        - generic [ref=f20e167]:
+          - generic [ref=f20e168]:
+            - img [ref=f20e169]
+            - generic [ref=f20e171]:
+              - heading "The latest configuration has not been applied" [level=4] [ref=f20e172]
+              - generic [ref=f20e174]:
+                - text: 4 unapplied configuration changes detected. A rebuild is required.
+                - button "View changes" [ref=f20e175]
+          - button [ref=f20e176]:
+            - img [ref=f20e177]
+        - navigation [ref=f20e179]:
+          - navigation [ref=f20e180]:
+            - list [ref=f20e181]:
+              - listitem [ref=f20e182]:
+                - generic [ref=f20e183]:
+                  - link "My first project" [ref=f20e184] [cursor=pointer]:
+                    - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o
+                  - button [ref=f20e185]:
+                    - img [ref=f20e186]
+              - listitem [ref=f20e188]:
+                - generic [ref=f20e189]:
+                  - link "production" [ref=f20e190] [cursor=pointer]:
+                    - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr
+                  - button [ref=f20e191]:
+                    - img [ref=f20e192]
+              - listitem [ref=f20e194]:
+                - link "athena:main-k2h04qpg9n76ymy8mcfnw9sf (localhost)" [ref=f20e195] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi
+              - generic [ref=f20e196]:
+                - generic [ref=f20e198]:
+                  - link "Running" [ref=f20e201] [cursor=pointer]:
+                    - /url: https://github.com/JdaNuuvem/athena/commit/73b0084dafbbe6b115685fe8bc70578de06a2309
+                  - generic [ref=f20e202]: (unknown)
+                  - img [ref=f20e206] [cursor=pointer]
+                - button "Refresh Status" [ref=f20e207]:
+                  - img [ref=f20e208]
+          - generic [ref=f20e210]:
+            - navigation [ref=f20e211]:
+              - link "Configuration" [ref=f20e212] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi
+              - link "Deployments" [ref=f20e213] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/deployment
+              - link "Logs" [ref=f20e214] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/logs
+                - generic [ref=f20e215]: Logs
+              - link "Terminal" [ref=f20e216] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/terminal
+              - button "Links" [ref=f20e219]:
+                - generic [ref=f20e220]: Links
+                - img [ref=f20e221]
+            - generic [ref=f20e224]:
+              - button "Advanced" [ref=f20e227]:
+                - generic [ref=f20e228]: Advanced
+                - img [ref=f20e229]
+              - generic [ref=f20e231]:
+                - button "Redeploy" [ref=f20e232] [cursor=pointer]:
+                  - img [ref=f20e233]
+                  - text: Redeploy
+                - button "Restart" [ref=f20e235] [cursor=pointer]:
+                  - img [ref=f20e236]
+                  - text: Restart
+                - button "Stop" [ref=f20e241] [cursor=pointer]:
+                  - img [ref=f20e242]
+                  - text: Stop
+        - generic [ref=f20e244]:
+          - heading "Deployment Log" [level=2] [ref=f20e246]
+          - generic [ref=f20e248]:
+            - generic [ref=f20e249]:
+              - generic [ref=f20e251]:
+                - generic [ref=f20e252]: Deployment is
+                - generic [ref=f20e253]: Failed
+              - generic [ref=f20e254]:
+                - generic [ref=f20e255]:
+                  - img [ref=f20e256]
+                  - textbox "Find in logs" [ref=f20e258]
+                - generic [ref=f20e259]:
+                  - button "Copy Logs" [ref=f20e260]:
+                    - img [ref=f20e261]
+                  - button "Download Logs" [ref=f20e264]:
+                    - img [ref=f20e265]
+                  - button "Toggle Timestamps" [ref=f20e267]:
+                    - img [ref=f20e268]
+                  - button "Show Debug Logs" [ref=f20e270]:
+                    - img [ref=f20e271]
+                  - button "Follow Logs" [ref=f20e273]:
+                    - img [ref=f20e274]
+                  - button "Fullscreen" [ref=f20e276]:
+                    - img [ref=f20e277]
+            - generic [ref=f20e282]:
+              - generic [ref=f20e283]:
+                - generic [ref=f20e284]: 2026-Jul-07 17:20:57.895111
+                - generic [ref=f20e285]: Docker 29.6.1 with BuildKit and Buildx detected on deployment server (localhost).
+              - generic [ref=f20e286]:
+                - generic [ref=f20e287]: 2026-Jul-07 17:20:57.909815
+                - generic [ref=f20e288]: Starting deployment of JdaNuuvem/athena:master to localhost.
+              - generic [ref=f20e289]:
+                - generic [ref=f20e290]: 2026-Jul-07 17:20:58.170573
+                - generic [ref=f20e291]: "Preparing container with helper image: ghcr.io/coollabsio/coolify-helper:1.0.14"
+              - generic [ref=f20e292]:
+                - generic [ref=f20e293]: 2026-Jul-07 17:20:59.084131
+                - generic [ref=f20e294]: "----------------------------------------"
+              - generic [ref=f20e295]:
+                - generic [ref=f20e296]: 2026-Jul-07 17:20:59.088550
+                - generic [ref=f20e297]: Importing JdaNuuvem/athena:master (commit sha 07223bc24df2c341b786ea8aef64553e23934f6c) to /artifacts/x5u2l70h2ww3l2p6776njgzv.
+              - generic [ref=f20e298]:
+                - generic [ref=f20e299]: 2026-Jul-07 17:21:00.340284
+                - generic [ref=f20e300]: Image not found (a181zp5xj2ety5z82mopyqzi:07223bc24df2c341b786ea8aef64553e23934f6c). Building new image.
+              - generic [ref=f20e301]:
+                - generic [ref=f20e302]: 2026-Jul-07 17:21:01.441413
+                - generic [ref=f20e303]: "----------------------------------------"
+              - generic [ref=f20e304]:
+                - generic [ref=f20e305]: 2026-Jul-07 17:21:01.447539
+                - generic [ref=f20e306]: Building docker image started.
+              - generic [ref=f20e307]:
+                - generic [ref=f20e308]: 2026-Jul-07 17:21:01.452051
+                - generic [ref=f20e309]: To check the current progress, click on Show Debug Logs.
+              - generic [ref=f20e310]:
+                - generic [ref=f20e311]: 2026-Jul-07 17:21:02.111955
+                - generic [ref=f20e312]: ========================================
+              - generic [ref=f20e313]:
+                - generic [ref=f20e314]: 2026-Jul-07 17:21:02.116716
+                - generic [ref=f20e315]: "Deployment failed: Command execution failed (exit code 1): docker exec x5u2l70h2ww3l2p6776njgzv bash -c 'bash /artifacts/build.sh'"
+              - generic [ref=f20e316]:
+                - generic [ref=f20e317]: 2026-Jul-07 17:21:02.116716
+                - generic [ref=f20e318]: "Error: ERROR: failed to build: resolve : lstat /artifacts/x5u2l70h2ww3l2p6776njgzv/docker/production: no such file or directory"
+              - generic [ref=f20e319]:
+                - generic [ref=f20e320]: 2026-Jul-07 17:21:02.116716
+                - generic [ref=f20e321]: exit status 1
+              - generic [ref=f20e322]:
+                - generic [ref=f20e323]: 2026-Jul-07 17:21:02.161333
+                - generic [ref=f20e324]: ========================================
+              - generic [ref=f20e325]:
+                - generic [ref=f20e326]: 2026-Jul-07 17:21:02.165762
+                - generic [ref=f20e327]: Deployment failed. Removing the new version of your application.
+              - generic [ref=f20e328]:
+                - generic [ref=f20e329]: 2026-Jul-07 17:21:02.533904
+                - generic [ref=f20e330]: "Gracefully shutting down build container: x5u2l70h2ww3l2p6776njgzv"
+  - img
+  - list

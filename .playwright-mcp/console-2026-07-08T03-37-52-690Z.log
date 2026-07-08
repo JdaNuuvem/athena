@@ -1,0 +1,8 @@
+[     308ms] [ERROR] Failed to load resource: the server responded with a status of 503 () @ https://athena.zoikom.site/:0
+[     511ms] [ERROR] Failed to load resource: the server responded with a status of 503 () @ https://athena.zoikom.site/favicon.ico:0
+[   22169ms] [ERROR] Mixed Content: The page at 'https://athena.zoikom.site/' was loaded over HTTPS, but requested an insecure resource 'http://177.7.45.242:3000/api/health'. This request has been blocked; the content must be served over HTTPS. @ :1
+[   22173ms] TypeError: Failed to fetch
+    at eval (eval at <anonymous> (eval at evaluate (:303:30)), <anonymous>:2:3)
+    at eval (eval at evaluate (:303:30), <anonymous>:4:50)
+    at UtilityScript.evaluate (<anonymous>:305:16)
+    at UtilityScript.<anonymous> (<anonymous>:1:44)

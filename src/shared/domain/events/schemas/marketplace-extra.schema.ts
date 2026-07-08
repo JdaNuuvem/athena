@@ -1,5 +1,0 @@
-import { z } from 'zod'
-export const ListingUpdatedPayload = z.object({ listingId:z.string().uuid(), channel:z.string().min(1), changedFields:z.array(z.string()).min(1), price:z.number().optional(), stockQuantity:z.number().int().optional(), updatedAt:z.string().datetime() })
-export const ListingClosedPayload = z.object({ listingId:z.string().uuid(), channel:z.string().min(1), reason:z.enum(['out_of_stock','discontinued','policy_violation','manual']), closedAt:z.string().datetime() })
-export const ChannelOrderShippedPayload = z.object({ channelOrderId:z.string().min(1), channel:z.string().min(1), carrier:z.string().optional(), trackingCode:z.string().min(1), trackingUrl:z.string().url().optional(), shippedAt:z.string().datetime() })
-export const ChannelReturnReceivedPayload = z.object({ returnId:z.string().uuid(), channelOrderId:z.string().min(1), channel:z.string().min(1), reason:z.string().min(1), items:z.array(z.object({sku:z.string(),quantity:z.number().int().positive()})).optional(), receivedAt:z.string().datetime() })

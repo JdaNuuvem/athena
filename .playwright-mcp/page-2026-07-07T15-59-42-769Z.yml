@@ -1,0 +1,54 @@
+- generic [ref=f3e3]:
+  - complementary [ref=f3e4]:
+    - generic [ref=f3e6]:
+      - generic [ref=f3e8]: A
+      - generic [ref=f3e9]:
+        - heading "ATHENA OS" [level=1] [ref=f3e10]
+        - paragraph [ref=f3e11]: Dashboard
+    - navigation [ref=f3e12]:
+      - link "Overview" [ref=f3e13] [cursor=pointer]:
+        - /url: /
+        - img [ref=f3e14]
+        - generic [ref=f3e19]: Overview
+      - link "Pedidos" [ref=f3e20] [cursor=pointer]:
+        - /url: /orders
+        - img [ref=f3e21]
+        - generic [ref=f3e25]: Pedidos
+      - link "Estoque" [ref=f3e26] [cursor=pointer]:
+        - /url: /inventory
+        - img [ref=f3e27]
+        - generic [ref=f3e37]: Estoque
+      - link "Producao" [ref=f3e38] [cursor=pointer]:
+        - /url: /production
+        - img [ref=f3e39]
+        - generic [ref=f3e41]: Producao
+      - link "Moldes & CNC" [ref=f3e42] [cursor=pointer]:
+        - /url: /molds
+        - img [ref=f3e43]
+        - generic [ref=f3e49]: Moldes & CNC
+      - link "Clientes" [ref=f3e50] [cursor=pointer]:
+        - /url: /customers
+        - img [ref=f3e51]
+        - generic [ref=f3e56]: Clientes
+      - link "Financeiro" [ref=f3e57] [cursor=pointer]:
+        - /url: /finance
+        - img [ref=f3e58]
+        - generic [ref=f3e60]: Financeiro
+      - link "Tributario" [ref=f3e61] [cursor=pointer]:
+        - /url: /tax-intelligence
+        - img [ref=f3e62]
+        - generic [ref=f3e66]: Tributario
+      - link "Admin" [ref=f3e67] [cursor=pointer]:
+        - /url: /admin
+        - img [ref=f3e68]
+        - generic [ref=f3e70]: Admin
+      - link "Config" [ref=f3e71] [cursor=pointer]:
+        - /url: /settings
+        - img [ref=f3e72]
+        - generic [ref=f3e73]: Config
+  - main [ref=f3e74]:
+    - generic [ref=f3e75]:
+      - heading "Overview" [level=2] [ref=f3e76]
+      - generic [ref=f3e84]:
+        - heading "Pedidos por Status" [level=3] [ref=f3e86]
+        - heading "Pedidos Recentes" [level=3] [ref=f3e89]

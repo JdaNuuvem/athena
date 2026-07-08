@@ -1,0 +1,143 @@
+- generic [active] [ref=f11e27]:
+  - generic [ref=f11e28]:
+    - generic [ref=f11e29]:
+      - generic [ref=f11e30]:
+        - link "Coolify" [ref=f11e31] [cursor=pointer]:
+          - /url: /
+        - combobox [ref=f11e35]:
+          - option "Switch team" [disabled]
+          - option "Root Team" [selected]
+      - button "Open sidebar" [ref=f11e36]:
+        - generic [ref=f11e37]: Open sidebar
+        - img [ref=f11e38]
+    - main [ref=f11e40]:
+      - generic [ref=f11e41]:
+        - generic [ref=f11e42]:
+          - generic [ref=f11e43]:
+            - heading "Server" [level=1] [ref=f11e44]
+            - generic [ref=f11e46]:
+              - generic [ref=f11e189]: Proxy Running
+              - button "Refresh Status" [ref=f11e190]:
+                - img [ref=f11e191]
+            - generic [ref=f11e57]: Sentinel In Sync
+          - generic [ref=f11e58]: localhost
+          - generic [ref=f11e59]:
+            - navigation [ref=f11e60]:
+              - link "Configuration" [ref=f11e61] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp
+              - link "Proxy" [ref=f11e62] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/proxy
+              - link "Sentinel" [ref=f11e63] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/sentinel
+              - link "Resources" [ref=f11e64] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/resources
+              - link "Terminal" [ref=f11e65] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/terminal
+              - link "Security" [ref=f11e66] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/security/patches
+            - generic [ref=f11e193]:
+              - button "Restart Proxy" [ref=f11e195] [cursor=pointer]:
+                - img [ref=f11e196]
+                - text: Restart Proxy
+              - button "Stop Proxy" [ref=f11e201] [cursor=pointer]:
+                - img [ref=f11e202]
+                - text: Stop Proxy
+        - generic [ref=f11e73]:
+          - generic [ref=f11e74]:
+            - link "General" [ref=f11e75] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp
+              - generic [ref=f11e76]: General
+            - link "Advanced" [ref=f11e77] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/advanced
+              - generic [ref=f11e78]: Advanced
+            - link "Private Key" [ref=f11e79] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/private-key
+              - generic [ref=f11e80]: Private Key
+            - link "CA Certificate" [ref=f11e81] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/ca-certificate
+              - generic [ref=f11e82]: CA Certificate
+            - link "Docker Cleanup" [ref=f11e83] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/docker-cleanup
+              - generic [ref=f11e84]: Docker Cleanup
+            - link "Destinations" [ref=f11e85] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/destinations
+              - generic [ref=f11e86]: Destinations
+            - link "Log Drains" [ref=f11e87] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/log-drains
+              - generic [ref=f11e88]: Log Drains
+            - link "Metrics" [ref=f11e89] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/metrics
+              - generic [ref=f11e90]: Metrics
+            - link "Swarm" [ref=f11e91] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/swarm
+              - generic [ref=f11e92]: Swarm
+          - generic [ref=f11e93]:
+            - generic [ref=f11e94]:
+              - generic [ref=f11e95]:
+                - heading "General" [level=2] [ref=f11e96]
+                - button "Save" [ref=f11e98] [cursor=pointer]
+              - text: Server is reachable and validated.
+              - generic [ref=f11e99]:
+                - generic [ref=f11e100]:
+                  - generic [ref=f11e101]:
+                    - generic [ref=f11e102]:
+                      - text: Name
+                      - generic [ref=f11e103]: "*"
+                    - textbox [ref=f11e104]: localhost
+                  - generic [ref=f11e105]:
+                    - generic [ref=f11e106]: Description
+                    - textbox [ref=f11e107]: This is the server where Coolify is running on. Don't delete this!
+                  - generic [ref=f11e108]:
+                    - generic [ref=f11e109]:
+                      - text: Wildcard Domain
+                      - img [ref=f11e112] [cursor=pointer]
+                    - textbox "https://example.com" [ref=f11e114]
+                - generic [ref=f11e115]:
+                  - generic [ref=f11e116]:
+                    - generic [ref=f11e117]:
+                      - text: IP Address/Domain
+                      - generic [ref=f11e118]: "*"
+                      - img [ref=f11e121] [cursor=pointer]
+                    - generic [ref=f11e123]:
+                      - textbox [ref=f11e124]: host.docker.internal
+                      - button "Toggle password visibility" [ref=f11e125] [cursor=pointer]:
+                        - img [ref=f11e126]
+                  - generic [ref=f11e130]:
+                    - generic [ref=f11e131]:
+                      - generic [ref=f11e132]:
+                        - text: User
+                        - generic [ref=f11e133]: "*"
+                      - textbox [ref=f11e134]: root
+                    - generic [ref=f11e135]:
+                      - generic [ref=f11e136]:
+                        - text: Port
+                        - generic [ref=f11e137]: "*"
+                      - spinbutton [ref=f11e138]: "22"
+                - generic [ref=f11e140]:
+                  - generic [ref=f11e141]:
+                    - text: SSH Connection Timeout (s)
+                    - generic [ref=f11e142]: "*"
+                    - img [ref=f11e145] [cursor=pointer]
+                  - spinbutton [ref=f11e147]: "10"
+                - generic [ref=f11e148]:
+                  - generic [ref=f11e149]:
+                    - generic [ref=f11e150]: Server Timezone
+                    - img [ref=f11e153] [cursor=pointer]
+                  - generic [ref=f11e157]:
+                    - textbox "Search timezone..." [ref=f11e158]: UTC
+                    - img [ref=f11e159]
+            - generic [ref=f11e161]:
+              - heading "Server Details" [level=3] [ref=f11e163]
+              - button "Fetch Server Details" [ref=f11e164] [cursor=pointer]:
+                - generic [ref=f11e165]: Fetch Server Details
+  - list [ref=f11e204]
+  - generic [ref=f11e171]:
+    - generic [ref=f11e173]:
+      - heading "Proxy Startup Logs" [level=2] [ref=f11e174]
+      - button [ref=f11e175] [cursor=pointer]:
+        - img [ref=f11e176]
+    - generic [ref=f11e179]:
+      - generic [ref=f11e180]: "Note: This is the localhost server where Coolify runs. During proxy restart, the connection may be temporarily lost. If logs stop updating, please refresh the browser after a few minutes."
+      - generic [ref=f11e181]:
+        - heading "Logs" [level=3] [ref=f11e183]
+        - generic [ref=f11e205]: Creating required Docker Compose file. Pulling docker image. Image traefik:v3.6 Pulling Image traefik:v3.6 Pulled Stopping and removing existing coolify-proxy. coolify-proxy coolify-proxy Successfully stopped and removed existing coolify-proxy. Ensuring network coolify exists... Ensuring network w9hn3qezdgivens9g1o7r3of exists... Starting coolify-proxy. Container coolify-proxy Creating Container coolify-proxy Created Container coolify-proxy Starting Container coolify-proxy Started Container coolify-proxy Waiting Container coolify-proxy Healthy Successfully started coolify-proxy. Successfully connected coolify-proxy to coolify network. Successfully connected coolify-proxy to w9hn3qezdgivens9g1o7r3of network.

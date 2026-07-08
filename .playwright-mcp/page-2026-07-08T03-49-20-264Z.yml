@@ -1,0 +1,260 @@
+- generic [active] [ref=f88e1]:
+  - generic [ref=f88e2]:
+    - generic [ref=f88e3]:
+      - navigation [ref=f88e5]:
+        - generic [ref=f88e6]:
+          - generic [ref=f88e7]:
+            - link "Coolify" [ref=f88e8] [cursor=pointer]:
+              - /url: /
+            - link "v4.1.2" [ref=f88e9] [cursor=pointer]:
+              - /url: https://github.com/coollabsio/coolify/releases/tag/v4.1.2
+          - button / [ref=f88e11]:
+            - img [ref=f88e12]
+            - generic [ref=f88e14]: /
+        - combobox [ref=f88e19]:
+          - option "Switch team" [disabled]
+          - option "Root Team" [selected]
+        - list [ref=f88e20]:
+          - listitem [ref=f88e21]:
+            - list [ref=f88e22]:
+              - listitem [ref=f88e23]:
+                - link "Dashboard" [ref=f88e24] [cursor=pointer]:
+                  - /url: /
+                  - img [ref=f88e25]
+                  - generic [ref=f88e27]: Dashboard
+              - listitem [ref=f88e28]:
+                - link "Projects" [ref=f88e29] [cursor=pointer]:
+                  - /url: /projects
+                  - img [ref=f88e30]
+                  - generic [ref=f88e35]: Projects
+              - listitem [ref=f88e36]:
+                - link "Servers" [ref=f88e37] [cursor=pointer]:
+                  - /url: /servers
+                  - img [ref=f88e38]
+                  - generic [ref=f88e43]: Servers
+              - listitem [ref=f88e44]:
+                - link "Sources" [ref=f88e45] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/sources
+                  - img [ref=f88e46]
+                  - generic [ref=f88e48]: Sources
+              - listitem [ref=f88e49]:
+                - link "Destinations" [ref=f88e50] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/destinations
+                  - img [ref=f88e51]
+                  - generic [ref=f88e53]: Destinations
+              - listitem [ref=f88e54]:
+                - link "S3 Storages" [ref=f88e55] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/storages
+                  - img [ref=f88e56]
+                  - generic [ref=f88e61]: S3 Storages
+              - listitem [ref=f88e62]:
+                - link "Shared Variables" [ref=f88e63] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/shared-variables
+                  - img [ref=f88e64]
+                  - generic [ref=f88e68]: Shared Variables
+              - listitem [ref=f88e69]:
+                - link "Notifications" [ref=f88e70] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/notifications/email
+                  - img [ref=f88e71]
+                  - generic [ref=f88e73]: Notifications
+              - listitem [ref=f88e74]:
+                - link "Keys & Tokens" [ref=f88e75] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/security/private-key
+                  - img [ref=f88e76]
+                  - generic [ref=f88e78]: Keys & Tokens
+              - listitem [ref=f88e79]:
+                - link "Tags" [ref=f88e80] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/tags
+                  - img [ref=f88e81]
+                  - generic [ref=f88e85]: Tags
+              - listitem [ref=f88e86]:
+                - link "Terminal" [ref=f88e87] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/terminal
+                  - img [ref=f88e88]
+                  - generic [ref=f88e91]: Terminal
+              - listitem [ref=f88e92]:
+                - link "Profile" [ref=f88e93] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/profile
+                  - img [ref=f88e94]
+                  - generic [ref=f88e99]: Profile
+              - listitem [ref=f88e100]:
+                - link "Teams" [ref=f88e101] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/team
+                  - img [ref=f88e102]
+                  - generic [ref=f88e110]: Teams
+              - listitem [ref=f88e111]:
+                - link "Settings" [ref=f88e112] [cursor=pointer]:
+                  - /url: /settings
+                  - img [ref=f88e113]
+                  - generic [ref=f88e117]: Settings
+              - listitem [ref=f88e119]:
+                - button "What's New" [ref=f88e121]:
+                  - img [ref=f88e122]
+                  - generic [ref=f88e124]: What's New
+                  - generic "10 unread changelog entries" [ref=f88e125]: 9+
+              - listitem [ref=f88e126]:
+                - generic "Theme switcher" [ref=f88e127]:
+                  - img [ref=f88e128]
+                  - generic [ref=f88e130]: Theme
+                  - generic [ref=f88e131]:
+                    - button "Use light theme" [ref=f88e132]:
+                      - img [ref=f88e133]
+                    - button "Use system theme" [ref=f88e135]:
+                      - img [ref=f88e136]
+                    - button "Use dark theme" [ref=f88e138]:
+                      - img [ref=f88e139]
+              - generic:
+                - listitem:
+                  - generic "No upgrade available"
+              - listitem [ref=f88e141]:
+                - link "Sponsor us" [ref=f88e142] [cursor=pointer]:
+                  - /url: https://coolify.io/sponsorships
+                  - img [ref=f88e143]
+                  - generic [ref=f88e147]: Sponsor us
+              - listitem [ref=f88e148]:
+                - generic "Send us feedback or get help!" [ref=f88e151] [cursor=pointer]:
+                  - img [ref=f88e152]
+                  - generic [ref=f88e154]: Feedback
+              - listitem [ref=f88e155]:
+                - button "Logout" [ref=f88e157]:
+                  - img [ref=f88e158]
+                  - generic [ref=f88e160]: Logout
+      - button "Collapse sidebar" [ref=f88e161]:
+        - img [ref=f88e162]
+    - main [ref=f88e164]:
+      - generic [ref=f88e165]:
+        - generic [ref=f88e166]:
+          - generic [ref=f88e167]:
+            - heading "Server" [level=1] [ref=f88e168]
+            - generic [ref=f88e170]:
+              - generic [ref=f88e174]: Proxy Running
+              - button "Refresh Status" [ref=f88e175]:
+                - img [ref=f88e176]
+            - generic [ref=f88e183]: Sentinel In Sync
+          - generic [ref=f88e184]: localhost
+          - generic [ref=f88e185]:
+            - navigation [ref=f88e186]:
+              - link "Configuration" [ref=f88e187] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp
+              - link "Proxy" [ref=f88e188] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/proxy
+              - link "Sentinel" [ref=f88e189] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/sentinel
+              - link "Resources" [ref=f88e190] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/resources
+              - link "Terminal" [ref=f88e191] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/terminal
+              - link "Security" [ref=f88e192] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/security/patches
+            - generic [ref=f88e195]:
+              - button "Restart Proxy" [ref=f88e197] [cursor=pointer]:
+                - img [ref=f88e198]
+                - text: Restart Proxy
+              - button "Stop Proxy" [ref=f88e203] [cursor=pointer]:
+                - img [ref=f88e204]
+                - text: Stop Proxy
+        - generic [ref=f88e206]:
+          - generic [ref=f88e207]:
+            - link "Configuration" [ref=f88e208] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/proxy
+              - generic [ref=f88e209]: Configuration
+            - link "Dynamic Configurations" [ref=f88e210] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/proxy/dynamic
+              - generic [ref=f88e211]: Dynamic Configurations
+            - link "Logs" [ref=f88e212] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/proxy/logs
+              - generic [ref=f88e213]: Logs
+          - generic [ref=f88e217]:
+            - generic [ref=f88e218]:
+              - heading "Configuration" [level=2] [ref=f88e219]
+              - button "Switch Proxy" [ref=f88e220] [cursor=pointer]
+              - button "Save" [ref=f88e221] [cursor=pointer]
+            - generic [ref=f88e222]: Configure your proxy settings and advanced options.
+            - heading "Advanced" [level=3] [ref=f88e223]
+            - generic [ref=f88e224]:
+              - generic [ref=f88e226]:
+                - generic [ref=f88e227]:
+                  - text: Generate labels only for Traefik
+                  - img [ref=f88e230] [cursor=pointer]
+                - checkbox "Generate labels only for Traefik" [ref=f88e232] [cursor=pointer]
+              - generic [ref=f88e234]:
+                - generic [ref=f88e235]:
+                  - text: Override default request handler
+                  - img [ref=f88e238] [cursor=pointer]
+                - checkbox "Override default request handler" [checked] [ref=f88e240] [cursor=pointer]
+              - generic [ref=f88e241]:
+                - generic [ref=f88e242]: Redirect to (optional)
+                - textbox "https://app.coolify.io" [ref=f88e243]
+            - generic [ref=f88e245]:
+              - heading "Traefik (Coolify Proxy)" [level=3] [ref=f88e246]
+              - button "Reset Configuration" [ref=f88e248] [cursor=pointer]
+            - generic [ref=f88e250]:
+              - generic [ref=f88e251]: Configuration file ( /data/coolify/proxy/docker-compose.yml )
+              - code [ref=f88e256]:
+                - generic [ref=f88e257]:
+                  - generic [ref=f88e259]:
+                    - generic [ref=f88e262]: "1"
+                    - generic [ref=f88e264]: "2"
+                    - generic [ref=f88e266]: "3"
+                    - generic [ref=f88e268]: "4"
+                    - generic [ref=f88e270]: "5"
+                    - generic [ref=f88e272]: "6"
+                    - generic [ref=f88e274]: "7"
+                    - generic [ref=f88e276]: "8"
+                    - generic [ref=f88e278]: "9"
+                    - generic [ref=f88e280]: "10"
+                    - generic [ref=f88e282]: "11"
+                    - generic [ref=f88e284]: "12"
+                    - generic [ref=f88e286]: "13"
+                    - generic [ref=f88e288]: "14"
+                    - generic [ref=f88e290]: "15"
+                    - generic [ref=f88e292]: "16"
+                    - generic [ref=f88e294]: "17"
+                    - generic [ref=f88e296]: "18"
+                    - generic [ref=f88e298]: "19"
+                    - generic [ref=f88e300]: "20"
+                    - generic [ref=f88e302]: "21"
+                    - generic [ref=f88e304]: "22"
+                    - generic [ref=f88e306]: "23"
+                    - generic [ref=f88e308]: "24"
+                    - generic [ref=f88e310]: "25"
+                    - generic [ref=f88e312]: "26"
+                    - generic [ref=f88e314]: "27"
+                    - generic [ref=f88e316]: "28"
+                    - generic [ref=f88e318]: "29"
+                  - generic [ref=f88e414]:
+                    - generic [ref=f88e416]: "name: coolify-proxy"
+                    - generic [ref=f88e418]: "networks:"
+                    - generic [ref=f88e420]: "coolify:"
+                    - generic [ref=f88e422]: "external: true"
+                    - generic [ref=f88e424]: "services:"
+                    - generic [ref=f88e426]: "traefik:"
+                    - generic [ref=f88e428]: "container_name: coolify-proxy"
+                    - generic [ref=f88e430]: "image: 'traefik:v3.6'"
+                    - generic [ref=f88e432]: "restart: unless-stopped"
+                    - generic [ref=f88e434]: "extra_hosts:"
+                    - generic [ref=f88e436]: "- 'host.docker.internal:host-gateway'"
+                    - generic [ref=f88e438]: "networks:"
+                    - generic [ref=f88e440]: "- coolify"
+                    - generic [ref=f88e442]: "ports:"
+                    - generic [ref=f88e444]: "- '80:80'"
+                    - generic [ref=f88e446]: "- '443:443'"
+                    - generic [ref=f88e448]: "- '443:443/udp'"
+                    - generic [ref=f88e450]: "- '8080:8080'"
+                    - generic [ref=f88e452]: "healthcheck:"
+                    - generic [ref=f88e454]: "test: 'wget -qO- http://localhost:80/ping || exit 1'"
+                    - generic [ref=f88e456]: "interval: 4s"
+                    - generic [ref=f88e458]: "timeout: 2s"
+                    - generic [ref=f88e460]: "retries: 5"
+                    - generic [ref=f88e462]: "volumes:"
+                    - generic [ref=f88e464]: "- '/var/run/docker.sock:/var/run/docker.sock:ro'"
+                    - generic [ref=f88e466]: "- '/data/coolify/proxy/:/traefik'"
+                    - generic [ref=f88e468]: "command:"
+                    - generic [ref=f88e470]: "- '--ping=true'"
+                    - generic [ref=f88e472]: "- '--ping.entrypoint=http'"
+                  - textbox "Editor content" [ref=f88e474]
+  - img
+  - list
+  - generic [ref=f88e475]:
+    - alert
+    - alert

@@ -1,0 +1,119 @@
+{
+  "name": "WhatsApp Sales Bot — ATHENA OS",
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "Webhook (Evolution API)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "parameters": {
+        "path": "whatsapp-webhook",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "forward-to-athena",
+      "name": "Encaminhar para ATHENA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [450, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:3000/api/whatsapp/webhook",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-api-key", "value": "athena-internal-dev-key" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "data", "value": "={{ JSON.stringify($json) }}" }
+          ]
+        },
+        "options": {
+          "timeout": 15000,
+          "continueOnFail": true
+        }
+      }
+    },
+    {
+      "id": "intent-classifier",
+      "name": "Classificar Intenção (Fallback)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const msg = $input.first().json;\nconst text = (msg.body || msg.message || msg.text || \"\").toLowerCase();\n\nlet intent = \"fallback\";\nif (/ola|oi|bom dia|boa tarde|boa noite|inicio|start/i.test(text)) intent = \"greeting\";\nelse if (/cardapio|catalogo|produtos|servicos|lista|tem|vende/i.test(text)) intent = \"catalog\";\nelse if (/preco|valor|custa|quanto|orcamento/i.test(text)) intent = \"pricing\";\nelse if (/comprar|quero|pedido|pagar|fechar/i.test(text)) intent = \"purchase\";\nelse if (/humano|atendente|pessoa|falar|ajuda/i.test(text)) intent = \"human\";\n\nreturn { intent, text, from: msg.from || msg.sender, original: msg };"
+      }
+    },
+    {
+      "id": "response-builder",
+      "name": "Montar Resposta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const intent = $input.first().json.intent;\nconst respostas = {\n  greeting: \"Olá! 👋 Bem-vindo(a) à nossa loja! Como posso ajudar?\\n\\n📦 *Catálogo* - digite 'catálogo'\\n💰 *Preços* - digite 'preços'\\n🛒 *Comprar* - digite 'comprar'\\n👤 *Falar com atendente* - digite 'atendente'\",\n  catalog: \"Aqui está nosso catálogo:\\n\\n1️⃣ Produto A - R$ 49,90\\n2️⃣ Produto B - R$ 89,90\\n3️⃣ Produto C - R$ 129,90\\n4️⃣ Combo Premium - R$ 199,90\\n\\nDigite o número do produto para mais detalhes!\",\n  pricing: \"Nossos preços:\\n• Produto A: R$ 49,90\\n• Produto B: R$ 89,90\\n• Produto C: R$ 129,90\\n• Combo Premium: R$ 199,90 (A+B+C)\\n\\nFrete grátis acima de R$ 150! 🚚\",\n  purchase: \"Ótima escolha! Para finalizar seu pedido, preciso de:\\n\\n📝 Nome completo\\n📍 Endereço de entrega\\n💳 Forma de pagamento (PIX/cartão)\\n\\nMe envie essas informações e já confirmo seu pedido! ✅\",\n  human: \"Um momento, vou transferir você para um atendente humano... ⏳\\n\\nEnquanto isso, pode me adiantar qual é sua dúvida?\",\n  fallback: \"Desculpe, não entendi. 😅\\n\\nTente:\\n• 'catálogo' - ver produtos\\n• 'preços' - ver valores\\n• 'comprar' - fazer pedido\\n• 'atendente' - falar com pessoa\"\n};\nreturn { reply: respostas[intent] || respostas.fallback };"
+      }
+    },
+    {
+      "id": "respond-to-webhook",
+      "name": "Responder Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 300],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.reply }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/plain; charset=utf-8"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook (Evolution API)": {
+      "main": [
+        [{ "node": "Encaminhar para ATHENA", "type": "main", "index": 0 }],
+        [{ "node": "Classificar Intenção (Fallback)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Encaminhar para ATHENA": {
+      "main": [[{ "node": "Responder Webhook", "type": "main", "index": 0 }]]
+    },
+    "Classificar Intenção (Fallback)": {
+      "main": [[{ "node": "Montar Resposta", "type": "main", "index": 0 }]]
+    },
+    "Montar Resposta": {
+      "main": [[{ "node": "Responder Webhook", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    { "name": "whatsapp" },
+    { "name": "sales" },
+    { "name": "athena" }
+  ]
+}

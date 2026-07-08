@@ -1,3 +1,0 @@
-export interface ProductionRun { id: string; machineId: string; moldId: string; productId: string; materialLot: string; status: 'running'|'completed'|'stopped'; totalCycles: number; totalPartsProduced: number; totalDefectives: number; totalMaterialKg: number; oee: number; startedAt: string; completedAt?: string; createdAt: string; updatedAt: string }
-export interface ProductionBatch { id: string; runId: string; productId: string; cycles: number; partsProduced: number; defectiveParts: number; scrapRatePercent: number; qualityStatus: 'approved'|'quarantine'|'rejected'; completedAt: string }
-export interface DefectRecord { id: string; batchId: string; runId: string; defectType: string; quantity: number; detectedAt: string }

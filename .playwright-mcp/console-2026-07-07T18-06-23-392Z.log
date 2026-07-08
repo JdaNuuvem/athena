@@ -1,0 +1,2 @@
+[   31371ms] [ERROR] Access to fetch at 'http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/api/health' from origin 'http://177.7.45.242:8000' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/logs:0
+[   31372ms] [ERROR] Failed to load resource: net::ERR_FAILED @ http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/api/health:0

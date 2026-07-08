@@ -1,0 +1,4 @@
+[     446ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://177.7.45.242/api/health:0
+[     654ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://177.7.45.242/favicon.ico:0
+[   24172ms] [ERROR] Access to fetch at 'https://athena.zoikom.site/api/health' from origin 'http://177.7.45.242' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://177.7.45.242/api/health:0
+[   24173ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://athena.zoikom.site/api/health:0

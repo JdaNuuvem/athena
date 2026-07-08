@@ -1,0 +1,57 @@
+- generic [ref=f4e3]:
+  - complementary [ref=f4e4]:
+    - generic [ref=f4e6]:
+      - generic [ref=f4e8]: A
+      - generic [ref=f4e9]:
+        - heading "ATHENA OS" [level=1] [ref=f4e10]
+        - paragraph [ref=f4e11]: Dashboard
+    - navigation [ref=f4e12]:
+      - link "Overview" [ref=f4e13] [cursor=pointer]:
+        - /url: /
+        - img [ref=f4e14]
+        - generic [ref=f4e19]: Overview
+      - link "Pedidos" [ref=f4e20] [cursor=pointer]:
+        - /url: /orders
+        - img [ref=f4e21]
+        - generic [ref=f4e25]: Pedidos
+      - link "Estoque" [ref=f4e26] [cursor=pointer]:
+        - /url: /inventory
+        - img [ref=f4e27]
+        - generic [ref=f4e37]: Estoque
+      - link "Producao" [ref=f4e38] [cursor=pointer]:
+        - /url: /production
+        - img [ref=f4e39]
+        - generic [ref=f4e41]: Producao
+      - link "Moldes & CNC" [ref=f4e42] [cursor=pointer]:
+        - /url: /molds
+        - img [ref=f4e43]
+        - generic [ref=f4e49]: Moldes & CNC
+      - link "Clientes" [ref=f4e50] [cursor=pointer]:
+        - /url: /customers
+        - img [ref=f4e51]
+        - generic [ref=f4e56]: Clientes
+      - link "Financeiro" [ref=f4e57] [cursor=pointer]:
+        - /url: /finance
+        - img [ref=f4e58]
+        - generic [ref=f4e60]: Financeiro
+      - link "Tributario" [ref=f4e61] [cursor=pointer]:
+        - /url: /tax-intelligence
+        - img [ref=f4e62]
+        - generic [ref=f4e66]: Tributario
+      - link "Admin" [ref=f4e67] [cursor=pointer]:
+        - /url: /admin
+        - img [ref=f4e68]
+        - generic [ref=f4e70]: Admin
+      - link "Config" [ref=f4e71] [cursor=pointer]:
+        - /url: /settings
+        - img [ref=f4e72]
+        - generic [ref=f4e73]: Config
+      - link "Chat Hermes" [ref=f4e74] [cursor=pointer]:
+        - /url: /chat
+        - img [ref=f4e75]
+        - generic [ref=f4e77]: Chat Hermes
+      - link "Produtos Shopee" [ref=f4e78] [cursor=pointer]:
+        - /url: /products
+        - img [ref=f4e79]
+        - generic [ref=f4e82]: Produtos Shopee
+  - main [ref=f4e83]

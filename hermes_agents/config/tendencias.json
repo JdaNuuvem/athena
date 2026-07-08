@@ -1,0 +1,8 @@
+[
+  {"termo": "organizador de cozinha", "volume": 22000, "crescimento": 45.0, "categoria": "casa"},
+  {"termo": "acessórios home office", "volume": 18000, "crescimento": 30.0, "categoria": "escritorio"},
+  {"termo": "produtos sustentaveis", "volume": 15000, "crescimento": 60.0, "categoria": "geral"},
+  {"termo": "gadgets cozinha", "volume": 12000, "crescimento": 25.0, "categoria": "casa"},
+  {"termo": "pet acessorios", "volume": 25000, "crescimento": 20.0, "categoria": "pets"},
+  {"termo": "decoracao minimalista", "volume": 10000, "crescimento": 55.0, "categoria": "decoracao"}
+]

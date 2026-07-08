@@ -1,0 +1,141 @@
+- generic [active] [ref=f68e1]:
+  - generic [ref=f68e2]:
+    - generic [ref=f68e3]:
+      - navigation [ref=f68e5]:
+        - generic [ref=f68e6]:
+          - generic [ref=f68e7]:
+            - link "Coolify" [ref=f68e8] [cursor=pointer]:
+              - /url: /
+            - link "v4.1.2" [ref=f68e9] [cursor=pointer]:
+              - /url: https://github.com/coollabsio/coolify/releases/tag/v4.1.2
+          - button / [ref=f68e11]:
+            - img [ref=f68e12]
+            - generic [ref=f68e14]: /
+        - combobox [ref=f68e19]:
+          - option "Switch team" [disabled]
+          - option "Root Team" [selected]
+        - list [ref=f68e20]:
+          - listitem [ref=f68e21]:
+            - list [ref=f68e22]:
+              - listitem [ref=f68e23]:
+                - link "Dashboard" [ref=f68e24] [cursor=pointer]:
+                  - /url: /
+                  - img [ref=f68e25]
+                  - generic [ref=f68e27]: Dashboard
+              - listitem [ref=f68e28]:
+                - link "Projects" [ref=f68e29] [cursor=pointer]:
+                  - /url: /projects
+                  - img [ref=f68e30]
+                  - generic [ref=f68e35]: Projects
+              - listitem [ref=f68e36]:
+                - link "Servers" [ref=f68e37] [cursor=pointer]:
+                  - /url: /servers
+                  - img [ref=f68e38]
+                  - generic [ref=f68e43]: Servers
+              - listitem [ref=f68e44]:
+                - link "Sources" [ref=f68e45] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/sources
+                  - img [ref=f68e46]
+                  - generic [ref=f68e48]: Sources
+              - listitem [ref=f68e49]:
+                - link "Destinations" [ref=f68e50] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/destinations
+                  - img [ref=f68e51]
+                  - generic [ref=f68e53]: Destinations
+              - listitem [ref=f68e54]:
+                - link "S3 Storages" [ref=f68e55] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/storages
+                  - img [ref=f68e56]
+                  - generic [ref=f68e61]: S3 Storages
+              - listitem [ref=f68e62]:
+                - link "Shared Variables" [ref=f68e63] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/shared-variables
+                  - img [ref=f68e64]
+                  - generic [ref=f68e68]: Shared Variables
+              - listitem [ref=f68e69]:
+                - link "Notifications" [ref=f68e70] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/notifications/email
+                  - img [ref=f68e71]
+                  - generic [ref=f68e73]: Notifications
+              - listitem [ref=f68e74]:
+                - link "Keys & Tokens" [ref=f68e75] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/security/private-key
+                  - img [ref=f68e76]
+                  - generic [ref=f68e78]: Keys & Tokens
+              - listitem [ref=f68e79]:
+                - link "Tags" [ref=f68e80] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/tags
+                  - img [ref=f68e81]
+                  - generic [ref=f68e85]: Tags
+              - listitem [ref=f68e86]:
+                - link "Terminal" [ref=f68e87] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/terminal
+                  - img [ref=f68e88]
+                  - generic [ref=f68e91]: Terminal
+              - listitem [ref=f68e92]:
+                - link "Profile" [ref=f68e93] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/profile
+                  - img [ref=f68e94]
+                  - generic [ref=f68e99]: Profile
+              - listitem [ref=f68e100]:
+                - link "Teams" [ref=f68e101] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/team
+                  - img [ref=f68e102]
+                  - generic [ref=f68e110]: Teams
+              - listitem [ref=f68e111]:
+                - link "Settings" [ref=f68e112] [cursor=pointer]:
+                  - /url: /settings
+                  - img [ref=f68e113]
+                  - generic [ref=f68e117]: Settings
+              - listitem [ref=f68e118]:
+                - button "What's New" [ref=f68e120]:
+                  - img [ref=f68e121]
+                  - generic [ref=f68e123]: What's New
+                  - generic "10 unread changelog entries" [ref=f68e124]: 9+
+              - listitem [ref=f68e125]:
+                - generic "Theme switcher" [ref=f68e126]:
+                  - img [ref=f68e127]
+                  - generic [ref=f68e129]: Theme
+                  - generic [ref=f68e130]:
+                    - button "Use light theme" [ref=f68e131]:
+                      - img [ref=f68e132]
+                    - button "Use system theme" [ref=f68e134]:
+                      - img [ref=f68e135]
+                    - button "Use dark theme" [ref=f68e137]:
+                      - img [ref=f68e138]
+              - generic:
+                - listitem:
+                  - generic "No upgrade available"
+              - listitem [ref=f68e140]:
+                - link "Sponsor us" [ref=f68e141] [cursor=pointer]:
+                  - /url: https://coolify.io/sponsorships
+                  - img [ref=f68e142]
+                  - generic [ref=f68e146]: Sponsor us
+              - listitem [ref=f68e147]:
+                - generic "Send us feedback or get help!" [ref=f68e150] [cursor=pointer]:
+                  - img [ref=f68e151]
+                  - generic [ref=f68e153]: Feedback
+              - listitem [ref=f68e154]:
+                - button "Logout" [ref=f68e156]:
+                  - img [ref=f68e157]
+                  - generic [ref=f68e159]: Logout
+      - button "Collapse sidebar" [ref=f68e160]:
+        - img [ref=f68e161]
+    - main [ref=f68e163]:
+      - generic [ref=f68e164]:
+        - generic [ref=f68e165]:
+          - heading "Projects" [level=1] [ref=f68e166]
+          - button "+ Add" [ref=f68e168] [cursor=pointer]
+        - generic [ref=f68e169]: All your projects are here.
+        - generic [ref=f68e171] [cursor=pointer]:
+          - link [ref=f68e172]:
+            - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr
+          - generic [ref=f68e173]:
+            - generic [ref=f68e175]: My first project
+            - generic [ref=f68e176]:
+              - link "+ Add Resource" [ref=f68e177]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/new
+              - link "Settings" [ref=f68e178]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/edit
+  - img
+  - list

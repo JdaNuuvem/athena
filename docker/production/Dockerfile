@@ -1,33 +1,18 @@
-FROM node:22-alpine AS builder
+FROM python:3.11-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends gcc libpq-dev && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY package.json tsconfig.json prisma.config.ts ./
-COPY prisma/ ./prisma/
-RUN npm install --production=false
-COPY src/ ./src/
-RUN npx prisma generate
-RUN npm run build || true # ponytail: tsc type errors in pre-existing code; JS emitted regardless
-RUN npm prune --production
+COPY hermes_agents/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Build React dashboard
-COPY dashboard/package.json ./dashboard/
-RUN cd dashboard && npm install
-COPY dashboard/ ./dashboard/
-RUN cd dashboard && npm run build
+COPY hermes_agents/ /app/hermes_agents/
 
-FROM node:22-alpine AS runner
+ENV PORT=3000
+ENV PYTHONUNBUFFERED=1
+ENV DB_PORT=5432
+ENV DB_NAME=hermes_factory
 
-RUN apk add --no-cache curl
-WORKDIR /app
-COPY --from=builder /app/package.json ./
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/prisma ./prisma
-COPY prisma.config.ts ./
-
-ENV NODE_ENV=production
 EXPOSE 3000
-
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD curl -f http://localhost:3000/api/health || exit 1
-
-CMD ["node", "dist/bootstrap/startup.js"]
+WORKDIR /app/hermes_agents
+CMD python athena_bridge.py

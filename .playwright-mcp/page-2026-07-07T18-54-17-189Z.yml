@@ -1,0 +1,54 @@
+- generic [ref=f76e3]:
+  - complementary [ref=f76e4]:
+    - generic [ref=f76e6]:
+      - generic [ref=f76e8]: A
+      - generic [ref=f76e9]:
+        - heading "ATHENA OS" [level=1] [ref=f76e10]
+        - paragraph [ref=f76e11]: Dashboard
+    - navigation [ref=f76e12]:
+      - link "Overview" [ref=f76e13] [cursor=pointer]:
+        - /url: /
+        - img [ref=f76e14]
+        - generic [ref=f76e19]: Overview
+      - link "Pedidos" [ref=f76e20] [cursor=pointer]:
+        - /url: /orders
+        - img [ref=f76e21]
+        - generic [ref=f76e25]: Pedidos
+      - link "Estoque" [ref=f76e26] [cursor=pointer]:
+        - /url: /inventory
+        - img [ref=f76e27]
+        - generic [ref=f76e37]: Estoque
+      - link "Producao" [ref=f76e38] [cursor=pointer]:
+        - /url: /production
+        - img [ref=f76e39]
+        - generic [ref=f76e41]: Producao
+      - link "Moldes & CNC" [ref=f76e42] [cursor=pointer]:
+        - /url: /molds
+        - img [ref=f76e43]
+        - generic [ref=f76e49]: Moldes & CNC
+      - link "Clientes" [ref=f76e50] [cursor=pointer]:
+        - /url: /customers
+        - img [ref=f76e51]
+        - generic [ref=f76e56]: Clientes
+      - link "Financeiro" [ref=f76e57] [cursor=pointer]:
+        - /url: /finance
+        - img [ref=f76e58]
+        - generic [ref=f76e60]: Financeiro
+      - link "Tributario" [ref=f76e61] [cursor=pointer]:
+        - /url: /tax-intelligence
+        - img [ref=f76e62]
+        - generic [ref=f76e66]: Tributario
+      - link "Admin" [ref=f76e67] [cursor=pointer]:
+        - /url: /admin
+        - img [ref=f76e68]
+        - generic [ref=f76e70]: Admin
+      - link "Config" [ref=f76e71] [cursor=pointer]:
+        - /url: /settings
+        - img [ref=f76e72]
+        - generic [ref=f76e73]: Config
+      - link "Chat Hermes" [ref=f76e74] [cursor=pointer]:
+        - /url: /chat
+        - img [ref=f76e75]
+        - generic [ref=f76e77]: Chat Hermes
+  - main [ref=f76e78]:
+    - heading "Configurações" [level=2] [ref=f76e80]

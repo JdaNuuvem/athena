@@ -1,0 +1,7 @@
+- generic [ref=f65e2]:
+  - generic [ref=f65e3]: H
+  - heading "Hermes" [level=1] [ref=f65e4]
+  - paragraph [ref=f65e5]: Digite sua senha para continuar
+  - generic [ref=f65e6]:
+    - textbox "Senha" [active] [ref=f65e7]
+    - button "Entrar" [ref=f65e8] [cursor=pointer]

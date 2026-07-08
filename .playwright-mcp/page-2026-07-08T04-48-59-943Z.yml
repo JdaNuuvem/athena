@@ -1,0 +1,62 @@
+- generic [ref=f93e3]:
+  - complementary [ref=f93e4]:
+    - generic [ref=f93e6]:
+      - generic [ref=f93e8]: A
+      - generic [ref=f93e9]:
+        - heading "ATHENA OS" [level=1] [ref=f93e10]
+        - paragraph [ref=f93e11]: Dashboard
+    - navigation [ref=f93e12]:
+      - link "Overview" [ref=f93e13] [cursor=pointer]:
+        - /url: /
+        - img [ref=f93e14]
+        - generic [ref=f93e19]: Overview
+      - link "Pedidos" [ref=f93e20] [cursor=pointer]:
+        - /url: /orders
+        - img [ref=f93e21]
+        - generic [ref=f93e25]: Pedidos
+      - link "Estoque" [ref=f93e26] [cursor=pointer]:
+        - /url: /inventory
+        - img [ref=f93e27]
+        - generic [ref=f93e37]: Estoque
+      - link "Producao" [ref=f93e38] [cursor=pointer]:
+        - /url: /production
+        - img [ref=f93e39]
+        - generic [ref=f93e41]: Producao
+      - link "Moldes & CNC" [ref=f93e42] [cursor=pointer]:
+        - /url: /molds
+        - img [ref=f93e43]
+        - generic [ref=f93e49]: Moldes & CNC
+      - link "Clientes" [ref=f93e50] [cursor=pointer]:
+        - /url: /customers
+        - img [ref=f93e51]
+        - generic [ref=f93e56]: Clientes
+      - link "Financeiro" [ref=f93e57] [cursor=pointer]:
+        - /url: /finance
+        - img [ref=f93e58]
+        - generic [ref=f93e60]: Financeiro
+      - link "Tributario" [ref=f93e61] [cursor=pointer]:
+        - /url: /tax-intelligence
+        - img [ref=f93e62]
+        - generic [ref=f93e66]: Tributario
+      - link "Admin" [ref=f93e67] [cursor=pointer]:
+        - /url: /admin
+        - img [ref=f93e68]
+        - generic [ref=f93e70]: Admin
+      - link "Config" [ref=f93e71] [cursor=pointer]:
+        - /url: /settings
+        - img [ref=f93e72]
+        - generic [ref=f93e73]: Config
+      - link "Chat Hermes" [ref=f93e74] [cursor=pointer]:
+        - /url: /chat
+        - img [ref=f93e75]
+        - generic [ref=f93e77]: Chat Hermes
+      - link "Produtos Shopee" [ref=f93e78] [cursor=pointer]:
+        - /url: /products
+        - img [ref=f93e79]
+        - generic [ref=f93e82]: Produtos Shopee
+  - main [ref=f93e83]:
+    - generic [ref=f93e84]:
+      - heading "Overview" [level=2] [ref=f93e85]
+      - generic [ref=f93e93]:
+        - heading "Pedidos por Status" [level=3] [ref=f93e95]
+        - heading "Pedidos Recentes" [level=3] [ref=f93e98]

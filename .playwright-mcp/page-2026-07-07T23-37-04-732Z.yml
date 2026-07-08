@@ -1,0 +1,134 @@
+- generic [active] [ref=f19e1]:
+  - generic [ref=f19e2]:
+    - generic [ref=f19e3]:
+      - generic [ref=f19e4]:
+        - link "Coolify" [ref=f19e5] [cursor=pointer]:
+          - /url: /
+        - combobox [ref=f19e9]:
+          - option "Switch team" [disabled]
+          - option "Root Team" [selected]
+      - button "Open sidebar" [ref=f19e10]:
+        - generic [ref=f19e11]: Open sidebar
+        - img [ref=f19e12]
+    - main [ref=f19e14]:
+      - generic [ref=f19e15]:
+        - generic [ref=f19e16]:
+          - generic [ref=f19e17]:
+            - heading "Server" [level=1] [ref=f19e18]
+            - generic [ref=f19e20]:
+              - generic [ref=f19e24]: Proxy Running
+              - button "Refresh Status" [ref=f19e25]:
+                - img [ref=f19e26]
+            - generic [ref=f19e33]: Sentinel In Sync
+          - generic [ref=f19e34]: localhost
+          - generic [ref=f19e35]:
+            - navigation [ref=f19e36]:
+              - link "Configuration" [ref=f19e37] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp
+              - link "Proxy" [ref=f19e38] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/proxy
+              - link "Sentinel" [ref=f19e39] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/sentinel
+              - link "Resources" [ref=f19e40] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/resources
+              - link "Terminal" [ref=f19e41] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/terminal
+              - link "Security" [ref=f19e42] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/security/patches
+            - generic [ref=f19e45]:
+              - button "Restart Proxy" [ref=f19e47] [cursor=pointer]:
+                - img [ref=f19e48]
+                - text: Restart Proxy
+              - button "Stop Proxy" [ref=f19e53] [cursor=pointer]:
+                - img [ref=f19e54]
+                - text: Stop Proxy
+        - generic [ref=f19e56]:
+          - generic [ref=f19e57]:
+            - link "General" [ref=f19e58] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp
+              - generic [ref=f19e59]: General
+            - link "Advanced" [ref=f19e60] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/advanced
+              - generic [ref=f19e61]: Advanced
+            - link "Private Key" [ref=f19e62] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/private-key
+              - generic [ref=f19e63]: Private Key
+            - link "CA Certificate" [ref=f19e64] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/ca-certificate
+              - generic [ref=f19e65]: CA Certificate
+            - link "Docker Cleanup" [ref=f19e66] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/docker-cleanup
+              - generic [ref=f19e67]: Docker Cleanup
+            - link "Destinations" [ref=f19e68] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/destinations
+              - generic [ref=f19e69]: Destinations
+            - link "Log Drains" [ref=f19e70] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/log-drains
+              - generic [ref=f19e71]: Log Drains
+            - link "Metrics" [ref=f19e72] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/metrics
+              - generic [ref=f19e73]: Metrics
+            - link "Swarm" [ref=f19e74] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/swarm
+              - generic [ref=f19e75]: Swarm
+          - generic [ref=f19e76]:
+            - generic [ref=f19e77]:
+              - generic [ref=f19e78]:
+                - heading "General" [level=2] [ref=f19e79]
+                - button "Save" [ref=f19e81] [cursor=pointer]
+              - text: Server is reachable and validated.
+              - generic [ref=f19e82]:
+                - generic [ref=f19e83]:
+                  - generic [ref=f19e84]:
+                    - generic [ref=f19e85]:
+                      - text: Name
+                      - generic [ref=f19e86]: "*"
+                    - textbox [ref=f19e87]: localhost
+                  - generic [ref=f19e88]:
+                    - generic [ref=f19e89]: Description
+                    - textbox [ref=f19e90]: This is the server where Coolify is running on. Don't delete this!
+                  - generic [ref=f19e91]:
+                    - generic [ref=f19e92]:
+                      - text: Wildcard Domain
+                      - img [ref=f19e95] [cursor=pointer]
+                    - textbox "https://example.com" [ref=f19e97]
+                - generic [ref=f19e98]:
+                  - generic [ref=f19e99]:
+                    - generic [ref=f19e100]:
+                      - text: IP Address/Domain
+                      - generic [ref=f19e101]: "*"
+                      - img [ref=f19e104] [cursor=pointer]
+                    - generic [ref=f19e106]:
+                      - textbox [ref=f19e107]: host.docker.internal
+                      - button "Toggle password visibility" [ref=f19e108] [cursor=pointer]:
+                        - img [ref=f19e109]
+                  - generic [ref=f19e113]:
+                    - generic [ref=f19e114]:
+                      - generic [ref=f19e115]:
+                        - text: User
+                        - generic [ref=f19e116]: "*"
+                      - textbox [ref=f19e117]: root
+                    - generic [ref=f19e118]:
+                      - generic [ref=f19e119]:
+                        - text: Port
+                        - generic [ref=f19e120]: "*"
+                      - spinbutton [ref=f19e121]: "22"
+                - generic [ref=f19e123]:
+                  - generic [ref=f19e124]:
+                    - text: SSH Connection Timeout (s)
+                    - generic [ref=f19e125]: "*"
+                    - img [ref=f19e128] [cursor=pointer]
+                  - spinbutton [ref=f19e130]: "10"
+                - generic [ref=f19e131]:
+                  - generic [ref=f19e132]:
+                    - generic [ref=f19e133]: Server Timezone
+                    - img [ref=f19e136] [cursor=pointer]
+                  - generic [ref=f19e140]:
+                    - textbox "Search timezone..." [ref=f19e141]: UTC
+                    - img [ref=f19e142]
+            - generic [ref=f19e144]:
+              - heading "Server Details" [level=3] [ref=f19e146]
+              - button "Fetch Server Details" [ref=f19e147] [cursor=pointer]:
+                - generic [ref=f19e148]: Fetch Server Details
+  - img
+  - list

@@ -1,0 +1,70 @@
+- generic [active] [ref=f38e1]:
+  - generic [ref=f38e2]:
+    - generic [ref=f38e3]:
+      - generic [ref=f38e4]:
+        - link "Coolify" [ref=f38e5] [cursor=pointer]:
+          - /url: /
+        - combobox [ref=f38e9]:
+          - option "Switch team" [disabled]
+          - option "Root Team" [selected]
+      - button "Open sidebar" [ref=f38e10]:
+        - generic [ref=f38e11]: Open sidebar
+        - img [ref=f38e12]
+    - main [ref=f38e14]:
+      - generic [ref=f38e15]:
+        - generic [ref=f38e16]:
+          - generic [ref=f38e17]:
+            - heading "Server" [level=1] [ref=f38e18]
+            - generic [ref=f38e20]:
+              - generic [ref=f38e24]: Proxy Running
+              - button "Refresh Status" [ref=f38e25]:
+                - img [ref=f38e26]
+            - generic [ref=f38e33]: Sentinel In Sync
+          - generic [ref=f38e34]: localhost
+          - generic [ref=f38e35]:
+            - navigation [ref=f38e36]:
+              - link "Configuration" [ref=f38e37] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp
+              - link "Proxy" [ref=f38e38] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/proxy
+              - link "Sentinel" [ref=f38e39] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/sentinel
+              - link "Resources" [ref=f38e40] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/resources
+              - link "Terminal" [ref=f38e41] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/terminal
+              - link "Security" [ref=f38e42] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/security/patches
+            - generic [ref=f38e45]:
+              - button "Restart Proxy" [ref=f38e47] [cursor=pointer]:
+                - img [ref=f38e48]
+                - text: Restart Proxy
+              - button "Stop Proxy" [ref=f38e53] [cursor=pointer]:
+                - img [ref=f38e54]
+                - text: Stop Proxy
+        - generic [ref=f38e56]:
+          - generic [ref=f38e57]:
+            - link "Configuration" [ref=f38e58] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/proxy
+              - generic [ref=f38e59]: Configuration
+            - link "Dynamic Configurations" [ref=f38e60] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/proxy/dynamic
+              - generic [ref=f38e61]: Dynamic Configurations
+            - link "Logs" [ref=f38e62] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/proxy/logs
+              - generic [ref=f38e63]: Logs
+          - generic [ref=f38e64]:
+            - generic [ref=f38e66]:
+              - generic [ref=f38e67]:
+                - heading "Dynamic Configurations" [level=2] [ref=f38e68]
+                - button "Reload" [ref=f38e69] [cursor=pointer]
+                - button "+ Add" [ref=f38e71] [cursor=pointer]
+              - generic [ref=f38e72]: You can add dynamic proxy configurations here.
+            - generic [ref=f38e74]:
+              - generic [ref=f38e75]: Loading dynamic configurations...
+              - img [ref=f38e76]
+  - img
+  - list
+  - generic [ref=f38e78]:
+    - alert
+    - alert

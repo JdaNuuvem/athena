@@ -1,0 +1,28 @@
+- generic [active] [ref=f7e1]:
+  - generic [ref=f7e2]:
+    - generic [ref=f7e3]:
+      - generic [ref=f7e4]:
+        - link "Coolify" [ref=f7e5] [cursor=pointer]:
+          - /url: /
+        - combobox [ref=f7e9]:
+          - option "Switch team" [disabled]
+          - option "Root Team" [selected]
+      - button "Open sidebar" [ref=f7e10]:
+        - generic [ref=f7e11]: Open sidebar
+        - img [ref=f7e12]
+    - main [ref=f7e14]:
+      - generic [ref=f7e17]:
+        - generic [ref=f7e18]:
+          - generic [ref=f7e19]:
+            - heading "New Resource" [level=1] [ref=f7e20]
+            - combobox [ref=f7e23]:
+              - 'option "Environment: production" [selected]'
+          - generic [ref=f7e24]: Deploy resources, like Applications, Databases, Services...
+          - generic [ref=f7e25]:
+            - textbox "Type / to search..." [ref=f7e26]
+            - generic [ref=f7e28]:
+              - generic [ref=f7e29]: Filter by category
+              - img [ref=f7e30]
+        - generic [ref=f7e32]: Loading...
+  - img
+  - list

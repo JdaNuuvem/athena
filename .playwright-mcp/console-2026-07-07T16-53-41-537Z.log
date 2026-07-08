@@ -1,0 +1,75 @@
+[    1368ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/:0
+[    1369ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/:0
+[    1369ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/:0
+[    2303ms] [ERROR] Failed to load resource: net::ERR_SSL_PROTOCOL_ERROR @ https://177.7.45.242:8000/api/agent/ag_06_telegram/stats:0
+[    2303ms] [ERROR] Erro ao carregar stats: TypeError: Failed to fetch
+    at y (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:9:38193)
+    at http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:9:38125
+    at Gc (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:91683)
+    at Ol (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:106776)
+    at Dl (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:106660)
+    at Ol (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:107540)
+    at Dl (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:106660)
+    at Ol (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:106822)
+    at Uu (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:119562)
+    at http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:117014 @ http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8
+[    2371ms] [ERROR] Failed to load resource: net::ERR_SSL_PROTOCOL_ERROR @ https://177.7.45.242:8000/api/moldes/dashboard:0
+[    2371ms] [ERROR] Erro ao carregar produção: TypeError: Failed to fetch
+    at b (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:9:38335)
+    at http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:9:38129
+    at Gc (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:91683)
+    at Ol (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:106776)
+    at Dl (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:106660)
+    at Ol (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:107540)
+    at Dl (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:106660)
+    at Ol (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:106822)
+    at Uu (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:119562)
+    at http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:117014 @ http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8
+[    2371ms] [ERROR] Failed to load resource: net::ERR_SSL_PROTOCOL_ERROR @ https://177.7.45.242:8000/api/qualidade/taxa_defeitos?periodo=30:0
+[    2371ms] [ERROR] Erro ao carregar qualidade: TypeError: Failed to fetch
+    at x (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:9:38470)
+    at http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:9:38133
+    at Gc (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:91683)
+    at Ol (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:106776)
+    at Dl (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:106660)
+    at Ol (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:107540)
+    at Dl (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:106660)
+    at Ol (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:106822)
+    at Uu (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:119562)
+    at http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:117014 @ http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8
+[    2456ms] [ERROR] Failed to load resource: net::ERR_SSL_PROTOCOL_ERROR @ https://177.7.45.242:8000/api/manutencao/pendentes:0
+[    2456ms] [ERROR] Erro ao carregar manutenção: TypeError: Failed to fetch
+    at ee (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:9:38625)
+    at http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:9:38137
+    at Gc (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:91683)
+    at Ol (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:106776)
+    at Dl (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:106660)
+    at Ol (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:107540)
+    at Dl (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:106660)
+    at Ol (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:106822)
+    at Uu (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:119562)
+    at http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:117014 @ http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8
+[    2460ms] [ERROR] Failed to load resource: net::ERR_SSL_PROTOCOL_ERROR @ https://177.7.45.242:8000/api/ml/status:0
+[    2460ms] [ERROR] Erro ao carregar ML: TypeError: Failed to fetch
+    at S (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:9:38766)
+    at http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:9:38142
+    at Gc (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:91683)
+    at Ol (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:106776)
+    at Dl (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:106660)
+    at Ol (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:107540)
+    at Dl (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:106660)
+    at Ol (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:106822)
+    at Uu (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:119562)
+    at http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:117014 @ http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8
+[    2582ms] [ERROR] Failed to load resource: net::ERR_SSL_PROTOCOL_ERROR @ https://177.7.45.242:8000/api/config/status:0
+[    2582ms] [ERROR] Erro: TypeError: Failed to fetch
+    at v (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:9:38027)
+    at http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:9:38146
+    at Gc (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:91683)
+    at Ol (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:106776)
+    at Dl (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:106660)
+    at Ol (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:107540)
+    at Dl (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:106660)
+    at Ol (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:106822)
+    at Uu (http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:119562)
+    at http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8:117014 @ http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io/assets/index-C2d9DaMy.js:8

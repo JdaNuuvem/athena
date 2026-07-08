@@ -1,0 +1,43 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e3]:
+      - generic [ref=e4]:
+        - link "Coolify" [ref=e5] [cursor=pointer]:
+          - /url: /
+        - combobox [ref=e9]:
+          - option "Switch team" [disabled]
+          - option "Root Team" [selected]
+      - button "Open sidebar" [ref=e10]:
+        - generic [ref=e11]: Open sidebar
+        - img [ref=e12]
+    - main [ref=e14]:
+      - generic [ref=e15]:
+        - heading "Dashboard" [level=1] [ref=e16]
+        - generic [ref=e17]: Your self-hosted infrastructure.
+        - generic [ref=e18]:
+          - generic [ref=e19]:
+            - heading "Projects" [level=3] [ref=e20]
+            - button [ref=e23] [cursor=pointer]:
+              - img [ref=e24]
+          - generic [ref=e27] [cursor=pointer]:
+            - link [ref=e28]:
+              - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr
+            - generic [ref=e29]:
+              - generic [ref=e31]: My first project
+              - generic [ref=e32]:
+                - link "+ Add Resource" [ref=e33]:
+                  - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/new
+                - link "Settings" [ref=e34]:
+                  - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/edit
+        - generic [ref=e35]:
+          - generic [ref=e36]:
+            - heading "Servers" [level=3] [ref=e37]
+            - button [ref=e40] [cursor=pointer]:
+              - img [ref=e41]
+          - link "localhost This is the server where Coolify is running on. Don't delete this!" [ref=e44] [cursor=pointer]:
+            - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp
+            - generic [ref=e45]:
+              - generic [ref=e46]: localhost
+              - generic [ref=e47]: This is the server where Coolify is running on. Don't delete this!
+  - img
+  - list

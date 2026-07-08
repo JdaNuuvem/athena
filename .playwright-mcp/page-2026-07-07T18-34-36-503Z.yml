@@ -1,0 +1,17 @@
+- generic [active] [ref=f66e1]:
+  - generic [ref=f66e3]:
+    - paragraph [ref=f66e4]: "404"
+    - heading "How did you get here?" [level=1] [ref=f66e5]
+    - paragraph [ref=f66e6]: Sorry, we couldn't find the page you're looking for.
+    - generic [ref=f66e7]:
+      - link "Go back" [ref=f66e8] [cursor=pointer]:
+        - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/deployment/ctgizzz7jfccq3icrsvpzjzj
+        - button "Go back" [ref=f66e9]
+      - link "Dashboard" [ref=f66e10] [cursor=pointer]:
+        - /url: http://177.7.45.242:8000
+        - button "Dashboard" [ref=f66e11]
+      - link "Contact support" [ref=f66e12] [cursor=pointer]:
+        - /url: https://coolify.io/docs/contact
+        - text: Contact support
+        - img [ref=f66e13]
+  - img

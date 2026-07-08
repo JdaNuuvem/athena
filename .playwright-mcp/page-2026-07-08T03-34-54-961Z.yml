@@ -1,0 +1,201 @@
+- generic [active] [ref=f75e1]:
+  - generic [ref=f75e2]:
+    - generic [ref=f75e3]:
+      - navigation [ref=f75e5]:
+        - generic [ref=f75e6]:
+          - generic [ref=f75e7]:
+            - link "Coolify" [ref=f75e8] [cursor=pointer]:
+              - /url: /
+            - link "v4.1.2" [ref=f75e9] [cursor=pointer]:
+              - /url: https://github.com/coollabsio/coolify/releases/tag/v4.1.2
+          - button / [ref=f75e11]:
+            - img [ref=f75e12]
+            - generic [ref=f75e14]: /
+        - combobox [ref=f75e19]:
+          - option "Switch team" [disabled]
+          - option "Root Team" [selected]
+        - list [ref=f75e20]:
+          - listitem [ref=f75e21]:
+            - list [ref=f75e22]:
+              - listitem [ref=f75e23]:
+                - link "Dashboard" [ref=f75e24] [cursor=pointer]:
+                  - /url: /
+                  - img [ref=f75e25]
+                  - generic [ref=f75e27]: Dashboard
+              - listitem [ref=f75e28]:
+                - link "Projects" [ref=f75e29] [cursor=pointer]:
+                  - /url: /projects
+                  - img [ref=f75e30]
+                  - generic [ref=f75e35]: Projects
+              - listitem [ref=f75e36]:
+                - link "Servers" [ref=f75e37] [cursor=pointer]:
+                  - /url: /servers
+                  - img [ref=f75e38]
+                  - generic [ref=f75e43]: Servers
+              - listitem [ref=f75e44]:
+                - link "Sources" [ref=f75e45] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/sources
+                  - img [ref=f75e46]
+                  - generic [ref=f75e48]: Sources
+              - listitem [ref=f75e49]:
+                - link "Destinations" [ref=f75e50] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/destinations
+                  - img [ref=f75e51]
+                  - generic [ref=f75e53]: Destinations
+              - listitem [ref=f75e54]:
+                - link "S3 Storages" [ref=f75e55] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/storages
+                  - img [ref=f75e56]
+                  - generic [ref=f75e61]: S3 Storages
+              - listitem [ref=f75e62]:
+                - link "Shared Variables" [ref=f75e63] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/shared-variables
+                  - img [ref=f75e64]
+                  - generic [ref=f75e68]: Shared Variables
+              - listitem [ref=f75e69]:
+                - link "Notifications" [ref=f75e70] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/notifications/email
+                  - img [ref=f75e71]
+                  - generic [ref=f75e73]: Notifications
+              - listitem [ref=f75e74]:
+                - link "Keys & Tokens" [ref=f75e75] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/security/private-key
+                  - img [ref=f75e76]
+                  - generic [ref=f75e78]: Keys & Tokens
+              - listitem [ref=f75e79]:
+                - link "Tags" [ref=f75e80] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/tags
+                  - img [ref=f75e81]
+                  - generic [ref=f75e85]: Tags
+              - listitem [ref=f75e86]:
+                - link "Terminal" [ref=f75e87] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/terminal
+                  - img [ref=f75e88]
+                  - generic [ref=f75e91]: Terminal
+              - listitem [ref=f75e92]:
+                - link "Profile" [ref=f75e93] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/profile
+                  - img [ref=f75e94]
+                  - generic [ref=f75e99]: Profile
+              - listitem [ref=f75e100]:
+                - link "Teams" [ref=f75e101] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/team
+                  - img [ref=f75e102]
+                  - generic [ref=f75e110]: Teams
+              - listitem [ref=f75e111]:
+                - link "Settings" [ref=f75e112] [cursor=pointer]:
+                  - /url: /settings
+                  - img [ref=f75e113]
+                  - generic [ref=f75e117]: Settings
+              - listitem [ref=f75e119]:
+                - button "What's New" [ref=f75e121]:
+                  - img [ref=f75e122]
+                  - generic [ref=f75e124]: What's New
+                  - generic "10 unread changelog entries" [ref=f75e125]: 9+
+              - listitem [ref=f75e126]:
+                - generic "Theme switcher" [ref=f75e127]:
+                  - img [ref=f75e128]
+                  - generic [ref=f75e130]: Theme
+                  - generic [ref=f75e131]:
+                    - button "Use light theme" [ref=f75e132]:
+                      - img [ref=f75e133]
+                    - button "Use system theme" [ref=f75e135]:
+                      - img [ref=f75e136]
+                    - button "Use dark theme" [ref=f75e138]:
+                      - img [ref=f75e139]
+              - generic:
+                - listitem:
+                  - generic "No upgrade available"
+              - listitem [ref=f75e141]:
+                - link "Sponsor us" [ref=f75e142] [cursor=pointer]:
+                  - /url: https://coolify.io/sponsorships
+                  - img [ref=f75e143]
+                  - generic [ref=f75e147]: Sponsor us
+              - listitem [ref=f75e148]:
+                - generic "Send us feedback or get help!" [ref=f75e151] [cursor=pointer]:
+                  - img [ref=f75e152]
+                  - generic [ref=f75e154]: Feedback
+              - listitem [ref=f75e155]:
+                - button "Logout" [ref=f75e157]:
+                  - img [ref=f75e158]
+                  - generic [ref=f75e160]: Logout
+      - button "Collapse sidebar" [ref=f75e161]:
+        - img [ref=f75e162]
+    - main [ref=f75e164]:
+      - generic [ref=f75e165]:
+        - generic [ref=f75e166]:
+          - generic [ref=f75e167]:
+            - heading "Server" [level=1] [ref=f75e168]
+            - generic [ref=f75e170]:
+              - generic [ref=f75e174]: Proxy Running
+              - button "Refresh Status" [ref=f75e175]:
+                - img [ref=f75e176]
+            - generic [ref=f75e183]: Sentinel In Sync
+          - generic [ref=f75e184]: localhost
+          - generic [ref=f75e185]:
+            - navigation [ref=f75e186]:
+              - link "Configuration" [ref=f75e187] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp
+              - link "Proxy" [ref=f75e188] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/proxy
+              - link "Sentinel" [ref=f75e189] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/sentinel
+              - link "Resources" [ref=f75e190] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/resources
+              - link "Terminal" [ref=f75e191] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/terminal
+              - link "Security" [ref=f75e192] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/security/patches
+            - generic [ref=f75e195]:
+              - button "Restart Proxy" [ref=f75e197] [cursor=pointer]:
+                - img [ref=f75e198]
+                - text: Restart Proxy
+              - button "Stop Proxy" [ref=f75e203] [cursor=pointer]:
+                - img [ref=f75e204]
+                - text: Stop Proxy
+        - generic [ref=f75e206]:
+          - generic [ref=f75e207]:
+            - link "Configuration" [ref=f75e208] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/proxy
+              - generic [ref=f75e209]: Configuration
+            - link "Dynamic Configurations" [ref=f75e210] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/proxy/dynamic
+              - generic [ref=f75e211]: Dynamic Configurations
+            - link "Logs" [ref=f75e212] [cursor=pointer]:
+              - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp/proxy/logs
+              - generic [ref=f75e213]: Logs
+          - generic [ref=f75e217]:
+            - generic [ref=f75e218]:
+              - heading "Configuration" [level=2] [ref=f75e219]
+              - button "Switch Proxy" [ref=f75e220] [cursor=pointer]
+              - button "Save" [ref=f75e221] [cursor=pointer]
+            - generic [ref=f75e222]: Configure your proxy settings and advanced options.
+            - heading "Advanced" [level=3] [ref=f75e223]
+            - generic [ref=f75e224]:
+              - generic [ref=f75e226]:
+                - generic [ref=f75e227]:
+                  - text: Generate labels only for Traefik
+                  - img [ref=f75e230] [cursor=pointer]
+                - checkbox "Generate labels only for Traefik" [ref=f75e232] [cursor=pointer]
+              - generic [ref=f75e234]:
+                - generic [ref=f75e235]:
+                  - text: Override default request handler
+                  - img [ref=f75e238] [cursor=pointer]
+                - checkbox "Override default request handler" [checked] [ref=f75e240] [cursor=pointer]
+              - generic [ref=f75e241]:
+                - generic [ref=f75e242]: Redirect to (optional)
+                - textbox "https://app.coolify.io" [ref=f75e243]
+            - generic [ref=f75e245]:
+              - heading "Traefik (Coolify Proxy)" [level=3] [ref=f75e246]
+              - button "Reset Configuration" [ref=f75e248] [cursor=pointer]
+            - generic [ref=f75e250]:
+              - generic [ref=f75e251]: Configuration file ( /data/coolify/proxy/docker-compose.yml )
+              - generic [ref=f75e254]:
+                - code [ref=f75e256]:
+                  - textbox "Editor content" [ref=f75e260]
+                - generic [ref=f75e261]: Start typing here
+  - img
+  - list
+  - generic [ref=f75e262]:
+    - alert
+    - alert

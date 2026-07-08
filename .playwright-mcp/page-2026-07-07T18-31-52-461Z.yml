@@ -1,0 +1,65 @@
+- generic [ref=f63e3]:
+  - complementary [ref=f63e4]:
+    - generic [ref=f63e6]:
+      - generic [ref=f63e8]: A
+      - generic [ref=f63e9]:
+        - heading "ATHENA OS" [level=1] [ref=f63e10]
+        - paragraph [ref=f63e11]: Dashboard
+    - navigation [ref=f63e12]:
+      - link "Overview" [ref=f63e13] [cursor=pointer]:
+        - /url: /
+        - img [ref=f63e14]
+        - generic [ref=f63e19]: Overview
+      - link "Pedidos" [ref=f63e20] [cursor=pointer]:
+        - /url: /orders
+        - img [ref=f63e21]
+        - generic [ref=f63e25]: Pedidos
+      - link "Estoque" [ref=f63e26] [cursor=pointer]:
+        - /url: /inventory
+        - img [ref=f63e27]
+        - generic [ref=f63e37]: Estoque
+      - link "Producao" [ref=f63e38] [cursor=pointer]:
+        - /url: /production
+        - img [ref=f63e39]
+        - generic [ref=f63e41]: Producao
+      - link "Moldes & CNC" [ref=f63e42] [cursor=pointer]:
+        - /url: /molds
+        - img [ref=f63e43]
+        - generic [ref=f63e49]: Moldes & CNC
+      - link "Clientes" [ref=f63e50] [cursor=pointer]:
+        - /url: /customers
+        - img [ref=f63e51]
+        - generic [ref=f63e56]: Clientes
+      - link "Financeiro" [ref=f63e57] [cursor=pointer]:
+        - /url: /finance
+        - img [ref=f63e58]
+        - generic [ref=f63e60]: Financeiro
+      - link "Tributario" [ref=f63e61] [cursor=pointer]:
+        - /url: /tax-intelligence
+        - img [ref=f63e62]
+        - generic [ref=f63e66]: Tributario
+      - link "Admin" [ref=f63e67] [cursor=pointer]:
+        - /url: /admin
+        - img [ref=f63e68]
+        - generic [ref=f63e70]: Admin
+      - link "Config" [ref=f63e71] [cursor=pointer]:
+        - /url: /settings
+        - img [ref=f63e72]
+        - generic [ref=f63e73]: Config
+      - link "Chat Hermes" [ref=f63e74] [cursor=pointer]:
+        - /url: /chat
+        - img [ref=f63e75]
+        - generic [ref=f63e77]: Chat Hermes
+  - main [ref=f63e78]:
+    - generic [ref=f63e164]:
+      - generic [ref=f63e165]:
+        - img [ref=f63e166]
+        - heading "Hermes Chat" [level=2] [ref=f63e168]
+      - generic [ref=f63e169]:
+        - generic [ref=f63e171]: Olá! Sou o assistente Hermes. Como posso ajudar?
+        - generic [ref=f63e179]: como esta a producao hoje?
+        - generic [ref=f63e181]: "{\"error\":\"Hermes error\",\"status\":401}"
+      - generic [ref=f63e172]:
+        - textbox "Digite sua mensagem..." [ref=f63e173]
+        - button [ref=f63e174]:
+          - img [ref=f63e175]

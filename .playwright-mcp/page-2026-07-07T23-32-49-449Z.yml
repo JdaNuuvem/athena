@@ -1,0 +1,25 @@
+- generic [active] [ref=f11e1]:
+  - generic [ref=f11e2]:
+    - generic [ref=f11e3]:
+      - generic [ref=f11e4]:
+        - link "Coolify" [ref=f11e5] [cursor=pointer]:
+          - /url: /
+        - combobox [ref=f11e9]:
+          - option "Switch team" [disabled]
+          - option "Root Team" [selected]
+      - button "Open sidebar" [ref=f11e10]:
+        - generic [ref=f11e11]: Open sidebar
+        - img [ref=f11e12]
+    - main [ref=f11e14]:
+      - generic [ref=f11e15]:
+        - generic [ref=f11e16]:
+          - heading "Servers" [level=1] [ref=f11e17]
+          - button "+ Add" [ref=f11e19] [cursor=pointer]
+        - generic [ref=f11e20]: All your servers are here.
+        - link "localhost This is the server where Coolify is running on. Don't delete this!" [ref=f11e22] [cursor=pointer]:
+          - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp
+          - generic [ref=f11e23]:
+            - generic [ref=f11e24]: localhost
+            - generic [ref=f11e25]: This is the server where Coolify is running on. Don't delete this!
+  - img
+  - list

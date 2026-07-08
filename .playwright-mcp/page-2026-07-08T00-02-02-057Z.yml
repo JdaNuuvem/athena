@@ -1,0 +1,43 @@
+- generic [active] [ref=f42e1]:
+  - generic [ref=f42e2]:
+    - generic [ref=f42e3]:
+      - generic [ref=f42e4]:
+        - link "Coolify" [ref=f42e5] [cursor=pointer]:
+          - /url: /
+        - combobox [ref=f42e9]:
+          - option "Switch team" [disabled]
+          - option "Root Team" [selected]
+      - button "Open sidebar" [ref=f42e10]:
+        - generic [ref=f42e11]: Open sidebar
+        - img [ref=f42e12]
+    - main [ref=f42e14]:
+      - generic [ref=f42e15]:
+        - heading "Dashboard" [level=1] [ref=f42e16]
+        - generic [ref=f42e17]: Your self-hosted infrastructure.
+        - generic [ref=f42e18]:
+          - generic [ref=f42e19]:
+            - heading "Projects" [level=3] [ref=f42e20]
+            - button [ref=f42e23] [cursor=pointer]:
+              - img [ref=f42e24]
+          - generic [ref=f42e27] [cursor=pointer]:
+            - link [ref=f42e28]:
+              - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr
+            - generic [ref=f42e29]:
+              - generic [ref=f42e31]: My first project
+              - generic [ref=f42e32]:
+                - link "+ Add Resource" [ref=f42e33]:
+                  - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/new
+                - link "Settings" [ref=f42e34]:
+                  - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/edit
+        - generic [ref=f42e35]:
+          - generic [ref=f42e36]:
+            - heading "Servers" [level=3] [ref=f42e37]
+            - button [ref=f42e40] [cursor=pointer]:
+              - img [ref=f42e41]
+          - link "localhost This is the server where Coolify is running on. Don't delete this!" [ref=f42e44] [cursor=pointer]:
+            - /url: http://177.7.45.242:8000/server/w7kcpwqhb2up103ki9u2e5dp
+            - generic [ref=f42e45]:
+              - generic [ref=f42e46]: localhost
+              - generic [ref=f42e47]: This is the server where Coolify is running on. Don't delete this!
+  - img
+  - list

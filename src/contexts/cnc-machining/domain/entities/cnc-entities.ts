@@ -1,3 +1,0 @@
-export interface CNCJob { id: string; machineId: string; programId: string; materialType: string; status: 'scheduled'|'running'|'completed'|'failed'|'inspected'; partsProduced: number; partsDefective: number; scheduledAt: string; startedAt?: string; completedAt?: string; createdAt: string }
-export interface CNCTool { id: string; toolNumber: number; machineId: string; wearMicrons: number; thresholdMicrons: number; cyclesCompleted: number; estimatedCyclesRemaining: number; status: 'active'|'warning'|'replaced' }
-export interface MachineDowntime { id: string; machineId: string; reason: string; startedAt: string; endedAt?: string; durationMin?: number }

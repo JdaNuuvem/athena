@@ -1,0 +1,185 @@
+- generic [active] [ref=f70e1]:
+  - generic [ref=f70e2]:
+    - generic [ref=f70e3]:
+      - navigation [ref=f70e5]:
+        - generic [ref=f70e6]:
+          - generic [ref=f70e7]:
+            - link "Coolify" [ref=f70e8] [cursor=pointer]:
+              - /url: /
+            - link "v4.1.2" [ref=f70e9] [cursor=pointer]:
+              - /url: https://github.com/coollabsio/coolify/releases/tag/v4.1.2
+          - button / [ref=f70e11]:
+            - img [ref=f70e12]
+            - generic [ref=f70e14]: /
+        - combobox [ref=f70e19]:
+          - option "Switch team" [disabled]
+          - option "Root Team" [selected]
+        - list [ref=f70e20]:
+          - listitem [ref=f70e21]:
+            - list [ref=f70e22]:
+              - listitem [ref=f70e23]:
+                - link "Dashboard" [ref=f70e24] [cursor=pointer]:
+                  - /url: /
+                  - img [ref=f70e25]
+                  - generic [ref=f70e27]: Dashboard
+              - listitem [ref=f70e28]:
+                - link "Projects" [ref=f70e29] [cursor=pointer]:
+                  - /url: /projects
+                  - img [ref=f70e30]
+                  - generic [ref=f70e35]: Projects
+              - listitem [ref=f70e36]:
+                - link "Servers" [ref=f70e37] [cursor=pointer]:
+                  - /url: /servers
+                  - img [ref=f70e38]
+                  - generic [ref=f70e43]: Servers
+              - listitem [ref=f70e44]:
+                - link "Sources" [ref=f70e45] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/sources
+                  - img [ref=f70e46]
+                  - generic [ref=f70e48]: Sources
+              - listitem [ref=f70e49]:
+                - link "Destinations" [ref=f70e50] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/destinations
+                  - img [ref=f70e51]
+                  - generic [ref=f70e53]: Destinations
+              - listitem [ref=f70e54]:
+                - link "S3 Storages" [ref=f70e55] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/storages
+                  - img [ref=f70e56]
+                  - generic [ref=f70e61]: S3 Storages
+              - listitem [ref=f70e62]:
+                - link "Shared Variables" [ref=f70e63] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/shared-variables
+                  - img [ref=f70e64]
+                  - generic [ref=f70e68]: Shared Variables
+              - listitem [ref=f70e69]:
+                - link "Notifications" [ref=f70e70] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/notifications/email
+                  - img [ref=f70e71]
+                  - generic [ref=f70e73]: Notifications
+              - listitem [ref=f70e74]:
+                - link "Keys & Tokens" [ref=f70e75] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/security/private-key
+                  - img [ref=f70e76]
+                  - generic [ref=f70e78]: Keys & Tokens
+              - listitem [ref=f70e79]:
+                - link "Tags" [ref=f70e80] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/tags
+                  - img [ref=f70e81]
+                  - generic [ref=f70e85]: Tags
+              - listitem [ref=f70e86]:
+                - link "Terminal" [ref=f70e87] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/terminal
+                  - img [ref=f70e88]
+                  - generic [ref=f70e91]: Terminal
+              - listitem [ref=f70e92]:
+                - link "Profile" [ref=f70e93] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/profile
+                  - img [ref=f70e94]
+                  - generic [ref=f70e99]: Profile
+              - listitem [ref=f70e100]:
+                - link "Teams" [ref=f70e101] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/team
+                  - img [ref=f70e102]
+                  - generic [ref=f70e110]: Teams
+              - listitem [ref=f70e111]:
+                - link "Settings" [ref=f70e112] [cursor=pointer]:
+                  - /url: /settings
+                  - img [ref=f70e113]
+                  - generic [ref=f70e117]: Settings
+              - listitem [ref=f70e119]:
+                - button "What's New" [ref=f70e121]:
+                  - img [ref=f70e122]
+                  - generic [ref=f70e124]: What's New
+                  - generic "10 unread changelog entries" [ref=f70e125]: 9+
+              - listitem [ref=f70e126]:
+                - generic "Theme switcher" [ref=f70e127]:
+                  - img [ref=f70e128]
+                  - generic [ref=f70e130]: Theme
+                  - generic [ref=f70e131]:
+                    - button "Use light theme" [ref=f70e132]:
+                      - img [ref=f70e133]
+                    - button "Use system theme" [ref=f70e135]:
+                      - img [ref=f70e136]
+                    - button "Use dark theme" [ref=f70e138]:
+                      - img [ref=f70e139]
+              - generic:
+                - listitem:
+                  - generic "No upgrade available"
+              - listitem [ref=f70e141]:
+                - link "Sponsor us" [ref=f70e142] [cursor=pointer]:
+                  - /url: https://coolify.io/sponsorships
+                  - img [ref=f70e143]
+                  - generic [ref=f70e147]: Sponsor us
+              - listitem [ref=f70e148]:
+                - generic "Send us feedback or get help!" [ref=f70e151] [cursor=pointer]:
+                  - img [ref=f70e152]
+                  - generic [ref=f70e154]: Feedback
+              - listitem [ref=f70e155]:
+                - button "Logout" [ref=f70e157]:
+                  - img [ref=f70e158]
+                  - generic [ref=f70e160]: Logout
+      - button "Collapse sidebar" [ref=f70e161]:
+        - img [ref=f70e162]
+    - main [ref=f70e164]:
+      - generic [ref=f70e165]:
+        - heading "Logs" [level=1] [ref=f70e166]
+        - navigation [ref=f70e167]:
+          - navigation [ref=f70e168]:
+            - list [ref=f70e169]:
+              - listitem [ref=f70e170]:
+                - generic [ref=f70e171]:
+                  - link "My first project" [ref=f70e172] [cursor=pointer]:
+                    - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o
+                  - button [ref=f70e173]:
+                    - img [ref=f70e174]
+              - listitem [ref=f70e176]:
+                - generic [ref=f70e177]:
+                  - link "production" [ref=f70e178] [cursor=pointer]:
+                    - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr
+                  - button [ref=f70e179]:
+                    - img [ref=f70e180]
+              - listitem [ref=f70e182]:
+                - link "athena:main-k2h04qpg9n76ymy8mcfnw9sf (localhost)" [ref=f70e183] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi
+              - generic [ref=f70e184]:
+                - generic [ref=f70e186]:
+                  - link "Running" [ref=f70e189] [cursor=pointer]:
+                    - /url: https://github.com/JdaNuuvem/athena/commit/9045d64ebd97963dff1b81d0bb30c7cb508cf173
+                  - generic [ref=f70e190]: (unhealthy)
+                  - img [ref=f70e194] [cursor=pointer]
+                - button "Refresh Status" [ref=f70e195]:
+                  - img [ref=f70e196]
+          - generic [ref=f70e198]:
+            - navigation [ref=f70e199]:
+              - link "Configuration" [ref=f70e200] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi
+              - link "Deployments" [ref=f70e201] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/deployment
+              - link "Logs" [ref=f70e202] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/logs
+                - generic [ref=f70e203]: Logs
+              - link "Terminal" [ref=f70e204] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/terminal
+              - button "Links" [ref=f70e207]:
+                - generic [ref=f70e208]: Links
+                - img [ref=f70e209]
+            - generic [ref=f70e212]:
+              - button "Advanced" [ref=f70e215]:
+                - generic [ref=f70e216]: Advanced
+                - img [ref=f70e217]
+              - generic [ref=f70e219]:
+                - button "Redeploy" [ref=f70e220] [cursor=pointer]:
+                  - img [ref=f70e221]
+                  - text: Redeploy
+                - button "Restart" [ref=f70e223] [cursor=pointer]:
+                  - img [ref=f70e224]
+                  - text: Restart
+                - button "Stop" [ref=f70e229] [cursor=pointer]:
+                  - img [ref=f70e230]
+                  - text: Stop
+        - generic [ref=f70e232]:
+          - heading "Logs" [level=2] [ref=f70e233]
+          - generic [ref=f70e234]: Loading containers...
+  - img
+  - list

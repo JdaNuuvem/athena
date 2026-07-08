@@ -1,0 +1,140 @@
+- generic [active] [ref=f31e1]:
+  - generic [ref=f31e2]:
+    - generic [ref=f31e11]:
+      - generic [ref=f31e12]:
+        - link "Coolify" [ref=f31e13] [cursor=pointer]:
+          - /url: /
+        - combobox [ref=f31e17]:
+          - option "Switch team" [disabled]
+          - option "Root Team" [selected]
+      - button "Open sidebar" [ref=f31e18]:
+        - generic [ref=f31e19]: Open sidebar
+        - img [ref=f31e20]
+    - main [ref=f31e22]:
+      - generic [ref=f31e23]:
+        - heading "Deployment" [level=1] [ref=f31e24]
+        - navigation [ref=f31e25]:
+          - navigation [ref=f31e26]:
+            - list [ref=f31e27]:
+              - listitem [ref=f31e28]:
+                - generic [ref=f31e29]:
+                  - link "My first project" [ref=f31e30] [cursor=pointer]:
+                    - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o
+                  - button [ref=f31e31]:
+                    - img [ref=f31e32]
+              - listitem [ref=f31e34]:
+                - generic [ref=f31e35]:
+                  - link "production" [ref=f31e36] [cursor=pointer]:
+                    - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr
+                  - button [ref=f31e37]:
+                    - img [ref=f31e38]
+              - listitem [ref=f31e40]:
+                - link "athena:main-k2h04qpg9n76ymy8mcfnw9sf (localhost)" [ref=f31e41] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi
+              - generic [ref=f31e42]:
+                - generic [ref=f31e44]:
+                  - link "Running" [ref=f31e47] [cursor=pointer]:
+                    - /url: https://github.com/JdaNuuvem/athena/commit/1faa1992c48495f1a209eef373fd2e8d6c6d496c
+                  - generic [ref=f31e48]: (healthy)
+                - button "Refresh Status" [ref=f31e49]:
+                  - img [ref=f31e50]
+          - generic [ref=f31e52]:
+            - navigation [ref=f31e53]:
+              - link "Configuration" [ref=f31e54] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi
+              - link "Deployments" [ref=f31e55] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/deployment
+              - link "Logs" [ref=f31e56] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/logs
+                - generic [ref=f31e57]: Logs
+              - link "Terminal" [ref=f31e58] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/terminal
+              - button "Links" [ref=f31e61]:
+                - generic [ref=f31e62]: Links
+                - img [ref=f31e63]
+            - generic [ref=f31e66]:
+              - button "Advanced" [ref=f31e69]:
+                - generic [ref=f31e70]: Advanced
+                - img [ref=f31e71]
+              - generic [ref=f31e73]:
+                - button "Redeploy" [ref=f31e74] [cursor=pointer]:
+                  - img [ref=f31e75]
+                  - text: Redeploy
+                - button "Restart" [ref=f31e77] [cursor=pointer]:
+                  - img [ref=f31e78]
+                  - text: Restart
+                - button "Stop" [ref=f31e83] [cursor=pointer]:
+                  - img [ref=f31e84]
+                  - text: Stop
+        - generic [ref=f31e86]:
+          - heading "Deployment Log" [level=2] [ref=f31e88]
+          - generic [ref=f31e91]:
+            - generic [ref=f31e92]:
+              - generic [ref=f31e94]:
+                - generic [ref=f31e95]: Deployment is
+                - generic [ref=f31e96]: Finished
+              - generic [ref=f31e100]:
+                - generic [ref=f31e101]:
+                  - img [ref=f31e102]
+                  - textbox "Find in logs" [ref=f31e104]
+                - generic [ref=f31e105]:
+                  - button "Copy Logs" [ref=f31e106]:
+                    - img [ref=f31e107]
+                  - button "Download Logs" [ref=f31e110]:
+                    - img [ref=f31e111]
+                  - button "Toggle Timestamps" [ref=f31e113]:
+                    - img [ref=f31e114]
+                  - button "Show Debug Logs" [ref=f31e116]:
+                    - img [ref=f31e117]
+                  - button "Follow Logs" [ref=f31e119]:
+                    - img [ref=f31e120]
+                  - button "Fullscreen" [ref=f31e122]:
+                    - img [ref=f31e123]
+            - generic [ref=f31e128]:
+              - generic [ref=f31e129]:
+                - generic [ref=f31e130]: 2026-Jul-07 23:52:50.084923
+                - generic [ref=f31e131]: Docker 29.6.1 with BuildKit and Buildx detected on deployment server (localhost).
+              - generic [ref=f31e132]:
+                - generic [ref=f31e133]: 2026-Jul-07 23:52:50.089581
+                - generic [ref=f31e134]: Starting deployment of JdaNuuvem/athena:master to localhost.
+              - generic [ref=f31e135]:
+                - generic [ref=f31e136]: 2026-Jul-07 23:52:50.331752
+                - generic [ref=f31e137]: "Preparing container with helper image: ghcr.io/coollabsio/coolify-helper:1.0.14"
+              - generic [ref=f31e138]:
+                - generic [ref=f31e139]: 2026-Jul-07 23:52:51.153529
+                - generic [ref=f31e140]: "----------------------------------------"
+              - generic [ref=f31e141]:
+                - generic [ref=f31e142]: 2026-Jul-07 23:52:51.157811
+                - generic [ref=f31e143]: Importing JdaNuuvem/athena:master (commit sha 9045d64ebd97963dff1b81d0bb30c7cb508cf173) to /artifacts/ot602dm8kdr1ezq79wgpmva1.
+              - generic [ref=f31e144]:
+                - generic [ref=f31e145]: 2026-Jul-07 23:52:52.295955
+                - generic [ref=f31e146]: Image not found (a181zp5xj2ety5z82mopyqzi:9045d64ebd97963dff1b81d0bb30c7cb508cf173). Building new image.
+              - generic [ref=f31e147]:
+                - generic [ref=f31e148]: 2026-Jul-07 23:52:53.717160
+                - generic [ref=f31e149]: "----------------------------------------"
+              - generic [ref=f31e150]:
+                - generic [ref=f31e151]: 2026-Jul-07 23:52:53.722267
+                - generic [ref=f31e152]: Building docker image started.
+              - generic [ref=f31e153]:
+                - generic [ref=f31e154]: 2026-Jul-07 23:52:53.726541
+                - generic [ref=f31e155]: To check the current progress, click on Show Debug Logs.
+              - generic [ref=f31e156]:
+                - generic [ref=f31e157]: 2026-Jul-07 23:53:53.434690
+                - generic [ref=f31e158]: Building docker image completed.
+              - generic [ref=f31e159]:
+                - generic [ref=f31e160]: 2026-Jul-07 23:53:53.730293
+                - generic [ref=f31e161]: "----------------------------------------"
+              - generic [ref=f31e162]:
+                - generic [ref=f31e163]: 2026-Jul-07 23:53:53.735427
+                - generic [ref=f31e164]: Application has ports mapped to the host system, rolling update is not supported.
+              - generic [ref=f31e165]:
+                - generic [ref=f31e166]: 2026-Jul-07 23:53:53.740506
+                - generic [ref=f31e167]: Removing old containers.
+              - generic [ref=f31e168]:
+                - generic [ref=f31e169]: 2026-Jul-07 23:53:54.920037
+                - generic [ref=f31e170]: New container started.
+              - generic [ref=f31e171]:
+                - generic [ref=f31e172]: 2026-Jul-07 23:53:55.442973
+                - generic [ref=f31e173]: "Gracefully shutting down build container: ot602dm8kdr1ezq79wgpmva1"
+  - img
+  - list

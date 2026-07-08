@@ -1,0 +1,128 @@
+- generic [active] [ref=f35e1]:
+  - generic [ref=f35e2]:
+    - generic [ref=f35e3]:
+      - generic [ref=f35e4]:
+        - link "Coolify" [ref=f35e5] [cursor=pointer]:
+          - /url: /
+        - combobox [ref=f35e9]:
+          - option "Switch team" [disabled]
+          - option "Root Team" [selected]
+      - button "Open sidebar" [ref=f35e10]:
+        - generic [ref=f35e11]: Open sidebar
+        - img [ref=f35e12]
+    - main [ref=f35e14]:
+      - generic [ref=f35e15]:
+        - heading "Deployment" [level=1] [ref=f35e16]
+        - navigation [ref=f35e17]:
+          - navigation [ref=f35e18]:
+            - list [ref=f35e19]:
+              - listitem [ref=f35e20]:
+                - generic [ref=f35e21]:
+                  - link "My first project" [ref=f35e22] [cursor=pointer]:
+                    - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o
+                  - button [ref=f35e23]:
+                    - img [ref=f35e24]
+              - listitem [ref=f35e26]:
+                - generic [ref=f35e27]:
+                  - link "production" [ref=f35e28] [cursor=pointer]:
+                    - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr
+                  - button [ref=f35e29]:
+                    - img [ref=f35e30]
+              - listitem [ref=f35e32]:
+                - link "athena:main-k2h04qpg9n76ymy8mcfnw9sf (localhost)" [ref=f35e33] [cursor=pointer]:
+                  - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi
+              - generic [ref=f35e34]:
+                - generic [ref=f35e36]:
+                  - link "Running" [ref=f35e39] [cursor=pointer]:
+                    - /url: https://github.com/JdaNuuvem/athena/commit/9045d64ebd97963dff1b81d0bb30c7cb508cf173
+                  - generic [ref=f35e40]: (healthy)
+                - button "Refresh Status" [ref=f35e41]:
+                  - img [ref=f35e42]
+          - generic [ref=f35e44]:
+            - navigation [ref=f35e45]:
+              - link "Configuration" [ref=f35e46] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi
+              - link "Deployments" [ref=f35e47] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/deployment
+              - link "Logs" [ref=f35e48] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/logs
+                - generic [ref=f35e49]: Logs
+              - link "Terminal" [ref=f35e50] [cursor=pointer]:
+                - /url: http://177.7.45.242:8000/project/ms4tg7zfr6chjyg4nnku9u1o/environment/rx4y3uxy042an81bjjsi5sbr/application/a181zp5xj2ety5z82mopyqzi/terminal
+              - button "Links" [ref=f35e53]:
+                - generic [ref=f35e54]: Links
+                - img [ref=f35e55]
+            - generic [ref=f35e58]:
+              - button "Advanced" [ref=f35e61]:
+                - generic [ref=f35e62]: Advanced
+                - img [ref=f35e63]
+              - generic [ref=f35e65]:
+                - button "Redeploy" [ref=f35e66] [cursor=pointer]:
+                  - img [ref=f35e67]
+                  - text: Redeploy
+                - button "Restart" [ref=f35e69] [cursor=pointer]:
+                  - img [ref=f35e70]
+                  - text: Restart
+                - button "Stop" [ref=f35e75] [cursor=pointer]:
+                  - img [ref=f35e76]
+                  - text: Stop
+        - generic [ref=f35e78]:
+          - heading "Deployment Log" [level=2] [ref=f35e80]
+          - generic [ref=f35e82]:
+            - generic [ref=f35e83]:
+              - generic [ref=f35e85]:
+                - generic [ref=f35e86]: Deployment is
+                - generic [ref=f35e87]: Finished
+              - generic [ref=f35e88]:
+                - generic [ref=f35e89]:
+                  - img [ref=f35e90]
+                  - textbox "Find in logs" [ref=f35e92]
+                - generic [ref=f35e93]:
+                  - button "Copy Logs" [ref=f35e94]:
+                    - img [ref=f35e95]
+                  - button "Download Logs" [ref=f35e98]:
+                    - img [ref=f35e99]
+                  - button "Toggle Timestamps" [ref=f35e101]:
+                    - img [ref=f35e102]
+                  - button "Show Debug Logs" [ref=f35e104]:
+                    - img [ref=f35e105]
+                  - button "Follow Logs" [ref=f35e107]:
+                    - img [ref=f35e108]
+                  - button "Fullscreen" [ref=f35e110]:
+                    - img [ref=f35e111]
+            - generic [ref=f35e116]:
+              - generic [ref=f35e117]:
+                - generic [ref=f35e118]: 2026-Jul-07 23:55:14.014234
+                - generic [ref=f35e119]: Docker 29.6.1 with BuildKit and Buildx detected on deployment server (localhost).
+              - generic [ref=f35e120]:
+                - generic [ref=f35e121]: 2026-Jul-07 23:55:14.020011
+                - generic [ref=f35e122]: Starting deployment of JdaNuuvem/athena:master to localhost.
+              - generic [ref=f35e123]:
+                - generic [ref=f35e124]: 2026-Jul-07 23:55:14.265176
+                - generic [ref=f35e125]: "Preparing container with helper image: ghcr.io/coollabsio/coolify-helper:1.0.14"
+              - generic [ref=f35e126]:
+                - generic [ref=f35e127]: 2026-Jul-07 23:55:15.075382
+                - generic [ref=f35e128]: "----------------------------------------"
+              - generic [ref=f35e129]:
+                - generic [ref=f35e130]: 2026-Jul-07 23:55:15.079924
+                - generic [ref=f35e131]: Importing JdaNuuvem/athena:master (commit sha 9045d64ebd97963dff1b81d0bb30c7cb508cf173) to /artifacts/r12sh7ddlvijweljnrpi84b2.
+              - generic [ref=f35e132]:
+                - generic [ref=f35e133]: 2026-Jul-07 23:55:16.303364
+                - generic [ref=f35e134]: No build configuration changed & image found (a181zp5xj2ety5z82mopyqzi:9045d64ebd97963dff1b81d0bb30c7cb508cf173) with the same Git Commit SHA. Build step skipped.
+              - generic [ref=f35e135]:
+                - generic [ref=f35e136]: 2026-Jul-07 23:55:17.140141
+                - generic [ref=f35e137]: "----------------------------------------"
+              - generic [ref=f35e138]:
+                - generic [ref=f35e139]: 2026-Jul-07 23:55:17.144431
+                - generic [ref=f35e140]: Application has ports mapped to the host system, rolling update is not supported.
+              - generic [ref=f35e141]:
+                - generic [ref=f35e142]: 2026-Jul-07 23:55:17.148648
+                - generic [ref=f35e143]: Removing old containers.
+              - generic [ref=f35e144]:
+                - generic [ref=f35e145]: 2026-Jul-07 23:55:18.323359
+                - generic [ref=f35e146]: New container started.
+              - generic [ref=f35e147]:
+                - generic [ref=f35e148]: 2026-Jul-07 23:55:18.697242
+                - generic [ref=f35e149]: "Gracefully shutting down build container: r12sh7ddlvijweljnrpi84b2"
+  - img
+  - list
