@@ -13,6 +13,7 @@ import Integrations from './pages/Integrations'
 import BlingIntegration from './pages/BlingIntegration'
 import HermesIntegration from './pages/HermesIntegration'
 import ShopeeAdsIntegration from './pages/ShopeeAdsIntegration'
+import Produtos from './pages/Produtos'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuth()
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="/hermes" element={<ProtectedRoute><Layout><HermesIntegration /></Layout></ProtectedRoute>} />
         <Route path="/shopee-ads" element={<ProtectedRoute><Layout><ShopeeAdsIntegration /></Layout></ProtectedRoute>} />
         <Route path="/integrations" element={<ProtectedRoute><Layout><Integrations /></Layout></ProtectedRoute>} />
+        <Route path="/produtos" element={<ProtectedRoute><Layout><Produtos /></Layout></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AuthProvider>
