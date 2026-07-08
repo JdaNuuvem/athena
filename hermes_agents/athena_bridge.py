@@ -1382,6 +1382,63 @@ def bling_webhook_pedido():
             return {"error": str(e)}
     return jsonify(run_async(_go()))
 
+@app.route('/api/bling/config', methods=['GET'])
+def bling_config_get():
+    from bling_erp import status
+    s = status()
+    return jsonify({
+        "api_key": s.get("autenticado", False) and "configurado" or "",
+        "sandbox": False, "auto_sync": False, "sync_interval_minutes": 30,
+        "sync_products": True, "sync_orders": True, "sync_invoices": False, "sync_receivables": False, "sync_stock": False,
+        "auth_url": s.get("auth_url", ""), "autenticado": s.get("autenticado", False),
+    })
+
+@app.route('/api/bling/config', methods=['PUT'])
+def bling_config_put():
+    from core.config import set_config
+    data = request.json or {}
+    if data.get("api_key"):
+        set_config("bling", "api_key", data["api_key"])
+    return jsonify({"success": True})
+
+@app.route('/api/bling/test', methods=['POST'])
+def bling_test():
+    from bling_erp import status
+    s = status()
+    return jsonify({"success": s.get("autenticado", False), "message": "Conectado" if s.get("autenticado") else "Não autenticado"})
+
+@app.route('/api/bling/products', methods=['GET'])
+def bling_products():
+    from bling_erp import listar_produtos
+    r = listar_produtos()
+    dados = r.get("data", [])
+    return jsonify([{
+        "id": p.get("id", 0), "codigo": p.get("codigo", ""), "descricao": p.get("descricao", ""),
+        "preco": float(p.get("preco", 0) or 0), "estoque_atual": int(p.get("estoqueAtual", 0) or 0),
+        "estoque_minimo": int(p.get("estoqueMinimo", 0) or 0), "situacao": p.get("situacao", "Ativo"),
+    } for p in dados])
+
+@app.route('/api/bling/orders', methods=['GET'])
+def bling_orders():
+    from bling_erp import listar_pedidos
+    r = listar_pedidos()
+    dados = r.get("data", [])
+    return jsonify([{
+        "id": p.get("id", 0), "numero": str(p.get("numero", "")), "data": p.get("dataEmissao", ""),
+        "total_venda": float(p.get("totalVenda", 0) or 0), "situacao": p.get("situacao", ""),
+        "contato_nome": p.get("contato", {}).get("nome", ""), "imported_at": "",
+    } for p in dados])
+
+@app.route('/api/bling/sync/products', methods=['POST'])
+def bling_sync_products():
+    from bling_erp import sincronizar_produtos
+    return jsonify(sincronizar_produtos())
+
+@app.route('/api/bling/sync/orders', methods=['POST'])
+def bling_sync_orders():
+    from bling_erp import sincronizar_pedidos
+    return jsonify(sincronizar_pedidos())
+
 @app.route('/api/test/bling', methods=['GET'])
 def test_bling():
     from bling_erp import status
