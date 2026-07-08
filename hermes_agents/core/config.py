@@ -16,7 +16,11 @@ _config = {
     },
     "bling": {
         "api_key": "",
-        "api_url": "https://bling.com.br/Api/v3"
+        "api_url": "https://bling.com.br/Api/v3",
+        "client_id": "",
+        "client_secret": "",
+        "access_token": "",
+        "refresh_token": ""
     },
     "shopee": {
         "partner_id": "",
