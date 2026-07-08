@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+const n = (v: unknown, d = 0) => { const x = Number(v); return isNaN(x) ? d : x }
 import { useApi } from '../hooks/useAuth'
 
 interface ProdutoLoja {
@@ -92,9 +93,9 @@ export default function Produtos() {
                     <td className="py-3 px-4 text-white font-medium">{p.nome}</td>
                     <td className="py-3 px-4 text-right text-white">{p.total_lojas}</td>
                     <td className="py-3 px-4 text-right text-white">{p.vendidos_30d}</td>
-                    <td className="py-3 px-4 text-right text-white">R$ {p.receita_30d.toFixed(2)}</td>
-                    <td className={`py-3 px-4 text-right font-medium ${p.margem_pct >= 30 ? 'text-green-400' : p.margem_pct >= 15 ? 'text-athena-accent' : p.margem_pct > 0 ? 'text-yellow-400' : 'text-red-400'}`}>
-                      {p.margem_pct.toFixed(1)}%
+                    <td className="py-3 px-4 text-right text-white">R$ {n(p.receita_30d).toFixed(2)}</td>
+                    <td className={`py-3 px-4 text-right font-medium ${n(p.margem_pct) >= 30 ? 'text-green-400' : n(p.margem_pct) >= 15 ? 'text-athena-accent' : n(p.margem_pct) > 0 ? 'text-yellow-400' : 'text-red-400'}`}>
+                      {n(p.margem_pct).toFixed(1)}%
                     </td>
                     <td className="py-3 px-4 text-center">
                       <button onClick={() => setExpandido(expandido === p.sku ? null : p.sku)}
@@ -111,7 +112,7 @@ export default function Produtos() {
                             <div key={`${p.sku}-${e.loja}`} className="bg-athena-900 rounded p-2 border border-athena-700">
                               <p className="text-athena-400 text-xs uppercase">{e.loja}</p>
                               <p className="text-white font-medium text-sm mt-1">
-                                R$ {e.preco.toFixed(2)}
+                                R$ {n(e.preco).toFixed(2)}
                               </p>
                               <span className={`text-xs px-1.5 py-0.5 rounded ${e.status === 'ativo' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
                                 {e.status}
