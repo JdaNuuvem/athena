@@ -157,15 +157,17 @@ CORS(app)
 
 @app.route('/api/auth/login', methods=['POST'])
 def simple_login():
-    """Login simples usando API key."""
-    api_key = request.json.get('api_key', '')
-    if api_key == API_TOKEN:
-        return jsonify({
-            "token": API_TOKEN,
-            "role": "admin",
-            "name": "Athena Admin"
-        })
-    return jsonify({"error": "Invalid API key"}), 401
+    """Login com username/password ou API key."""
+    data = request.json or {}
+    username = data.get('username', '')
+    password = data.get('password', '')
+    api_key = data.get('api_key', '')
+
+    if username == 'admin' and password == 'athena-admin-2026':
+        return jsonify({"token": API_TOKEN, "role": "admin", "name": "Athena Admin"})
+    if api_key and api_key == API_TOKEN:
+        return jsonify({"token": API_TOKEN, "role": "admin", "name": "Athena Admin"})
+    return jsonify({"error": "Invalid credentials"}), 401
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
