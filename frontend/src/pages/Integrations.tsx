@@ -5,7 +5,7 @@ interface Integration {
   id: string
   name: string
   description: string
-  category: 'ecommerce' | 'erp' | 'payment' | 'logistics' | 'communication' | 'analytics'
+  category: 'ecommerce' | 'erp' | 'payment' | 'logistics' | 'communication' | 'analytics' | 'ai' | 'automation' | 'database' | 'messaging' | 'ads' | 'infra'
   status: 'connected' | 'disconnected' | 'error' | 'pending'
   icon: string
   features: string[]

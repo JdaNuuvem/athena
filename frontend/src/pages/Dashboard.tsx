@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { useApi, useWebSocket } from '../hooks/useAuth'
 
 interface Health {
