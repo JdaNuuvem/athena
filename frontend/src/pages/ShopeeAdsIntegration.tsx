@@ -197,7 +197,7 @@ export default function ShopeeAdsIntegration() {
   }
 
   const getSeverityColor = (severity: string) => {
-    const colors = {
+    const colors: Record<string, string> = {
       info: 'bg-blue-500/20 text-blue-400',
       suggestion: 'bg-athena-accent/20 text-athena-accent',
       warning: 'bg-yellow-500/20 text-yellow-400',
@@ -207,7 +207,7 @@ export default function ShopeeAdsIntegration() {
   }
 
   const getStatusColor = (status: string) => {
-    const colors = {
+    const colors: Record<string, string> = {
       active: 'bg-green-500/20 text-green-400',
       paused: 'bg-yellow-500/20 text-yellow-400',
       ended: 'bg-gray-500/20 text-gray-400'
