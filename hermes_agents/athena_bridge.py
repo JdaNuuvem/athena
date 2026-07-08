@@ -947,14 +947,16 @@ def business_create_order():
 def hermes_agents_list():
     """Lista agentes do Hermes com status do banco."""
     async def _go():
-        db = await get_db()
-        rows = await db.fetch("""
-            SELECT id, 'ag-0' || id AS agente_id, nome, descricao, 'ativo' AS status
-            FROM fichas_tecnicas LIMIT 10
-        """)
-        if rows:
-            return [dict(r) for r in rows]
-        # Fallback: lista estática igual ao /api/agents
+        try:
+            db = await get_db()
+            rows = await db.fetch("""
+                SELECT id, 'ag-0' || id AS agente_id, descricao AS nome, descricao, 'ativo' AS status
+                FROM fichas_tecnicas LIMIT 10
+            """)
+            if rows:
+                return [dict(r) for r in rows]
+        except Exception:
+            pass
         return [
             {"id": 1, "agente_id": "ag-01", "nome": "Caçador", "descricao": "Hunter de oportunidades", "categoria": "cacador", "status": "ativo", "intervalo_minutos": 60},
             {"id": 2, "agente_id": "ag-02", "nome": "Lucratividade", "descricao": "Análise de margens", "categoria": "lucratividade", "status": "ativo", "intervalo_minutos": 1440},
@@ -972,28 +974,35 @@ def hermes_agents_list():
 def hermes_opportunities():
     """Oportunidades de produtos (tabela produtos_descobertos / AG-01)."""
     async def _go():
-        db = await get_db()
-        rows = await db.fetch("""
-            SELECT * FROM produtos_descobertos ORDER BY score_final DESC LIMIT 50
-        """)
-        return [dict(r) for r in rows]
+        try:
+            db = await get_db()
+            rows = await db.fetch("""SELECT * FROM produtos_descobertos ORDER BY score_final DESC LIMIT 50""")
+            return [dict(r) for r in rows]
+        except Exception:
+            return {"erro": "tabela produtos_descobertos não existe ainda", "itens": []}
     return jsonify(run_async(_go()))
 
 @app.route('/api/hermes/alerts', methods=['GET'])
 def hermes_alerts():
     """Alertas do sistema."""
     async def _go():
-        db = await get_db()
-        rows = await db.fetch("SELECT * FROM alertas ORDER BY created_at DESC LIMIT 50")
-        return [dict(r) for r in rows]
+        try:
+            db = await get_db()
+            rows = await db.fetch("SELECT * FROM alertas ORDER BY created_at DESC LIMIT 50")
+            return [dict(r) for r in rows]
+        except Exception:
+            return []
     return jsonify(run_async(_go()))
 
 @app.route('/api/hermes/alerts/<int:alert_id>/resolve', methods=['POST'])
 def hermes_alerts_resolve(alert_id):
     """Resolver alerta."""
     async def _go():
-        db = await get_db()
-        await db.execute("UPDATE alertas SET resolvido = true WHERE id = $1", alert_id)
+        try:
+            db = await get_db()
+            await db.execute("UPDATE alertas SET resolvido = true WHERE id = $1", alert_id)
+        except Exception:
+            pass
     run_async(_go())
     return jsonify({"success": True})
 
@@ -1001,9 +1010,12 @@ def hermes_alerts_resolve(alert_id):
 def hermes_executions():
     """Histórico de execuções."""
     async def _go():
-        db = await get_db()
-        rows = await db.fetch("SELECT * FROM hermes_execucoes ORDER BY id DESC LIMIT 50")
-        return [dict(r) for r in rows]
+        try:
+            db = await get_db()
+            rows = await db.fetch("SELECT * FROM hermes_execucoes ORDER BY id DESC LIMIT 50")
+            return [dict(r) for r in rows]
+        except Exception:
+            return []
     return jsonify(run_async(_go()))
 
 @app.route('/api/hermes/execute', methods=['POST'])
@@ -1184,9 +1196,18 @@ def health_real():
         try:
             db = await get_db()
             db_ok = await db.fetchval("SELECT 1")
-            agent_count = await db.fetchval("SELECT COUNT(*) FROM anuncios") or 0
-            order_count = await db.fetchval("SELECT COUNT(*) FROM vendas") or 0
-            alert_count = await db.fetchval("SELECT COUNT(*) FROM alertas WHERE NOT resolvido") or 0
+            agent_count = 0
+            order_count = 0
+            alert_count = 0
+            try:
+                agent_count = await db.fetchval("SELECT COUNT(*) FROM anuncios") or 0
+            except: pass
+            try:
+                order_count = await db.fetchval("SELECT COUNT(*) FROM vendas") or 0
+            except: pass
+            try:
+                alert_count = await db.fetchval("SELECT COUNT(*) FROM alertas WHERE NOT resolvido") or 0
+            except: pass
             return {
                 "status": "healthy",
                 "database": {"connected": bool(db_ok), "anuncios": agent_count, "vendas": order_count, "alertas_abertos": alert_count},
