@@ -13,7 +13,8 @@ AGENT = "Bling ERP v3"
 
 CLIENT_ID = os.environ.get("BLING_CLIENT_ID") or get_config("bling", "client_id") or ""
 CLIENT_SECRET = os.environ.get("BLING_CLIENT_SECRET") or get_config("bling", "client_secret") or ""
-REDIRECT_URI = os.environ.get("BLING_REDIRECT_URI", "https://athena.zoikom.site/api/bling/oauth/callback")
+BLING_DOMAIN = os.environ.get("BLING_DOMAIN", "athena.zoikom.site")
+REDIRECT_URI = f"https://{BLING_DOMAIN}/api/bling/oauth/callback"
 BASE_URL = "https://www.bling.com.br/Api/v3"
 
 def get_access_token() -> str:
