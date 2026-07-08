@@ -6,8 +6,10 @@ import os, sys, json, urllib.request
 from typing import Optional
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
-from core import run_async, get_db
+from core import run_async, get_db, FactoryConfig
 from pathlib import Path
+import psycopg2
+import psycopg2.extras
 
 ATHENA_URL = os.environ.get("ATHENA_URL", "http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io")
 GRAPHQL_URL = f"{ATHENA_URL}/graphql"
@@ -1358,193 +1360,151 @@ def test_telegram():
 # API Multiloja — Produtos, Lojas, KPIs (PRD Dashboard Multiloja)
 # ===========================================================================
 
+def _db_sync():
+    cfg = FactoryConfig.load()
+    conn = psycopg2.connect(host=cfg.db_host, port=cfg.db_port, dbname=cfg.db_name,
+                            user=cfg.db_user, password=cfg.db_password, connect_timeout=5)
+    conn.set_session(autocommit=True)
+    return conn
+
+def _dicts(cur):
+    cols = [d[0] for d in cur.description] if cur.description else []
+    return [dict(zip(cols, row)) for row in cur.fetchall()]
+
 @app.route('/api/produtos', methods=['GET'])
 def listar_produtos():
-    """Catálogo com busca, filtros e estoque por loja."""
     busca = request.args.get("busca", "").strip()
     loja = request.args.get("loja", "")
-    categoria = request.args.get("categoria", "")
-    status = request.args.get("status", "")
     margem_min = request.args.get("margem_min", type=float)
     pagina = request.args.get("pagina", 1, type=int)
     por_pagina = request.args.get("por_pagina", 50, type=int)
-
-    async def _go():
-        db = await get_db()
+    try:
+        conn = _db_sync()
+        cur = conn.cursor()
         where = ["1=1"]
         params = []
-        i = 1
         if busca:
-            where.append(f"(f.sku ILIKE ${i} OR f.descricao ILIKE ${i})")
-            params.append(f"%{busca}%")
-            i += 1
+            where.append(f"(f.sku ILIKE '%{busca}%' OR f.descricao ILIKE '%{busca}%')")
         if loja:
-            where.append(f"a.marketplace = ${i}")
-            params.append(loja)
-            i += 1
-        if margem_min is not None:
-            where.append(f"COALESCE(m.margem_pct, 0) >= ${i}")
-            params.append(margem_min)
-            i += 1
-
-        offset = (pagina - 1) * por_pagina
+            where.append("EXISTS(SELECT 1 FROM anuncios a WHERE a.sku=f.sku AND a.marketplace='%s')" % loja)
         sql_where = " AND ".join(where)
-        count = await db.fetchval(f"SELECT COUNT(*) FROM fichas_tecnicas f WHERE {sql_where}", *params)
-        rows = await db.fetch(f"""
-            SELECT f.id, f.sku, f.descricao AS nome, f.peso_gramas, f.material_principal,
-                   f.tempo_ciclo_segundos, f.created_at,
-                   COALESCE(m.margem_pct, 0) AS margem_pct,
-                   COALESCE(m.receita_total, 0) AS receita_30d,
-                   COALESCE(m.quantidade_vendida, 0) AS vendidos_30d
+        offset = (pagina - 1) * por_pagina
+        cur.execute(f"SELECT COUNT(*) FROM fichas_tecnicas f WHERE {sql_where}")
+        count = cur.fetchone()[0]
+        cur.execute(f"""
+            SELECT f.id,f.sku,f.descricao AS nome,COALESCE(m.margem_pct,0) AS margem_pct,
+                   COALESCE(m.receita_total,0) AS receita_30d,COALESCE(m.quantidade_vendida,0) AS vendidos_30d
             FROM fichas_tecnicas f
-            LEFT JOIN margens_diarias m ON m.sku = f.sku AND m.data = CURRENT_DATE
+            LEFT JOIN margens_diarias m ON m.sku=f.sku AND m.data=CURRENT_DATE
             WHERE {sql_where}
             ORDER BY m.quantidade_vendida DESC NULLS LAST
-            LIMIT ${i} OFFSET ${i+1}
-        """, *params, por_pagina, offset)
-        produtos = [dict(r) for r in rows]
-
-        # Buscar estoque por loja pra cada produto
-        skus = [p["sku"] for p in produtos]
-        estoques = {}
+            LIMIT {por_pagina} OFFSET {offset}
+        """)
+        rows = _dicts(cur)
+        skus = [r["sku"] for r in rows]
         if skus:
-            estoque_rows = await db.fetch("""
-                SELECT sku, marketplace, preco, status FROM anuncios
-                WHERE sku = ANY($1::varchar[])
-            """, skus)
-            for e in estoque_rows:
-                s = estoques.setdefault(e["sku"], [])
-                s.append({"loja": e["marketplace"], "preco": float(e["preco"]) if e["preco"] else 0, "status": e["status"]})
-
-        for p in produtos:
-            p["estoque_lojas"] = estoques.get(p["sku"], [])
-            p["total_lojas"] = len(p["estoque_lojas"])
-        return {"produtos": produtos, "total": count, "pagina": pagina, "por_pagina": por_pagina}
-    return jsonify(run_async(_go()))
+            cur.execute("SELECT sku,marketplace,preco,status FROM anuncios WHERE sku=ANY(%s)", (skus,))
+            estoques = {}
+            for e in _dicts(cur):
+                estoques.setdefault(e["sku"], []).append({"loja": e["marketplace"], "preco": float(e["preco"]) if e["preco"] else 0, "status": e["status"]})
+            for r in rows:
+                r["estoque_lojas"] = estoques.get(r["sku"], [])
+                r["total_lojas"] = len(r["estoque_lojas"])
+        cur.close(); conn.close()
+        return jsonify({"produtos": rows, "total": count, "pagina": pagina, "por_pagina": por_pagina})
+    except Exception as e:
+        return jsonify({"erro": str(e), "produtos": [], "total": 0})
 
 @app.route('/api/produtos/<sku>', methods=['GET'])
 def detalhe_produto(sku):
-    """Detalhes do produto com histórico de preços e estoque."""
-    async def _go():
-        try:
-            db = await get_db()
-            produto = await db.fetchrow("""
-                SELECT f.*, COALESCE(m.margem_pct, 0) AS margem_pct,
-                       COALESCE(m.receita_total, 0) AS receita_30d,
-                       COALESCE(m.quantidade_vendida, 0) AS vendidos_30d,
-                       COALESCE(m.lucro_liquido, 0) AS lucro_30d
-                FROM fichas_tecnicas f
-                LEFT JOIN margens_diarias m ON m.sku = f.sku AND m.data = CURRENT_DATE
-                WHERE f.sku = $1
-            """, sku)
-            if not produto:
-                return {"sku": sku, "nome": sku, "descricao": "", "margem_pct": 0}
-            p = dict(produto)
-            try:
-                estoque = await db.fetch("SELECT marketplace, preco, posicao_busca, avaliacao_media, status FROM anuncios WHERE sku = $1", sku)
-                p["estoque_lojas"] = [dict(r) for r in estoque]
-            except: p["estoque_lojas"] = []
-            try:
-                vendas = await db.fetch("SELECT data, marketplace, quantidade, preco_venda, receita_bruta FROM vendas WHERE sku = $1 ORDER BY data DESC LIMIT 90", sku)
-                p["vendas_30d"] = [dict(r) for r in vendas]
-            except: p["vendas_30d"] = []
-            try:
-                precos = await db.fetch("SELECT data, preco_venda FROM vendas WHERE sku = $1 ORDER BY data ASC", sku)
-                p["historico_precos"] = [{"data": str(r["data"]), "preco": float(r["preco_venda"])} for r in precos]
-            except: p["historico_precos"] = []
-            return p
-        except Exception as e:
-            return {"sku": sku, "erro": str(e), "estoque_lojas": [], "vendas_30d": []}
-    return jsonify(run_async(_go()))
+    try:
+        conn = _db_sync(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("""
+            SELECT f.*,COALESCE(m.margem_pct,0) AS margem_pct,COALESCE(m.receita_total,0) AS receita_30d,
+                   COALESCE(m.quantidade_vendida,0) AS vendidos_30d,COALESCE(m.lucro_liquido,0) AS lucro_30d
+            FROM fichas_tecnicas f LEFT JOIN margens_diarias m ON m.sku=f.sku AND m.data=CURRENT_DATE WHERE f.sku=%s
+        """, (sku,))
+        p = cur.fetchone()
+        if not p:
+            return jsonify({"sku": sku, "erro": "não encontrado"}), 404
+        p = dict(p)
+        cur.execute("SELECT marketplace,preco,posicao_busca,avaliacao_media,status FROM anuncios WHERE sku=%s", (sku,))
+        p["estoque_lojas"] = [dict(r) for r in cur.fetchall()]
+        cur.execute("SELECT data,marketplace,quantidade,preco_venda,receita_bruta FROM vendas WHERE sku=%s ORDER BY data DESC LIMIT 90", (sku,))
+        p["vendas_30d"] = [dict(r, data=str(r["data"])) for r in cur.fetchall()]
+        cur.execute("SELECT data,preco_venda FROM vendas WHERE sku=%s ORDER BY data ASC", (sku,))
+        p["historico_precos"] = [{"data": str(r["data"]), "preco": float(r["preco_venda"])} for r in cur.fetchall()]
+        for k in ("peso_gramas","tempo_ciclo_segundos","margem_pct","receita_30d","lucro_30d"):
+            if k in p and p[k] is not None: p[k] = float(p[k])
+        cur.close(); conn.close()
+        return jsonify(p)
+    except Exception as e:
+        return jsonify({"sku": sku, "erro": str(e), "estoque_lojas": []})
 
 @app.route('/api/lojas', methods=['GET'])
 def listar_lojas():
     """Performance de todas as lojas (físicas + marketplaces)."""
-    async def _go():
+    try:
+        conn = _db_sync(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        periodo = request.args.get("periodo", 30, type=int)
+        fisicas = [{"id":i,"nome":n,"tipo":"fisica"} for i,n in enumerate(["Loja Centro","Loja Shopping","Loja Norte","Loja Sul","Loja Leste"],1)]
         try:
-            db = await get_db()
-            fisicas = [
-                {"id": 1, "nome": "Loja Centro", "tipo": "fisica"},
-                {"id": 2, "nome": "Loja Shopping", "tipo": "fisica"},
-                {"id": 3, "nome": "Loja Norte", "tipo": "fisica"},
-                {"id": 4, "nome": "Loja Sul", "tipo": "fisica"},
-                {"id": 5, "nome": "Loja Leste", "tipo": "fisica"},
-            ]
-            periodo = request.args.get("periodo", 30, type=int)
+            cur.execute("SELECT DISTINCT marketplace FROM vendas WHERE marketplace IS NOT NULL")
+            mps = [{"id":10+i,"nome":r["marketplace"],"tipo":"digital"} for i,r in enumerate(cur.fetchall())]
+        except:
+            mps = []
+        if not mps:
+            mps = [{"id":10,"nome":"shopee","tipo":"digital"},{"id":11,"nome":"mercado_livre","tipo":"digital"}]
+        resultado = []
+        for loja in fisicas + mps:
             try:
-                mps = await db.fetch("SELECT DISTINCT marketplace FROM vendas WHERE marketplace IS NOT NULL")
-                marketplaces = [{"id": 10 + i, "nome": r["marketplace"], "tipo": "digital"} for i, r in enumerate(mps)] if mps else []
+                if loja["tipo"]=="fisica":
+                    cur.execute("SELECT COALESCE(SUM(receita_bruta),0) AS r,COALESCE(SUM(quantidade),0) AS p FROM vendas WHERE loja_id=%s AND data>=CURRENT_DATE-%s", (loja["id"], periodo))
+                else:
+                    cur.execute("SELECT COALESCE(SUM(receita_bruta),0) AS r,COALESCE(SUM(quantidade),0) AS p FROM vendas WHERE marketplace=%s AND data>=CURRENT_DATE-%s", (loja["nome"], periodo))
+                v = cur.fetchone()
+                receita, pedidos = float(v["r"]), v["p"]
             except:
-                marketplaces = []
-            if not marketplaces:
-                marketplaces = [
-                    {"id": 10, "nome": "shopee", "tipo": "digital"},
-                    {"id": 11, "nome": "mercado_livre", "tipo": "digital"},
-                ]
-            todas = fisicas + marketplaces
-            resultado = []
-            for loja in todas:
-                try:
-                    if loja["tipo"] == "fisica":
-                        v = await db.fetchrow("SELECT COALESCE(SUM(receita_bruta),0) AS receita, COALESCE(SUM(quantidade),0) AS pedidos FROM vendas WHERE loja_id=$1 AND data>=CURRENT_DATE-$2::integer", loja["id"], periodo)
-                    else:
-                        v = await db.fetchrow("SELECT COALESCE(SUM(receita_bruta),0) AS receita, COALESCE(SUM(quantidade),0) AS pedidos FROM vendas WHERE marketplace=$1 AND data>=CURRENT_DATE-$2::integer", loja["nome"], periodo)
-                    receita = float(v["receita"]) if v else 0
-                    pedidos = v["pedidos"] if v else 0
-                except:
-                    receita, pedidos = 0, 0
-                resultado.append({**loja, "receita": receita, "pedidos": pedidos, "ticket_medio": round(receita/max(pedidos,1),2)})
-
-            total_receita = sum(r["receita"] for r in resultado)
-            resultado.insert(0, {"id":0,"nome":"📊 Consolidado","tipo":"consolidado","receita":total_receita,"pedidos":sum(r["pedidos"] for r in resultado),"ticket_medio":round(total_receita/max(sum(r["pedidos"] for r in resultado),1),2)})
-            return resultado
-        except Exception as e:
-            return [{"id":0,"nome":"📊 Consolidado","tipo":"consolidado","receita":0,"pedidos":0,"ticket_medio":0,"erro":str(e)}]
-    return jsonify(run_async(_go()))
+                receita, pedidos = 0, 0
+            resultado.append({**loja,"receita":receita,"pedidos":pedidos,"ticket_medio":round(receita/max(pedidos,1),2)})
+        tr = sum(r["receita"] for r in resultado)
+        resultado.insert(0,{"id":0,"nome":"📊 Consolidado","tipo":"consolidado","receita":tr,"pedidos":sum(r["pedidos"] for r in resultado),"ticket_medio":round(tr/max(sum(r["pedidos"] for r in resultado),1),2)})
+        cur.close(); conn.close()
+        return jsonify(resultado)
+    except Exception as e:
+        return jsonify([{"id":0,"nome":"📊 Consolidado","tipo":"consolidado","receita":0,"pedidos":0,"ticket_medio":0,"erro":str(e)}])
 
 @app.route('/api/kpi/overview', methods=['GET'])
 def kpi_overview():
     """KPIs consolidados para página inicial."""
-    async def _go():
+    try:
+        conn = _db_sync(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        periodo = request.args.get("periodo", 30, type=int)
+        def f(v,d=0): return float(v) if v is not None else d
         try:
-            db = await get_db()
-            periodo = request.args.get("periodo", 30, type=int)
-
-            def f(v, d=0):
-                return float(v) if v is not None else d
-            try:
-                total_receita = f(await db.fetchval("SELECT COALESCE(SUM(receita_bruta),0) FROM vendas WHERE data>=CURRENT_DATE-$1::integer", periodo))
-                total_pedidos = await db.fetchval("SELECT COALESCE(SUM(quantidade),0) FROM vendas WHERE data>=CURRENT_DATE-$1::integer", periodo) or 0
-            except:
-                total_receita, total_pedidos = 0, 0
-            try:
-                total_produtos = await db.fetchval("SELECT COUNT(*) FROM fichas_tecnicas") or 0
-            except:
-                total_produtos = 0
-            try:
-                total_anuncios = await db.fetchval("SELECT COUNT(*) FROM anuncios WHERE status='ativo'") or 0
-            except:
-                total_anuncios = 0
-            try:
-                receita_shopee = f(await db.fetchval("SELECT COALESCE(SUM(receita_bruta),0) FROM vendas WHERE marketplace ILIKE '%shopee%' AND data>=CURRENT_DATE-$1::integer", periodo))
-                receita_ml = f(await db.fetchval("SELECT COALESCE(SUM(receita_bruta),0) FROM vendas WHERE marketplace ILIKE '%mercado_livre%' AND data>=CURRENT_DATE-$1::integer", periodo))
-            except:
-                receita_shopee, receita_ml = 0, 0
-            try:
-                top = await db.fetch("SELECT v.sku,f.descricao AS nome,SUM(v.quantidade) AS qtd,SUM(v.receita_bruta) AS receita,COALESCE(m.margem_pct,0) AS margem FROM vendas v JOIN fichas_tecnicas f ON f.sku=v.sku LEFT JOIN margens_diarias m ON m.sku=v.sku AND m.data=CURRENT_DATE WHERE v.data>=CURRENT_DATE-$1::integer GROUP BY v.sku,f.descricao,m.margem_pct ORDER BY SUM(v.receita_bruta) DESC LIMIT 10", periodo)
-                top_skus = [dict(r) for r in top]
-            except:
-                top_skus = []
-            return {
-                "receita_total": total_receita, "total_pedidos": total_pedidos,
-                "total_produtos": total_produtos, "total_anuncios": total_anuncios,
-                "ticket_medio": round(total_receita / max(total_pedidos, 1), 2),
-                "receita_por_canal": {"shopee": receita_shopee, "mercado_livre": receita_ml},
-                "top_skus": top_skus,
-            }
-        except Exception as e:
-            return {"erro": str(e), "receita_total": 0, "total_pedidos": 0, "total_produtos": 0, "total_anuncios": 0}
-    return jsonify(run_async(_go()))
+            cur.execute("SELECT COALESCE(SUM(receita_bruta),0) FROM vendas WHERE data>=CURRENT_DATE-%s", (periodo,))
+            total_receita = f(cur.fetchone()[0])
+            cur.execute("SELECT COALESCE(SUM(quantidade),0) FROM vendas WHERE data>=CURRENT_DATE-%s", (periodo,))
+            total_pedidos = cur.fetchone()[0] or 0
+        except: total_receita,total_pedidos=0,0
+        try: cur.execute("SELECT COUNT(*) FROM fichas_tecnicas"); total_produtos=cur.fetchone()[0] or 0
+        except: total_produtos=0
+        try: cur.execute("SELECT COUNT(*) FROM anuncios WHERE status='ativo'"); total_anuncios=cur.fetchone()[0] or 0
+        except: total_anuncios=0
+        try:
+            cur.execute("SELECT COALESCE(SUM(receita_bruta),0) FROM vendas WHERE marketplace='shopee' AND data>=CURRENT_DATE-%s", (periodo,))
+            receita_shopee=f(cur.fetchone()[0])
+            cur.execute("SELECT COALESCE(SUM(receita_bruta),0) FROM vendas WHERE marketplace='mercado_livre' AND data>=CURRENT_DATE-%s", (periodo,))
+            receita_ml=f(cur.fetchone()[0])
+        except: receita_shopee,receita_ml=0,0
+        try:
+            cur.execute("SELECT v.sku,f.descricao AS nome,SUM(v.quantidade) AS qtd,SUM(v.receita_bruta) AS receita,COALESCE(m.margem_pct,0) AS margem FROM vendas v JOIN fichas_tecnicas f ON f.sku=v.sku LEFT JOIN margens_diarias m ON m.sku=v.sku AND m.data=CURRENT_DATE WHERE v.data>=CURRENT_DATE-%s GROUP BY v.sku,f.descricao,m.margem_pct ORDER BY SUM(v.receita_bruta) DESC LIMIT 10", (periodo,))
+            top_skus=[dict(r) for r in cur.fetchall()]
+        except: top_skus=[]
+        cur.close(); conn.close()
+        return jsonify({"receita_total":total_receita,"total_pedidos":total_pedidos,"total_produtos":total_produtos,"total_anuncios":total_anuncios,"ticket_medio":round(total_receita/max(total_pedidos,1),2),"receita_por_canal":{"shopee":receita_shopee,"mercado_livre":receita_ml},"top_skus":top_skus})
+    except Exception as e:
+        return jsonify({"erro":str(e),"receita_total":0,"total_pedidos":0,"total_produtos":0,"total_anuncios":0})
 
 # ===========================================================================
 # Rota padrão — SPA fallback: serve index.html pra qualquer rota do frontend
