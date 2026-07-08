@@ -919,12 +919,12 @@ def hermes_chat():
 @app.route('/api/business/inventory/<sku>', methods=['GET'])
 def business_inventory(sku):
     """Check stock by SKU via AG-031 (portado)."""
-    from ag_04_planejador import obter_estoque_produtos
-    estoque = obter_estoque_produtos(sku)
-    return jsonify({
-        "sku": sku, "estoque": estoque,
-        "status": "ok", "agente": "ag-031", "fonte": "hermes_db"
-    })
+    try:
+        from ag_04_planejador import obter_estoque_produtos
+        estoque = obter_estoque_produtos(sku)
+        return jsonify({"sku": sku, "estoque": estoque, "status": "ok", "agente": "ag-031"})
+    except Exception as e:
+        return jsonify({"sku": sku, "estoque": 0, "status": "erro", "erro": str(e)})
 
 @app.route('/api/business/quality/analyze-cycle', methods=['POST'])
 def business_quality():
