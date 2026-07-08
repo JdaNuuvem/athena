@@ -4,7 +4,7 @@ ATHENA OS tem 52 agentes, 40+ queries GraphQL, 30+ endpoints REST.
 """
 import os, sys, json, urllib.request
 from typing import Optional
-from flask import Flask, request, jsonify, CORS
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 ATHENA_URL = os.environ.get("ATHENA_URL", "http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io")
@@ -144,7 +144,7 @@ def relatorio_consolidado() -> str:
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from core.config import get_config
-import time
+import time, json
 
 app = Flask(__name__)
 CORS(app)
