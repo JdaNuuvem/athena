@@ -1,10 +1,8 @@
 """
 Integração Bling ERP v3 — OAuth2 + Webhooks
 """
-import sys, os, json, time, requests
-from pathlib import Path
+import os, json, time, requests
 from urllib.parse import urlencode
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from core import log, run_async, get_db
 from core.config import get_config, set_config
@@ -173,11 +171,250 @@ def status() -> dict:
         "auth_url": get_auth_url() if not token else "",
     }
 
+def webhook_bling_pedido(payload: dict) -> dict:
+    """Processa webhook de pedido recebido do Bling."""
+    from datetime import date, timedelta
+    async def _go():
+        db = await get_db()
+        pedido = payload.get("pedido", payload)
+        itens = pedido.get("itens", [])
+        for item in itens:
+            sku = item.get("codigo", "")
+            qtd = int(item.get("quantidade", 1))
+            preco = float(item.get("valorUnitario", 0))
+            await db.execute(
+                "INSERT INTO vendas (data, sku, marketplace, quantidade, preco_venda, receita_bruta) VALUES ($1,$2,'bling',$3,$4,$5)",
+                date.today(), sku, qtd, preco, preco * qtd)
+        try:
+            from ag_04_planejador import adicionar_pedido_producao
+            for item in itens:
+                adicionar_pedido_producao(
+                    sku=item.get("codigo", ""), quantidade=int(item.get("quantidade", 1)),
+                    prazo=date.today() + timedelta(days=3), prioridade=5,
+                    cliente_id=pedido.get("contato", {}).get("nome", ""))
+        except Exception as e:
+            log(AGENT, f"Erro ao enfileirar produção: {e}")
+        return {"success": True, "itens": len(itens)}
+    try:
+        return run_async(_go())
+    except Exception as e:
+        return {"error": str(e)}
+
+
 def registrar_webhook(tipo: str = "pedido", url: str = None) -> dict:
-    webhook_url = url or f"{REDIRECT_URI.replace('/oauth/callback', '/webhook/bling/pedido')}"
+    webhook_url = url or f"https://{BLING_DOMAIN}/webhook/bling/pedido"
     return _request("webhooks", {
         "webhook": {"url": webhook_url, "evento": tipo, "metodo": "POST", "formato": "JSON"}
     }, method="POST")
+
+# ──────────────────────────────────────────────
+# Task 2: CRUD de Produtos, Depósitos, Estoque, Analytics, Webhooks, Notificações
+# ──────────────────────────────────────────────
+
+def criar_produto(dados: dict) -> dict:
+    """Cria um produto no Bling via POST /produtos. dados deve conter nome, codigo, preco, etc."""
+    return _request("produtos", dados, method="POST")
+
+
+def atualizar_produto(id_produto: int, dados: dict) -> dict:
+    """Atualiza produto existente via PUT /produtos/{id}."""
+    return _request(f"produtos/{id_produto}", dados, method="PUT")
+
+
+def deletar_produto(id_produto: int) -> dict:
+    """Deleta produto via DELETE /produtos/{idProduto}."""
+    return _request(f"produtos/{id_produto}", method="DELETE")
+
+
+def atualizar_situacao_produtos(ids: list, situacao: str) -> dict:
+    """Altera situacao em lote via POST /produtos/situacoes. situacao: 'A' (ativo), 'I' (inativo), 'E' (excluido)."""
+    return _request("produtos/situacoes", {
+        "idsProdutos": ids,
+        "situacao": situacao,
+    }, method="POST")
+
+
+# ── Depósitos e Estoque ──
+
+def listar_depositos(pagina: int = 1, limite: int = 100) -> dict:
+    """Lista depositos/lojas internas do Bling."""
+    return _request("depositos", {"pagina": pagina, "limite": limite})
+
+
+def obter_saldo_deposito(id_deposito: int, ids_produtos: list = None) -> dict:
+    """Obtem saldo de estoque em um deposito especifico. ids_produtos: lista opcional de IDs para filtrar."""
+    params = {}
+    if ids_produtos:
+        params["idsProdutos[]"] = ids_produtos
+    return _request(f"estoques/saldos/{id_deposito}", params)
+
+
+def atualizar_estoque_deposito(dados: dict) -> dict:
+    """Atualiza estoque via PUT /estoques. dados deve conter: idDeposito, idProduto, operacao ('B' balanco | 'E' entrada | 'S' saida),
+    quantidade, preco (opcional)."""
+    return _request("estoques", dados, method="PUT")
+
+
+# ── Analytics de Vendas ──
+
+def resumo_vendas(dias: int = 30) -> dict:
+    """Retorna resumo de vendas para analytics: top SKUs, vendas diarias, totais.
+    Usa listar_pedidos() e agrega localmente ja que Bling nao tem endpoint especifico."""
+    from datetime import date, timedelta
+    import collections
+
+    today = date.today()
+    cutoff = today - timedelta(days=dias)
+    top_skus = collections.defaultdict(lambda: {"quantidade": 0, "receita": 0.0})
+    vendas_por_dia = collections.defaultdict(float)
+    total_receita = 0.0
+    total_pedidos = 0
+
+    pagina = 1
+    while True:
+        r = listar_pedidos(pagina=pagina, limite=100)
+        dados = r.get("data", [])
+        if not dados or r.get("error"):
+            break
+        for pedido_val in dados:
+            data_str = pedido_val.get("dataEmissao", "")[:10]
+            if not data_str or data_str < cutoff.isoformat():
+                continue
+            total_pedidos += 1
+            for item in pedido_val.get("itens", []):
+                sku = item.get("codigo", "")
+                qtd = int(item.get("quantidade", 1))
+                preco = float(item.get("valorUnitario", 0))
+                receita_item = qtd * preco
+                top_skus[sku]["quantidade"] += qtd
+                top_skus[sku]["receita"] += receita_item
+                vendas_por_dia[data_str] += receita_item
+                total_receita += receita_item
+        pagina += 1
+        if len(dados) < 100:
+            break
+
+    ranked = sorted(top_skus.items(), key=lambda x: x[1]["receita"], reverse=True)
+
+    return {
+        "total_receita": round(total_receita, 2),
+        "total_pedidos": total_pedidos,
+        "dias_analisados": dias,
+        "top_skus": [{"sku": sku, **info} for sku, info in ranked[:20]],
+        "vendas_diarias": sorted(vendas_por_dia.items()),
+    }
+
+
+# ── Webhooks ──
+
+def listar_webhooks(pagina: int = 1, limite: int = 100) -> dict:
+    """Lista webhooks cadastrados no Bling."""
+    return _request("webhooks", {"pagina": pagina, "limite": limite})
+
+
+def criar_webhook(evento: str, url: str) -> dict:
+    """Registra um novo webhook no Bling."""
+    return _request("webhooks", {
+        "webhook": {"url": url, "evento": evento, "metodo": "POST", "formato": "JSON"}
+    }, method="POST")
+
+
+def deletar_webhook(id_webhook: int) -> dict:
+    """Remove um webhook do Bling."""
+    return _request(f"webhooks/{id_webhook}", method="DELETE")
+
+
+def validar_assinatura_webhook(payload: bytes, signature_header: str) -> bool:
+    """Valida assinatura HMAC-SHA256 do webhook. signature_header = valor de X-Bling-Signature-256."""
+    import hmac
+    import hashlib
+
+    if not signature_header:
+        return False
+    secret = CLIENT_SECRET.encode("utf-8")
+    computed = hmac.new(secret, payload, hashlib.sha256).hexdigest()
+    # Tempo de comparacao constante para evitar timing attack
+    return hmac.compare_digest(f"sha256={computed}", signature_header)
+
+
+# ── Notificacoes ──
+
+def listar_notificacoes(pagina: int = 1, limite: int = 100) -> dict:
+    """Lista notificacoes do Bling."""
+    return _request("notificacoes", {"pagina": pagina, "limite": limite})
+
+
+def confirmar_leitura_notificacao(id_notificacao: int) -> dict:
+    """Marca notificacao como lida."""
+    return _request(f"notificacoes/{id_notificacao}", method="PATCH")
+
+
+# ── Processador de Eventos Webhook ──
+
+def processar_evento_webhook(evento: str, payload: dict) -> dict:
+    """Roteia evento de webhook para o handler adequado.
+    Retorna: {"processed": True, "evento": evento} ou {"error": ...}"""
+    from datetime import date, timedelta
+
+    async def _go():
+        db = await get_db()
+        resource = evento.split(".")[0] if "." in evento else ""
+
+        if resource in ("pedido", "order"):
+            pedido = payload.get("pedido", payload)
+            itens = pedido.get("itens", [])
+            for item in itens:
+                sku = item.get("codigo", "")
+                qtd = int(item.get("quantidade", 1))
+                preco = float(item.get("valorUnitario", 0))
+                await db.execute(
+                    """INSERT INTO vendas (data, sku, marketplace, quantidade, preco_venda, receita_bruta)
+                       VALUES ($1, $2, 'bling', $3, $4, $5)""",
+                    date.today(), sku, qtd, preco, preco * qtd,
+                )
+
+            # Enfileirar producao
+            try:
+                from ag_04_planejador import adicionar_pedido_producao
+                for item in itens:
+                    adicionar_pedido_producao(
+                        sku=item.get("codigo", ""),
+                        quantidade=int(item.get("quantidade", 1)),
+                        prazo=date.today() + timedelta(days=3),
+                        prioridade=5,
+                        cliente_id=pedido.get("contato", {}).get("nome", ""),
+                    )
+            except Exception as e:
+                log(AGENT, f"webhook erro producao: {e}")
+
+        elif resource in ("produto", "product"):
+            produto = payload.get("produto", payload)
+            sku = produto.get("codigo", "") or str(produto.get("id", ""))
+            nome = produto.get("descricao", "")
+            preco = float(produto.get("preco", 0)) if produto.get("preco") else 0
+            await db.execute("""
+                INSERT INTO fichas_tecnicas (sku, descricao) VALUES ($1, $2)
+                ON CONFLICT (sku) DO UPDATE SET descricao = $2
+            """, sku, nome)
+
+        elif resource == "estoque":
+            estoque = payload.get("estoque", payload)
+            id_deposito = estoque.get("idDeposito", 0)
+            sku = estoque.get("codigo", "")
+            saldo = float(estoque.get("saldo", 0))
+            await db.execute("""
+                INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao)
+                VALUES ($1, $2, $3, NOW())
+                ON CONFLICT (sku, loja) DO UPDATE SET quantidade = $3, data_atualizacao = NOW()
+            """, sku, str(id_deposito), saldo)
+
+        return {"processed": True, "evento": evento, "resource": resource}
+
+    try:
+        return run_async(_go())
+    except Exception as e:
+        return {"error": str(e), "evento": evento}
+
 
 if __name__ == "__main__":
     log(AGENT, f"Configurado: {bool(CLIENT_ID)}")
