@@ -9,16 +9,18 @@ export default function ProdutosPage() {
   const [total, setTotal] = useState(0);
   const [busca, setBusca] = useState("");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
   const load = async (search?: string) => {
     setLoading(true);
+    setError(null);
     try {
       const r = await api.listarProdutos({ busca: search });
       setProdutos(r.produtos as Product[]);
       setTotal(r.total);
-    } catch {
-      // stays empty on error
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Erro ao carregar produtos");
     } finally {
       setLoading(false);
     }
@@ -36,6 +38,12 @@ export default function ProdutosPage() {
   return (
     <div className="p-6 space-y-6">
       <h1 className="text-lg font-light text-neutral-300">Produtos</h1>
+
+      {error && (
+        <div className="text-red-400 text-sm bg-red-950/40 border border-red-900/50 rounded-lg px-4 py-3">
+          {error}
+        </div>
+      )}
 
       <form onSubmit={handleSearch} className="flex gap-2 max-w-md">
         <label htmlFor="busca" className="sr-only">Buscar produto</label>
