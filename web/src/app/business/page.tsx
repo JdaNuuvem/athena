@@ -10,6 +10,7 @@ export default function BusinessPage() {
   const [mlStatus, setMlStatus] = useState<{ modelo_treinado: boolean } | null>(null);
   const [mlMessage, setMlMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [mlLoading, setMlLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -24,7 +25,7 @@ export default function BusinessPage() {
         setExecutions(e as Record<string, unknown>[]);
         setMlStatus(m as { modelo_treinado: boolean });
       })
-      .catch(() => {});
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Erro ao carregar dados"));
   }, []);
 
   const treinarModelo = async () => {
@@ -43,6 +44,12 @@ export default function BusinessPage() {
   return (
     <div className="p-6 space-y-6 max-w-4xl">
       <h1 className="text-lg font-light text-neutral-300">Operações</h1>
+
+      {error && (
+        <div className="text-red-400 text-sm bg-red-950/40 border border-red-900/50 rounded-lg px-4 py-3">
+          {error}
+        </div>
+      )}
 
       <section>
         <h2 className="text-sm font-medium text-neutral-400 mb-2">Machine Learning</h2>

@@ -7,6 +7,7 @@ export default function DashboardPage() {
   const [kpi, setKpi] = useState<KPIOverview | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([api.kpiOverview(), api.agentsList()])
@@ -14,7 +15,7 @@ export default function DashboardPage() {
         setKpi(k as unknown as KPIOverview);
         setAgents(a.agents);
       })
-      .catch(() => {})
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Erro ao carregar dashboard"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -23,6 +24,12 @@ export default function DashboardPage() {
   return (
     <div className="p-6 space-y-6">
       <h1 className="text-lg font-light text-neutral-300">Dashboard</h1>
+
+      {error && (
+        <div className="text-red-400 text-sm bg-red-950/40 border border-red-900/50 rounded-lg px-4 py-3">
+          {error}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard label="Receita (30d)" value={kpi ? `R$ ${(kpi.receita_total as number).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "—"} />

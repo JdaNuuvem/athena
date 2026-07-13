@@ -6,11 +6,12 @@ import { api, type Agent } from "@/lib/api";
 export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     api.agentsList()
       .then((r) => setAgents(r.agents))
-      .catch(() => {})
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Erro ao carregar agentes"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -23,6 +24,12 @@ export default function AgentsPage() {
   return (
     <div className="p-6 space-y-6">
       <h1 className="text-lg font-light text-neutral-300">Agentes</h1>
+
+      {error && (
+        <div className="text-red-400 text-sm bg-red-950/40 border border-red-900/50 rounded-lg px-4 py-3">
+          {error}
+        </div>
+      )}
 
       <div className="flex gap-4 text-sm text-neutral-400">
         <span>🟢 {running.length} em execução</span>
