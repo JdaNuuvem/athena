@@ -20,6 +20,7 @@
 - Testes de backend que tocam o Postgres exigem o banco acessível — mesma pré-condição já assumida por `hermes_agents/test_fase2.py` e `test_fase3.py`. Rodar sempre a partir do diretório `hermes_agents/` (para que `from core import ...` resolva).
 - Frontend não tem framework de teste configurado (decisão já validada no spec): o gate de verificação de cada tarefa de frontend é `npm run build` (dentro de `web/`) devolvendo exit code 0.
 - Em produção (Coolify), definir a env `ATHENA_JWT_SECRET` — sem ela, cada worker gera um segredo aleatório próprio no boot e tokens emitidos por um worker não validam nos outros. Isso já é uma limitação pré-existente do `API_TOKEN` atual; o plano não resolve isso, só documenta.
+- **Addendum de segurança (aprovado pelo usuário durante a execução):** hash de senha usa `werkzeug.security` (não SHA-256 puro), não há credencial `admin/admin` hardcoded (senha temporária aleatória é gerada no boot quando `ATHENA_USERS` não está configurada), e a comparação do `api_key` usa `hmac.compare_digest`. Isso substitui o comportamento do `auth.py` original nesses três pontos — todo o resto do arquivo permanece como descrito no Task 1.
 
 ---
 
@@ -45,6 +46,12 @@ Criar `hermes_agents/test_fase_multiloja.py`:
 """
 Testes de integração para Fase 0 + Fase 1 - Fundação de Acesso e Núcleo Multiloja.
 """
+import os
+from werkzeug.security import generate_password_hash
+
+TEST_PASSWORD = "senha-teste-123"
+os.environ["ATHENA_USERS"] = f"admin:{generate_password_hash(TEST_PASSWORD)}:admin:Admin"
+
 import sys
 from core import log
 
@@ -55,7 +62,7 @@ def test_auth_jwt_login_and_me():
     from athena_bridge import app
     client = app.test_client()
 
-    resp = client.post("/api/auth/login", json={"username": "admin", "password": "admin"})
+    resp = client.post("/api/auth/login", json={"username": "admin", "password": TEST_PASSWORD})
     assert resp.status_code == 200, f"Login deve retornar 200: {resp.get_json()}"
     body = resp.get_json()
     assert body["role"] == "admin", f"Role deve ser admin: {body}"
@@ -118,42 +125,48 @@ Expected: FAIL — `/api/me` ainda devolve sempre `"role": "admin"` mas `body["t
 
 Substituir o conteúdo inteiro do arquivo por:
 
+**Nota de segurança (adicionada após revisão automática no fluxo de execução):** o `auth.py` original usava SHA-256 sem salt para senha e um usuário padrão `admin/admin` hardcoded. Essas duas práticas foram substituídas abaixo por `werkzeug.security` (hash com salt, já é dependência do Flask) e por uma senha temporária aleatória gerada no boot quando `ATHENA_USERS` não está configurada — em vez de preservar o padrão antigo verbatim como este documento originalmente descrevia.
+
 ```python
 import os
-import hashlib
+import hmac
+import secrets
 import functools
 from datetime import datetime, timedelta
 
 import jwt
 from flask import Blueprint, request, jsonify
+from werkzeug.security import generate_password_hash, check_password_hash
 
 auth_bp = Blueprint("auth", __name__)
 
 API_TOKEN = os.environ.get("ATHENA_TOKEN", "")
 if not API_TOKEN:
-    API_TOKEN = hashlib.sha256(os.urandom(32)).hexdigest()[:32]
+    API_TOKEN = secrets.token_hex(16)
 
 JWT_SECRET = os.environ.get("ATHENA_JWT_SECRET", "")
 if not JWT_SECRET:
-    JWT_SECRET = hashlib.sha256(os.urandom(32)).hexdigest()
-
-
-def _hash(pw: str) -> str:
-    return hashlib.sha256(pw.encode()).hexdigest()
+    JWT_SECRET = secrets.token_hex(32)
 
 
 # ponytail: users from env vars ATHENA_USERS="admin:hash:role:nome,joao:hash:role:nome"
-USUARIOS_DEFAULT = {
-    "admin": {"hash": _hash("admin"), "role": "admin", "name": "Admin"},
-}
-
+# hash gerado com werkzeug.security.generate_password_hash
 raw = os.environ.get("ATHENA_USERS", "")
-USUARIOS = USUARIOS_DEFAULT.copy()
+USUARIOS = {}
 if raw:
     for entry in raw.split(","):
         parts = entry.strip().split(":")
         if len(parts) >= 4:
             USUARIOS[parts[0]] = {"hash": parts[1], "role": parts[2], "name": parts[3]}
+
+if "admin" not in USUARIOS:
+    _senha_temporaria = secrets.token_urlsafe(12)
+    USUARIOS["admin"] = {
+        "hash": generate_password_hash(_senha_temporaria),
+        "role": "admin",
+        "name": "Admin",
+    }
+    print(f"[auth] ATHENA_USERS não configurada — senha temporária do admin gerada: {_senha_temporaria}")
 
 
 ROLE_PERMISSIONS = {
@@ -211,10 +224,10 @@ def simple_login():
     api_key = data.get("api_key", "")
 
     user = USUARIOS.get(username, {})
-    if user and user.get("hash") == _hash(password):
+    if user and check_password_hash(user.get("hash", ""), password):
         token = _issue_token(username, user["role"], user["name"])
         return jsonify({"token": token, "role": user["role"], "name": user["name"]})
-    if api_key and api_key == API_TOKEN:
+    if api_key and hmac.compare_digest(api_key, API_TOKEN):
         token = _issue_token("admin", "admin", "Admin")
         return jsonify({"token": token, "role": "admin", "name": "Admin"})
     return jsonify({"error": "Invalid credentials"}), 401
@@ -281,7 +294,7 @@ def test_loja_detalhe_requer_role():
     assert resp_sem_token.status_code == 401, "Sem token deve retornar 401"
     log("TEST", "✅ /api/lojas/1 sem token retorna 401")
 
-    login = client.post("/api/auth/login", json={"username": "admin", "password": "admin"})
+    login = client.post("/api/auth/login", json={"username": "admin", "password": TEST_PASSWORD})
     token = login.get_json()["token"]
 
     resp = client.get("/api/lojas/1", headers={"Authorization": f"Bearer {token}"})
@@ -471,7 +484,7 @@ def test_vendas_agregadas():
     resp_sem_token = client.get("/api/vendas")
     assert resp_sem_token.status_code == 401, "Sem token deve retornar 401"
 
-    login = client.post("/api/auth/login", json={"username": "admin", "password": "admin"})
+    login = client.post("/api/auth/login", json={"username": "admin", "password": TEST_PASSWORD})
     token = login.get_json()["token"]
 
     resp = client.get("/api/vendas?periodo=30&agrupado_por=dia", headers={"Authorization": f"Bearer {token}"})
