@@ -2,6 +2,10 @@
 """
 Testes de integração para Fase 0 + Fase 1 - Fundação de Acesso e Núcleo Multiloja.
 """
+from werkzeug.security import generate_password_hash
+
+TEST_PASSWORD = "senha-teste-123"
+
 import sys
 from core import log
 
@@ -10,10 +14,19 @@ def test_auth_jwt_login_and_me():
     """Testa que o login emite um JWT por usuário e /api/me devolve o papel real."""
     log("TEST", "Testando login JWT e /api/me...")
     from athena_bridge import app
+    from routes.auth import USUARIOS
     import jwt
+
+    # Setup test user with known password
+    USUARIOS["admin"] = {
+        "hash": generate_password_hash(TEST_PASSWORD),
+        "role": "admin",
+        "name": "Admin",
+    }
+
     client = app.test_client()
 
-    resp = client.post("/api/auth/login", json={"username": "admin", "password": "admin"})
+    resp = client.post("/api/auth/login", json={"username": "admin", "password": TEST_PASSWORD})
     assert resp.status_code == 200, f"Login deve retornar 200: {resp.get_json()}"
     body = resp.get_json()
     assert body["role"] == "admin", f"Role deve ser admin: {body}"
