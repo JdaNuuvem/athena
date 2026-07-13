@@ -1,38 +1,42 @@
 import os
-import hashlib
+import hmac
+import secrets
 import functools
 from datetime import datetime, timedelta, timezone
 
 import jwt
 from flask import Blueprint, request, jsonify
+from werkzeug.security import generate_password_hash, check_password_hash
 
 auth_bp = Blueprint("auth", __name__)
 
 API_TOKEN = os.environ.get("ATHENA_TOKEN", "")
 if not API_TOKEN:
-    API_TOKEN = hashlib.sha256(os.urandom(32)).hexdigest()[:32]
+    API_TOKEN = secrets.token_hex(16)
 
 JWT_SECRET = os.environ.get("ATHENA_JWT_SECRET", "")
 if not JWT_SECRET:
-    JWT_SECRET = hashlib.sha256(os.urandom(32)).hexdigest()
-
-
-def _hash(pw: str) -> str:
-    return hashlib.sha256(pw.encode()).hexdigest()
+    JWT_SECRET = secrets.token_hex(32)
 
 
 # ponytail: users from env vars ATHENA_USERS="admin:hash:role:nome,joao:hash:role:nome"
-USUARIOS_DEFAULT = {
-    "admin": {"hash": _hash("admin"), "role": "admin", "name": "Admin"},
-}
-
+# hash gerado com werkzeug.security.generate_password_hash
 raw = os.environ.get("ATHENA_USERS", "")
-USUARIOS = USUARIOS_DEFAULT.copy()
+USUARIOS = {}
 if raw:
     for entry in raw.split(","):
         parts = entry.strip().split(":")
         if len(parts) >= 4:
             USUARIOS[parts[0]] = {"hash": parts[1], "role": parts[2], "name": parts[3]}
+
+if "admin" not in USUARIOS:
+    _senha_temporaria = secrets.token_urlsafe(12)
+    USUARIOS["admin"] = {
+        "hash": generate_password_hash(_senha_temporaria),
+        "role": "admin",
+        "name": "Admin",
+    }
+    print(f"[auth] ATHENA_USERS não configurada — senha temporária do admin gerada: {_senha_temporaria}")
 
 
 ROLE_PERMISSIONS = {
@@ -90,10 +94,10 @@ def simple_login():
     api_key = data.get("api_key", "")
 
     user = USUARIOS.get(username, {})
-    if user and user.get("hash") == _hash(password):
+    if user and check_password_hash(user.get("hash", ""), password):
         token = _issue_token(username, user["role"], user["name"])
         return jsonify({"token": token, "role": user["role"], "name": user["name"]})
-    if api_key and api_key == API_TOKEN:
+    if api_key and hmac.compare_digest(api_key, API_TOKEN):
         token = _issue_token("admin", "admin", "Admin")
         return jsonify({"token": token, "role": "admin", "name": "Admin"})
     return jsonify({"error": "Invalid credentials"}), 401
