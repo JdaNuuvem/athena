@@ -1032,6 +1032,67 @@ def memory_recall():
 
 
 
+
+
+# ── Atendimento Routes ──
+
+@app.route('/api/atendimento/dashboard', methods=['GET'])
+def atend_dashboard():
+    from core.atendimento import dashboard as ad
+    return jsonify(ad())
+
+@app.route('/api/atendimento/tickets/criar', methods=['POST'])
+def atend_criar_ticket():
+    data = request.json or {}
+    from core.atendimento import criar_ticket
+    return jsonify(criar_ticket(data.get("cliente",""), data.get("assunto",""), data.get("canal","whatsapp"), data.get("prioridade","normal")))
+
+@app.route('/api/atendimento/tickets/<int:id>/mensagem', methods=['POST'])
+def atend_mensagem(id):
+    data = request.json or {}
+    from core.atendimento import adicionar_mensagem
+    return jsonify(adicionar_mensagem(id, data.get("remetente",""), data.get("conteudo",""), data.get("tipo","texto")))
+
+@app.route('/api/atendimento/tickets/<int:id>/fechar', methods=['POST'])
+def atend_fechar(id):
+    from core.atendimento import fechar_ticket
+    return jsonify(fechar_ticket(id))
+
+@app.route('/api/atendimento/tickets/<int:id>/reabrir', methods=['POST'])
+def atend_reabrir(id):
+    from core.atendimento import reabrir_ticket
+    return jsonify(reabrir_ticket(id))
+
+@app.route('/api/atendimento/<tabela>', methods=['GET'])
+def atend_list(tabela):
+    from core.atendimento import list as al, TABLES
+    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
+    return jsonify({"data": al(tabela)})
+
+@app.route('/api/atendimento/<tabela>', methods=['POST'])
+def atend_create(tabela):
+    from core.atendimento import create as ac, TABLES
+    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
+    return jsonify(ac(tabela, request.json or {}))
+
+@app.route('/api/atendimento/<tabela>/<int:id>', methods=['GET'])
+def atend_get(tabela, id):
+    from core.atendimento import get as ag, TABLES
+    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
+    return jsonify(ag(tabela, id))
+
+@app.route('/api/atendimento/<tabela>/<int:id>', methods=['PUT'])
+def atend_update(tabela, id):
+    from core.atendimento import update as au, TABLES
+    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
+    return jsonify(au(tabela, id, request.json or {}))
+
+@app.route('/api/atendimento/<tabela>/<int:id>', methods=['DELETE'])
+def atend_delete(tabela, id):
+    from core.atendimento import delete as ad, TABLES
+    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
+    return jsonify(ad(tabela, id))
+
 # ── PDV Routes ──
 
 @app.route('/api/pdv/dashboard', methods=['GET'])
@@ -1348,6 +1409,60 @@ def cad_vendedor_metas(mes=None):
 def cad_fornecedor_resumo():
     from core.cadastros import fornecedor_resumo
     return jsonify({"data": fornecedor_resumo()})
+
+# ── Financeiro CRUD ──
+
+@app.route('/api/financeiro/<tabela>', methods=['GET'])
+def fin_list(tabela):
+    from core.financeiro import list as fin_list_fn, FIN_TABLES
+    if tabela not in FIN_TABLES:
+        return jsonify({"error": "Tabela invalida"}), 404
+    return jsonify({"data": fin_list_fn(tabela)})
+
+@app.route('/api/financeiro/<tabela>', methods=['POST'])
+def fin_create(tabela):
+    from core.financeiro import create as fin_create_fn, FIN_TABLES
+    if tabela not in FIN_TABLES:
+        return jsonify({"error": "Tabela invalida"}), 404
+    data = request.json or {}
+    if not data:
+        return jsonify({"error": "Dados obrigatorios"}), 400
+    return jsonify(fin_create_fn(tabela, data))
+
+@app.route('/api/financeiro/<tabela>/<int:id>', methods=['GET'])
+def fin_get(tabela, id):
+    from core.financeiro import get as fin_get_fn, FIN_TABLES
+    if tabela not in FIN_TABLES:
+        return jsonify({"error": "Tabela invalida"}), 404
+    return jsonify(fin_get_fn(tabela, id))
+
+@app.route('/api/financeiro/<tabela>/<int:id>', methods=['PUT'])
+def fin_update(tabela, id):
+    from core.financeiro import update as fin_update_fn, FIN_TABLES
+    if tabela not in FIN_TABLES:
+        return jsonify({"error": "Tabela invalida"}), 404
+    data = request.json or {}
+    return jsonify(fin_update_fn(tabela, id, data))
+
+@app.route('/api/financeiro/<tabela>/<int:id>', methods=['DELETE'])
+def fin_delete(tabela, id):
+    from core.financeiro import delete as fin_delete_fn, FIN_TABLES
+    if tabela not in FIN_TABLES:
+        return jsonify({"error": "Tabela invalida"}), 404
+    return jsonify(fin_delete_fn(tabela, id))
+
+@app.route('/api/financeiro/fluxo_caixa/resumo', methods=['GET'])
+def fin_fluxo_caixa_resumo():
+    from core.financeiro import fluxo_caixa_resumo
+    dias = request.args.get("dias", 30, type=int)
+    return jsonify(fluxo_caixa_resumo(dias))
+
+@app.route('/api/financeiro/dre/resumo', methods=['GET'])
+@app.route('/api/financeiro/dre/resumo/<mes>', methods=['GET'])
+def fin_dre_resumo(mes=None):
+    from core.financeiro import dre_resumo
+    mes = mes or request.args.get("mes")
+    return jsonify(dre_resumo(mes))
 
 # ===========================================================================
 # Business operations (chamado pelo Business.tsx)
