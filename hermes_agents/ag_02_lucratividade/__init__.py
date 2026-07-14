@@ -10,6 +10,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from core import get_db, run_async, log, hoje, pct, FactoryConfig
 
+# ── Integração com Memória ──
+try:
+    from core.memory import store as memory_store
+except ImportError:
+    def memory_store(*a, **kw): pass
+
 AGENT = "AG-02 | Analista de Lucratividade"
 
 # ===========================================================================
@@ -204,7 +210,18 @@ def verificar_alertas() -> list:
             """, r["sku"], msg)
 
         return alertas
-    return run_async(_go())
+    resultado = run_async(_go())
+
+    # ── Memory: store alert check ──
+    if resultado:
+        memory_store(
+            query="Verificação de alertas de lucratividade",
+            response=f"{len(resultado)} SKUs abaixo da margem mínima",
+            agent_id="ag_02", category="financeiro",
+            metadata={"total_alertas": len(resultado)}
+        )
+
+    return resultado
 
 # ===========================================================================
 # Auto-teste

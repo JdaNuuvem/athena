@@ -9,6 +9,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from core import get_db, run_async, log, hoje
 
+# ── Integração com Memória ──
+try:
+    from core.memory import store as memory_store
+except ImportError:
+    def memory_store(*a, **kw): pass
+
 AGENT = "AG-03 | Gerente de Marketplaces"
 
 # ===========================================================================
@@ -27,7 +33,16 @@ def verificar_posicoes() -> list:
             ORDER BY marketplace, posicao_busca
         """)
         return [dict(r) for r in rows]
-    return run_async(_go())
+    resultado = run_async(_go())
+
+    memory_store(
+        query="Verificação de posições dos anúncios",
+        response=f"{len(resultado)} anúncios ativos",
+        agent_id="ag_03", category="marketing",
+        metadata={"total_anuncios": len(resultado)}
+    )
+
+    return resultado
 
 def anuncios_caindo() -> list:
     """Anúncios que caíram de posição (fora do top 10)."""
@@ -201,6 +216,15 @@ def executar_monitoramento() -> list:
     run_async(_salvar())
 
     log(AGENT, f"Monitoramento concluído: {len(resultados)} ocorrências")
+
+    # ── Memory: store monitoring cycle ──
+    memory_store(
+        query="Monitoramento de marketplaces",
+        response=f"{len(resultados)} ocorrências detectadas",
+        agent_id="ag_03", category="marketing",
+        metadata={"ocorrencias": len(resultados)}
+    )
+
     return resultados
 
 # ===========================================================================

@@ -11,6 +11,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from core import get_db, run_async, log, hoje, pct
 
+# ── Integração com Memória ──
+try:
+    from core.memory import store as memory_store, recall as memory_recall
+except ImportError:
+    def memory_store(*a, **kw): pass
+    def memory_recall(*a, **kw): return []
+
 AGENT = "AG-01 | Caçador de Produtos"
 
 # ---------------------------------------------------------------------------
@@ -183,6 +190,17 @@ def executar_cacada(categoria: str = "casa_e_decoracao") -> list:
     run_async(_save())
 
     log(AGENT, f"Caçada concluída: {len(todos_produtos)} produtos encontrados")
+
+    # ── Memory: store hunting results ──
+    if todos_produtos:
+        top_names = [p["nome"] for p in todos_produtos[:5]]
+        memory_store(
+            query=f"Caçada de produtos — categoria {categoria}",
+            response=str(top_names),
+            agent_id="ag_01", category="marketing",
+            metadata={"categoria": categoria, "total": len(todos_produtos)}
+        )
+
     return todos_produtos
 
 def top_oportunidades(n: int = 10) -> list:

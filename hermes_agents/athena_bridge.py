@@ -893,6 +893,63 @@ def whatsapp_webhook():
     resultado = processar_mensagem(parsed["phone"], parsed["text"])
     return jsonify({"processed": True, "resultado": resultado})
 
+# ── Executor de agente com memória ──
+
+def _executar_agente(agente_id: str, mensagem: str, user_id: str,
+                     nome: str, contexto: str = "") -> str:
+    """Executa o agente apropriado com contexto da memória."""
+    prefix = f"[Memória]: {contexto}\n\n" if contexto else ""
+
+    try:
+        if "ag_01" in agente_id:
+            from ag_01_cacador import executar_cacada, top_oportunidades
+            if "oportunidade" in mensagem.lower() or "produto" in mensagem.lower():
+                ops = top_oportunidades(5)
+                return f"{prefix}Top 5 oportunidades: {ops}" if ops else f"{prefix}Nenhuma oportunidade nova encontrada."
+            r = executar_cacada()
+            return f"{prefix}{r}"
+
+        elif "ag_02" in agente_id:
+            from ag_02_lucratividade import analisar_sku, relatorio_diario, verificar_alertas
+            if "alerta" in mensagem.lower():
+                a = verificar_alertas()
+                return f"{prefix}Alertas: {a}"
+            r = relatorio_diario()
+            return f"{prefix}{r}"
+
+        elif "ag_03" in agente_id:
+            from ag_03_marketplaces import comparar_precos_concorrentes, verificar_posicoes
+            if "preço" in mensagem.lower() or "concorrente" in mensagem.lower():
+                c = comparar_precos_concorrentes()
+                return f"{prefix}Comparação de preços: {c}"
+            p = verificar_posicoes()
+            return f"{prefix}Posições dos anúncios: {p}"
+
+        elif "ag_04" in agente_id:
+            from ag_04_planejador import gerar_plano_diario
+            plano = gerar_plano_diario()
+            return f"{prefix}Plano diário: {plano}"
+
+        elif "ag_07" in agente_id:
+            from ag_07_laboratorio import pipeline_lancamentos
+            return f"{prefix}Pipeline de lançamentos: {pipeline_lancamentos()}"
+
+        elif "ag_09" in agente_id:
+            from ag_09_memoria import buscar_similar, stats
+            if "parecido" in mensagem.lower() or "similar" in mensagem.lower():
+                s = buscar_similar(mensagem)
+                return f"{prefix}Produtos similares: {s}"
+            s = stats()
+            return f"{prefix}Stats da memória corporativa: {s}"
+
+        else:
+            return f"{prefix}Agente {agente_id} consultado. Pergunta: '{mensagem[:100]}'. Use /detalhe para aprofundar."
+
+    except Exception as e:
+        log(None, f"Erro agente {agente_id}: {e}")
+        return f"{prefix}Erro ao processar com {agente_id}: {str(e)[:200]}"
+
+
 # ===========================================================================
 # Chat com agente (chamado pelo Chat.tsx do frontend)
 # ===========================================================================
@@ -904,18 +961,57 @@ def hermes_chat():
     user_id = data.get("user_id", "anon")
     nome = data.get("nome", "Visitante")
 
+    from core.memory import recall, context, store
     from ag_10_diretor import processar_pergunta
-    from ag_06_telegram import classificar_cliente
 
-    cliente = classificar_cliente(user_id, nome)
-    resposta = processar_pergunta(user_id, mensagem, cliente)
+    # 1. Buscar memória relevante
+    memoria_contexto = context(mensagem)
+    memorias = recall(mensagem, limit=3)
+
+    # 2. Roteamento pelo diretor (enriquecido com memória)
+    rota = processar_pergunta(mensagem)
+    agente = rota.get("agentes", ["ag_10"])[0] if rota.get("agentes") else "ag_10"
+
+    # 3. Resposta do agente (usa contexto da memória)
+    resposta_texto = _executar_agente(agente, mensagem, user_id, nome, memoria_contexto)
+
+    # 4. Salvar na memória
+    store(mensagem, resposta_texto, agent_id=agente,
+          category=rota.get("categoria", "geral"),
+          metadata={"user_id": user_id, "nome": nome})
 
     return jsonify({
-        "resposta": resposta.get("resposta", "Não entendi. Pode reformular?"),
-        "agente": resposta.get("agente", "diretor"),
-        "intencao": resposta.get("intencao", "geral"),
-        "user_id": user_id,
+        "resposta": resposta_texto,
+        "agente": agente,
+        "intencao": rota.get("acao", "geral"),
+        "memorias": len(memorias),
     })
+
+# ── Memory API ──
+
+@app.route('/api/memory/stats', methods=['GET'])
+def memory_stats():
+    from core.memory import stats as memory_stats_fn, history as memory_history
+    agent = request.args.get("agente", "")
+    s = memory_stats_fn()
+    return jsonify(s)
+
+@app.route('/api/memory/history', methods=['GET'])
+def memory_history():
+    from core.memory import history as memory_history
+    agent = request.args.get("agente", "")
+    cat = request.args.get("categoria", "")
+    h = memory_history(agent_id=agent or None, category=cat or None, limit=20)
+    return jsonify({"history": h, "total": len(h)})
+
+@app.route('/api/memory/recall', methods=['POST'])
+def memory_recall():
+    from core.memory import recall as memory_recall
+    data = request.json or {}
+    query = data.get("query", "")
+    agent = data.get("agente", "")
+    results = memory_recall(query, agent_id=agent or None, limit=5)
+    return jsonify({"results": results, "total": len(results)})
 
 # ===========================================================================
 # Business operations (chamado pelo Business.tsx)

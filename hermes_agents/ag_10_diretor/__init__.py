@@ -14,29 +14,34 @@ AGENT = "AG-10 | Diretor de Inteligência"
 def processar_pergunta(pergunta: str) -> dict:
     """
     Roteia perguntas para os agentes especialistas corretos.
-    Retorna agente(s) responsável(is) e ação sugerida.
+    Retorna agente(s) responsável(is), ação e categoria.
     """
     perguntas = {
-        "o que devemos fabricar": {"agentes": ["ag_01", "ag_07"], "acao": "executar_cacada + pipeline_lancamentos"},
-        "qual produto devo lançar": {"agentes": ["ag_07"], "acao": "pipeline_lancamentos"},
-        "onde estamos perdendo dinheiro": {"agentes": ["ag_02", "ag_05"], "acao": "bottom_deficitarios + relatorio_industrial"},
-        "qual marketplace está dando mais lucro": {"agentes": ["ag_02", "ag_03"], "acao": "top_lucrativos + relatorio_consolidado"},
-        "qual loja está performando pior": {"agentes": ["ag_08"], "acao": "comparar_lojas"},
-        "qual molde não está se pagando": {"agentes": ["ag_02", "ag_09"], "acao": "analisar_sku + verificar_moldes"},
-        "melhor sequência de produção": {"agentes": ["ag_04"], "acao": "gerar_plano_diario"},
-        "status das máquinas": {"agentes": ["ag_05"], "acao": "analisar_gargalos + relatorio_industrial"},
-        "produtos em alta": {"agentes": ["ag_01"], "acao": "top_oportunidades"},
-        "preços dos concorrentes": {"agentes": ["ag_03"], "acao": "comparar_precos_concorrentes"},
-        "atender cliente": {"agentes": ["ag_06"], "acao": "processar_mensagem"},
-        "já fabricamos algo parecido": {"agentes": ["ag_09"], "acao": "buscar_similar"},
+        "o que devemos fabricar": {"agentes": ["ag_01", "ag_07"], "acao": "executar_cacada + pipeline_lancamentos", "categoria": "produto"},
+        "qual produto devo lançar": {"agentes": ["ag_07"], "acao": "pipeline_lancamentos", "categoria": "produto"},
+        "onde estamos perdendo dinheiro": {"agentes": ["ag_02", "ag_05"], "acao": "bottom_deficitarios + relatorio_industrial", "categoria": "financeiro"},
+        "qual marketplace está dando mais lucro": {"agentes": ["ag_02", "ag_03"], "acao": "top_lucrativos + relatorio_consolidado", "categoria": "marketing"},
+        "qual loja está performando pior": {"agentes": ["ag_08"], "acao": "comparar_lojas", "categoria": "produto"},
+        "qual molde não está se pagando": {"agentes": ["ag_02", "ag_09"], "acao": "analisar_sku + verificar_moldes", "categoria": "financeiro"},
+        "melhor sequência de produção": {"agentes": ["ag_04"], "acao": "gerar_plano_diario", "categoria": "produto"},
+        "status das máquinas": {"agentes": ["ag_05"], "acao": "analisar_gargalos + relatorio_industrial", "categoria": "produto"},
+        "produtos em alta": {"agentes": ["ag_01"], "acao": "top_oportunidades", "categoria": "marketing"},
+        "preços dos concorrentes": {"agentes": ["ag_03"], "acao": "comparar_precos_concorrentes", "categoria": "marketing"},
+        "atender cliente": {"agentes": ["ag_06"], "acao": "processar_mensagem", "categoria": "marketing"},
+        "já fabricamos algo parecido": {"agentes": ["ag_09"], "acao": "buscar_similar", "categoria": "produto"},
+        "margem": {"agentes": ["ag_02"], "acao": "analisar_margens", "categoria": "financeiro"},
+        "custo": {"agentes": ["ag_02", "ag_09"], "acao": "analisar_custos", "categoria": "financeiro"},
+        "anúncio": {"agentes": ["ag_03"], "acao": "verificar_posicoes", "categoria": "marketing"},
+        "vendas": {"agentes": ["ag_02", "ag_03"], "acao": "relatorio_vendas", "categoria": "financeiro"},
     }
 
     pergunta_lower = pergunta.lower()
     for chave, rota in perguntas.items():
         if chave in pergunta_lower:
-            return {"pergunta": pergunta, "agentes": rota["agentes"], "acao": rota["acao"]}
+            return {"pergunta": pergunta, "agentes": rota["agentes"], "acao": rota["acao"], "categoria": rota["categoria"]}
 
-    return {"pergunta": pergunta, "agentes": ["ag_09", "ag_01", "ag_02"], "acao": "buscar_similar + top_oportunidades + relatorio_diario"}
+    return {"pergunta": pergunta, "agentes": ["ag_09", "ag_01", "ag_02"],
+            "acao": "buscar_similar + top_oportunidades + relatorio_diario", "categoria": "geral"}
 
 def relatorio_executivo() -> str:
     """Gera relatório executivo diário consolidado."""
