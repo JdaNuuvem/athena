@@ -24,6 +24,9 @@ const NAV_ITEMS = [
   { href: "/documentos", label: "Documentos", icon: "📁" },
   { href: "/automacoes", label: "Automações", icon: "🔄" },
   { href: "/relatorios", label: "Relatórios", icon: "📈" },
+  { href: "/agents", label: "Agentes", icon: "◈" },
+  { href: "/integracoes/bling", label: "Bling", icon: "◆" },
+  { href: "/hermes", label: "Hermes", icon: "◈" },
 ];
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
