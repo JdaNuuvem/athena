@@ -504,3 +504,13 @@ export async function confirmarLeituraNotificacao(
   });
   return res.json();
 }
+
+// ── NFe Download ──
+
+export function baixarNFeXML(idNota: number): void {
+  window.open(`/api/bling/financeiro/notas-fiscais/${idNota}/xml`, "_blank");
+}
+
+export function abrirNFeDANFE(idNota: number): void {
+  window.open(`/api/bling/financeiro/notas-fiscais/${idNota}/danfe`, "_blank");
+}

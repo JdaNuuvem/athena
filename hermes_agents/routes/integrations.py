@@ -421,6 +421,7 @@ from bling_erp import (
     atualizar_situacao_produtos,
     listar_depositos, obter_saldo_deposito, atualizar_estoque_deposito,
     listar_pedidos, listar_contas_receber, listar_notas_fiscais,
+    get_nfe_detail, get_nfe_xml,
     resumo_vendas, sincronizar_produtos, sincronizar_pedidos,
     listar_webhooks, criar_webhook, deletar_webhook,
     listar_notificacoes, confirmar_leitura_notificacao,
@@ -535,6 +536,30 @@ def api_notas_fiscais():
     pagina = request.args.get("pagina", 1, type=int)
     limite = request.args.get("limite", 100, type=int)
     return jsonify(listar_notas_fiscais(pagina, limite))
+
+@bling_bp.route("/financeiro/notas-fiscais/<int:id_nota>")
+def api_nfe_detail(id_nota):
+    return jsonify(get_nfe_detail(id_nota))
+
+@bling_bp.route("/financeiro/notas-fiscais/<int:id_nota>/xml")
+def api_nfe_xml(id_nota):
+    xml_content, content_type = get_nfe_xml(id_nota)
+    if not xml_content:
+        return jsonify({"error": "XML não encontrado ou acesso negado"}), 404
+    from flask import Response
+    return Response(xml_content, mimetype=content_type or "application/xml",
+                    headers={"Content-Disposition": f"attachment; filename=nfe-{id_nota}.xml"})
+
+@bling_bp.route("/financeiro/notas-fiscais/<int:id_nota>/danfe")
+def api_nfe_danfe(id_nota):
+    """Redireciona para o DANFE no site do Bling."""
+    r = get_nfe_detail(id_nota)
+    data = r.get("data", {})
+    danfe_url = data.get("linkDanfe", "")
+    if not danfe_url:
+        return jsonify({"error": "DANFE não disponível"}), 404
+    from flask import redirect
+    return redirect(danfe_url)
 
 
 @bling_bp.route("/webhooks")

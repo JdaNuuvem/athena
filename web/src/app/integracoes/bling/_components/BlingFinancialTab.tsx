@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Spinner from "./shared/Spinner";
 import Alert from "./shared/Alert";
 import EmptyState from "./shared/EmptyState";
-import { listarContasReceber, listarNotasFiscais } from "@/lib/api";
+import { listarContasReceber, listarNotasFiscais, baixarNFeXML, abrirNFeDANFE } from "@/lib/api";
 
 interface NotaFiscal {
   id: number;
@@ -177,6 +177,20 @@ export default function BlingFinancialTab() {
                                 <h4 className="text-neutral-400 font-medium mb-2">Valores</h4>
                                 <p className="text-neutral-500 italic text-[10px]">Total não disponível no resumo. Acesse o Bling para valores detalhados da NF-e.</p>
                               </div>
+                            </div>
+                            <div className="flex gap-2 mt-4 pt-3 border-t border-neutral-700/50">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); baixarNFeXML(n.id); }}
+                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs rounded-lg transition-colors"
+                              >
+                                📄 Baixar XML
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); abrirNFeDANFE(n.id); }}
+                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs rounded-lg transition-colors"
+                              >
+                                🖨️ DANFE
+                              </button>
                             </div>
                           </td>
                         </tr>

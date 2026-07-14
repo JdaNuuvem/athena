@@ -116,6 +116,29 @@ def listar_contas_receber(pagina: int = 1, limite: int = 100) -> dict:
 def listar_notas_fiscais(pagina: int = 1, limite: int = 100) -> dict:
     return _request("nfe", {"pagina": pagina, "limite": limite})
 
+def get_nfe_detail(id_nota: int) -> dict:
+    """Retorna detalhes completos de uma NF-e incluindo link do XML e DANFE."""
+    return _request(f"nfe/{id_nota}")
+
+def get_nfe_xml(id_nota: int) -> tuple[str | None, str | None]:
+    """Retorna (conteudo_xml, content_type) do XML da NF-e ou (None, None) se erro."""
+    r = get_nfe_detail(id_nota)
+    if r.get("error"):
+        return None, None
+    data = r.get("data", {})
+    xml_url = data.get("xml") or data.get("linkXml") or ""
+    if not xml_url:
+        return None, None
+    try:
+        token = get_access_token()
+        headers = {"Authorization": f"Bearer {token}"}
+        resp = requests.get(xml_url, headers=headers, timeout=30)
+        if resp.status_code == 200:
+            return resp.text, resp.headers.get("Content-Type", "application/xml")
+    except Exception:
+        pass
+    return None, None
+
 def sincronizar_produtos() -> dict:
     async def _go():
         db = await get_db()
