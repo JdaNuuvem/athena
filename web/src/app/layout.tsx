@@ -123,9 +123,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                       : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800"
                   }`}
                 >
-                  <span className="text-base w-5 text-center shrink-0" aria-hidden="true">
-                    {item.icon}
-                  </span>
+                  <Icon name={item.icon} size={18} className="shrink-0" />
                   {sidebarOpen
                     ? <span>{item.label}</span>
                     : <span className="sr-only">{item.label}</span>
