@@ -20,17 +20,17 @@ REDIRECT_URI = f"https://{BLING_DOMAIN}/api/bling/oauth/callback"
 BASE_URL = "https://www.bling.com.br/Api/v3"
 
 # ── Token management (persistido no DB) ──
-# ── Token storage (cache em memória) ──
+# ── Token storage (env var > cache) ──
 _TOKEN = {"access": "", "refresh": ""}
 
 def get_access_token() -> str:
-    return _TOKEN["access"]
+    return os.environ.get("BLING_ACCESS_TOKEN", "") or _TOKEN["access"]
 
 def set_access_token(token: str):
     _TOKEN["access"] = token
 
 def get_refresh_token() -> str:
-    return _TOKEN["refresh"]
+    return os.environ.get("BLING_REFRESH_TOKEN", "") or _TOKEN["refresh"]
 
 def set_refresh_token(token: str):
     _TOKEN["refresh"] = token
