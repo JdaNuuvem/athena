@@ -20,84 +20,20 @@ REDIRECT_URI = f"https://{BLING_DOMAIN}/api/bling/oauth/callback"
 BASE_URL = "https://www.bling.com.br/Api/v3"
 
 # ── Token management (persistido no DB) ──
-
-_table_ready = False
-
-def _ensure_token_table():
-    global _table_ready
-    if _table_ready:
-        return
-    async def _go():
-        db = await get_db()
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS bling_tokens (
-                id SERIAL PRIMARY KEY,
-                access_token TEXT NOT NULL,
-                refresh_token TEXT,
-                expires_at TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT NOW()
-            )
-        """)
-        await db.execute("""
-            INSERT INTO bling_tokens (id, access_token, refresh_token)
-            SELECT 1, '', ''
-            WHERE NOT EXISTS (SELECT 1 FROM bling_tokens WHERE id = 1)
-        """)
-    try:
-        run_async(_go())
-        _table_ready = True
-    except Exception:
-        pass
-
-# ── Token cache em memória (fallback quando DB falha) ──
-_token_cache = {"access": "", "refresh": ""}
+# ── Token storage (cache em memória) ──
+_TOKEN = {"access": "", "refresh": ""}
 
 def get_access_token() -> str:
-    try:
-        _ensure_token_table()
-        async def _go():
-            db = await get_db()
-            row = await db.fetchrow("SELECT access_token FROM bling_tokens WHERE id = 1")
-            return row["access_token"] if row else ""
-        token = run_async(_go())
-        if token:
-            _token_cache["access"] = token
-            return token
-    except Exception as e:
-        log(AGENT, f"Erro ao ler token do DB: {e}")
-    return _token_cache.get("access", "")
+    return _TOKEN["access"]
 
 def set_access_token(token: str):
-    _token_cache["access"] = token
-    try:
-        _ensure_token_table()
-        async def _go():
-            db = await get_db()
-            await db.execute("UPDATE bling_tokens SET access_token = $1, updated_at = NOW() WHERE id = 1", token)
-        run_async(_go())
-    except Exception as e:
-        log(AGENT, f"Erro ao salvar token no DB: {e}")
+    _TOKEN["access"] = token
 
 def get_refresh_token() -> str:
-    try:
-        _ensure_token_table()
-        async def _go():
-            db = await get_db()
-            row = await db.fetchrow("SELECT refresh_token FROM bling_tokens WHERE id = 1")
-            return row["refresh_token"] if row else ""
-        return run_async(_go())
-    except Exception:
-        return ""
+    return _TOKEN["refresh"]
 
 def set_refresh_token(token: str):
-    try:
-        _ensure_token_table()
-        async def _go():
-            db = await get_db()
-            await db.execute("UPDATE bling_tokens SET refresh_token = $1, updated_at = NOW() WHERE id = 1", token)
-        run_async(_go())
-    except Exception:
-        pass
+    _TOKEN["refresh"] = token
 
 def get_auth_url() -> str:
     params = urlencode({
