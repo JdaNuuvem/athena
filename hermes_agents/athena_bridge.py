@@ -1030,6 +1030,82 @@ def memory_recall():
 
 
 
+
+
+# ── PDV Routes ──
+
+@app.route('/api/pdv/dashboard', methods=['GET'])
+def pdv_dashboard_api():
+    from core.pdv import dashboard as pdv_dash
+    return jsonify(pdv_dash())
+
+@app.route('/api/pdv/caixa/abrir', methods=['POST'])
+def pdv_abrir_caixa():
+    data = request.json or {}
+    from core.pdv import abrir_caixa
+    return jsonify(abrir_caixa(data.get("operador","Admin"), float(data.get("saldo_inicial",0))))
+
+@app.route('/api/pdv/caixa/<int:id>/fechar', methods=['POST'])
+def pdv_fechar_caixa(id):
+    data = request.json or {}
+    from core.pdv import fechar_caixa
+    return jsonify(fechar_caixa(id, float(data.get("saldo_final",0))))
+
+@app.route('/api/pdv/caixa/<int:id>/sangria', methods=['POST'])
+def pdv_sangria(id):
+    data = request.json or {}
+    from core.pdv import sangria
+    return jsonify(sangria(id, float(data.get("valor",0)), data.get("motivo",""), data.get("operador","")))
+
+@app.route('/api/pdv/caixa/<int:id>/suprimento', methods=['POST'])
+def pdv_suprimento(id):
+    data = request.json or {}
+    from core.pdv import suprimento
+    return jsonify(suprimento(id, float(data.get("valor",0)), data.get("motivo",""), data.get("operador","")))
+
+@app.route('/api/pdv/venda', methods=['POST'])
+def pdv_venda():
+    data = request.json or {}
+    from core.pdv import realizar_venda
+    return jsonify(realizar_venda(
+        caixa_id=data.get("caixa_id",0),
+        itens=data.get("itens",[]),
+        pagamentos=data.get("pagamentos",[]),
+        cliente=data.get("cliente",""),
+        operador=data.get("operador",""),
+        desconto=float(data.get("desconto",0))
+    ))
+
+@app.route('/api/pdv/<tabela>', methods=['GET'])
+def pdv_list(tabela):
+    from core.pdv import list as pl, TABLES
+    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
+    return jsonify({"data": pl(tabela)})
+
+@app.route('/api/pdv/<tabela>', methods=['POST'])
+def pdv_create(tabela):
+    from core.pdv import create as pc, TABLES
+    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
+    return jsonify(pc(tabela, request.json or {}))
+
+@app.route('/api/pdv/<tabela>/<int:id>', methods=['GET'])
+def pdv_get(tabela, id):
+    from core.pdv import get as pg, TABLES
+    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
+    return jsonify(pg(tabela, id))
+
+@app.route('/api/pdv/<tabela>/<int:id>', methods=['PUT'])
+def pdv_update(tabela, id):
+    from core.pdv import update as pu, TABLES
+    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
+    return jsonify(pu(tabela, id, request.json or {}))
+
+@app.route('/api/pdv/<tabela>/<int:id>', methods=['DELETE'])
+def pdv_delete(tabela, id):
+    from core.pdv import delete as pd, TABLES
+    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
+    return jsonify(pd(tabela, id))
+
 # ── Compras Routes ──
 
 @app.route('/api/compras/dashboard', methods=['GET'])
@@ -1210,6 +1286,68 @@ def rh_folha_resumo(mes):
 def rh_beneficios_resumo():
     from core.rh import beneficios_resumo
     return jsonify(beneficios_resumo())
+
+# ── Cadastros CRUD ──
+
+@app.route('/api/cadastros/<tabela>', methods=['GET'])
+def cad_list(tabela):
+    from core.cadastros import list as cad_list_fn, ALL_TABLES
+    if tabela not in ALL_TABLES:
+        return jsonify({"error": "Tabela invalida"}), 404
+    return jsonify({"data": cad_list_fn(tabela)})
+
+@app.route('/api/cadastros/<tabela>', methods=['POST'])
+def cad_create(tabela):
+    from core.cadastros import create as cad_create_fn, ALL_TABLES
+    if tabela not in ALL_TABLES:
+        return jsonify({"error": "Tabela invalida"}), 404
+    data = request.json or {}
+    if not data:
+        return jsonify({"error": "Dados obrigatorios"}), 400
+    return jsonify(cad_create_fn(tabela, data))
+
+@app.route('/api/cadastros/<tabela>/<int:id>', methods=['GET'])
+def cad_get(tabela, id):
+    from core.cadastros import get as cad_get_fn, ALL_TABLES
+    if tabela not in ALL_TABLES:
+        return jsonify({"error": "Tabela invalida"}), 404
+    return jsonify(cad_get_fn(tabela, id))
+
+@app.route('/api/cadastros/<tabela>/<int:id>', methods=['PUT'])
+def cad_update(tabela, id):
+    from core.cadastros import update as cad_update_fn, ALL_TABLES
+    if tabela not in ALL_TABLES:
+        return jsonify({"error": "Tabela invalida"}), 404
+    data = request.json or {}
+    return jsonify(cad_update_fn(tabela, id, data))
+
+@app.route('/api/cadastros/<tabela>/<int:id>', methods=['DELETE'])
+def cad_delete(tabela, id):
+    from core.cadastros import delete as cad_delete_fn, ALL_TABLES
+    if tabela not in ALL_TABLES:
+        return jsonify({"error": "Tabela invalida"}), 404
+    return jsonify(cad_delete_fn(tabela, id))
+
+@app.route('/api/cadastros/permissoes/perfil', methods=['GET'])
+def cad_permissoes_perfil():
+    from core.cadastros import permissoes_por_perfil
+    return jsonify({"data": permissoes_por_perfil()})
+
+@app.route('/api/cadastros/vendedores/comissao', methods=['GET'])
+def cad_vendedor_comissao():
+    from core.cadastros import vendedor_comissao_resumo
+    return jsonify(vendedor_comissao_resumo())
+
+@app.route('/api/cadastros/vendedores/metas', methods=['GET'])
+@app.route('/api/cadastros/vendedores/metas/<mes>', methods=['GET'])
+def cad_vendedor_metas(mes=None):
+    from core.cadastros import vendedor_metas
+    return jsonify({"data": vendedor_metas(mes)})
+
+@app.route('/api/cadastros/fornecedores/resumo', methods=['GET'])
+def cad_fornecedor_resumo():
+    from core.cadastros import fornecedor_resumo
+    return jsonify({"data": fornecedor_resumo()})
 
 # ===========================================================================
 # Business operations (chamado pelo Business.tsx)
