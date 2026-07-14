@@ -92,17 +92,17 @@ export default function ProdutosPage() {
                   <td className="p-3 text-indigo-400 font-mono text-xs numeric">{p.sku}</td>
                   <td className="p-3 text-neutral-300">{p.nome}</td>
                   <td className="p-3 text-right numeric">
-                    <span className={p.margem_pct >= 25 ? "text-green-400" : p.margem_pct >= 15 ? "text-yellow-400" : "text-red-400"}>
-                      {p.margem_pct.toFixed(1)}%
+                    <span className={(p.margem_pct ?? 0) >= 25 ? "text-green-400" : (p.margem_pct ?? 0) >= 15 ? "text-yellow-400" : "text-red-400"}>
+                      {(p.margem_pct ?? 0).toFixed(1)}%
                     </span>
                   </td>
                   <td className="p-3 text-right text-neutral-300 numeric">
-                    R$ {p.receita_30d.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    R$ {(p.receita_30d ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                   </td>
-                  <td className="p-3 text-right text-neutral-400 numeric">{p.vendidos_30d}</td>
+                  <td className="p-3 text-right text-neutral-400 numeric">{p.vendidos_30d ?? 0}</td>
                   <td className="p-3 text-center">
                     <span className="text-xs bg-neutral-800 text-neutral-400 px-2 py-0.5 rounded-full numeric">
-                      {p.total_lojas}
+                      {p.total_lojas ?? 0}
                     </span>
                   </td>
                 </tr>
