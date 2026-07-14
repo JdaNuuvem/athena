@@ -36,58 +36,33 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     window.location.href = "/login";
   };
 
-  // Login page: no sidebar
-  if (pathname === "/login") {
-    return (
-      <html lang="pt-BR">
-        <head>
-          <meta charSet="utf-8" />
-          <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <title>Athena — Login</title>
-        </head>
-        <body className="bg-neutral-950 text-neutral-100 min-h-screen">{children}</body>
-      </html>
-    );
-  }
-
-  // Close mobile drawer on navigation
-  useEffect(() => {
-    if (typeof window !== "undefined" && window.innerWidth < 640) {
-      setSidebarOpen(false);
-    }
-  }, [pathname]);
+  const isLogin = pathname === "/login";
 
   return (
     <html lang="pt-BR">
       <head>
-        <title>Hermes — Athena</title>
+        <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Athena</title>
       </head>
-      <body className="bg-neutral-950 text-neutral-100 min-h-screen flex">
+      <body className={`bg-neutral-950 text-neutral-100 min-h-screen ${!isLogin ? "flex" : ""}`}>
+        {isLogin ? (
+          children
+        ) : (
+          <>
+            {/* Mobile backdrop */}
+            {sidebarOpen && (
+              <div className="sm:hidden fixed inset-0 bg-black/60 z-40" onClick={() => setSidebarOpen(false)} aria-hidden="true" />
+            )}
 
-        {/* Mobile backdrop */}
-        {sidebarOpen && (
-          <div
-            className="sm:hidden fixed inset-0 bg-black/60 z-40"
-            onClick={() => setSidebarOpen(false)}
-            aria-hidden="true"
-          />
-        )}
-
-        {/* Sidebar */}
-        <aside
-          aria-label="Navegação principal"
-          className={[
-            "bg-neutral-900 border-r border-neutral-800 flex flex-col",
-            "transition-all duration-200",
-            // Mobile: fixed overlay drawer, always full width
-            "fixed inset-y-0 left-0 z-50 w-56",
-            sidebarOpen ? "translate-x-0" : "-translate-x-full",
-            // Desktop: in-flow, collapsible width
-            "sm:relative sm:z-auto sm:inset-auto sm:translate-x-0 sm:shrink-0",
-            sidebarOpen ? "sm:w-56" : "sm:w-14",
-          ].join(" ")}
-        >
+            {/* Sidebar */}
+            <aside aria-label="Navegação principal" className={[
+              "bg-neutral-900 border-r border-neutral-800 flex flex-col transition-all duration-200",
+              "fixed inset-y-0 left-0 z-50 w-56",
+              sidebarOpen ? "translate-x-0" : "-translate-x-full",
+              "sm:relative sm:z-auto sm:inset-auto sm:translate-x-0 sm:shrink-0",
+              sidebarOpen ? "sm:w-56" : "sm:w-14",
+            ].join(" ")}>
           <div className="flex items-center justify-between p-3 border-b border-neutral-800">
             {sidebarOpen && (
               <span className="font-semibold text-sm tracking-wide select-none">ATHENA</span>
@@ -171,7 +146,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
           {children}
         </main>
-
+          </>
+        )}
       </body>
     </html>
   );
