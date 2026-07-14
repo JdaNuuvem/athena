@@ -19,6 +19,10 @@ const NAV_ITEMS = [
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [user, setUser] = useState<{ name: string; role: string } | null>(null);
+  const [loja, setLoja] = useState<string>(() => {
+    if (typeof window === "undefined") return "todas";
+    return localStorage.getItem("loja") || "todas";
+  });
   const pathname = usePathname();
 
   // Auto-login: garante que sempre existe um token
@@ -110,6 +114,32 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               );
             })}
           </nav>
+
+          {/* Store selector */}
+          {sidebarOpen && (
+            <div className="px-3 pb-2">
+              <label className="text-[9px] text-neutral-500 uppercase tracking-wider mb-1 block">Loja</label>
+              <select
+                value={loja}
+                onChange={(e) => {
+                  setLoja(e.target.value);
+                  localStorage.setItem("loja", e.target.value);
+                }}
+                className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-indigo-500"
+              >
+                <option value="todas">🏢 Todas as Lojas</option>
+                <option value="centro">📍 Loja Centro</option>
+                <option value="shopping">🛍️ Loja Shopping</option>
+                <option value="norte">🧭 Loja Norte</option>
+                <option value="sul">🧭 Loja Sul</option>
+              </select>
+            </div>
+          )}
+          {!sidebarOpen && (
+            <div className="px-1.5 pb-2 flex justify-center">
+              <span className="text-[9px] text-neutral-500 cursor-help" title={`Loja: ${loja}`}>🏢</span>
+            </div>
+          )}
 
           {user && (
             <div className="p-3 border-t border-neutral-800">
