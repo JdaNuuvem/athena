@@ -1026,6 +1026,54 @@ def memory_recall():
     results = memory_recall(query, agent_id=agent or None, limit=5)
     return jsonify({"results": results, "total": len(results)})
 
+
+
+# ── CRM Routes ──
+
+@app.route('/api/crm/funil', methods=['GET'])
+def crm_funil():
+    from core.crm import funil as crm_funil_fn
+    return jsonify(crm_funil_fn())
+
+@app.route('/api/crm/<tabela>', methods=['GET'])
+def crm_list(tabela):
+    from core.crm import list as crm_list_fn, CRM_TABLES
+    if tabela not in CRM_TABLES:
+        return jsonify({"error": "Tabela invalida"}), 404
+    return jsonify({"data": crm_list_fn(tabela)})
+
+@app.route('/api/crm/<tabela>', methods=['POST'])
+def crm_create(tabela):
+    from core.crm import create as crm_create_fn, CRM_TABLES
+    if tabela not in CRM_TABLES:
+        return jsonify({"error": "Tabela invalida"}), 404
+    data = request.json or {}
+    if not data:
+        return jsonify({"error": "Dados obrigatorios"}), 400
+    return jsonify(crm_create_fn(tabela, data))
+
+@app.route('/api/crm/<tabela>/<int:id>', methods=['GET'])
+def crm_get(tabela, id):
+    from core.crm import get as crm_get_fn, CRM_TABLES
+    if tabela not in CRM_TABLES:
+        return jsonify({"error": "Tabela invalida"}), 404
+    return jsonify(crm_get_fn(tabela, id))
+
+@app.route('/api/crm/<tabela>/<int:id>', methods=['PUT'])
+def crm_update(tabela, id):
+    from core.crm import update as crm_update_fn, CRM_TABLES
+    if tabela not in CRM_TABLES:
+        return jsonify({"error": "Tabela invalida"}), 404
+    data = request.json or {}
+    return jsonify(crm_update_fn(tabela, id, data))
+
+@app.route('/api/crm/<tabela>/<int:id>', methods=['DELETE'])
+def crm_delete(tabela, id):
+    from core.crm import delete as crm_delete_fn, CRM_TABLES
+    if tabela not in CRM_TABLES:
+        return jsonify({"error": "Tabela invalida"}), 404
+    return jsonify(crm_delete_fn(tabela, id))
+
 # ── Lojas CRUD ──
 
 @app.route('/api/lojas/manage', methods=['GET'])
