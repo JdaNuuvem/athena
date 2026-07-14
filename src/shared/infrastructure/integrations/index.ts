@@ -1,5 +1,0 @@
-export { TelegramBot, telegramBot, TelegramMessage, TelegramUpdate } from './telegram-bot'
-export { WhatsAppAdapter, whatsappAdapter, WhatsAppMessage, WhatsAppWebhookPayload } from './whatsapp-adapter'
-export { MercadoLivreAdapter, mercadoLivreAdapter, MLProduct, MLOrder, MLQuestion } from './mercadolivre-adapter'
-export { ShopeeAdapter, shopeeAdapter, ShopeeProduct, ShopeeOrder } from './shopee-adapter'
-export { EmailSender, emailSender, EmailConfig, EmailMessage } from './email-sender'

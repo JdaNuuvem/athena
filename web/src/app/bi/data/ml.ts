@@ -1,0 +1,105 @@
+import type { AnomalyResult, CustomerSegment, MLRecommendation } from "../types";
+
+export const ANOMALIAS: AnomalyResult[] = [
+  {
+    id: 1,
+    tipo: "transacao",
+    severidade: "critico",
+    descricao: 'Transação atípica detectada — R$ 45.200 em "Utilidades" por cliente novo',
+    valor: 45200,
+    impacto: "Potencial fraude ou erro de faturamento",
+    data: "13/07/2026",
+    recomendacao: "Verificar pedido #PED-2347 e conferir com cliente",
+  },
+  {
+    id: 2,
+    tipo: "estoque",
+    severidade: "moderado",
+    descricao: 'Consumo anômalo de "Organizador MC-001" — 3x acima da média semanal',
+    valor: 12800,
+    impacto: "Ruptura de estoque em 5 dias se mantido o ritmo",
+    data: "12/07/2026",
+    recomendacao: "Disparar ordem de compra emergencial de 200 unidades",
+  },
+  {
+    id: 3,
+    tipo: "venda",
+    severidade: "baixo",
+    descricao: "Queda atípica de 40% nas vendas da categoria Pet vs média semanal",
+    valor: -6400,
+    impacto: "Possível problema de campanha ou precificação",
+    data: "11/07/2026",
+    recomendacao: "Revisar campanhas ativas e comparar preços com concorrência",
+  },
+  {
+    id: 4,
+    tipo: "preco",
+    severidade: "moderado",
+    descricao: 'Margem de "Cooler Compacto" caiu para 9.8% — abaixo do piso de 15%',
+    valor: 3800,
+    impacto: "Prejuízo estimado de R$ 3.800/mês se mantido",
+    data: "10/07/2026",
+    recomendacao: "Reajustar preço para R$ 79,90 ou negociar custo com fornecedor",
+  },
+  {
+    id: 5,
+    tipo: "venda",
+    severidade: "baixo",
+    descricao: "Pico anômalo de vendas na madrugada (02:00-05:00) — 4x média do horário",
+    valor: 18200,
+    impacto: "Possível ataque de bot ou campanha internacional",
+    data: "09/07/2026",
+    recomendacao: "Analisar origem do tráfego e geolocalização dos pedidos",
+  },
+];
+
+export const SEGMENTOS: CustomerSegment[] = [
+  { segmento: "Clientes Premium", percentual: 12, receitaMedia: 4850, churn: 2.3, descricao: "Alta fidelidade, ticket médio elevado, compram todo mês" },
+  { segmento: "Compradores Regulares", percentual: 38, receitaMedia: 1250, churn: 8.7, descricao: "Compram a cada 2-3 meses, sensíveis a promoções" },
+  { segmento: "Compradores Ocasional", percentual: 35, receitaMedia: 380, churn: 18.4, descricao: "Compram em datas sazonais, baixa recorrência" },
+  { segmento: "Em Risco de Churn", percentual: 10, receitaMedia: 620, churn: 52.1, descricao: "Reduziram frequência em 60% nos últimos 3 meses" },
+  { segmento: "Novos Clientes", percentual: 5, receitaMedia: 280, churn: 35.0, descricao: "Primeira compra nos últimos 30 dias" },
+];
+
+export const RECOMENDACOES: MLRecommendation[] = [
+  {
+    id: 1,
+    tipo: "cross-sell",
+    descricao: 'Clientes que compram "Garrafa Térmica Pro" têm 73% de chance de comprar "Copo Térmico 500ml"',
+    confianca: 73,
+    receitaEstimada: 12800,
+    acao: "Criar bundle com 10% de desconto na página de produto",
+  },
+  {
+    id: 2,
+    tipo: "upsell",
+    descricao: '20% dos clientes de "Fone Bluetooth" sobem para "Mini Projetor LED" quando expostos a comparativo',
+    confianca: 68,
+    receitaEstimada: 9400,
+    acao: "Adicionar banner de upgrade no carrinho de compras",
+  },
+  {
+    id: 3,
+    tipo: "retencao",
+    descricao: "58 clientes no segmento 'Em Risco de Churn' não compram há 60+ dias",
+    confianca: 85,
+    receitaEstimada: 22100,
+    acao: "Enviar cupom de 15% + frete grátis com validade de 7 dias",
+  },
+  {
+    id: 4,
+    tipo: "cross-sell",
+    descricao: 'Compras de "Cortina Blackout" têm 61% de probabilidade de incluir "Vaso Decorativo"',
+    confianca: 61,
+    receitaEstimada: 7600,
+    acao: "Sugerir combinação na finalização de compra",
+  },
+  {
+    id: 5,
+    tipo: "upsell",
+    descricao: '31% dos clientes "Ocasional" sobem para "Regular" com programa de fidelidade',
+    confianca: 77,
+    receitaEstimada: 31500,
+    acao: "Lançar programa de pontos com recompensas progressivas",
+  },
+];

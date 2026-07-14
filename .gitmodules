@@ -1,0 +1,3 @@
+[submodule "athena"]
+	path = athena
+	url = https://github.com/JdaNuuvem/athena

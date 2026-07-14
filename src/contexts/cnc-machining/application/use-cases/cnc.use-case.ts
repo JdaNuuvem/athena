@@ -1,3 +1,0 @@
-import type { ICNCJobRepository } from '../../domain/repositories'; import { CNCJob } from '../../domain/entities'; import type { IEventBus } from '@shared/domain/events'
-export class ScheduleCNCJobUseCase { constructor(private repo: ICNCJobRepository, private eb: IEventBus) {} async execute(input: { partNumber: string; estimatedHours: number; priority?: number }): Promise<CNCJob> { const j = new CNCJob(input.partNumber, input.estimatedHours, input.priority); await this.repo.save(j); return j } }
-export class StartCNCJobUseCase { constructor(private repo: ICNCJobRepository) {} async execute(id: string, machineId: string): Promise<void> { const j = await this.repo.findById(id); if (!j) throw new Error('Not found'); j.start(machineId); await this.repo.save(j) } }

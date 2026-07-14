@@ -1,2 +1,0 @@
-export interface Mold { id: string; moldCode: string; productId: string; cavityCount: number; steelType: string; cycleLife: number; currentCycles: number; status: 'designed'|'fabricated'|'delivered'|'installed'|'retired'; installedMachineId?: string; createdAt: string; updatedAt: string }
-export interface MoldMaintenance { id: string; moldId: string; type: string; scheduledDate?: string; performedAt?: string; findings?: string; partsReplaced: string[]; downtimeHours: number; nextMaintenanceCycles?: number }
