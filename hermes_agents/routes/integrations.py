@@ -415,7 +415,7 @@ def test_whatsapp():
 
 # ── Bling API v2 (new bling_bp) ──
 
-from hermes_agents.bling_erp import (
+from bling_erp import (
     status as bling_status_fn, get_auth_url, exchange_code,
     listar_produtos, criar_produto, atualizar_produto, deletar_produto,
     atualizar_situacao_produtos,

@@ -153,6 +153,11 @@ import time, json
 app = Flask(__name__)
 CORS(app)
 
+from routes.integrations import bling_bp
+from routes.webhooks import webhook_bp
+app.register_blueprint(bling_bp)
+app.register_blueprint(webhook_bp)
+
 # ===========================================================================
 # Autenticação e Health Check (Athena OS)
 # ===========================================================================

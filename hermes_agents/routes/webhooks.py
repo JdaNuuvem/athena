@@ -56,7 +56,7 @@ def bling_pedido_webhook_v2():
 
 # ── Bling Webhook Receiver (Task 4) ──
 
-from hermes_agents.bling_erp import validar_assinatura_webhook, processar_evento_webhook as processar_evento
+from bling_erp import validar_assinatura_webhook, processar_evento_webhook as processar_evento
 
 EVENTOS_BLING = [
     "pedido.criado", "pedido.alterado", "pedido.cancelado",
