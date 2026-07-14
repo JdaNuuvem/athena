@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: "⊞" },
   { href: "/agents", label: "Agentes", icon: "◈" },
   { href: "/produtos", label: "Produtos", icon: "◇" },
+  { href: "/integracoes/bling", label: "Bling", icon: "◆" },
   { href: "/workflows", label: "Workflows", icon: "⇄" },
   { href: "/metrics", label: "Métricas", icon: "▤" },
   { href: "/business", label: "Operações", icon: "⚙" },
