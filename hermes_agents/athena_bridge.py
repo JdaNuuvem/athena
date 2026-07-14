@@ -1848,11 +1848,21 @@ def deletar_loja_manage(id):
 
 # ── RH CRUD ──
 
+@app.route('/api/rh/dashboard', methods=['GET'])
+def rh_dashboard():
+    from core.rh import dashboard
+    return jsonify(dashboard())
+
 @app.route('/api/rh/<tabela>', methods=['GET'])
 def rh_list(tabela):
-    from core.rh import list as rh_list_fn, RH_TABLES
+    from core.rh import list as rh_list_fn, listar_filtrado, RH_TABLES
     if tabela not in RH_TABLES:
         return jsonify({"error": "Tabela invalida"}), 404
+    data_inicio = request.args.get("data_inicio", "")
+    data_fim = request.args.get("data_fim", "")
+    status = request.args.get("status", "")
+    if data_inicio or data_fim or status:
+        return jsonify(listar_filtrado(tabela, data_inicio, data_fim, status))
     return jsonify({"data": rh_list_fn(tabela)})
 
 @app.route('/api/rh/<tabela>', methods=['POST'])
@@ -1901,6 +1911,11 @@ def rh_folha_resumo(mes):
 def rh_beneficios_resumo():
     from core.rh import beneficios_resumo
     return jsonify(beneficios_resumo())
+
+@app.route('/api/rh/funcionario/<int:id>', methods=['GET'])
+def rh_funcionario_detalhe(id):
+    from core.rh import funcionario_detalhe
+    return jsonify(funcionario_detalhe(id))
 
 # ── Cadastros CRUD ──
 

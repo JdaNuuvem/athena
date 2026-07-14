@@ -282,3 +282,74 @@ def beneficios_resumo() -> dict:
     except Exception as e:
         log(AGENT, f"Erro beneficios_resumo: {e}")
         return {"total_empresa": 0, "total_funcionario": 0, "beneficios": []}
+
+# ── Dashboard ──
+
+def dashboard() -> dict:
+    async def _go():
+        db = await get_db()
+        total_func = await db.fetchval("SELECT COUNT(*) FROM rh_funcionarios")
+        ativos = await db.fetchval("SELECT COUNT(*) FROM rh_funcionarios WHERE status = 'ativo'")
+        ferias = await db.fetchval("SELECT COUNT(*) FROM rh_funcionarios WHERE status = 'ferias'")
+        afastados = await db.fetchval("SELECT COUNT(*) FROM rh_funcionarios WHERE status = 'afastado'")
+        folha_mes = await db.fetchval("SELECT COALESCE(SUM(liquido),0) FROM rh_folha WHERE mes = TO_CHAR(CURRENT_DATE, 'YYYY-MM')")
+        ponto_hoje = await db.fetchval("SELECT COUNT(*) FROM rh_ponto WHERE data = CURRENT_DATE")
+        ferias_proximas = await db.fetch("SELECT f.nome, r.inicio, r.fim FROM rh_ferias r JOIN rh_funcionarios f ON f.id = r.funcionario_id WHERE r.inicio >= CURRENT_DATE ORDER BY r.inicio LIMIT 5")
+        return {
+            "total_funcionarios": total_func or 0, "ativos": ativos or 0,
+            "ferias": ferias or 0, "afastados": afastados or 0,
+            "folha_mes": float(folha_mes or 0), "ponto_hoje": ponto_hoje or 0,
+            "ferias_proximas": [dict(r) for r in (ferias_proximas or [])],
+        }
+    try: return run_async(_go())
+    except: return {"total_funcionarios":0,"ativos":0,"ferias":0,"afastados":0,"folha_mes":0,"ponto_hoje":0,"ferias_proximas":[]}
+
+# ── Listagem com filtro ──
+
+def listar_filtrado(tabela: str, data_inicio: str = "", data_fim: str = "", status: str = "") -> dict:
+    date_fields = {"ferias": "inicio", "folha": "mes", "ponto": "data"}
+    field = date_fields.get(tabela, "created_at")
+    async def _go():
+        db = await get_db()
+        where = []
+        params = []
+        p = 1
+        if data_inicio and field != "mes":
+            where.append(f"{field} >= ${p}::date"); params.append(data_inicio); p += 1
+        if data_fim and field != "mes":
+            where.append(f"{field} <= ${p}::date"); params.append(data_fim); p += 1
+        if data_inicio and field == "mes":
+            where.append(f"{field} >= ${p}"); params.append(data_inicio); p += 1
+        if data_fim and field == "mes":
+            where.append(f"{field} <= ${p}"); params.append(data_fim); p += 1
+        if status:
+            where.append(f"status = ${p}"); params.append(status); p += 1
+        clause = ("WHERE " + " AND ".join(where)) if where else ""
+        rows = await db.fetch(f"SELECT * FROM rh_{tabela} {clause} ORDER BY id DESC LIMIT 500", *params)
+        return {"data": [dict(r) for r in rows]}
+    try: return run_async(_go())
+    except: return {"data": []}
+
+# ── Funcionário completo ──
+
+def funcionario_detalhe(id: int) -> dict:
+    async def _go():
+        db = await get_db()
+        func = await db.fetchrow("SELECT * FROM rh_funcionarios WHERE id = $1", id)
+        if not func: return {"error": "not found"}
+        ponto = await db.fetch("SELECT * FROM rh_ponto WHERE funcionario_id = $1 ORDER BY data DESC LIMIT 30", id)
+        ferias = await db.fetch("SELECT * FROM rh_ferias WHERE funcionario_id = $1 ORDER BY inicio DESC", id)
+        folha = await db.fetch("SELECT * FROM rh_folha WHERE funcionario_id = $1 ORDER BY mes DESC LIMIT 12", id)
+        beneficios = await db.fetch("""SELECT b.*, fb.ativo FROM rh_beneficios b
+            JOIN rh_funcionario_beneficio fb ON fb.beneficio_id = b.id WHERE fb.funcionario_id = $1""", id)
+        escala = await db.fetchrow("SELECT * FROM rh_escala WHERE funcionario_id = $1 LIMIT 1", id)
+        return {
+            "funcionario": dict(func),
+            "ponto": [dict(r) for r in ponto],
+            "ferias": [dict(r) for r in ferias],
+            "folha": [dict(r) for r in folha],
+            "beneficios": [dict(r) for r in beneficios],
+            "escala": dict(escala) if escala else None,
+        }
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
