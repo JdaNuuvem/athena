@@ -18,19 +18,24 @@ const NAV_ITEMS = [
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [user, setUser] = useState<{ name: string; role: string } | null>(null);
+  const [user, setUser] = useState<{ name: string; role: string } | null>(() => {
+    if (typeof window === "undefined") return null;
+    const cached = localStorage.getItem("user");
+    if (cached) { try { return JSON.parse(cached); } catch {} }
+    return null;
+  });
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
     if (pathname === "/login") return;
-
-    api.me()
-      .then((d) => setUser(d))
-      .catch(() => {
-        if (pathname !== "/login") router.push("/login");
-      });
-  }, [pathname]);
+    const token = localStorage.getItem("token");
+    if (!token) { router.push("/login"); return; }
+    if (!user) {
+      const cached = localStorage.getItem("user");
+      if (cached) { try { setUser(JSON.parse(cached)); } catch {} }
+    }
+  }, [pathname, user, router]);
 
   // Close mobile drawer on navigation
   useEffect(() => {
@@ -42,6 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const logout = () => {
     fetch("/api/auth/logout", { method: "POST", credentials: "include" });
     localStorage.removeItem("token");
+    localStorage.removeItem("user");
     router.push("/login");
   };
 

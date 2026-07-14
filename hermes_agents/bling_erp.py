@@ -19,17 +19,54 @@ BLING_DOMAIN = os.environ.get("BLING_DOMAIN", "athena.zoikom.site")
 REDIRECT_URI = f"https://{BLING_DOMAIN}/api/bling/oauth/callback"
 BASE_URL = "https://www.bling.com.br/Api/v3"
 
+# ── Token management (persistido no DB) ──
+
+def _ensure_token_table():
+    async def _go():
+        db = await get_db()
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS bling_tokens (
+                id SERIAL PRIMARY KEY,
+                access_token TEXT NOT NULL,
+                refresh_token TEXT,
+                expires_at TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        await db.execute("""
+            INSERT INTO bling_tokens (id, access_token, refresh_token)
+            SELECT 1, '', ''
+            WHERE NOT EXISTS (SELECT 1 FROM bling_tokens WHERE id = 1)
+        """)
+    run_async(_go(), default=None)
+
+_ensure_token_table()
+
 def get_access_token() -> str:
-    return get_config("bling", "access_token") or ""
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow("SELECT access_token FROM bling_tokens WHERE id = 1")
+        return row["access_token"] if row else ""
+    return run_async(_go(), default="")
 
 def set_access_token(token: str):
-    set_config("bling", "access_token", token)
+    async def _go():
+        db = await get_db()
+        await db.execute("UPDATE bling_tokens SET access_token = $1, updated_at = NOW() WHERE id = 1", token)
+    run_async(_go(), default=None)
 
 def get_refresh_token() -> str:
-    return get_config("bling", "refresh_token") or ""
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow("SELECT refresh_token FROM bling_tokens WHERE id = 1")
+        return row["refresh_token"] if row else ""
+    return run_async(_go(), default="")
 
 def set_refresh_token(token: str):
-    set_config("bling", "refresh_token", token)
+    async def _go():
+        db = await get_db()
+        await db.execute("UPDATE bling_tokens SET refresh_token = $1, updated_at = NOW() WHERE id = 1", token)
+    run_async(_go(), default=None)
 
 def get_auth_url() -> str:
     params = urlencode({
@@ -48,6 +85,7 @@ def exchange_code(code: str) -> dict:
         r = requests.post(f"{BASE_URL}/oauth/token", json={
             "grant_type": "authorization_code",
             "code": code,
+            "redirect_uri": REDIRECT_URI,
         }, headers={"Authorization": auth}, timeout=30)
         data = r.json()
         if "access_token" in data:
