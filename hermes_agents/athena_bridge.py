@@ -1028,6 +1028,53 @@ def memory_recall():
 
 
 
+
+
+# ── Compras Routes ──
+
+@app.route('/api/compras/dashboard', methods=['GET'])
+def compras_dashboard():
+    from core.compras import dashboard as compras_dash
+    return jsonify(compras_dash())
+
+@app.route('/api/compras/<tabela>', methods=['GET'])
+def compras_list(tabela):
+    from core.compras import list as cl, TABLES
+    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
+    return jsonify({"data": cl(tabela)})
+
+@app.route('/api/compras/<tabela>', methods=['POST'])
+def compras_create(tabela):
+    from core.compras import create as cc, TABLES
+    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
+    data = request.json or {}
+    return jsonify(cc(tabela, data))
+
+@app.route('/api/compras/<tabela>/<int:id>', methods=['GET'])
+def compras_get(tabela, id):
+    from core.compras import get as cg, TABLES
+    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
+    return jsonify(cg(tabela, id))
+
+@app.route('/api/compras/<tabela>/<int:id>', methods=['PUT'])
+def compras_update(tabela, id):
+    from core.compras import update as cu, TABLES
+    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
+    return jsonify(cu(tabela, id, request.json or {}))
+
+@app.route('/api/compras/<tabela>/<int:id>', methods=['DELETE'])
+def compras_delete(tabela, id):
+    from core.compras import delete as cd, TABLES
+    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
+    return jsonify(cd(tabela, id))
+
+@app.route('/api/compras/solicitacoes/<int:id>/aprovar', methods=['POST'])
+def compras_aprovar(id):
+    data = request.json or {}
+    aprovador = data.get("aprovador", "Admin")
+    from core.compras import aprovar_solicitacao
+    return jsonify(aprovar_solicitacao(id, aprovador))
+
 # ── CRM Routes ──
 
 @app.route('/api/crm/funil', methods=['GET'])
@@ -1107,6 +1154,62 @@ def deletar_loja_manage(id):
     from core.lojas import deletar as deletar_loja_fn
     ok = deletar_loja_fn(id)
     return jsonify({"success": ok}) if ok else jsonify({"error": "Loja não encontrada"}), 404
+
+# ── RH CRUD ──
+
+@app.route('/api/rh/<tabela>', methods=['GET'])
+def rh_list(tabela):
+    from core.rh import list as rh_list_fn, RH_TABLES
+    if tabela not in RH_TABLES:
+        return jsonify({"error": "Tabela invalida"}), 404
+    return jsonify({"data": rh_list_fn(tabela)})
+
+@app.route('/api/rh/<tabela>', methods=['POST'])
+def rh_create(tabela):
+    from core.rh import create as rh_create_fn, RH_TABLES
+    if tabela not in RH_TABLES:
+        return jsonify({"error": "Tabela invalida"}), 404
+    data = request.json or {}
+    if not data:
+        return jsonify({"error": "Dados obrigatorios"}), 400
+    return jsonify(rh_create_fn(tabela, data))
+
+@app.route('/api/rh/<tabela>/<int:id>', methods=['GET'])
+def rh_get(tabela, id):
+    from core.rh import get as rh_get_fn, RH_TABLES
+    if tabela not in RH_TABLES:
+        return jsonify({"error": "Tabela invalida"}), 404
+    return jsonify(rh_get_fn(tabela, id))
+
+@app.route('/api/rh/<tabela>/<int:id>', methods=['PUT'])
+def rh_update(tabela, id):
+    from core.rh import update as rh_update_fn, RH_TABLES
+    if tabela not in RH_TABLES:
+        return jsonify({"error": "Tabela invalida"}), 404
+    data = request.json or {}
+    return jsonify(rh_update_fn(tabela, id, data))
+
+@app.route('/api/rh/<tabela>/<int:id>', methods=['DELETE'])
+def rh_delete(tabela, id):
+    from core.rh import delete as rh_delete_fn, RH_TABLES
+    if tabela not in RH_TABLES:
+        return jsonify({"error": "Tabela invalida"}), 404
+    return jsonify(rh_delete_fn(tabela, id))
+
+@app.route('/api/rh/ponto/data/<data>', methods=['GET'])
+def rh_ponto_data(data):
+    from core.rh import ponto_por_data
+    return jsonify({"data": ponto_por_data(data)})
+
+@app.route('/api/rh/folha/resumo/<mes>', methods=['GET'])
+def rh_folha_resumo(mes):
+    from core.rh import folha_resumo
+    return jsonify(folha_resumo(mes))
+
+@app.route('/api/rh/beneficios/resumo', methods=['GET'])
+def rh_beneficios_resumo():
+    from core.rh import beneficios_resumo
+    return jsonify(beneficios_resumo())
 
 # ===========================================================================
 # Business operations (chamado pelo Business.tsx)
