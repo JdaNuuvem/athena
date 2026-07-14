@@ -1,13 +1,18 @@
 import type { FastifyRequest, FastifyReply } from 'fastify'
 import { verifyToken, extractToken } from './jwt'
+import { AuthorizationService } from '../../../contexts/rbac/application/services/authorization-service'
 
 export type AuthRole = 'admin' | 'operator' | 'viewer'
 
 declare module 'fastify' {
-  interface FastifyRequest { user?: { sub: string; role: string; iat: number; exp: number } }
+  interface FastifyRequest {
+    user?: { sub: string; role: string; email: string; permissions: string[]; iat: number; exp: number }
+  }
 }
 
-export function authMiddleware(requiredRole: AuthRole | null) {
+const authService = new AuthorizationService()
+
+export function authMiddleware(requiredRole: string | null) {
   return async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
     const publicPaths = ['/api/health', '/api/auth/login']
     if (publicPaths.includes(req.url)) return
@@ -18,7 +23,16 @@ export function authMiddleware(requiredRole: AuthRole | null) {
     const payload = verifyToken(t)
     if (!payload) { reply.status(401).send({ error: 'Invalid or expired token' }); return }
 
-    req.user = { sub: payload.sub, role: payload.role, iat: payload.iat ?? 0, exp: payload.exp ?? 0 }
+    const permissions = payload.permissions ?? []
+
+    req.user = {
+      sub: payload.sub,
+      role: payload.role,
+      email: payload.email,
+      permissions,
+      iat: payload.iat ?? 0,
+      exp: payload.exp ?? 0,
+    }
 
     if (requiredRole) {
       const roleHierarchy: Record<string, number> = { viewer: 1, operator: 2, admin: 3 }

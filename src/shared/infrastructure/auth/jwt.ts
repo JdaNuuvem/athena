@@ -5,6 +5,7 @@ export interface TokenPayload {
   sub: string
   email: string
   role: string
+  permissions?: string[]
   iat?: number
   exp?: number
 }
@@ -23,7 +24,8 @@ export interface AuthenticatedUser {
   id: string
   email: string
   name: string
-  role: AuthRole
+  role: string
+  permissions: string[]
 }
 
 function base64url(str: string): string { return Buffer.from(str).toString('base64url') }
@@ -82,25 +84,6 @@ export function generateTokens(payload: Omit<TokenPayload, 'iat' | 'exp'>): Toke
 export function createToken(sub: string, role: string): { token: string; expiresAt: Date } {
   const config = getConfig()
   const seconds = parseDuration(config.JWT_EXPIRES_IN)
-  const token = sign({ sub, email: '', role, iat: 0, exp: 0 }, config.JWT_SECRET, config.JWT_EXPIRES_IN)
+  const token = sign({ sub, email: '', role }, config.JWT_SECRET, config.JWT_EXPIRES_IN)
   return { token, expiresAt: new Date(Date.now() + seconds * 1000) }
-}
-
-export function authenticateUser(username: string, password: string): { sub: string; role: AuthRole; name: string } | null {
-  if (username === 'admin' && password === 'admin') return { sub: 'user-admin', role: 'admin', name: 'Administrator' }
-  if (username === 'operator' && password === 'operator') return { sub: 'user-op', role: 'operator', name: 'Operator' }
-  return null
-}
-
-export function hashPassword(password: string): string {
-  const salt = crypto.randomBytes(16).toString('hex')
-  const hash = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex')
-  return `${salt}:${hash}`
-}
-
-export function verifyPassword(password: string, storedHash: string): boolean {
-  const [salt, hash] = storedHash.split(':')
-  if (!salt || !hash) return false
-  const computed = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex')
-  return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(computed))
 }

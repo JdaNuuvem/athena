@@ -11,9 +11,10 @@ import type { AgentRegistry } from '../../agents/registry/agent-registry'
 import type { OrchestrationEngine } from '../../agents/orchestration/orchestration-engine'
 import { registerBusinessRoutes } from './business-routes'
 import { registerBIRoutes } from './bi-routes'
-import { authMiddleware, type AuthRole } from '../../shared/infrastructure/auth/middleware'
+import { registerRbacRoutes } from './rbac-routes'
+import { registerDocumentosRoutes } from './documentos-routes'
+import { authMiddleware, requirePermission } from '../../shared/infrastructure/auth'
 import { checkRateLimit } from '../../shared/infrastructure/auth/rate-limiter'
-import { authenticateUser, createToken } from '../../shared/infrastructure/auth'
 import { metrics, getMetricsAsText } from '../../shared/infrastructure/observability/metrics'
 import { logger } from '../../shared/infrastructure/observability/logger'
 import { wsBus } from '../../shared/infrastructure/websocket/ws-bus'
@@ -184,7 +185,7 @@ export async function startDashboard(registry: AgentRegistry, orchestrator: Orch
     }
   })
 
-  server.get('/api/settings', async () => {
+  server.get('/api/settings', { preHandler: [authMiddleware(null), requirePermission('settings:view')] }, async () => {
     const { getAllSettings } = await import('../../shared/infrastructure/persistence/settings-repository')
     const rows = await getAllSettings()
     const groups: Record<string, Array<{ key: string; value: string; secure: boolean; updatedAt: string }>> = {}
@@ -196,25 +197,25 @@ export async function startDashboard(registry: AgentRegistry, orchestrator: Orch
     return groups
   })
 
-  server.put<{ Body: { settings: Array<{ key: string; value: string }> } }>('/api/settings', async (req) => {
+  server.put<{ Body: { settings: Array<{ key: string; value: string }> } }>('/api/settings', { preHandler: [authMiddleware(null), requirePermission('settings:manage')] }, async (req) => {
     const { setSettingsBatch } = await import('../../shared/infrastructure/persistence/settings-repository')
     await setSettingsBatch(req.body.settings)
     return { status: 'saved', count: req.body.settings.length }
   })
 
-  server.post('/api/shopee/sync', async () => {
+  server.post('/api/shopee/sync', { preHandler: [authMiddleware(null), requirePermission('integrations:manage')] }, async () => {
     const { syncShopeeProducts } = await import('../../shared/infrastructure/integrations/shopee-stock-sync')
     const result = await syncShopeeProducts()
     return result
   })
 
-  server.post('/api/shopee/orders/sync', async () => {
+  server.post('/api/shopee/orders/sync', { preHandler: [authMiddleware(null), requirePermission('integrations:manage')] }, async () => {
     const { syncShopeeOrders } = await import('../../shared/infrastructure/integrations/shopee-stock-sync')
     const result = await syncShopeeOrders()
     return result
   })
 
-  server.post<{ Body: { orderId: string; items: Array<{ sku: string; quantity: number }> } }>('/api/stock/decrement', async (req, reply) => {
+  server.post<{ Body: { orderId: string; items: Array<{ sku: string; quantity: number }> } }>('/api/stock/decrement', { preHandler: [authMiddleware(null), requirePermission('inventory:edit')] }, async (req, reply) => {
     const { decrementAndPushStock } = await import('../../shared/infrastructure/integrations/shopee-stock-sync')
     const check = await decrementAndPushStock(req.body.orderId, req.body.items)
     if (!check.success) {
@@ -316,7 +317,7 @@ export async function startDashboard(registry: AgentRegistry, orchestrator: Orch
   })
 
   // Shopee Product Management
-  server.get('/api/shopee/products', async (req, reply) => {
+  server.get('/api/shopee/products', { preHandler: [authMiddleware(null), requirePermission('products:view')] }, async (req, reply) => {
     const { ShopeeAdapter } = await import('../../shared/infrastructure/integrations/shopee-adapter')
     const { status, offset, limit } = req.query as { status?: string; offset?: string; limit?: string }
     const adapter = new ShopeeAdapter()
@@ -325,7 +326,7 @@ export async function startDashboard(registry: AgentRegistry, orchestrator: Orch
     return result
   })
 
-  server.get<{ Params: { id: string } }>('/api/shopee/products/:id', async (req, reply) => {
+  server.get<{ Params: { id: string } }>('/api/shopee/products/:id', { preHandler: [authMiddleware(null), requirePermission('products:view')] }, async (req, reply) => {
     const { ShopeeAdapter } = await import('../../shared/infrastructure/integrations/shopee-adapter')
     const adapter = new ShopeeAdapter()
     if (!adapter.isConfigured) return reply.status(503).send({ error: 'Shopee not configured' })
@@ -337,7 +338,7 @@ export async function startDashboard(registry: AgentRegistry, orchestrator: Orch
     return { ...item, models }
   })
 
-  server.post<{ Body: { item_name: string; description: string; price: number; stock: number; category_id: number; weight: number; images: string[] } }>('/api/shopee/products', async (req, reply) => {
+  server.post<{ Body: { item_name: string; description: string; price: number; stock: number; category_id: number; weight: number; images: string[] } }>('/api/shopee/products', { preHandler: [authMiddleware(null), requirePermission('products:create')] }, async (req, reply) => {
     const { ShopeeAdapter } = await import('../../shared/infrastructure/integrations/shopee-adapter')
     const adapter = new ShopeeAdapter()
     if (!adapter.isConfigured) return reply.status(503).send({ error: 'Shopee not configured' })
@@ -346,7 +347,7 @@ export async function startDashboard(registry: AgentRegistry, orchestrator: Orch
     return { status: 'published', item_id: result.item_id }
   })
 
-  server.put<{ Params: { id: string }; Body: { stock: number; model_id?: number } }>('/api/shopee/products/:id/stock', async (req, reply) => {
+  server.put<{ Params: { id: string }; Body: { stock: number; model_id?: number } }>('/api/shopee/products/:id/stock', { preHandler: [authMiddleware(null), requirePermission('inventory:edit')] }, async (req, reply) => {
     const { ShopeeAdapter } = await import('../../shared/infrastructure/integrations/shopee-adapter')
     const adapter = new ShopeeAdapter()
     if (!adapter.isConfigured) return reply.status(503).send({ error: 'Shopee not configured' })
@@ -357,7 +358,7 @@ export async function startDashboard(registry: AgentRegistry, orchestrator: Orch
     return result
   })
 
-  server.put<{ Params: { id: string }; Body: { price: number } }>('/api/shopee/products/:id/price', async (req, reply) => {
+  server.put<{ Params: { id: string }; Body: { price: number } }>('/api/shopee/products/:id/price', { preHandler: [authMiddleware(null), requirePermission('products:edit')] }, async (req, reply) => {
     const { ShopeeAdapter } = await import('../../shared/infrastructure/integrations/shopee-adapter')
     const adapter = new ShopeeAdapter()
     if (!adapter.isConfigured) return reply.status(503).send({ error: 'Shopee not configured' })
@@ -367,13 +368,26 @@ export async function startDashboard(registry: AgentRegistry, orchestrator: Orch
 
   registerBusinessRoutes(server, registry, orchestrator)
   registerBIRoutes(server)
+  registerRbacRoutes(server)
+  registerDocumentosRoutes(server)
 
   await server.register(mercurius, {
     schema: typeDefs,
     resolvers,
     graphiql: true,
     subscription: true,
-    context: () => ({ registry, orchestrator, pubsub: athenaPubSub, loaders: createLoaders() }),
+    context: (req) => {
+      const user = (req as unknown as { user?: { sub: string; role: string; permissions: string[] } }).user
+      return { user, registry, orchestrator, pubsub: athenaPubSub, loaders: createLoaders() }
+    },
+  })
+
+  server.addHook('preHandler', async (req, reply) => {
+    if (req.url === '/graphql' || req.url.startsWith('/graphql?')) {
+      await new Promise<void>((resolve, reject) => {
+        authMiddleware(null)(req, reply).then(() => resolve()).catch(reject)
+      })
+    }
   })
 
   await server.listen({ port: config.PORT, host: config.HOST })
