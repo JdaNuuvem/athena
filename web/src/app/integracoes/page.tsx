@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { api, type Integration } from "@/lib/api";
 
 const INTEGRATION_LINKS: Record<string, string> = {
@@ -66,9 +67,9 @@ export default function IntegracoesPage() {
               );
 
               return link ? (
-                <a key={i.id} href={link}>
+                <Link key={i.id} href={link}>
                   {content}
-                </a>
+                </Link>
               ) : (
                 <div key={i.id}>{content}</div>
               );

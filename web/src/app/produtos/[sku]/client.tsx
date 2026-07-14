@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
 
@@ -27,9 +28,9 @@ export default function ProdutoClientPage() {
   return (
     <div className="p-6 space-y-6 max-w-4xl">
       <div>
-        <a href="/produtos" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors">
+        <Link href="/produtos" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors">
           ← Produtos
-        </a>
+        </Link>
         <h1 className="text-lg font-light text-neutral-300 mt-1">
           {String(produto.descricao || produto.nome || sku)}
         </h1>

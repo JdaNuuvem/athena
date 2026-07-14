@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api, type Agent } from "@/lib/api";
 
@@ -44,9 +45,9 @@ export default function AgentClientPage() {
   return (
     <div className="p-6 space-y-6 max-w-3xl">
       <div>
-        <a href="/agents" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors">
+        <Link href="/agents" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors">
           ← Agentes
-        </a>
+        </Link>
         <h1 className="text-lg font-light text-neutral-300 mt-1">{agentName}</h1>
         {agent && (
           <div className="flex items-center gap-3 mt-2">

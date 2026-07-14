@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 
@@ -15,7 +17,7 @@ export default function ShopeeAdsPage() {
   return (
     <div className="p-6 space-y-6 max-w-4xl">
       <div>
-        <a href="/integracoes" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors">← Integrações</a>
+        <Link href="/integracoes" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors">← Integrações</Link>
         <h1 className="text-lg font-light text-neutral-300 mt-1">Shopee Ads</h1>
       </div>
 

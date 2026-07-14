@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
 
 export default function ShopeeIntegrationPage() {
@@ -25,7 +26,7 @@ export default function ShopeeIntegrationPage() {
   return (
     <div className="p-6 space-y-6 max-w-3xl">
       <div>
-        <a href="/integracoes" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors">← Integrações</a>
+        <Link href="/integracoes" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors">← Integrações</Link>
         <h1 className="text-lg font-light text-neutral-300 mt-1">Shopee</h1>
       </div>
 
