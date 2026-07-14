@@ -9,8 +9,12 @@ from core.config import get_config, set_config
 
 AGENT = "Bling ERP v3"
 
-CLIENT_ID = os.environ.get("BLING_CLIENT_ID") or get_config("bling", "client_id") or ""
-CLIENT_SECRET = os.environ.get("BLING_CLIENT_SECRET") or get_config("bling", "client_secret") or ""
+def _client_id():
+    return os.environ.get("BLING_CLIENT_ID") or get_config("bling", "client_id") or ""
+
+def _client_secret():
+    return os.environ.get("BLING_CLIENT_SECRET") or get_config("bling", "client_secret") or ""
+
 BLING_DOMAIN = os.environ.get("BLING_DOMAIN", "athena.zoikom.site")
 REDIRECT_URI = f"https://{BLING_DOMAIN}/api/bling/oauth/callback"
 BASE_URL = "https://www.bling.com.br/Api/v3"
@@ -30,7 +34,7 @@ def set_refresh_token(token: str):
 def get_auth_url() -> str:
     params = urlencode({
         "response_type": "code",
-        "client_id": CLIENT_ID,
+        "client_id": _client_id(),
         "redirect_uri": REDIRECT_URI,
         "state": os.urandom(16).hex(),
     })
@@ -41,8 +45,8 @@ def exchange_code(code: str) -> dict:
         r = requests.post(f"{BASE_URL}/oauth/token", json={
             "grant_type": "authorization_code",
             "code": code,
-            "client_id": CLIENT_ID,
-            "client_secret": CLIENT_SECRET,
+            "client_id": _client_id(),
+            "client_secret": _client_secret(),
             "redirect_uri": REDIRECT_URI,
         }, timeout=30)
         data = r.json()
@@ -62,8 +66,8 @@ def refresh_access_token() -> dict:
         r = requests.post(f"{BASE_URL}/oauth/token", json={
             "grant_type": "refresh_token",
             "refresh_token": rt,
-            "client_id": CLIENT_ID,
-            "client_secret": CLIENT_SECRET,
+            "client_id": _client_id(),
+            "client_secret": _client_secret(),
         }, timeout=30)
         data = r.json()
         if "access_token" in data:
@@ -166,7 +170,7 @@ def sincronizar_pedidos() -> dict:
 def status() -> dict:
     token = get_access_token()
     return {
-        "client_id_setado": bool(CLIENT_ID),
+        "client_id_setado": bool(_client_id()),
         "autenticado": bool(token),
         "auth_url": get_auth_url() if not token else "",
     }
@@ -331,7 +335,7 @@ def validar_assinatura_webhook(payload: bytes, signature_header: str) -> bool:
 
     if not signature_header:
         return False
-    secret = CLIENT_SECRET.encode("utf-8")
+    secret = _client_secret().encode("utf-8")
     computed = hmac.new(secret, payload, hashlib.sha256).hexdigest()
     # Tempo de comparacao constante para evitar timing attack
     return hmac.compare_digest(f"sha256={computed}", signature_header)
@@ -417,6 +421,6 @@ def processar_evento_webhook(evento: str, payload: dict) -> dict:
 
 
 if __name__ == "__main__":
-    log(AGENT, f"Configurado: {bool(CLIENT_ID)}")
-    if CLIENT_ID:
+    log(AGENT, f"Configurado: {bool(_client_id())}")
+    if _client_id():
         log(AGENT, f"Auth URL: {get_auth_url()}")
