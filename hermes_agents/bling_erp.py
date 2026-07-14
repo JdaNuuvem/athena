@@ -49,6 +49,9 @@ def _ensure_token_table():
     except Exception:
         pass
 
+# ── Token cache em memória (fallback quando DB falha) ──
+_token_cache = {"access": "", "refresh": ""}
+
 def get_access_token() -> str:
     try:
         _ensure_token_table()
@@ -58,20 +61,20 @@ def get_access_token() -> str:
             return row["access_token"] if row else ""
         token = run_async(_go())
         if token:
-            log(AGENT, f"Token recuperado do DB: {token[:10]}...")
-        return token
+            _token_cache["access"] = token
+            return token
     except Exception as e:
         log(AGENT, f"Erro ao ler token do DB: {e}")
-        return ""
+    return _token_cache.get("access", "")
 
 def set_access_token(token: str):
+    _token_cache["access"] = token
     try:
         _ensure_token_table()
         async def _go():
             db = await get_db()
             await db.execute("UPDATE bling_tokens SET access_token = $1, updated_at = NOW() WHERE id = 1", token)
         run_async(_go())
-        log(AGENT, f"Token salvo no DB: {token[:10]}...")
     except Exception as e:
         log(AGENT, f"Erro ao salvar token no DB: {e}")
 
