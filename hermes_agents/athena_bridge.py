@@ -1038,6 +1038,57 @@ def memory_recall():
 
 
 
+
+
+# ── Relatorios Routes ──
+
+@app.route('/api/relatorios/vendas', methods=['GET'])
+def rel_vendas():
+    from core.relatorios import vendas; dias=request.args.get('dias',30,type=int)
+    return jsonify(vendas(dias))
+
+@app.route('/api/relatorios/lucro', methods=['GET'])
+def rel_lucro():
+    from core.relatorios import lucro_margem; dias=request.args.get('dias',30,type=int)
+    return jsonify(lucro_margem(dias))
+
+@app.route('/api/relatorios/estoque', methods=['GET'])
+def rel_estoque():
+    from core.relatorios import estoque; return jsonify(estoque())
+
+@app.route('/api/relatorios/clientes', methods=['GET'])
+def rel_clientes():
+    from core.relatorios import clientes; dias=request.args.get('dias',90,type=int)
+    return jsonify(clientes(dias))
+
+@app.route('/api/relatorios/fornecedores', methods=['GET'])
+def rel_fornecedores():
+    from core.relatorios import fornecedores; return jsonify(fornecedores())
+
+@app.route('/api/relatorios/aging', methods=['GET'])
+def rel_aging():
+    from core.relatorios import aging_financeiro; return jsonify(aging_financeiro())
+
+@app.route('/api/relatorios/fluxo-caixa', methods=['GET'])
+def rel_fluxo():
+    from core.relatorios import fluxo_caixa; dias=request.args.get('dias',30,type=int)
+    return jsonify(fluxo_caixa(dias))
+
+@app.route('/api/relatorios/ticket-medio', methods=['GET'])
+def rel_ticket():
+    from core.relatorios import ticket_medio; dias=request.args.get('dias',30,type=int)
+    return jsonify(ticket_medio(dias))
+
+@app.route('/api/relatorios/dre', methods=['GET'])
+def rel_dre():
+    from core.relatorios import dre; dias=request.args.get('dias',30,type=int)
+    return jsonify(dre(dias))
+
+@app.route('/api/relatorios/previsao', methods=['GET'])
+def rel_previsao():
+    from core.relatorios import previsao; dias=request.args.get('dias',30,type=int)
+    return jsonify(previsao(dias))
+
 # ── Automacoes Routes ──
 
 @app.route('/api/automacoes/dashboard', methods=['GET'])
