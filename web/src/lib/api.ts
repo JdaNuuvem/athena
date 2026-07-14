@@ -82,6 +82,19 @@ export const api = {
   integrations: () =>
     request<Array<{ id: string; name: string; category: string; status: string }>>("/api/integrations"),
 
+  // Industrial Dashboard
+  moldesDashboard: () =>
+    request<{ moldes_criticos: unknown[]; jobs_cnc_ativos: unknown[]; eventos_recentes: unknown[] }>("/api/moldes/dashboard"),
+
+  qualidadeDefeitos: (periodo = 30) =>
+    request<{ lotes_inspecionados: number; taxa_reprovacao_pct: number; por_sku: unknown[] }>(`/api/qualidade/taxa_defeitos?periodo=${periodo}`),
+
+  manutencaoPendentes: () =>
+    request<{ total: number; alertas_ativos: number; kpis: Record<string, number> }>("/api/manutencao/pendentes"),
+
+  telegramStats: () =>
+    request<{ total_clientes: number; total_pedidos: number; faturamento_total: number; ticket_medio_geral: number }>("/api/agent/ag_06_telegram/stats"),
+
   // Bling
   blingStatus: () => request<{ autenticado: boolean; client_id_setado: boolean; auth_url: string }>("/api/bling/status"),
   blingSync: () => request<{ produtos: { sincronizados: number; erro?: string }; pedidos: { sincronizados: number; erro?: string } }>("/api/bling/sync", { method: "POST" }),

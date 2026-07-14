@@ -6,14 +6,28 @@ import { api, type KPIOverview, type Agent } from "@/lib/api";
 export default function DashboardPage() {
   const [kpi, setKpi] = useState<KPIOverview | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [moldes, setMoldes] = useState<Record<string, unknown> | null>(null);
+  const [qualidade, setQualidade] = useState<Record<string, unknown> | null>(null);
+  const [manutencao, setManutencao] = useState<Record<string, unknown> | null>(null);
+  const [telegram, setTelegram] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([api.kpiOverview(), api.agentsList()])
-      .then(([k, a]) => {
+    Promise.all([
+      api.kpiOverview(), api.agentsList(), 
+      api.moldesDashboard().catch(() => null),
+      api.qualidadeDefeitos().catch(() => null),
+      api.manutencaoPendentes().catch(() => null),
+      api.telegramStats().catch(() => null),
+    ])
+      .then(([k, a, m, q, man, t]) => {
         setKpi(k as unknown as KPIOverview);
         setAgents(a.agents);
+        if (m) setMoldes(m as Record<string, unknown>);
+        if (q) setQualidade(q as Record<string, unknown>);
+        if (man) setManutencao(man as Record<string, unknown>);
+        if (t) setTelegram(t as Record<string, unknown>);
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "Erro ao carregar dashboard"))
       .finally(() => setLoading(false));
@@ -97,6 +111,52 @@ export default function DashboardPage() {
           </div>
         </section>
       )}
+
+      {telegram && (
+        <section>
+          <h2 className="text-sm font-medium text-neutral-400 mb-3">Telegram</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <KpiCard label="Clientes" value={String(telegram.total_clientes ?? "—")} />
+            <KpiCard label="Pedidos" value={String(telegram.total_pedidos ?? "—")} />
+            <KpiCard label="Faturamento" value={telegram.faturamento_total ? `R$ ${Number(telegram.faturamento_total).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "—"} />
+            <KpiCard label="Ticket Médio" value={telegram.ticket_medio_geral ? `R$ ${Number(telegram.ticket_medio_geral).toFixed(2)}` : "—"} />
+          </div>
+        </section>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {moldes && (
+          <section className="bg-neutral-900 border border-neutral-800 rounded-lg p-4">
+            <h2 className="text-sm font-medium text-neutral-400 mb-3">Produção</h2>
+            <div className="space-y-2 text-xs">
+              <div className="flex justify-between"><span className="text-neutral-500">Moldes Críticos</span><span className="text-red-400">{String((moldes.moldes_criticos as unknown[])?.length ?? 0)}</span></div>
+              <div className="flex justify-between"><span className="text-neutral-500">CNC Ativos</span><span className="text-green-400">{String((moldes.jobs_cnc_ativos as unknown[])?.length ?? 0)}</span></div>
+              <div className="flex justify-between"><span className="text-neutral-500">Eventos Recentes</span><span className="text-neutral-300">{String((moldes.eventos_recentes as unknown[])?.length ?? 0)}</span></div>
+            </div>
+          </section>
+        )}
+
+        {qualidade && (
+          <section className="bg-neutral-900 border border-neutral-800 rounded-lg p-4">
+            <h2 className="text-sm font-medium text-neutral-400 mb-3">Qualidade</h2>
+            <div className="space-y-2 text-xs">
+              <div className="flex justify-between"><span className="text-neutral-500">Lotes Inspecionados</span><span className="text-neutral-300">{String(qualidade.lotes_inspecionados ?? "—")}</span></div>
+              <div className="flex justify-between"><span className="text-neutral-500">Taxa Reprovação</span><span className="text-red-400">{Number(qualidade.taxa_reprovacao_pct ?? 0).toFixed(1)}%</span></div>
+              <div className="flex justify-between"><span className="text-neutral-500">SKUs com Defeito</span><span className="text-neutral-300">{String((qualidade.por_sku as unknown[])?.length ?? 0)}</span></div>
+            </div>
+          </section>
+        )}
+
+        {manutencao && (
+          <section className="bg-neutral-900 border border-neutral-800 rounded-lg p-4">
+            <h2 className="text-sm font-medium text-neutral-400 mb-3">Manutenção</h2>
+            <div className="space-y-2 text-xs">
+              <div className="flex justify-between"><span className="text-neutral-500">Pendentes</span><span className="text-yellow-400">{String(manutencao.total ?? "—")}</span></div>
+              <div className="flex justify-between"><span className="text-neutral-500">Alertas Ativos</span><span className="text-red-400">{String(manutencao.alertas_ativos ?? "—")}</span></div>
+            </div>
+          </section>
+        )}
+      </div>
     </div>
   );
 }
