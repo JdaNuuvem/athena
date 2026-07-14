@@ -118,6 +118,14 @@ def delete(t: str, i: int): return _delete(f"compras_{t}", i)
 def aprovar_solicitacao(id: int, aprovador: str) -> dict:
     return update("solicitacoes", id, {"status": "aprovada", "aprovado_por": aprovador, "aprovado_em": hoje()})
 
+def confirmar_recebimento(id: int) -> dict:
+    r = update("recebimentos", id, {"status": "confirmado"})
+    try:
+        from core.entidades import ao_receber_compra
+        ao_receber_compra(id)
+    except: pass
+    return r
+
 def dashboard() -> dict:
     async def _go():
         db = await get_db()

@@ -232,8 +232,8 @@ def dashboard() -> dict:
         obrigacoes_pendentes = await db.fetchval("SELECT COUNT(*) FROM fiscal_obrigacoes WHERE status = 'pendente'")
         obrigacoes_atrasadas = await db.fetchval("SELECT COUNT(*) FROM fiscal_obrigacoes WHERE data_vencimento < CURRENT_DATE AND status = 'pendente'")
         tributos_ativos = await db.fetchval("SELECT COUNT(*) FROM fiscal_tributos WHERE ativo = true")
-        receber_total = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fiscal_contas_receber_bling WHERE situacao = 'pendente'")
-        pagar_total = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fiscal_contas_pagar_bling WHERE situacao = 'pendente'")
+        receber_total = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_contas_receber WHERE status = 'pendente' AND origem = 'bling'")
+        pagar_total = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_contas_pagar WHERE status = 'pendente' AND origem = 'bling'")
         return {
             "nfs_mes": nfs_mes or 0, "nfs_total": nfs_total or 0,
             "valor_mes": float(valor_mes or 0),
@@ -329,6 +329,7 @@ def sincronizar_notas_fiscais_bling(pagina: int = 1, limite: int = 100) -> dict:
     return run_async(_go())
 
 def sincronizar_contas_receber_bling(pagina: int = 1, limite: int = 100) -> dict:
+    """Sync contas a receber do Bling → fin_contas_receber (tabela unificada SSOT)."""
     from bling_erp import listar_contas_receber as bling_cr, get_access_token, get_auth_url
     token = get_access_token()
     if not token: return {"error": "Bling nao autenticado", "auth_url": get_auth_url()}
@@ -338,40 +339,36 @@ def sincronizar_contas_receber_bling(pagina: int = 1, limite: int = 100) -> dict
     if not dados: return {"sync": 0, "message": "sem dados"}
     async def _go():
         db = await get_db()
+        # Ensure bling_id + origem columns on fin_contas_receber
+        for col, ct in [("bling_id", "BIGINT"), ("origem", "VARCHAR(30) DEFAULT 'manual'")]:
+            try:
+                exists = await db.fetchval("SELECT column_name FROM information_schema.columns WHERE table_name='fin_contas_receber' AND column_name=$1", col)
+                if not exists: await db.execute(f"ALTER TABLE fin_contas_receber ADD COLUMN {col} {ct}")
+            except: pass
         total = 0
         for cr in dados:
             try:
                 bling_id = cr.get("id")
                 if not bling_id: continue
-                existing = await db.fetchval("SELECT id FROM fiscal_contas_receber_bling WHERE bling_id = $1", bling_id)
+                existing = await db.fetchval("SELECT id FROM fin_contas_receber WHERE bling_id = $1", bling_id)
                 contato = cr.get("contato", {}) or {}
                 vencimento = (cr.get("vencimento") or cr.get("dataVencimento") or "")[:10] or None
-                data_emissao = (cr.get("dataEmissao") or "")[:10] or None
                 data_recebimento = (cr.get("dataRecebimento") or cr.get("dataPagamento") or "")[:10] or None
                 if existing:
-                    await db.execute("""UPDATE fiscal_contas_receber_bling SET
-                        numero=$1, descricao=$2, contato_nome=$3, contato_documento=$4,
-                        valor=$5, valor_pago=$6, vencimento=$7::date, data_recebimento=$8::date,
-                        situacao=$9, forma_pagamento=$10, categoria=$11, sincronizado_em=NOW()
-                        WHERE bling_id=$12""",
-                        str(cr.get("numero","")), cr.get("descricao",""),
-                        contato.get("nome",""), contato.get("numeroDocumento",""),
-                        float(cr.get("valor",0) or 0), float(cr.get("valorPago",0) or 0),
-                        vencimento, data_recebimento,
-                        str(cr.get("situacao","pendente")), cr.get("formaPagamento",""),
-                        cr.get("categoria",""), bling_id)
+                    await db.execute("""UPDATE fin_contas_receber SET
+                        cliente=$1, descricao=$2, valor=$3, vencimento=$4::date, data_recebimento=$5::date,
+                        status=$6, forma_pagamento=$7, origem='bling'
+                        WHERE bling_id=$8""",
+                        contato.get("nome",""), cr.get("descricao",""),
+                        float(cr.get("valor",0) or 0), vencimento, data_recebimento,
+                        str(cr.get("situacao","pendente")), cr.get("formaPagamento",""), bling_id)
                 else:
-                    await db.execute("""INSERT INTO fiscal_contas_receber_bling
-                        (bling_id, numero, descricao, contato_nome, contato_documento,
-                         valor, valor_pago, vencimento, data_recebimento, data_emissao,
-                         situacao, forma_pagamento, categoria, sincronizado_em)
-                        VALUES ($1,$2,$3,$4,$5,$6,$7,$8::date,$9::date,$10::date,$11,$12,$13,NOW())""",
-                        bling_id, str(cr.get("numero","")), cr.get("descricao",""),
-                        contato.get("nome",""), contato.get("numeroDocumento",""),
-                        float(cr.get("valor",0) or 0), float(cr.get("valorPago",0) or 0),
-                        vencimento, data_recebimento, data_emissao,
-                        str(cr.get("situacao","pendente")), cr.get("formaPagamento",""),
-                        cr.get("categoria",""))
+                    await db.execute("""INSERT INTO fin_contas_receber
+                        (cliente, descricao, valor, vencimento, data_recebimento, status, forma_pagamento, bling_id, origem)
+                        VALUES ($1,$2,$3,$4::date,$5::date,$6,$7,$8,'bling')""",
+                        contato.get("nome",""), cr.get("descricao",""),
+                        float(cr.get("valor",0) or 0), vencimento, data_recebimento,
+                        str(cr.get("situacao","pendente")), cr.get("formaPagamento",""), bling_id)
                 total += 1
             except Exception as e:
                 log(AGENT, f"Erro sync CR: {e}")
@@ -379,6 +376,7 @@ def sincronizar_contas_receber_bling(pagina: int = 1, limite: int = 100) -> dict
     return run_async(_go())
 
 def sincronizar_contas_pagar_bling(pagina: int = 1, limite: int = 100) -> dict:
+    """Sync contas a pagar do Bling → fin_contas_pagar (tabela unificada SSOT)."""
     from bling_erp import listar_contas_pagar as bling_cp, get_access_token, get_auth_url
     token = get_access_token()
     if not token: return {"error": "Bling nao autenticado", "auth_url": get_auth_url()}
@@ -388,40 +386,35 @@ def sincronizar_contas_pagar_bling(pagina: int = 1, limite: int = 100) -> dict:
     if not dados: return {"sync": 0, "message": "sem dados"}
     async def _go():
         db = await get_db()
+        for col, ct in [("bling_id", "BIGINT"), ("origem", "VARCHAR(30) DEFAULT 'manual'")]:
+            try:
+                exists = await db.fetchval("SELECT column_name FROM information_schema.columns WHERE table_name='fin_contas_pagar' AND column_name=$1", col)
+                if not exists: await db.execute(f"ALTER TABLE fin_contas_pagar ADD COLUMN {col} {ct}")
+            except: pass
         total = 0
         for cp in dados:
             try:
                 bling_id = cp.get("id")
                 if not bling_id: continue
-                existing = await db.fetchval("SELECT id FROM fiscal_contas_pagar_bling WHERE bling_id = $1", bling_id)
+                existing = await db.fetchval("SELECT id FROM fin_contas_pagar WHERE bling_id = $1", bling_id)
                 fornecedor = cp.get("fornecedor", cp.get("contato", {})) or {}
                 vencimento = (cp.get("vencimento") or cp.get("dataVencimento") or "")[:10] or None
-                data_emissao = (cp.get("dataEmissao") or "")[:10] or None
                 data_pagamento = (cp.get("dataPagamento") or "")[:10] or None
                 if existing:
-                    await db.execute("""UPDATE fiscal_contas_pagar_bling SET
-                        numero=$1, descricao=$2, fornecedor_nome=$3, fornecedor_documento=$4,
-                        valor=$5, valor_pago=$6, vencimento=$7::date, data_pagamento=$8::date,
-                        situacao=$9, forma_pagamento=$10, categoria=$11, sincronizado_em=NOW()
-                        WHERE bling_id=$12""",
-                        str(cp.get("numero","")), cp.get("descricao",""),
-                        fornecedor.get("nome",""), fornecedor.get("numeroDocumento",""),
-                        float(cp.get("valor",0) or 0), float(cp.get("valorPago",0) or 0),
-                        vencimento, data_pagamento,
-                        str(cp.get("situacao","pendente")), cp.get("formaPagamento",""),
-                        cp.get("categoria",""), bling_id)
+                    await db.execute("""UPDATE fin_contas_pagar SET
+                        fornecedor=$1, descricao=$2, valor=$3, vencimento=$4::date, data_pagamento=$5::date,
+                        status=$6, forma_pagamento=$7, origem='bling'
+                        WHERE bling_id=$8""",
+                        fornecedor.get("nome",""), cp.get("descricao",""),
+                        float(cp.get("valor",0) or 0), vencimento, data_pagamento,
+                        str(cp.get("situacao","pendente")), cp.get("formaPagamento",""), bling_id)
                 else:
-                    await db.execute("""INSERT INTO fiscal_contas_pagar_bling
-                        (bling_id, numero, descricao, fornecedor_nome, fornecedor_documento,
-                         valor, valor_pago, vencimento, data_pagamento, data_emissao,
-                         situacao, forma_pagamento, categoria, sincronizado_em)
-                        VALUES ($1,$2,$3,$4,$5,$6,$7,$8::date,$9::date,$10::date,$11,$12,$13,NOW())""",
-                        bling_id, str(cp.get("numero","")), cp.get("descricao",""),
-                        fornecedor.get("nome",""), fornecedor.get("numeroDocumento",""),
-                        float(cp.get("valor",0) or 0), float(cp.get("valorPago",0) or 0),
-                        vencimento, data_pagamento, data_emissao,
-                        str(cp.get("situacao","pendente")), cp.get("formaPagamento",""),
-                        cp.get("categoria",""))
+                    await db.execute("""INSERT INTO fin_contas_pagar
+                        (fornecedor, descricao, valor, vencimento, data_pagamento, status, forma_pagamento, bling_id, origem)
+                        VALUES ($1,$2,$3,$4::date,$5::date,$6,$7,$8,'bling')""",
+                        fornecedor.get("nome",""), cp.get("descricao",""),
+                        float(cp.get("valor",0) or 0), vencimento, data_pagamento,
+                        str(cp.get("situacao","pendente")), cp.get("formaPagamento",""), bling_id)
                 total += 1
             except Exception as e:
                 log(AGENT, f"Erro sync CP: {e}")

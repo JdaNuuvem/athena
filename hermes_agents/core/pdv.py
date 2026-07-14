@@ -127,7 +127,13 @@ def fechar_caixa(caixa_id: int, saldo_final: float) -> dict:
             "saldo_esperado": float(saldo_final),
             "diferenca": float(saldo_final) - float((row["saldo_inicial"] if row else 0) + (total_vendas or 0) - (sangrias or 0) + (suprimentos or 0)),
         }
-    try: return run_async(_go())
+    try:
+        result = run_async(_go())
+        try:
+            from core.entidades import ao_fechar_caixa_pdv
+            ao_fechar_caixa_pdv(caixa_id)
+        except: pass
+        return result
     except Exception as e: return {"error": str(e)}
 
 def sangria(caixa_id: int, valor: float, motivo: str, operador: str) -> dict:

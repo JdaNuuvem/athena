@@ -170,7 +170,14 @@ def atualizar_status(id: int, novo_status: str, usuario: str = "") -> dict:
             id, status_anterior, novo_status, usuario)
         row = await db.fetchrow("UPDATE vendas_pedidos SET status=$1, updated_at=NOW() WHERE id=$2 RETURNING *", novo_status, id)
         return dict(row) if row else {"error":"not found"}
-    try: return run_async(_go())
+    try:
+        result = run_async(_go())
+        if novo_status == "faturado":
+            try:
+                from core.entidades import ao_faturar_pedido
+                ao_faturar_pedido(id)
+            except: pass
+        return result
     except Exception as e: return {"error":str(e)}
 
 # ── Dashboard ──

@@ -141,7 +141,12 @@ def iniciar_op(op_id: int) -> dict:
     return update("ops", op_id, {"status":"em_andamento","data_inicio":hoje()})
 
 def finalizar_op(op_id: int) -> dict:
-    return update("ops", op_id, {"status":"finalizada","data_fim":hoje()})
+    r = update("ops", op_id, {"status":"finalizada","data_fim":hoje()})
+    try:
+        from core.entidades import ao_finalizar_producao
+        ao_finalizar_producao(op_id)
+    except: pass
+    return r
 
 def parar_maquina(maquina_id: int, motivo: str) -> dict:
     return update("maquinas", maquina_id, {"status":"parada","observacoes":motivo})
