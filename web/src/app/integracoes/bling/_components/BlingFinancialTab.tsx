@@ -5,33 +5,8 @@ import Spinner from "./shared/Spinner";
 import Alert from "./shared/Alert";
 import EmptyState from "./shared/EmptyState";
 import { listarContasReceber, listarNotasFiscais, baixarNFeXML, abrirNFeDANFE } from "@/lib/api";
-
-interface NotaFiscal {
-  id: number;
-  numero: string;
-  dataEmissao?: string;
-  dataOperacao?: string;
-  contato: { nome: string; numeroDocumento?: string };
-  situacao: number;
-  tipo: number;
-  chaveAcesso?: string;
-  loja?: { id: number };
-  naturezaOperacao?: { id: number };
-  valorNota?: number;
-  total?: number;
-}
-
-interface ContaReceber {
-  id: number;
-  numero: string;
-  vencimento?: string;
-  valor?: number;
-  contato: { nome: string };
-  situacao: number | string;
-}
-
-const NF_SITUACOES: Record<number, string> = { 1: "Emitida", 2: "Cancelada", 3: "Inutilizada", 4: "Denegada" };
-const NF_TIPOS: Record<number, string> = { 0: "Saída", 1: "Entrada" };
+import type { NotaFiscal, ContaReceber } from "@/lib/types/domain";
+import { NF_SITUACOES, NF_TIPOS } from "@/lib/types/domain";
 
 export default function BlingFinancialTab() {
   const [contas, setContas] = useState<ContaReceber[]>([]);

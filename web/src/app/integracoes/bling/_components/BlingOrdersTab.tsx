@@ -5,22 +5,8 @@ import Spinner from "./shared/Spinner";
 import Alert from "./shared/Alert";
 import EmptyState from "./shared/EmptyState";
 import { listarBlingPedidos, sincronizarBlingPedidos } from "@/lib/api";
-
-interface Pedido {
-  id: number;
-  numero: string;
-  data?: string;
-  dataSaida?: string;
-  contato: { nome: string; numeroDocumento?: string; tipoPessoa?: string };
-  total: number;
-  totalProdutos?: number;
-  situacao: { id: number; valor: number } | string;
-  itens?: Array<{ codigo: string; descricao?: string; quantidade: number; valor: number }>;
-  loja?: { id: number };
-}
-
-const SITUACOES: Record<number, string> = { 1: "Aberto", 6: "Concluído", 9: "Cancelado", 12: "Em andamento", 15: "Faturado", 18: "Devolvido" };
-const SIT_COLORS: Record<number, string> = { 1: "bg-yellow-900/30 text-yellow-400", 6: "bg-emerald-900/30 text-emerald-400", 9: "bg-red-900/30 text-red-400", 12: "bg-blue-900/30 text-blue-400", 15: "bg-emerald-900/30 text-emerald-400", 18: "bg-orange-900/30 text-orange-400" };
+import type { Pedido } from "@/lib/types/domain";
+import { PEDIDO_SITUACOES, PEDIDO_SIT_COLORS } from "@/lib/types/domain";
 
 export default function BlingOrdersTab() {
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
@@ -100,7 +86,7 @@ export default function BlingOrdersTab() {
           className="bg-neutral-800 border border-neutral-700 rounded-lg px-2 py-1.5 text-xs text-neutral-200"
         >
           <option value={0}>Todos status</option>
-          {Object.entries(SITUACOES).map(([id, label]) => (
+          {Object.entries(PEDIDO_SITUACOES).map(([id, label]) => (
             <option key={id} value={id}>{label}</option>
           ))}
         </select>
@@ -153,8 +139,8 @@ export default function BlingOrdersTab() {
                         {p.totalProdutos && <div className="text-[10px] text-neutral-500">itens: R$ {(p.totalProdutos ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</div>}
                       </td>
                       <td className="p-3 text-center">
-                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium ${SIT_COLORS[sid] || "bg-neutral-700 text-neutral-400"}`}>
-                          {SITUACOES[sid] || `#${sid}`}
+                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium ${PEDIDO_SIT_COLORS[sid] || "bg-neutral-700 text-neutral-400"}`}>
+                          {PEDIDO_SITUACOES[sid] || `#${sid}`}
                         </span>
                       </td>
                       <td className="p-3 text-center">
@@ -186,7 +172,7 @@ export default function BlingOrdersTab() {
                               <h4 className="text-neutral-400 font-medium mb-2">Valores</h4>
                               <p className="text-emerald-400">Total: R$ {(p.total ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
                               {p.totalProdutos && <p className="text-neutral-200">Produtos: R$ {p.totalProdutos.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>}
-                              <p className="text-neutral-500 mt-1">Status: {SITUACOES[sid] || `#${sid}`}</p>
+                              <p className="text-neutral-500 mt-1">Status: {PEDIDO_SITUACOES[sid] || `#${sid}`}</p>
                             </div>
                           </div>
                           {p.itens && p.itens.length > 0 && (

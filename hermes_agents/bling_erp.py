@@ -113,6 +113,9 @@ def listar_pedidos(pagina: int = 1, limite: int = 100) -> dict:
 def listar_contas_receber(pagina: int = 1, limite: int = 100) -> dict:
     return _request("contas/receber", {"pagina": pagina, "limite": limite})
 
+def listar_contas_pagar(pagina: int = 1, limite: int = 100) -> dict:
+    return _request("contas/pagar", {"pagina": pagina, "limite": limite})
+
 def listar_notas_fiscais(pagina: int = 1, limite: int = 100) -> dict:
     return _request("nfe", {"pagina": pagina, "limite": limite})
 

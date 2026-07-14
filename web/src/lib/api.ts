@@ -19,6 +19,23 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+import type {
+  Agent,
+  KPIOverview,
+  Product,
+  BlingProduct,
+  BlingOrder,
+  BlingInvoice,
+  BlingReceivable,
+  BlingConfig,
+  BlingStatus,
+  BlingDeposito,
+  BlingEstoqueSaldo,
+  BlingResumoVendas,
+  BlingWebhook,
+  Integration,
+} from "@/lib/types/domain";
+
 export const api = {
   // Auth
   login: (username: string, password: string) =>
@@ -166,112 +183,59 @@ export const api = {
   // ML
   mlStatus: () => request<{ modelo_treinado: boolean }>("/api/ml/status"),
   mlTreinar: () => request<Record<string, unknown>>("/api/ml/treinar", { method: "POST" }),
+
+  // RH
+  rhList: (tabela: string) => request<{ data: unknown[] }>(`/api/rh/${tabela}`),
+  rhGet: (tabela: string, id: number) => request<Record<string, unknown>>(`/api/rh/${tabela}/${id}`),
+  rhCreate: (tabela: string, data: Record<string, unknown>) =>
+    request<Record<string, unknown>>(`/api/rh/${tabela}`, { method: "POST", body: JSON.stringify(data) }),
+  rhUpdate: (tabela: string, id: number, data: Record<string, unknown>) =>
+    request<Record<string, unknown>>(`/api/rh/${tabela}/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  rhDelete: (tabela: string, id: number) =>
+    request<{ success: boolean }>(`/api/rh/${tabela}/${id}`, { method: "DELETE" }),
+  rhPontoPorData: (data: string) => request<{ data: unknown[] }>(`/api/rh/ponto/data/${data}`),
+  rhFolhaResumo: (mes: string) => request<Record<string, number>>(`/api/rh/folha/resumo/${mes}`),
+  rhBeneficiosResumo: () =>
+    request<{ total_empresa: number; total_funcionario: number; beneficios: unknown[] }>("/api/rh/beneficios/resumo"),
+
+  // Cadastros
+  cadList: (tabela: string) => request<{ data: unknown[] }>(`/api/cadastros/${tabela}`),
+  cadGet: (tabela: string, id: number) => request<Record<string, unknown>>(`/api/cadastros/${tabela}/${id}`),
+  cadCreate: (tabela: string, data: Record<string, unknown>) => request<Record<string, unknown>>(`/api/cadastros/${tabela}`, { method: "POST", body: JSON.stringify(data) }),
+  cadUpdate: (tabela: string, id: number, data: Record<string, unknown>) => request<Record<string, unknown>>(`/api/cadastros/${tabela}/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  cadDelete: (tabela: string, id: number) => request<{ success: boolean }>(`/api/cadastros/${tabela}/${id}`, { method: "DELETE" }),
+  cadPermissoes: () => request<{ data: unknown[] }>("/api/cadastros/permissoes/perfil"),
+  cadVendedorComissao: () => request<{ vendedores: unknown[]; total_comissoes: number }>("/api/cadastros/vendedores/comissao"),
+  cadVendedorMetas: (mes?: string) => request<{ data: unknown[] }>(`/api/cadastros/vendedores/metas${mes ? "/" + mes : ""}`),
+  cadFornecedorResumo: () => request<{ data: unknown[] }>("/api/cadastros/fornecedores/resumo"),
+
+  // Financeiro
+  finList: (tabela: string) => request<{ data: unknown[] }>(`/api/financeiro/${tabela}`),
+  finGet: (tabela: string, id: number) => request<Record<string, unknown>>(`/api/financeiro/${tabela}/${id}`),
+  finCreate: (tabela: string, data: Record<string, unknown>) => request<Record<string, unknown>>(`/api/financeiro/${tabela}`, { method: "POST", body: JSON.stringify(data) }),
+  finUpdate: (tabela: string, id: number, data: Record<string, unknown>) => request<Record<string, unknown>>(`/api/financeiro/${tabela}/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  finDelete: (tabela: string, id: number) => request<{ success: boolean }>(`/api/financeiro/${tabela}/${id}`, { method: "DELETE" }),
+  finFluxoResumo: (dias?: number) => request<{ resumo: Record<string, number>; diario: unknown[] }>(`/api/financeiro/fluxo_caixa/resumo${dias ? "?dias=" + dias : ""}`),
+  finDREResumo: (mes?: string) => request<{ receitas: number; despesas: number; resultado: number; lucro: boolean; items: unknown[] }>(`/api/financeiro/dre/resumo${mes ? "/" + mes : ""}`),
 };
 
-// Types
-export interface Agent {
-  id: string;
-  name: string;
-  role: string;
-  status: string;
-  context: string;
-  taskCount: number;
-}
-
-export interface KPIOverview {
-  receita_total: number;
-  total_pedidos: number;
-  total_produtos: number;
-  total_anuncios: number;
-  ticket_medio: number;
-  receita_por_canal: Record<string, number>;
-  top_skus: Array<{
-    sku: string;
-    nome: string;
-    qtd: number;
-    receita: number;
-    margem: number;
-  }>;
-}
-
-export interface Product {
-  sku: string;
-  nome: string;
-  margem_pct: number;
-  receita_30d: number;
-  vendidos_30d: number;
-  estoque_lojas: Array<{ loja: string; preco: number; status: string }>;
-  total_lojas: number;
-}
-
-export interface Integration {
-  id: string;
-  name: string;
-  category: string;
-  status: string;
-}
-
-// Bling types
-export interface BlingProduct {
-  id: number;
-  codigo: string;
-  descricao: string;
-  preco: number;
-  estoque_atual: number;
-  estoque_minimo: number;
-  situacao: string;
-}
-
-export interface BlingOrder {
-  id: number;
-  numero: string;
-  data: string;
-  total_venda: number;
-  situacao: string;
-  contato_nome: string;
-  imported_at: string;
-}
-
-export interface BlingInvoice {
-  id: number;
-  numero: string;
-  serie: string;
-  data_emissao: string;
-  valor_nota: number;
-  situacao: string;
-  cliente_nome: string;
-  imported_at: string;
-}
-
-export interface BlingReceivable {
-  id: number;
-  descricao: string;
-  valor: number;
-  data_vencimento: string;
-  situacao: string;
-}
-
-export interface BlingConfig {
-  api_key: string;
-  sandbox: boolean;
-  auto_sync: boolean;
-  sync_interval_minutes: number;
-  sync_products: boolean;
-  sync_orders: boolean;
-  sync_invoices: boolean;
-  sync_receivables: boolean;
-  sync_stock: boolean;
-  auth_url: string;
-  autenticado: boolean;
-}
-
-// ── Novos tipos Bling (Task 5) ──
-
-export interface BlingStatus {
-  client_id_setado: boolean;
-  autenticado: boolean;
-  auth_url: string;
-}
+// Types — SSOT re-exports from lib/types/domain (removes duplicate definitions)
+export type {
+  Agent,
+  KPIOverview,
+  Product,
+  BlingProduct,
+  BlingOrder,
+  BlingInvoice,
+  BlingReceivable,
+  BlingConfig,
+  BlingStatus,
+  BlingDeposito,
+  BlingEstoqueSaldo,
+  BlingResumoVendas,
+  BlingWebhook,
+  Integration,
+} from "@/lib/types/domain";
 
 export interface BlingProduto {
   id: number;
@@ -285,36 +249,6 @@ export interface BlingProduto {
 export interface BlingProdutosResponse {
   data: BlingProduto[];
   error?: string;
-}
-
-export interface BlingDeposito {
-  id: number;
-  descricao: string;
-  situacao: string;
-  [key: string]: unknown;
-}
-
-export interface BlingEstoqueSaldo {
-  idProduto: number;
-  codigo: string;
-  saldo: number;
-  [key: string]: unknown;
-}
-
-export interface BlingResumoVendas {
-  total_receita: number;
-  total_pedidos: number;
-  dias_analisados: number;
-  top_skus: Array<{ sku: string; quantidade: number; receita: number }>;
-  vendas_diarias: Array<[string, number]>;
-}
-
-export interface BlingWebhook {
-  id: number;
-  url: string;
-  evento: string;
-  situacao: string;
-  [key: string]: unknown;
 }
 
 // ── Bling API Methods (standalone, usam fetch direto) ──
@@ -517,4 +451,106 @@ export function baixarNFeXML(idNota: number): void {
 
 export function abrirNFeDANFE(idNota: number): void {
   window.open(`/api/bling/financeiro/notas-fiscais/${idNota}/danfe`, "_blank");
+}
+
+// ── Fiscal ──
+
+export async function fiscalDashboard(): Promise<import("@/lib/types/domain").FiscalDashboard> {
+  const res = await fetch("/api/fiscal/dashboard");
+  return res.json();
+}
+
+export async function fiscalList(tabela: string): Promise<{ data: unknown[] }> {
+  const res = await fetch(`/api/fiscal/${tabela}`);
+  return res.json();
+}
+
+export async function fiscalGet(tabela: string, id: number): Promise<Record<string, unknown>> {
+  const res = await fetch(`/api/fiscal/${tabela}/${id}`);
+  return res.json();
+}
+
+export async function fiscalCreate(tabela: string, data: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const res = await fetch(`/api/fiscal/${tabela}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return res.json();
+}
+
+export async function fiscalUpdate(tabela: string, id: number, data: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const res = await fetch(`/api/fiscal/${tabela}/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return res.json();
+}
+
+export async function fiscalDelete(tabela: string, id: number): Promise<{ success: boolean }> {
+  const res = await fetch(`/api/fiscal/${tabela}/${id}`, { method: "DELETE" });
+  return res.json();
+}
+
+export async function fiscalCalcularTributos(notaId: number): Promise<Record<string, unknown>> {
+  const res = await fetch(`/api/fiscal/tributos/calcular/${notaId}`);
+  return res.json();
+}
+
+export async function fiscalObrigacoesProximas(dias?: number): Promise<{ data: unknown[] }> {
+  const res = await fetch(`/api/fiscal/obrigacoes/proximas${dias ? "?dias=" + dias : ""}`);
+  return res.json();
+}
+
+export async function fiscalObrigacoesAtrasadas(): Promise<{ data: unknown[] }> {
+  const res = await fetch("/api/fiscal/obrigacoes/atrasadas");
+  return res.json();
+}
+
+export async function fiscalBaixarObrigacao(id: number): Promise<Record<string, unknown>> {
+  const res = await fetch(`/api/fiscal/obrigacoes/${id}/baixar`, { method: "POST" });
+  return res.json();
+}
+
+export async function fiscalSyncNotasFiscais(pagina?: number, limite?: number): Promise<{ sync: number; error?: string }> {
+  const res = await fetch("/api/fiscal/sync/notas-fiscais", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pagina: pagina || 1, limite: limite || 100 }),
+  });
+  return res.json();
+}
+
+export async function fiscalSyncContasReceber(pagina?: number, limite?: number): Promise<{ sync: number; error?: string }> {
+  const res = await fetch("/api/fiscal/sync/contas-receber", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pagina: pagina || 1, limite: limite || 100 }),
+  });
+  return res.json();
+}
+
+export async function fiscalSyncContasPagar(pagina?: number, limite?: number): Promise<{ sync: number; error?: string }> {
+  const res = await fetch("/api/fiscal/sync/contas-pagar", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pagina: pagina || 1, limite: limite || 100 }),
+  });
+  return res.json();
+}
+
+export async function fiscalSyncTudo(): Promise<{ notas_fiscais: number; contas_receber: number; contas_pagar: number }> {
+  const res = await fetch("/api/fiscal/sync/tudo", { method: "POST" });
+  return res.json();
+}
+
+export async function fiscalNFItens(notaId: number): Promise<{ data: unknown[] }> {
+  const res = await fetch(`/api/fiscal/notas-fiscais/${notaId}/itens`);
+  return res.json();
+}
+
+export async function fiscalNFImpostos(notaId: number): Promise<{ data: unknown[] }> {
+  const res = await fetch(`/api/fiscal/notas-fiscais/${notaId}/impostos`);
+  return res.json();
 }

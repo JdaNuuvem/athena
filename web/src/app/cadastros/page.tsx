@@ -1,16 +1,55 @@
 "use client";
 
+import { useState } from "react";
+import EmpresasTab from "./_components/EmpresasTab";
+import UsuariosTab from "./_components/UsuariosTab";
+import ClientesTab from "./_components/ClientesTab";
+import FornecedoresTab from "./_components/FornecedoresTab";
+import TransportadorasTab from "./_components/TransportadorasTab";
+import VendedoresTab from "./_components/VendedoresTab";
+
+const TABS = [
+  { key: "empresas", label: "Empresas" },
+  { key: "usuarios", label: "Usuários" },
+  { key: "clientes", label: "Clientes" },
+  { key: "fornecedores", label: "Fornecedores" },
+  { key: "transportadoras", label: "Transportadoras" },
+  { key: "vendedores", label: "Vendedores" },
+];
+
 export default function CadastrosPage() {
+  const [activeTab, setActiveTab] = useState("empresas");
+
   return (
     <div className="p-6 space-y-4">
-      <div><h1 className="text-lg font-bold text-neutral-100">Cadastros</h1><p className="text-xs text-neutral-500 mt-1">Gerencie clientes, fornecedores e categorias</p></div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {["Clientes", "Fornecedores", "Categorias"].map(m => (
-          <div key={m} className="bg-neutral-800 border border-neutral-700 rounded-lg p-4">
-            <h3 className="text-sm font-semibold text-neutral-200">{m}</h3>
-            <p className="text-xs text-neutral-500 mt-1">Em construcao</p>
-          </div>
+      <div>
+        <h1 className="text-lg font-bold text-neutral-100">Cadastros</h1>
+        <p className="text-xs text-neutral-500 mt-1">Gerencie empresas, usuários, clientes, fornecedores, transportadoras e vendedores</p>
+      </div>
+
+      <nav className="flex border-b border-neutral-700 gap-0">
+        {TABS.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-[1px] ${
+              activeTab === tab.key
+                ? "border-indigo-500 text-indigo-300"
+                : "border-transparent text-neutral-400 hover:text-neutral-200 hover:border-neutral-500"
+            }`}
+          >
+            {tab.label}
+          </button>
         ))}
+      </nav>
+
+      <div>
+        {activeTab === "empresas" && <EmpresasTab />}
+        {activeTab === "usuarios" && <UsuariosTab />}
+        {activeTab === "clientes" && <ClientesTab />}
+        {activeTab === "fornecedores" && <FornecedoresTab />}
+        {activeTab === "transportadoras" && <TransportadorasTab />}
+        {activeTab === "vendedores" && <VendedoresTab />}
       </div>
     </div>
   );
