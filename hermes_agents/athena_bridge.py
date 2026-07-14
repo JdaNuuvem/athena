@@ -1036,6 +1036,45 @@ def memory_recall():
 
 
 
+
+
+# ── Automacoes Routes ──
+
+@app.route('/api/automacoes/dashboard', methods=['GET'])
+def auto_dashboard():
+    from core.automacoes import dashboard as ad
+    return jsonify(ad())
+
+@app.route('/api/automacoes/<tabela>', methods=['GET'])
+def auto_list(tabela):
+    from core.automacoes import list as al, TABLES
+    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
+    return jsonify({"data": al(tabela)})
+
+@app.route('/api/automacoes/<tabela>', methods=['POST'])
+def auto_create(tabela):
+    from core.automacoes import create as ac, TABLES
+    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
+    return jsonify(ac(tabela, request.json or {}))
+
+@app.route('/api/automacoes/<tabela>/<int:id>', methods=['GET'])
+def auto_get(tabela, id):
+    from core.automacoes import get as ag, TABLES
+    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
+    return jsonify(ag(tabela, id))
+
+@app.route('/api/automacoes/<tabela>/<int:id>', methods=['PUT'])
+def auto_update(tabela, id):
+    from core.automacoes import update as au, TABLES
+    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
+    return jsonify(au(tabela, id, request.json or {}))
+
+@app.route('/api/automacoes/<tabela>/<int:id>', methods=['DELETE'])
+def auto_delete(tabela, id):
+    from core.automacoes import delete as ad, TABLES
+    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
+    return jsonify(ad(tabela, id))
+
 # ── Producao Routes ──
 
 @app.route('/api/producao/dashboard', methods=['GET'])
