@@ -195,7 +195,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               aria-label="Abrir menu"
               className="text-neutral-400 hover:text-neutral-200 text-lg leading-none"
             >
-              {/* menu icon */}...
+              ☰
             </button>
             <span className="font-semibold text-sm tracking-wide text-neutral-200 select-none">ATHENA</span>
           </div>
