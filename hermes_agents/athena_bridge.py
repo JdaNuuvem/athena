@@ -727,8 +727,9 @@ def set_bling_config():
     if api_url:
         set_config("bling", "api_url", api_url)
 
-    from bling_erp import CLIENT_ID, CLIENT_SECRET
-    return jsonify({"success": True, "oauth_setado": bool(CLIENT_ID or client_id), "client_id": CLIENT_ID or client_id})
+    from bling_erp import _client_id, _client_secret
+    cid = _client_id()
+    return jsonify({"success": True, "oauth_setado": bool(cid or client_id), "client_id": cid or client_id})
 
 @app.route('/api/config/shopee', methods=['POST'])
 def set_shopee_config():
