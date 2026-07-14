@@ -26,16 +26,10 @@ interface TributoRow {
 const COLUMNS: Column<TributoRow>[] = [
   { key: "sigla", label: "Sigla" },
   { key: "nome", label: "Tributo" },
-  { key: "tipo", label: "Esfera", render: (_, row) => (
-    <span className="capitalize">{row.tipo}</span>
-  )},
+  { key: "tipo", label: "Esfera", render: (_, row) => <span className="capitalize">{row.tipo}</span> },
   { key: "aliquota", label: "Alíquota", align: "center", render: (_, row) => `${row.aliquota}%` },
-  { key: "regime", label: "Regime", render: (_, row) => (
-    <span className="capitalize">{row.regime.replace(/_/g, " ")}</span>
-  )},
-  { key: "incidencia", label: "Incidência", render: (_, row) => (
-    <span className="text-[10px] text-neutral-400 max-w-[200px] block truncate">{row.incidencia}</span>
-  )},
+  { key: "regime", label: "Regime", render: (_, row) => <span className="capitalize">{row.regime.replace(/_/g, " ")}</span> },
+  { key: "incidencia", label: "Incidência", render: (_, row) => <span className="text-[10px] text-neutral-400 max-w-[200px] block truncate">{row.incidencia}</span> },
   { key: "ativo", label: "Ativo", align: "center", render: (_, row) => (
     <StatusBadge label={row.ativo ? "Ativo" : "Inativo"} variant={row.ativo ? "success" : "neutral"} />
   )},

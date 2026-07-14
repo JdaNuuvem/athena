@@ -1,4 +1,6 @@
-"""Fiscal Core — Tributos, Obrigacoes, Notas Fiscais, Integracao Bling"""
+import os
+path = r"D:\JORGE CHARME E LEON\SISTEMAS\N8N AUTOMACOES\hermes_agents\core\fiscal.py"
+content = '''"""Fiscal Core — Tributos, Obrigacoes, Notas Fiscais, Integracao Bling"""
 from core import get_db, run_async, log, hoje
 
 AGENT = "Fiscal Core"
@@ -149,33 +151,6 @@ def get(t: str, i: int): return _get(f"fiscal_{t}", i)
 def create(t: str, d: dict): return _create(f"fiscal_{t}", d)
 def update(t: str, i: int, d: dict): return _update(f"fiscal_{t}", i, d)
 def delete(t: str, i: int): return _delete(f"fiscal_{t}", i)
-
-# ── Listagem com filtro de data ──
-
-DATE_FIELDS = {"notas_fiscais": "data_emissao", "obrigacoes": "data_vencimento", "contas_receber_bling": "vencimento", "contas_pagar_bling": "vencimento"}
-
-def _list_filtered(t: str, date_field: str, data_inicio: str = "", data_fim: str = "", dias: int = 0, order: str = "id DESC", limit: int = 500) -> list:
-    async def _go():
-        db = await get_db()
-        where = []
-        params = []
-        p = 1
-        if data_inicio:
-            where.append(f"{date_field} >= ${p}::date"); params.append(data_inicio); p += 1
-        if data_fim:
-            where.append(f"{date_field} <= ${p}::date"); params.append(data_fim); p += 1
-        if dias > 0 and not (data_inicio or data_fim):
-            where.append(f"{date_field} >= CURRENT_DATE - ${p}"); params.append(dias); p += 1
-        clause = ("WHERE " + " AND ".join(where)) if where else ""
-        rows = await db.fetch(f"SELECT * FROM {t} {clause} ORDER BY {order} LIMIT {limit}", *params)
-        return [dict(r) for r in rows]
-    try: return run_async(_go())
-    except Exception as e: log(AGENT, f"list_filtered {t}: {e}"); return []
-
-def listar_filtrado(tabela: str, data_inicio: str = "", data_fim: str = "", dias: int = 0) -> dict:
-    t = f"fiscal_{tabela}"
-    field = DATE_FIELDS.get(tabela, "created_at")
-    return {"data": _list_filtered(t, field, data_inicio, data_fim, dias)}
 
 # ── Tributos ──
 
@@ -379,10 +354,10 @@ def sincronizar_contas_receber_bling(pagina: int = 1, limite: int = 100) -> dict
     return run_async(_go())
 
 def sincronizar_contas_pagar_bling(pagina: int = 1, limite: int = 100) -> dict:
-    from bling_erp import listar_contas_pagar as bling_cp, get_access_token, get_auth_url
+    from bling_erp import _request as bling_request, get_access_token, get_auth_url
     token = get_access_token()
     if not token: return {"error": "Bling nao autenticado", "auth_url": get_auth_url()}
-    r = bling_cp(pagina, limite)
+    r = bling_request("contas/pagar", {"pagina": pagina, "limite": limite})
     if r.get("error"): return r
     dados = r.get("data", [])
     if not dados: return {"sync": 0, "message": "sem dados"}
@@ -473,3 +448,8 @@ def _seed():
     except Exception as e: log(AGENT, f"Erro seed fiscal: {e}")
 
 _seed()
+'''
+
+with open(path, "w", encoding="utf-8", newline="\n") as f:
+    f.write(content)
+print(f"Fiscal Core: {len(content)} bytes")

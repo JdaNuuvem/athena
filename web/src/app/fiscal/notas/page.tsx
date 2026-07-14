@@ -2,8 +2,9 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { fiscalList, fiscalSyncNotasFiscais, baixarNFeXML, abrirNFeDANFE } from "@/lib/api";
-import type { Column, TabOption } from "../types";
+import DateFilter, { type DateFilterValue } from "@/app/_components/DateFilter";
 import { formatCurrency } from "../types";
+import type { Column, TabOption } from "../types";
 import PageHeader from "@/app/_components/PageHeader";
 import TabBar from "@/app/_components/TabBar";
 import DataTable from "@/app/_components/DataTable";
@@ -18,7 +19,6 @@ interface NotaRow {
   tipo: string;
   data_emissao: string;
   contato_nome: string;
-  contato_documento: string;
   valor_nf: number;
   valor_total_tributos: number;
   status: string;
@@ -76,6 +76,7 @@ export default function NotasFiscaisPage() {
   const [syncing, setSyncing] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [tab, setTab] = useState("todas");
+  const [dateFilter, setDateFilter] = useState<DateFilterValue>({});
 
   const carregar = useCallback(() => {
     setLoading(true);
@@ -88,13 +89,26 @@ export default function NotasFiscaisPage() {
 
   useEffect(() => { carregar(); }, [carregar]);
 
+  useEffect(() => {
+    const { data_inicio, data_fim, dias } = dateFilter;
+    if (!data_inicio && !data_fim && !dias) return;
+    const p = new URLSearchParams();
+    if (data_inicio) p.set("data_inicio", data_inicio);
+    if (data_fim) p.set("data_fim", data_fim);
+    if (dias) p.set("dias", String(dias));
+    fetch("/api/fiscal/notas_fiscais?" + p)
+      .then(r => r.json())
+      .then(r => setNotas((r.data || []) as NotaRow[]))
+      .catch(() => {});
+  }, [dateFilter]);
+
   const sync = async () => {
     setSyncing(true);
     setErro(null);
     try {
       const r = await fiscalSyncNotasFiscais();
       if (r.error) setErro(r.error);
-      await carregar();
+      carregar();
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao sincronizar");
     } finally {
@@ -108,13 +122,16 @@ export default function NotasFiscaisPage() {
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
         <PageHeader title="Notas Fiscais" subtitle="NF-e, NFC-e, NFS-e, CT-e e MDF-e" />
-        <button
-          onClick={sync}
-          disabled={syncing}
-          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs rounded"
-        >
-          {syncing ? "Sincronizando..." : "Sync Bling"}
-        </button>
+        <div className="flex items-center gap-3">
+          <DateFilter value={dateFilter} onChange={setDateFilter} />
+          <button
+            onClick={sync}
+            disabled={syncing}
+            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs rounded whitespace-nowrap"
+          >
+            {syncing ? "Sincronizando..." : "Sync Bling"}
+          </button>
+        </div>
       </div>
       <TabBar tabs={TABS} active={tab} onChange={setTab} />
       <ErrorAlert message={erro} />

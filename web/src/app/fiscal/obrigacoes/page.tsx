@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { fiscalObrigacoesProximas, fiscalObrigacoesAtrasadas, fiscalBaixarObrigacao, fiscalList } from "@/lib/api";
+import { fiscalObrigacoesAtrasadas, fiscalBaixarObrigacao, fiscalList } from "@/lib/api";
+import DateFilter, { type DateFilterValue } from "@/app/_components/DateFilter";
 import PageHeader from "@/app/_components/PageHeader";
 import StatusBadge from "@/app/_components/StatusBadge";
 import LoadingState from "@/app/_components/LoadingState";
@@ -37,18 +38,28 @@ export default function ObrigacoesPage() {
   const [atrasadas, setAtrasadas] = useState<ObrigacaoRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  const [dateFilter, setDateFilter] = useState<DateFilterValue>({});
 
   const carregar = useCallback(() => {
+    const p = new URLSearchParams();
+    if (dateFilter.data_inicio) p.set("data_inicio", dateFilter.data_inicio);
+    if (dateFilter.data_fim) p.set("data_fim", dateFilter.data_fim);
+    if (dateFilter.dias) p.set("dias", String(dateFilter.dias));
+    const q = p.toString();
+
     setLoading(true);
     setErro(null);
-    Promise.all([fiscalList("obrigacoes"), fiscalObrigacoesAtrasadas()])
+    Promise.all([
+      fetch("/api/fiscal/obrigacoes" + (q ? "?" + q : "")).then(r => r.json()),
+      fiscalObrigacoesAtrasadas(),
+    ])
       .then(([r1, r2]) => {
         setTodas((r1.data || []) as ObrigacaoRow[]);
         setAtrasadas((r2.data || []) as ObrigacaoRow[]);
       })
       .catch(e => setErro(e instanceof Error ? e.message : "Erro ao carregar"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [dateFilter]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -97,7 +108,10 @@ export default function ObrigacoesPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <PageHeader title="Obrigações Acessórias" subtitle="SPED, EFD, DCTF, GIA, SINTEGRA e DAS" />
+      <div className="flex items-center justify-between">
+        <PageHeader title="Obrigações Acessórias" subtitle="SPED, EFD, DCTF, GIA, SINTEGRA e DAS" />
+        <DateFilter value={dateFilter} onChange={setDateFilter} />
+      </div>
 
       <ErrorAlert message={erro} />
       {loading ? (
