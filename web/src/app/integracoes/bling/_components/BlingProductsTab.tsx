@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Spinner from "./shared/Spinner";
 import Alert from "./shared/Alert";
 import EmptyState from "./shared/EmptyState";
+import StockModal from "./StockModal";
 import {
   listarBlingProdutos,
   deletarBlingProduto,
@@ -34,6 +35,7 @@ export default function BlingProductsTab({ onNewProduct, onStockManage }: BlingP
   const [editStockId, setEditStockId] = useState<number | null>(null);
   const [editStockQty, setEditStockQty] = useState(0);
   const [editStockDeposit, setEditStockDeposit] = useState<number>(0);
+  const [stockModalProduto, setStockModalProduto] = useState<{ id: number; codigo: string; nome: string; preco: number } | null>(null);
 
   const carregar = useCallback(async (p = 1) => {
     try {
@@ -248,8 +250,8 @@ export default function BlingProductsTab({ onNewProduct, onStockManage }: BlingP
                         >−</button>
                         <span
                           className={`font-mono cursor-pointer hover:underline ${stockColor(Number(stock))}`}
-                          onClick={() => { setEditStockId(p.id); setEditStockQty(Number(stock)); }}
-                          title="Clique para editar"
+                          onClick={() => setStockModalProduto({ id: p.id, codigo: p.codigo, nome: getNome(p), preco: p.preco || 0 })}
+                          title="Clique para gerenciar estoque por depósito"
                         >{stock}</span>
                         <button
                           onClick={() => handleQuickStock(p, 1)}
@@ -272,6 +274,13 @@ export default function BlingProductsTab({ onNewProduct, onStockManage }: BlingP
             </tbody>
           </table>
         </div>
+      )}
+      {stockModalProduto && (
+        <StockModal
+          produto={stockModalProduto}
+          onClose={() => setStockModalProduto(null)}
+          onSaved={() => { setStockModalProduto(null); carregar(pagina); }}
+        />
       )}
     </div>
   );
