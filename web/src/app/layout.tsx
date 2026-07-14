@@ -8,13 +8,22 @@ import "./globals.css";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: "⊞" },
-  { href: "/agents", label: "Agentes", icon: "◈" },
-  { href: "/produtos", label: "Produtos", icon: "◇" },
-  { href: "/integracoes/bling", label: "Bling", icon: "◆" },
-  { href: "/hermes", label: "Hermes", icon: "◈" },
-  { href: "/metrics", label: "Métricas", icon: "▤" },
-  { href: "/business", label: "Operações", icon: "⚙" },
-  { href: "/integracoes", label: "Integrações", icon: "↔" },
+  { href: "/cadastros", label: "Cadastros", icon: "📋" },
+  { href: "/produtos", label: "Produtos", icon: "📦" },
+  { href: "/estoque", label: "Estoque", icon: "🏭" },
+  { href: "/compras", label: "Compras", icon: "🛒" },
+  { href: "/vendas", label: "Vendas", icon: "💰" },
+  { href: "/pdv", label: "PDV", icon: "🛍️" },
+  { href: "/financeiro", label: "Financeiro", icon: "💳" },
+  { href: "/fiscal", label: "Fiscal", icon: "📄" },
+  { href: "/crm", label: "CRM", icon: "👥" },
+  { href: "/atendimento", label: "Atendimento", icon: "💬" },
+  { href: "/producao", label: "Produção", icon: "⚙️" },
+  { href: "/rh", label: "RH", icon: "👤" },
+  { href: "/bi", label: "BI", icon: "📊" },
+  { href: "/documentos", label: "Documentos", icon: "📁" },
+  { href: "/automacoes", label: "Automações", icon: "🔄" },
+  { href: "/relatorios", label: "Relatórios", icon: "📈" },
 ];
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
