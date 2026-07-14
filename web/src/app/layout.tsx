@@ -23,23 +23,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const pathname = usePathname();
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token && pathname !== "/login") {
-      router.push("/login");
-      return;
-    }
-    if (!token) return;
+    if (pathname === "/login") return;
 
-    // User já está cacheado no localStorage (salvo pelo login)
-    const cached = localStorage.getItem("user");
-    if (cached) {
-      try { setUser(JSON.parse(cached)); } catch {}
-    }
-
-    // Verificação silenciosa — NUNCA kicka o usuário
     api.me()
-      .then((d) => { setUser(d); localStorage.setItem("user", JSON.stringify(d)); })
-      .catch(() => {});
+      .then((d) => setUser(d))
+      .catch(() => {
+        if (pathname !== "/login") router.push("/login");
+      });
   }, [pathname]);
 
   // Close mobile drawer on navigation
@@ -50,6 +40,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   }, [pathname]);
 
   const logout = () => {
+    fetch("/api/auth/logout", { method: "POST", credentials: "include" });
     localStorage.removeItem("token");
     router.push("/login");
   };

@@ -7,7 +7,11 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const method = options?.method || "GET";
   if (method !== "GET" && method !== "HEAD") headers["Content-Type"] = "application/json";
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers,
+    credentials: "include",
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error || `HTTP ${res.status}`);

@@ -171,7 +171,7 @@ USUARIOS = {
 
 @app.route('/api/auth/login', methods=['POST'])
 def simple_login():
-    """Login com username/password por perfil."""
+    """Login com username/password por perfil. Seta cookie de sessão."""
     data = request.json or {}
     username = data.get('username', '').lower()
     password = data.get('password', '')
@@ -179,22 +179,34 @@ def simple_login():
 
     user = USUARIOS.get(username, {})
     if user and user["password"] == password:
-        return jsonify({"token": API_TOKEN, "role": user["role"], "name": user["name"]})
+        resp = jsonify({"token": API_TOKEN, "role": user["role"], "name": user["name"]})
+        resp.set_cookie("auth_token", API_TOKEN, httponly=False, samesite="Lax", max_age=86400*30, secure=False)
+        return resp
     if api_key and api_key == API_TOKEN:
-        return jsonify({"token": API_TOKEN, "role": "admin", "name": "Admin"})
+        resp = jsonify({"token": API_TOKEN, "role": "admin", "name": "Admin"})
+        resp.set_cookie("auth_token", API_TOKEN, httponly=False, samesite="Lax", max_age=86400*30, secure=False)
+        return resp
     return jsonify({"error": "Invalid credentials"}), 401
 
 @app.route('/api/me', methods=['GET'])
 def current_user():
-    """Retorna dados do usuário logado."""
+    """Retorna dados do usuário logado (cookie ou header)."""
     auth = request.headers.get("Authorization", "")
-    if auth != f"Bearer {API_TOKEN}":
+    cookie_token = request.cookies.get("auth_token", "")
+    token = auth.replace("Bearer ", "") or cookie_token
+    if token != API_TOKEN:
         return jsonify({"error": "Unauthorized"}), 401
     return jsonify({"name": "Admin", "role": "admin", "permissoes": [
         "ver_produtos", "ver_estoque", "ver_financeiro", "ver_tributario",
         "ver_lojas", "ver_marketplaces", "ver_integracoes", "exportar",
         "gerenciar_usuarios"
     ]})
+
+@app.route('/api/auth/logout', methods=['POST'])
+def logout():
+    resp = jsonify({"success": True})
+    resp.set_cookie("auth_token", "", max_age=0)
+    return resp
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
