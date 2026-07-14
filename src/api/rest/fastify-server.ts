@@ -10,6 +10,7 @@ import { getConfig } from '../../shared/infrastructure/config/app-config'
 import type { AgentRegistry } from '../../agents/registry/agent-registry'
 import type { OrchestrationEngine } from '../../agents/orchestration/orchestration-engine'
 import { registerBusinessRoutes } from './business-routes'
+import { registerBIRoutes } from './bi-routes'
 import { authMiddleware, type AuthRole } from '../../shared/infrastructure/auth/middleware'
 import { checkRateLimit } from '../../shared/infrastructure/auth/rate-limiter'
 import { authenticateUser, createToken } from '../../shared/infrastructure/auth'
@@ -363,6 +364,9 @@ export async function startDashboard(registry: AgentRegistry, orchestrator: Orch
     const ok = await adapter.updatePrice(Number(req.params.id), req.body.price)
     return { success: ok }
   })
+
+  registerBusinessRoutes(server, registry, orchestrator)
+  registerBIRoutes(server)
 
   await server.register(mercurius, {
     schema: typeDefs,

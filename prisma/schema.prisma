@@ -504,18 +504,62 @@ model Insight {
 }
 
 model User {
-  id           String   @id
-  email        String   @unique
+  id           String     @id
+  email        String     @unique
   passwordHash String
   name         String
-  role         String   @default("viewer")
-  active       Boolean  @default(true)
+  active       Boolean    @default(true)
   refreshToken String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  userRoles UserRole[]
 
   @@index([email])
-  @@index([role])
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  active      Boolean  @default(true)
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  permissions RolePermission[]
+  users       UserRole[]
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  module      String
+  action      String
+  description String?
+  createdAt   DateTime @default(now())
+
+  roles RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model UserRole {
+  userId String
+  roleId String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
 }
 
 // === CNC Machining extras ===

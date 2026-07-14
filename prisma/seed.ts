@@ -228,15 +228,7 @@ async function main() {
   `)
   console.log('  4 metrics + 3 KPI targets')
 
-  // === Users ===
-  await prisma.$executeRawUnsafe(`DELETE FROM "User"`)
-  await prisma.$executeRawUnsafe(`
-    INSERT INTO "User" (id, email, "passwordHash", name, role, active) VALUES
-    ('USER-001','admin@athena.io','$2b$10$hash_admin','Admin','admin',true),
-    ('USER-002','operator@athena.io','$2b$10$hash_op','Operador','operator',true),
-    ('USER-003','viewer@athena.io','$2b$10$hash_viewer','Visualizador','viewer',true)
-  `)
-  console.log('  3 users')
+  // === Users === (RBAC seed handles users via seed-rbac.ts)
 
   console.log('\n✅ Seed completo — ATHENA OS com dados reais.\n')
 }

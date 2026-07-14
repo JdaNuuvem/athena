@@ -1,12 +1,12 @@
+import 'dotenv/config'
 import { defineConfig } from 'prisma/config'
 
 export default defineConfig({
-  datasources: {
-    db: {
-      connectionString: `postgresql://athena:athena@localhost:5433/athena`,
-    },
+  schema: './prisma/schema.prisma',
+  migrations: {
+    path: './prisma/migrations',
   },
-  migrate: {
-    datasource: 'db',
+  datasource: {
+    url: process.env['DATABASE_URL'] ?? 'postgresql://athena:athena@localhost:5433/athena',
   },
 })
