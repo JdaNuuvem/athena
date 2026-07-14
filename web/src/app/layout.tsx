@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { api } from "@/lib/api";
 import "./globals.css";
@@ -107,7 +108,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             {NAV_ITEMS.map((item) => {
               const active = pathname?.startsWith(item.href);
               return (
-                <a
+                <Link
                   key={item.href}
                   href={item.href}
                   aria-current={active ? "page" : undefined}
@@ -124,7 +125,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     ? <span>{item.label}</span>
                     : <span className="sr-only">{item.label}</span>
                   }
-                </a>
+                </Link>
               );
             })}
           </nav>
