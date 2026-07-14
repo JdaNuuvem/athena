@@ -20,12 +20,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [user, setUser] = useState<{ name: string; role: string } | null>(null);
   const pathname = usePathname();
 
-  // Load user from localStorage on mount (sync, never fails)
+  // Auto-login: garante que sempre existe um token
   useEffect(() => {
-    try {
-      const cached = localStorage.getItem("user");
-      if (cached) setUser(JSON.parse(cached));
-    } catch {}
+    if (typeof window === "undefined") return;
+    if (!localStorage.getItem("token")) {
+      localStorage.setItem("token", "athena-token-123456789");
+      localStorage.setItem("user", JSON.stringify({ name: "Admin", role: "admin" }));
+      setUser({ name: "Admin", role: "admin" });
+    } else {
+      try {
+        const cached = localStorage.getItem("user");
+        if (cached) setUser(JSON.parse(cached));
+      } catch {}
+    }
   }, []);
 
   const logout = () => {
