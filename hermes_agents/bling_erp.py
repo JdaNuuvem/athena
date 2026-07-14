@@ -21,7 +21,12 @@ BASE_URL = "https://www.bling.com.br/Api/v3"
 
 # ── Token management (persistido no DB) ──
 
+_table_ready = False
+
 def _ensure_token_table():
+    global _table_ready
+    if _table_ready:
+        return
     async def _go():
         db = await get_db()
         await db.execute("""
@@ -38,35 +43,38 @@ def _ensure_token_table():
             SELECT 1, '', ''
             WHERE NOT EXISTS (SELECT 1 FROM bling_tokens WHERE id = 1)
         """)
-    run_async(_go(), default=None)
-
-_ensure_token_table()
+    run_async(_go())
+    _table_ready = True
 
 def get_access_token() -> str:
+    _ensure_token_table()
     async def _go():
         db = await get_db()
         row = await db.fetchrow("SELECT access_token FROM bling_tokens WHERE id = 1")
         return row["access_token"] if row else ""
-    return run_async(_go(), default="")
+    return run_async(_go())
 
 def set_access_token(token: str):
+    _ensure_token_table()
     async def _go():
         db = await get_db()
         await db.execute("UPDATE bling_tokens SET access_token = $1, updated_at = NOW() WHERE id = 1", token)
-    run_async(_go(), default=None)
+    run_async(_go())
 
 def get_refresh_token() -> str:
+    _ensure_token_table()
     async def _go():
         db = await get_db()
         row = await db.fetchrow("SELECT refresh_token FROM bling_tokens WHERE id = 1")
         return row["refresh_token"] if row else ""
-    return run_async(_go(), default="")
+    return run_async(_go())
 
 def set_refresh_token(token: str):
+    _ensure_token_table()
     async def _go():
         db = await get_db()
         await db.execute("UPDATE bling_tokens SET refresh_token = $1, updated_at = NOW() WHERE id = 1", token)
-    run_async(_go(), default=None)
+    run_async(_go())
 
 def get_auth_url() -> str:
     params = urlencode({

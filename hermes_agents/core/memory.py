@@ -44,7 +44,7 @@ def _ensure_table():
         await db.execute("""
             CREATE INDEX IF NOT EXISTS idx_memoria_created ON memoria_interacoes(created_at DESC)
         """)
-    run_async(_go(), default=None)
+    run_async(_go())
 
 
 _ensure_table()
@@ -144,7 +144,7 @@ def recall(query: str, agent_id: str | None = None,
         scored.sort(key=lambda x: x[0], reverse=True)
         return [s[1] for s in scored[:limit]]
 
-    return run_async(_go(), default=[])
+    return run_async(_go())
 
 
 def _recent(agent_id: str | None = None,
@@ -172,7 +172,7 @@ def _recent(agent_id: str | None = None,
             LIMIT $${p+1}
         """, *params, limit)
         return [dict(r) for r in rows]
-    return run_async(_go(), default=[])
+    return run_async(_go())
 
 
 def history(agent_id: str | None = None, category: str | None = None,
@@ -200,7 +200,7 @@ def history(agent_id: str | None = None, category: str | None = None,
             LIMIT $${p+1}
         """, *params, limit)
         return [dict(r) for r in rows]
-    return run_async(_go(), default=[])
+    return run_async(_go())
 
 
 def learn(agent_id: str | None = None, category: str | None = None,
@@ -234,7 +234,7 @@ def learn(agent_id: str | None = None, category: str | None = None,
             LIMIT 10
         """, *params, min_occurrences)
         return [dict(r) for r in rows]
-    return run_async(_go(), default=[])
+    return run_async(_go())
 
 
 def context(query: str, agent_id: str | None = None,
@@ -283,7 +283,7 @@ def stats() -> dict:
             "success_rate": round(success_count / max(total, 1) * 100, 1),
             "by_agent": [dict(r) for r in (by_agent_rows or [])],
         }
-    return run_async(_go(), default={"total_interactions": 0, "success_rate": 0, "by_agent": []})
+    return run_async(_go())
 
 
 if __name__ == "__main__":
