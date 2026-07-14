@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { getPrisma } from '../../shared/infrastructure/persistence/prisma-client'
+import { authMiddleware } from '../../shared/infrastructure/auth/middleware'
 
 // ── tipos ──
 
@@ -95,6 +96,14 @@ async function queryNFsFromDB(): Promise<NotaFiscalDoc[] | null> {
 // ── route registration ──
 
 export function registerDocumentosRoutes(server: FastifyInstance): void {
+  server.addHook('onRoute', (opts) => {
+    if (opts.url.startsWith('/api/documentos/')) {
+      const prev = opts.preHandler
+      opts.preHandler = prev
+        ? [authMiddleware(null), ...(Array.isArray(prev) ? prev : [prev])]
+        : [authMiddleware(null)]
+    }
+  })
 
   server.get('/api/documentos/contratos', async () => {
     try {

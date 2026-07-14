@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { getPrisma } from '../../shared/infrastructure/persistence/prisma-client'
+import { authMiddleware } from '../../shared/infrastructure/auth/middleware'
 
 // ── tipagem inline — mantém sincronia com web/src/app/bi/types/index.ts ──
 
@@ -288,6 +289,14 @@ async function queryIndicadoresFromDB(): Promise<IndicadorFinanceiro[] | null> {
 // ── route registration ──
 
 export function registerBIRoutes(server: FastifyInstance): void {
+  server.addHook('onRoute', (opts) => {
+    if (opts.url.startsWith('/api/bi/')) {
+      const prev = opts.preHandler
+      opts.preHandler = prev
+        ? [authMiddleware(null), ...(Array.isArray(prev) ? prev : [prev])]
+        : [authMiddleware(null)]
+    }
+  })
 
   server.get('/api/bi/dashboard', async () => {
     // ponytail: DB-first with fallback. Add real KPI queries when BI DB is seeded.
