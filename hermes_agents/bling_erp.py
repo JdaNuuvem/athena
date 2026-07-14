@@ -287,19 +287,23 @@ def resumo_vendas(dias: int = 30) -> dict:
         if not dados or r.get("error"):
             break
         for pedido_val in dados:
-            data_str = pedido_val.get("dataEmissao", "")[:10]
+            data_str = (pedido_val.get("data") or pedido_val.get("dataEmissao", ""))[:10]
             if not data_str or data_str < cutoff.isoformat():
                 continue
             total_pedidos += 1
-            for item in pedido_val.get("itens", []):
-                sku = item.get("codigo", "")
-                qtd = int(item.get("quantidade", 1))
-                preco = float(item.get("valorUnitario", 0))
-                receita_item = qtd * preco
-                top_skus[sku]["quantidade"] += qtd
-                top_skus[sku]["receita"] += receita_item
-                vendas_por_dia[data_str] += receita_item
-                total_receita += receita_item
+            valor_pedido = float(pedido_val.get("total", 0))
+            total_receita += valor_pedido
+            vendas_por_dia[data_str] += valor_pedido
+            # Top SKUs via itens (se disponível) ou usa total do pedido
+            itens = pedido_val.get("itens") or []
+            if itens:
+                for item in itens:
+                    sku = item.get("codigo", "")
+                    qtd = int(item.get("quantidade", 1))
+                    preco = float(item.get("valor", item.get("valorUnitario", 0)))
+                    receita_item = qtd * preco
+                    top_skus[sku]["quantidade"] += qtd
+                    top_skus[sku]["receita"] += receita_item
         pagina += 1
         if len(dados) < 100:
             break
