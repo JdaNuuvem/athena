@@ -35,10 +35,7 @@ export default function RolesPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    Promise.all([
-      fetch("/api/roles", { headers: { Authorization: `Bearer ${localStorage.getItem("token") ?? ""}` } }).then(r => r.json()),
-      fetch("/api/permissions", { headers: { Authorization: `Bearer ${localStorage.getItem("token") ?? ""}` } }).then(r => r.json()),
-    ])
+    Promise.all([api.roles(), api.permissions()])
       .then(([rolesData, permsData]) => {
         setRoles(rolesData.roles || []);
         setPermissions(permsData.permissions || []);
@@ -64,14 +61,7 @@ export default function RolesPage() {
     setSaving(true);
     try {
       const permIds = permissions.filter(p => editPerms.has(p.code)).map(p => p.id);
-      await fetch(`/api/roles/${selectedRole.id}/permissions`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token") ?? ""}`,
-        },
-        body: JSON.stringify({ permissionIds: permIds }),
-      });
+      await api.rolesUpdatePermissions(selectedRole.id, permIds);
       setRoles(prev => prev.map(r => r.id === selectedRole.id ? { ...r, permissionCodes: [...editPerms] } : r));
       setSelectedRole(null);
     } catch (e) {

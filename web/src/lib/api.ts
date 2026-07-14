@@ -46,6 +46,15 @@ export const api = {
 
   me: () => request<{ id: string; name: string; role: string; roles: string[]; permissions: string[] }>("/api/auth/me"),
 
+  // RBAC
+  roles: () => request<{ roles: Array<{ id: string; name: string; description: string | null; active: boolean; isSystem: boolean; permissionCodes: string[]; createdAt: string }> }>("/api/roles"),
+  permissions: () => request<{ permissions: Array<{ id: string; code: string; module: string; action: string; description: string | null }> }>("/api/permissions"),
+  rolesUpdatePermissions: (roleId: string, permissionIds: string[]) =>
+    request<{ roleId: string; permissionCodes: string[] }>(`/api/roles/${roleId}/permissions`, {
+      method: "PUT",
+      body: JSON.stringify({ permissionIds }),
+    }),
+
   // Health
   health: () => request<{ status: string; agents: Record<string, number>; infrastructure: Record<string, { connected: boolean }> }>("/api/health"),
 
