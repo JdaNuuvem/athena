@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { api } from "@/lib/api";
@@ -21,7 +21,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [user, setUser] = useState<{ name: string; role: string } | null>(null);
   const router = useRouter();
   const pathname = usePathname();
-  const checked = useRef(false);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -29,12 +28,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       router.push("/login");
       return;
     }
-    if (token && !checked.current) {
-      checked.current = true;
-      api.me()
-        .then((d) => setUser(d))
-        .catch(() => { localStorage.removeItem("token"); router.push("/login"); });
+    if (!token) return;
+
+    // User já está cacheado no localStorage (salvo pelo login)
+    const cached = localStorage.getItem("user");
+    if (cached) {
+      try { setUser(JSON.parse(cached)); } catch {}
     }
+
+    // Verificação silenciosa — NUNCA kicka o usuário
+    api.me()
+      .then((d) => { setUser(d); localStorage.setItem("user", JSON.stringify(d)); })
+      .catch(() => {});
   }, [pathname]);
 
   // Close mobile drawer on navigation
