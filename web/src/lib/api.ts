@@ -2,8 +2,10 @@ const API_BASE = "";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const headers: Record<string, string> = {};
   if (token) headers["Authorization"] = `Bearer ${token}`;
+  const method = options?.method || "GET";
+  if (method !== "GET" && method !== "HEAD") headers["Content-Type"] = "application/json";
 
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
   if (!res.ok) {

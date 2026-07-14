@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { api } from "@/lib/api";
@@ -21,6 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [user, setUser] = useState<{ name: string; role: string } | null>(null);
   const router = useRouter();
   const pathname = usePathname();
+  const checked = useRef(false);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -28,7 +29,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       router.push("/login");
       return;
     }
-    if (token) {
+    if (token && !checked.current) {
+      checked.current = true;
       api.me()
         .then((d) => setUser(d))
         .catch(() => { localStorage.removeItem("token"); router.push("/login"); });
