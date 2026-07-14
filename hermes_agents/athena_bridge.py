@@ -1029,12 +1029,12 @@ def memory_recall():
 # ── Lojas CRUD ──
 
 @app.route('/api/lojas/manage', methods=['GET'])
-def listar_lojas():
+def listar_lojas_manage():
     from core.lojas import listar as listar_lojas_fn
     return jsonify({"lojas": listar_lojas_fn()})
 
 @app.route('/api/lojas/manage', methods=['POST'])
-def criar_loja():
+def criar_loja_manage():
     data = request.json or {}
     nome = (data.get("nome") or "").strip()
     if not nome:
@@ -1045,7 +1045,7 @@ def criar_loja():
     return jsonify({"loja": result}) if result else jsonify({"error": "Erro ao criar"}), 500
 
 @app.route('/api/lojas/manage/<int:id>', methods=['PUT'])
-def atualizar_loja(id):
+def atualizar_loja_manage(id):
     data = request.json or {}
     nome = (data.get("nome") or "").strip()
     if not nome:
@@ -1055,7 +1055,7 @@ def atualizar_loja(id):
     return jsonify({"success": ok}) if ok else jsonify({"error": "Loja não encontrada"}), 404
 
 @app.route('/api/lojas/manage/<int:id>', methods=['DELETE'])
-def deletar_loja(id):
+def deletar_loja_manage(id):
     from core.lojas import deletar as deletar_loja_fn
     ok = deletar_loja_fn(id)
     return jsonify({"success": ok}) if ok else jsonify({"error": "Loja não encontrada"}), 404
@@ -1711,7 +1711,7 @@ def detalhe_produto(sku):
         return jsonify({"sku": sku, "erro": str(e), "estoque_lojas": []})
 
 @app.route('/api/lojas', methods=['GET'])
-def listar_lojas():
+def listar_lojas_manage():
     """Performance de todas as lojas (físicas + marketplaces)."""
     try:
         conn = _db_sync(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
