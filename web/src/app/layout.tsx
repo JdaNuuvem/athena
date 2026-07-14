@@ -93,7 +93,7 @@ function Sidebar() {
       </div>
 
       <nav className="flex-1 p-2 space-y-1" role="navigation">
-        {filteredNav.map((item) => {
+        {NAV_ITEMS.map((item) => {
           const active = pathname?.startsWith(item.href);
           return (
             <Link
