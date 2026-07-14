@@ -42,13 +42,13 @@ def get_auth_url() -> str:
 
 def exchange_code(code: str) -> dict:
     try:
+        cid = _client_id()
+        csecret = _client_secret()
+        auth = requests.auth._basic_auth_str(cid, csecret)
         r = requests.post(f"{BASE_URL}/oauth/token", json={
             "grant_type": "authorization_code",
             "code": code,
-            "client_id": _client_id(),
-            "client_secret": _client_secret(),
-            "redirect_uri": REDIRECT_URI,
-        }, timeout=30)
+        }, headers={"Authorization": auth}, timeout=30)
         data = r.json()
         if "access_token" in data:
             set_access_token(data["access_token"])
@@ -63,12 +63,13 @@ def refresh_access_token() -> dict:
     if not rt:
         return {"error": "No refresh token"}
     try:
+        cid = _client_id()
+        csecret = _client_secret()
+        auth = requests.auth._basic_auth_str(cid, csecret)
         r = requests.post(f"{BASE_URL}/oauth/token", json={
             "grant_type": "refresh_token",
             "refresh_token": rt,
-            "client_id": _client_id(),
-            "client_secret": _client_secret(),
-        }, timeout=30)
+        }, headers={"Authorization": auth}, timeout=30)
         data = r.json()
         if "access_token" in data:
             set_access_token(data["access_token"])
