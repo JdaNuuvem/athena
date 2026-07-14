@@ -6,6 +6,7 @@ import {
   atualizarEstoqueDeposito, sincronizarBlingProdutos,
   BlingProduto, BlingDeposito,
 } from "@/lib/api";
+import { Can } from "@/lib/auth";
 
 interface StockRow {
   id: number; codigo: string; nome: string; preco: number;
@@ -129,7 +130,9 @@ export default function EstoquePage() {
         </div>
         <div className="flex gap-2">
           <button onClick={() => carregar()} className="px-3 py-1.5 bg-indigo-600 text-white text-xs rounded-lg hover:bg-indigo-500">🔄 Atualizar</button>
-          <button onClick={async () => { await sincronizarBlingProdutos(); carregar(); }} className="px-3 py-1.5 bg-indigo-600 text-white text-xs rounded-lg hover:bg-indigo-500">📥 Sincronizar Bling</button>
+          <Can permission="inventory:edit">
+            <button onClick={async () => { await sincronizarBlingProdutos(); carregar(); }} className="px-3 py-1.5 bg-indigo-600 text-white text-xs rounded-lg hover:bg-indigo-500">📥 Sincronizar Bling</button>
+          </Can>
         </div>
       </div>
 
@@ -170,6 +173,7 @@ export default function EstoquePage() {
       </div>
 
       {/* Bulk actions */}
+      <Can permission="inventory:edit">
       {selected.size > 0 && (
         <div className="bg-indigo-900/20 border border-indigo-800 rounded-lg p-3 flex items-center gap-3">
           <span className="text-xs text-indigo-300">{selected.size} selecionados</span>
@@ -183,6 +187,7 @@ export default function EstoquePage() {
           <button onClick={() => setSelected(new Set())} className="text-xs text-neutral-500 ml-auto">Limpar</button>
         </div>
       )}
+      </Can>
 
       {/* Table */}
       {loading ? <div className="text-neutral-500 text-sm py-8 text-center">Carregando estoque...</div> : filtered.length === 0 ? (
