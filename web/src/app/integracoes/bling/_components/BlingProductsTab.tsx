@@ -59,7 +59,11 @@ export default function BlingProductsTab({ onNewProduct, onStockManage }: BlingP
 
   const getStock = (p: BlingProduto) => {
     const s = (p as any).estoque;
-    return s?.saldoFisicoTotal ?? (p as any).saldoFisicoTotal ?? 0;
+    return s?.saldoVirtualTotal ?? s?.saldoFisicoTotal ?? 0;
+  };
+
+  const getNome = (p: BlingProduto) => {
+    return (p as any).nome || p.descricao || (p as any).descricaoCurta || "—";
   };
 
   const handleQuickStock = async (prod: BlingProduto, delta: number) => {
@@ -194,12 +198,12 @@ export default function BlingProductsTab({ onNewProduct, onStockManage }: BlingP
             <thead>
               <tr className="border-b border-neutral-700 text-neutral-400">
                 <th className="p-3 w-8"><input type="checkbox" checked={selected.size === produtos.length && produtos.length > 0} onChange={toggleAll} /></th>
+                <th className="text-left p-3 w-10"></th>
                 <th className="text-left p-3">SKU</th>
                 <th className="text-left p-3">Nome</th>
                 <th className="text-right p-3">Preço</th>
-                <th className="text-center p-3 w-40">Estoque</th>
-                <th className="text-left p-3">Categoria</th>
-                <th className="text-center p-3">Status</th>
+                <th className="text-center p-3 w-36">Estoque</th>
+                <th className="text-center p-3 w-20">Status</th>
                 <th className="text-right p-3">Ações</th>
               </tr>
             </thead>
@@ -210,9 +214,16 @@ export default function BlingProductsTab({ onNewProduct, onStockManage }: BlingP
                 return (
                 <tr key={p.id} className={`border-b border-neutral-700/50 ${i % 2 === 0 ? "bg-neutral-800" : "bg-neutral-800/50"}`}>
                   <td className="p-3"><input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} /></td>
-                  <td className="p-3 text-neutral-200 font-mono">{p.codigo}</td>
-                  <td className="p-3 text-neutral-200 max-w-[200px] truncate" title={p.descricao}>{p.descricao || "—"}</td>
-                  <td className="p-3 text-right text-emerald-400">R$ {(p.preco || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
+                  <td className="p-1">
+                    {(p as any).imagemURL ? (
+                      <img src={(p as any).imagemURL} alt="" className="w-8 h-8 object-cover rounded bg-neutral-700" />
+                    ) : (
+                      <div className="w-8 h-8 rounded bg-neutral-700 flex items-center justify-center text-[8px] text-neutral-500">IMG</div>
+                    )}
+                  </td>
+                  <td className="p-3 text-neutral-200 font-mono text-[11px]">{p.codigo}</td>
+                  <td className="p-3 text-neutral-200 max-w-[180px] truncate" title={getNome(p)}>{getNome(p)}</td>
+                  <td className="p-3 text-right text-emerald-400 font-medium">R$ {(p.preco || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
                   <td className="p-3 text-center">
                     {isEditing ? (
                       <div className="flex items-center gap-1 justify-center">
@@ -248,7 +259,6 @@ export default function BlingProductsTab({ onNewProduct, onStockManage }: BlingP
                       </div>
                     )}
                   </td>
-                  <td className="p-3 text-neutral-400 text-[10px]">{((p as any).categoria?.descricao || "—")}</td>
                   <td className="p-3 text-center">
                     <span className={`inline-block px-2 py-0.5 rounded text-[10px] ${p.situacao === "A" ? "bg-emerald-900/30 text-emerald-400" : "bg-neutral-700 text-neutral-400"}`}>
                       {p.situacao === "A" ? "Ativo" : "Inativo"}
