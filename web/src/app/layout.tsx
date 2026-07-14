@@ -4,29 +4,31 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { api } from "@/lib/api";
+import Icon from "./_components/Icon";
+import { AuthProvider, useAuth } from "@/lib/auth";
 import "./globals.css";
 
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard", icon: "⊞" },
-  { href: "/cadastros", label: "Cadastros", icon: "📋" },
-  { href: "/produtos", label: "Produtos", icon: "📦" },
-  { href: "/estoque", label: "Estoque", icon: "🏭" },
-  { href: "/compras", label: "Compras", icon: "🛒" },
-  { href: "/vendas", label: "Vendas", icon: "💰" },
-  { href: "/pdv", label: "PDV", icon: "🛍️" },
-  { href: "/financeiro", label: "Financeiro", icon: "💳" },
-  { href: "/fiscal", label: "Fiscal", icon: "📄" },
-  { href: "/crm", label: "CRM", icon: "👥" },
-  { href: "/atendimento", label: "Atendimento", icon: "💬" },
-  { href: "/producao", label: "Produção", icon: "⚙️" },
-  { href: "/rh", label: "RH", icon: "👤" },
-  { href: "/bi", label: "BI", icon: "📊" },
-  { href: "/documentos", label: "Documentos", icon: "📁" },
-  { href: "/automacoes", label: "Automações", icon: "🔄" },
-  { href: "/relatorios", label: "Relatórios", icon: "📈" },
-  { href: "/agents", label: "Agentes", icon: "◈" },
-  { href: "/integracoes/bling", label: "Bling", icon: "◆" },
-  { href: "/hermes", label: "Hermes", icon: "◈" },
+  { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
+  { href: "/cadastros", label: "Cadastros", icon: "cadastros" },
+  { href: "/produtos", label: "Produtos", icon: "produtos" },
+  { href: "/estoque", label: "Estoque", icon: "estoque" },
+  { href: "/compras", label: "Compras", icon: "compras" },
+  { href: "/vendas", label: "Vendas", icon: "vendas" },
+  { href: "/pdv", label: "PDV", icon: "pdv" },
+  { href: "/financeiro", label: "Financeiro", icon: "financeiro" },
+  { href: "/fiscal", label: "Fiscal", icon: "fiscal" },
+  { href: "/crm", label: "CRM", icon: "crm" },
+  { href: "/atendimento", label: "Atendimento", icon: "atendimento" },
+  { href: "/producao", label: "Produção", icon: "producao" },
+  { href: "/rh", label: "RH", icon: "rh" },
+  { href: "/bi", label: "BI", icon: "bi" },
+  { href: "/documentos", label: "Documentos", icon: "documentos" },
+  { href: "/automacoes", label: "Automações", icon: "automacoes" },
+  { href: "/relatorios", label: "Relatórios", icon: "relatorios" },
+  { href: "/agents", label: "Agentes", icon: "agents" },
+  { href: "/integracoes/bling", label: "Bling", icon: "bling" },
+  { href: "/hermes", label: "Hermes", icon: "agents" },
 ];
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -80,6 +82,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {isLogin ? (
           children
         ) : (
+          <AuthProvider>
           <>
             {/* Mobile backdrop */}
             {sidebarOpen && (
@@ -111,7 +114,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <nav className="flex-1 p-2 space-y-1" role="navigation">
             {NAV_ITEMS.map((item) => {
               const active = pathname?.startsWith(item.href);
-              return (
+              const modPerm = item.href.replace(/\//g,".").replace(/^./,"");
+                if (modPerm && typeof window !== "undefined") {
+                  const token = localStorage.getItem("token");
+                  if (!token) return null;
+                }
+                return (
                 <Link
                   key={item.href}
                   href={item.href}
@@ -122,9 +130,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                       : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800"
                   }`}
                 >
-                  <span className="text-base w-5 text-center shrink-0" aria-hidden="true">
-                    {item.icon}
-                  </span>
+                  <Icon name={item.icon} size={18} className="shrink-0" />
                   {sidebarOpen
                     ? <span>{item.label}</span>
                     : <span className="sr-only">{item.label}</span>
@@ -203,6 +209,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {children}
         </main>
           </>
+          </AuthProvider>
         )}
       </body>
     </html>

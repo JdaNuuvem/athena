@@ -171,36 +171,69 @@ USUARIOS = {
 
 @app.route('/api/auth/login', methods=['POST'])
 def simple_login():
-    """Login com username/password por perfil. Seta cookie de sessão."""
+    """Login com email/senha via RBAC. Fallback para usuarios hardcoded."""
     data = request.json or {}
-    username = data.get('username', '').lower()
+    email = data.get('email', data.get('username', '')).lower()
     password = data.get('password', '')
     api_key = data.get('api_key', '')
 
+    # Tenta RBAC primeiro
+    from core.rbac import autenticar
+    rbac_result = autenticar(email, password)
+    if rbac_result.get("autenticado"):
+        resp = jsonify({
+            "token": API_TOKEN,
+            "role": rbac_result.get("role","admin"),
+            "name": rbac_result.get("nome","Admin"),
+            "email": rbac_result.get("email",email),
+            "user_id": rbac_result.get("id"),
+            "permissoes": rbac_result.get("permissoes",[]),
+        })
+        resp.set_cookie("auth_token", API_TOKEN, httponly=False, samesite="Lax", max_age=86400*30, secure=False)
+        if rbac_result.get("id"):
+            resp.set_cookie("user_id", str(rbac_result["id"]), httponly=False, samesite="Lax", max_age=86400*30, secure=False)
+        return resp
+
+    # Fallback hardcoded
+    username = email.split("@")[0] if "@" in email else email
     user = USUARIOS.get(username, {})
     if user and user["password"] == password:
-        resp = jsonify({"token": API_TOKEN, "role": user["role"], "name": user["name"]})
+        resp = jsonify({"token": API_TOKEN, "role": user["role"], "name": user["name"], "permissoes": ["*"]})
         resp.set_cookie("auth_token", API_TOKEN, httponly=False, samesite="Lax", max_age=86400*30, secure=False)
         return resp
     if api_key and api_key == API_TOKEN:
-        resp = jsonify({"token": API_TOKEN, "role": "admin", "name": "Admin"})
+        resp = jsonify({"token": API_TOKEN, "role": "admin", "name": "Admin", "permissoes": ["*"]})
         resp.set_cookie("auth_token", API_TOKEN, httponly=False, samesite="Lax", max_age=86400*30, secure=False)
         return resp
     return jsonify({"error": "Invalid credentials"}), 401
 
 @app.route('/api/me', methods=['GET'])
 def current_user():
-    """Retorna dados do usuário logado (cookie ou header)."""
+    """Retorna dados do usuario logado com permissoes dinamicas do RBAC."""
     auth = request.headers.get("Authorization", "")
     cookie_token = request.cookies.get("auth_token", "")
     token = auth.replace("Bearer ", "") or cookie_token
     if token != API_TOKEN:
         return jsonify({"error": "Unauthorized"}), 401
-    return jsonify({"name": "Admin", "role": "admin", "permissoes": [
-        "ver_produtos", "ver_estoque", "ver_financeiro", "ver_tributario",
-        "ver_lojas", "ver_marketplaces", "ver_integracoes", "exportar",
-        "gerenciar_usuarios"
-    ]})
+    user_id = request.cookies.get("user_id")
+    if user_id:
+        try:
+            from core.rbac import get_permissoes_por_usuario
+            perms = get_permissoes_por_usuario(int(user_id))
+            # Buscar nome e role
+            from core.rbac import list_usuarios, list_roles
+            usuarios = [u for u in list_usuarios() if u.get("id") == int(user_id)]
+            user = usuarios[0] if usuarios else {}
+            role = None
+            if user.get("role_id"):
+                roles = [r for r in list_roles() if r.get("id") == user["role_id"]]
+                role = roles[0]["nome"] if roles else "admin"
+            return jsonify({
+                "name": user.get("nome", "Admin"), "role": role or "admin",
+                "user_id": int(user_id), "permissoes": perms,
+            })
+        except: pass
+    return jsonify({"name": "Admin", "role": "admin", "permissoes": ["*"]})
 
 @app.route('/api/auth/logout', methods=['POST'])
 def logout():
@@ -1407,6 +1440,54 @@ def crm_delete(tabela, id):
     if tabela not in CRM_TABLES:
         return jsonify({"error": "Tabela invalida"}), 404
     return jsonify(crm_delete_fn(tabela, id))
+
+
+
+# ── RBAC Management Routes ──
+
+@app.route('/api/rbac/roles', methods=['GET'])
+def rbac_list_roles():
+    from core.rbac import list_roles
+    return jsonify({"roles": list_roles()})
+
+@app.route('/api/rbac/roles', methods=['POST'])
+def rbac_create_role():
+    data = request.json or {}
+    from core.rbac import criar_role
+    return jsonify(criar_role(data.get("nome",""), data.get("descricao",""), data.get("permissoes")))
+
+@app.route('/api/rbac/roles/<int:id>', methods=['PUT'])
+def rbac_update_role(id):
+    data = request.json or {}
+    from core.rbac import atualizar_role
+    return jsonify(atualizar_role(id, data.get("nome"), data.get("descricao"), data.get("permissoes")))
+
+@app.route('/api/rbac/roles/<int:id>', methods=['DELETE'])
+def rbac_delete_role(id):
+    from core.rbac import deletar_role
+    return jsonify(deletar_role(id))
+
+@app.route('/api/rbac/permissoes', methods=['GET'])
+def rbac_list_permissoes():
+    from core.rbac import list_permissoes
+    return jsonify({"permissoes": list_permissoes()})
+
+@app.route('/api/rbac/usuarios', methods=['GET'])
+def rbac_list_usuarios():
+    from core.rbac import list_usuarios
+    return jsonify({"usuarios": list_usuarios()})
+
+@app.route('/api/rbac/usuarios', methods=['POST'])
+def rbac_create_usuario():
+    data = request.json or {}
+    from core.rbac import criar_usuario
+    return jsonify(criar_usuario(data.get("nome",""), data.get("email",""), data.get("senha",""), data.get("role","")))
+
+@app.route('/api/rbac/usuarios/<int:id>', methods=['PUT'])
+def rbac_update_usuario(id):
+    data = request.json or {}
+    from core.rbac import atualizar_usuario
+    return jsonify(atualizar_usuario(id, data.get("nome"), data.get("role"), data.get("ativo")))
 
 # ── Lojas CRUD ──
 
