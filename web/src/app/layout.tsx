@@ -4,29 +4,30 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { api } from "@/lib/api";
+import Icon from "./_components/Icon";
 import "./globals.css";
 
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard", icon: "⊞" },
-  { href: "/cadastros", label: "Cadastros", icon: "📋" },
-  { href: "/produtos", label: "Produtos", icon: "📦" },
-  { href: "/estoque", label: "Estoque", icon: "🏭" },
-  { href: "/compras", label: "Compras", icon: "🛒" },
-  { href: "/vendas", label: "Vendas", icon: "💰" },
-  { href: "/pdv", label: "PDV", icon: "🛍️" },
-  { href: "/financeiro", label: "Financeiro", icon: "💳" },
-  { href: "/fiscal", label: "Fiscal", icon: "📄" },
-  { href: "/crm", label: "CRM", icon: "👥" },
-  { href: "/atendimento", label: "Atendimento", icon: "💬" },
-  { href: "/producao", label: "Produção", icon: "⚙️" },
-  { href: "/rh", label: "RH", icon: "👤" },
-  { href: "/bi", label: "BI", icon: "📊" },
-  { href: "/documentos", label: "Documentos", icon: "📁" },
-  { href: "/automacoes", label: "Automações", icon: "🔄" },
-  { href: "/relatorios", label: "Relatórios", icon: "📈" },
-  { href: "/agents", label: "Agentes", icon: "◈" },
-  { href: "/integracoes/bling", label: "Bling", icon: "◆" },
-  { href: "/hermes", label: "Hermes", icon: "◈" },
+  { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
+  { href: "/cadastros", label: "Cadastros", icon: "cadastros" },
+  { href: "/produtos", label: "Produtos", icon: "produtos" },
+  { href: "/estoque", label: "Estoque", icon: "estoque" },
+  { href: "/compras", label: "Compras", icon: "compras" },
+  { href: "/vendas", label: "Vendas", icon: "vendas" },
+  { href: "/pdv", label: "PDV", icon: "pdv" },
+  { href: "/financeiro", label: "Financeiro", icon: "financeiro" },
+  { href: "/fiscal", label: "Fiscal", icon: "fiscal" },
+  { href: "/crm", label: "CRM", icon: "crm" },
+  { href: "/atendimento", label: "Atendimento", icon: "atendimento" },
+  { href: "/producao", label: "Produção", icon: "producao" },
+  { href: "/rh", label: "RH", icon: "rh" },
+  { href: "/bi", label: "BI", icon: "bi" },
+  { href: "/documentos", label: "Documentos", icon: "documentos" },
+  { href: "/automacoes", label: "Automações", icon: "automacoes" },
+  { href: "/relatorios", label: "Relatórios", icon: "relatorios" },
+  { href: "/agents", label: "Agentes", icon: "agents" },
+  { href: "/integracoes/bling", label: "Bling", icon: "bling" },
+  { href: "/hermes", label: "Hermes", icon: "agents" },
 ];
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -196,7 +197,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               aria-label="Abrir menu"
               className="text-neutral-400 hover:text-neutral-200 text-lg leading-none"
             >
-              ☰
+              {/* menu icon */}...
             </button>
             <span className="font-semibold text-sm tracking-wide text-neutral-200 select-none">ATHENA</span>
           </div>
