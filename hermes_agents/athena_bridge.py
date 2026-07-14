@@ -1711,7 +1711,7 @@ def detalhe_produto(sku):
         return jsonify({"sku": sku, "erro": str(e), "estoque_lojas": []})
 
 @app.route('/api/lojas', methods=['GET'])
-def listar_lojas_manage():
+def listar_lojas():
     """Performance de todas as lojas (físicas + marketplaces)."""
     try:
         conn = _db_sync(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
