@@ -38,13 +38,13 @@ import type {
 
 export const api = {
   // Auth
-  login: (username: string, password: string) =>
-    request<{ token: string; role: string; name: string }>("/api/auth/login", {
+  login: (email: string, password: string) =>
+    request<{ token: string; refreshToken: string; expiresIn: number; user: { id: string; name: string; role: string }; permissions: string[] }>("/api/auth/login", {
       method: "POST",
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ email, password }),
     }),
 
-  me: () => request<{ name: string; role: string; permissoes: string[] }>("/api/me"),
+  me: () => request<{ id: string; name: string; role: string; roles: string[]; permissions: string[] }>("/api/auth/me"),
 
   // Health
   health: () => request<{ status: string; agents: Record<string, number>; infrastructure: Record<string, { connected: boolean }> }>("/api/health"),
@@ -552,5 +552,78 @@ export async function fiscalNFItens(notaId: number): Promise<{ data: unknown[] }
 
 export async function fiscalNFImpostos(notaId: number): Promise<{ data: unknown[] }> {
   const res = await fetch(`/api/fiscal/notas-fiscais/${notaId}/impostos`);
+  return res.json();
+}
+
+// ── Vendas ──
+
+export async function vendasDashboard(dias?: number): Promise<Record<string, unknown>> {
+  const res = await fetch(`/api/vendas/dashboard${dias ? "?dias=" + dias : ""}`);
+  return res.json();
+}
+
+export async function vendasList(tabela: string, params?: Record<string, string>): Promise<{ data: unknown[] }> {
+  const q = new URLSearchParams(params || {});
+  const res = await fetch(`/api/vendas/${tabela}${q.toString() ? "?" + q : ""}`);
+  return res.json();
+}
+
+export async function vendasGet(tabela: string, id: number): Promise<Record<string, unknown>> {
+  const res = await fetch(`/api/vendas/${tabela}/${id}`);
+  return res.json();
+}
+
+export async function vendasCreate(tabela: string, data: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const res = await fetch(`/api/vendas/${tabela}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return res.json();
+}
+
+export async function vendasUpdate(tabela: string, id: number, data: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const res = await fetch(`/api/vendas/${tabela}/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return res.json();
+}
+
+export async function vendasDelete(tabela: string, id: number): Promise<{ success: boolean }> {
+  const res = await fetch(`/api/vendas/${tabela}/${id}`, { method: "DELETE" });
+  return res.json();
+}
+
+export async function vendasCriarPedido(dados: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const res = await fetch("/api/vendas/pedido", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(dados),
+  });
+  return res.json();
+}
+
+export async function vendasDetalhePedido(id: number): Promise<{ pedido: Record<string, unknown>; itens: unknown[]; pagamentos: unknown[]; historico: unknown[] }> {
+  const res = await fetch(`/api/vendas/pedido/${id}`);
+  return res.json();
+}
+
+export async function vendasAtualizarStatus(id: number, status: string, usuario?: string): Promise<Record<string, unknown>> {
+  const res = await fetch(`/api/vendas/pedido/${id}/status`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status, usuario }),
+  });
+  return res.json();
+}
+
+export async function vendasSyncBling(pagina?: number, limite?: number): Promise<{ sync: number; error?: string }> {
+  const res = await fetch("/api/vendas/sync/bling", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pagina: pagina || 1, limite: limite || 100 }),
+  });
   return res.json();
 }
