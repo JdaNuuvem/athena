@@ -56,8 +56,12 @@ def get_access_token() -> str:
             db = await get_db()
             row = await db.fetchrow("SELECT access_token FROM bling_tokens WHERE id = 1")
             return row["access_token"] if row else ""
-        return run_async(_go())
-    except Exception:
+        token = run_async(_go())
+        if token:
+            log(AGENT, f"Token recuperado do DB: {token[:10]}...")
+        return token
+    except Exception as e:
+        log(AGENT, f"Erro ao ler token do DB: {e}")
         return ""
 
 def set_access_token(token: str):
@@ -67,8 +71,9 @@ def set_access_token(token: str):
             db = await get_db()
             await db.execute("UPDATE bling_tokens SET access_token = $1, updated_at = NOW() WHERE id = 1", token)
         run_async(_go())
-    except Exception:
-        pass
+        log(AGENT, f"Token salvo no DB: {token[:10]}...")
+    except Exception as e:
+        log(AGENT, f"Erro ao salvar token no DB: {e}")
 
 def get_refresh_token() -> str:
     try:
