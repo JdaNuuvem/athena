@@ -70,12 +70,6 @@ function Sidebar() {
     api.lojasManage().then(r => setLojas(r.lojas)).catch(() => {});
   }, []);
 
-  const filteredNav = NAV_ITEMS.filter(item => {
-    const perm = NAV_PERMS[item.href];
-    if (!perm) return true;
-    return hasPermission(perm);
-  });
-
   return (
     <aside aria-label="Navegação principal" className={[
       "bg-neutral-900 border-r border-neutral-800 flex flex-col transition-all duration-200",
