@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter, usePathname } from "next/navigation";
-import { api } from "@/lib/api";
+import { usePathname } from "next/navigation";
 import "./globals.css";
 
 const NAV_ITEMS = [
@@ -18,24 +17,38 @@ const NAV_ITEMS = [
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [user, setUser] = useState<{ name: string; role: string } | null>(() => {
-    if (typeof window === "undefined") return null;
-    const cached = localStorage.getItem("user");
-    if (cached) { try { return JSON.parse(cached); } catch {} }
-    return null;
-  });
-  const router = useRouter();
+  const [user, setUser] = useState<{ name: string; role: string } | null>(null);
   const pathname = usePathname();
 
+  // Load user from localStorage on mount (sync, never fails)
   useEffect(() => {
-    if (pathname === "/login") return;
-    const token = localStorage.getItem("token");
-    if (!token) { router.push("/login"); return; }
-    if (!user) {
+    try {
       const cached = localStorage.getItem("user");
-      if (cached) { try { setUser(JSON.parse(cached)); } catch {} }
-    }
-  }, [pathname, user, router]);
+      if (cached) setUser(JSON.parse(cached));
+    } catch {}
+  }, []);
+
+  const logout = () => {
+    fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    setUser(null);
+    window.location.href = "/login";
+  };
+
+  // Login page: no sidebar
+  if (pathname === "/login") {
+    return (
+      <html lang="pt-BR">
+        <head>
+          <meta charSet="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <title>Athena — Login</title>
+        </head>
+        <body className="bg-neutral-950 text-neutral-100 min-h-screen">{children}</body>
+      </html>
+    );
+  }
 
   // Close mobile drawer on navigation
   useEffect(() => {
@@ -43,25 +56,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       setSidebarOpen(false);
     }
   }, [pathname]);
-
-  const logout = () => {
-    fetch("/api/auth/logout", { method: "POST", credentials: "include" });
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    router.push("/login");
-  };
-
-  if (pathname === "/login") {
-    return (
-      <html lang="pt-BR">
-        <head>
-          <title>Hermes — Login</title>
-          <meta name="viewport" content="width=device-width, initial-scale=1" />
-        </head>
-        <body className="bg-neutral-950 text-neutral-100 min-h-screen">{children}</body>
-      </html>
-    );
-  }
 
   return (
     <html lang="pt-BR">
