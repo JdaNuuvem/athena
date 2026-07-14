@@ -131,6 +131,8 @@ export default function BlingProductsTab({ onNewProduct, onStockManage }: BlingP
                 <th className="text-left p-3">SKU</th>
                 <th className="text-left p-3">Nome</th>
                 <th className="text-right p-3">Preço</th>
+                <th className="text-center p-3">Estoque</th>
+                <th className="text-left p-3">Categoria</th>
                 <th className="text-center p-3">Status</th>
                 <th className="text-right p-3">Ações</th>
               </tr>
@@ -140,8 +142,10 @@ export default function BlingProductsTab({ onNewProduct, onStockManage }: BlingP
                 <tr key={p.id} className={`border-b border-neutral-700/50 ${i % 2 === 0 ? "bg-neutral-800" : "bg-neutral-800/50"}`}>
                   <td className="p-3"><input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} /></td>
                   <td className="p-3 text-neutral-200 font-mono">{p.codigo}</td>
-                  <td className="p-3 text-neutral-200">{p.descricao}</td>
+                  <td className="p-3 text-neutral-200 max-w-[200px] truncate" title={p.descricao}>{p.descricao || "—"}</td>
                   <td className="p-3 text-right text-emerald-400">R$ {(p.preco || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
+                  <td className="p-3 text-center text-neutral-300">{((p as any).estoque?.saldoFisicoTotal ?? (p as any).saldoFisicoTotal ?? "—")}</td>
+                  <td className="p-3 text-neutral-400 text-xs">{((p as any).categoria?.descricao || "—")}</td>
                   <td className="p-3 text-center">
                     <span className={`inline-block px-2 py-0.5 rounded text-[10px] ${p.situacao === "A" ? "bg-emerald-900/30 text-emerald-400" : "bg-neutral-700 text-neutral-400"}`}>
                       {p.situacao === "A" ? "Ativo" : "Inativo"}
