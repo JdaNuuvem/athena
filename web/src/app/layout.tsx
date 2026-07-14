@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { api } from "@/lib/api";
 import "./globals.css";
 
 const NAV_ITEMS = [
@@ -19,11 +20,17 @@ const NAV_ITEMS = [
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [user, setUser] = useState<{ name: string; role: string } | null>(null);
+  const [lojas, setLojas] = useState<Array<{ id: number; nome: string }>>([]);
   const [loja, setLoja] = useState<string>(() => {
     if (typeof window === "undefined") return "todas";
     return localStorage.getItem("loja") || "todas";
   });
   const pathname = usePathname();
+
+  // Load lojas from API
+  useEffect(() => {
+    api.lojasManage().then(r => setLojas(r.lojas)).catch(() => {});
+  }, []);
 
   // Auto-login: garante que sempre existe um token
   useEffect(() => {
@@ -128,10 +135,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-indigo-500"
               >
                 <option value="todas">🏢 Todas as Lojas</option>
-                <option value="centro">📍 Loja Centro</option>
-                <option value="shopping">🛍️ Loja Shopping</option>
-                <option value="norte">🧭 Loja Norte</option>
-                <option value="sul">🧭 Loja Sul</option>
+                {lojas.map((l) => (
+                  <option key={l.id} value={String(l.id)}>📍 {l.nome}</option>
+                ))}
               </select>
             </div>
           )}

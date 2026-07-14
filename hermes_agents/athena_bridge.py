@@ -1026,6 +1026,40 @@ def memory_recall():
     results = memory_recall(query, agent_id=agent or None, limit=5)
     return jsonify({"results": results, "total": len(results)})
 
+# ── Lojas CRUD ──
+
+@app.route('/api/lojas/manage', methods=['GET'])
+def listar_lojas():
+    from core.lojas import listar as listar_lojas_fn
+    return jsonify({"lojas": listar_lojas_fn()})
+
+@app.route('/api/lojas/manage', methods=['POST'])
+def criar_loja():
+    data = request.json or {}
+    nome = (data.get("nome") or "").strip()
+    if not nome:
+        return jsonify({"error": "Nome é obrigatório"}), 400
+    result = None
+    from core.lojas import criar as criar_loja_fn
+    result = criar_loja_fn(nome)
+    return jsonify({"loja": result}) if result else jsonify({"error": "Erro ao criar"}), 500
+
+@app.route('/api/lojas/manage/<int:id>', methods=['PUT'])
+def atualizar_loja(id):
+    data = request.json or {}
+    nome = (data.get("nome") or "").strip()
+    if not nome:
+        return jsonify({"error": "Nome é obrigatório"}), 400
+    from core.lojas import atualizar as atualizar_loja_fn
+    ok = atualizar_loja_fn(id, nome)
+    return jsonify({"success": ok}) if ok else jsonify({"error": "Loja não encontrada"}), 404
+
+@app.route('/api/lojas/manage/<int:id>', methods=['DELETE'])
+def deletar_loja(id):
+    from core.lojas import deletar as deletar_loja_fn
+    ok = deletar_loja_fn(id)
+    return jsonify({"success": ok}) if ok else jsonify({"error": "Loja não encontrada"}), 404
+
 # ===========================================================================
 # Business operations (chamado pelo Business.tsx)
 # ===========================================================================

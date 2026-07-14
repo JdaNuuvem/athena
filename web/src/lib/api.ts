@@ -144,6 +144,10 @@ export const api = {
   // Lojas
   lojas: (periodo?: number) =>
     request<unknown[]>(`/api/lojas${periodo ? `?periodo=${periodo}` : ""}`),
+  lojasManage: () => request<{ lojas: Array<{ id: number; nome: string; ativa: boolean }> }>("/api/lojas/manage"),
+  lojasCriar: (nome: string) => request<{ loja: { id: number; nome: string } }>("/api/lojas/manage", { method: "POST", body: JSON.stringify({ nome }) }),
+  lojasAtualizar: (id: number, nome: string) => request<{ success: boolean }>(`/api/lojas/manage/${id}`, { method: "PUT", body: JSON.stringify({ nome }) }),
+  lojasDeletar: (id: number) => request<{ success: boolean }>(`/api/lojas/manage/${id}`, { method: "DELETE" }),
 
   // KPI
   kpiOverview: (periodo?: number) =>
