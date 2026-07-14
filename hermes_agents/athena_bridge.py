@@ -1137,8 +1137,13 @@ def fiscal_dashboard():
 
 @app.route('/api/fiscal/<tabela>', methods=['GET'])
 def fiscal_list(tabela):
-    from core.fiscal import list as fl, TABLES
+    from core.fiscal import list as fl, listar_filtrado, TABLES
     if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
+    data_inicio = request.args.get("data_inicio", "")
+    data_fim = request.args.get("data_fim", "")
+    dias = request.args.get("dias", 0, type=int)
+    if data_inicio or data_fim or dias:
+        return jsonify(listar_filtrado(tabela, data_inicio, data_fim, dias))
     return jsonify({"data": fl(tabela)})
 
 @app.route('/api/fiscal/<tabela>', methods=['POST'])
