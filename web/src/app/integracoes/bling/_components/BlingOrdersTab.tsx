@@ -16,10 +16,11 @@ interface PedidoItem {
 interface Pedido {
   id: number;
   numero: string;
-  dataEmissao: string;
+  data?: string;
+  dataEmissao?: string;
   contato: { nome: string };
   total: number;
-  situacao: string;
+  situacao: { id: number; valor: number } | string;
   itens: PedidoItem[];
 }
 
@@ -62,18 +63,16 @@ export default function BlingOrdersTab() {
 
   if (loading && pedidos.length === 0) return <Spinner />;
 
-  const situacaoStyle = (s: string) => {
-    const map: Record<string, string> = {
-      "1": "bg-yellow-900/30 text-yellow-400",
-      "2": "bg-emerald-900/30 text-emerald-400",
-      "3": "bg-red-900/30 text-red-400",
-    };
-    return map[s] || "bg-neutral-700 text-neutral-400";
+  const situacaoStyle = (s: any) => {
+    const id = s?.id ?? 0;
+    const map: Record<number, string> = { 1: "bg-yellow-900/30 text-yellow-400", 6: "bg-emerald-900/30 text-emerald-400", 9: "bg-red-900/30 text-red-400" };
+    return map[id] || "bg-neutral-700 text-neutral-400";
   };
 
-  const situacaoLabel = (s: string) => {
-    const map: Record<string, string> = { "1": "Aberto", "2": "Concluído", "3": "Cancelado" };
-    return map[s] || s;
+  const situacaoLabel = (s: any) => {
+    const id = s?.id ?? 0;
+    const map: Record<number, string> = { 1: "Aberto", 6: "Concluído", 9: "Cancelado" };
+    return map[id] || `#${id}`;
   };
 
   return (
@@ -109,8 +108,8 @@ export default function BlingOrdersTab() {
                 <tr key={p.id} className={`border-b border-neutral-700/50 ${i % 2 === 0 ? "bg-neutral-800" : "bg-neutral-800/50"}`}>
                   <td className="p-3 text-neutral-200 font-mono">{p.numero}</td>
                   <td className="p-3 text-neutral-200">{p.contato?.nome || "—"}</td>
-                  <td className="p-3 text-neutral-400">{p.dataEmissao?.slice(0, 10)}</td>
-                  <td className="p-3 text-right text-emerald-400">R$ {(p.total || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
+                  <td className="p-3 text-neutral-400">{String(p.data ?? p.dataEmissao ?? "—").slice(0, 10)}</td>
+                  <td className="p-3 text-right text-emerald-400">R$ {(p.total ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
                   <td className="p-3 text-center">
                     <span className={`px-2 py-0.5 rounded text-[10px] ${situacaoStyle(p.situacao)}`}>{situacaoLabel(p.situacao)}</span>
                   </td>

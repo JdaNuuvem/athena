@@ -178,7 +178,7 @@ def listar_contas_receber(pagina: int = 1, limite: int = 100) -> dict:
     return _request("contas/receber", {"pagina": pagina, "limite": limite})
 
 def listar_notas_fiscais(pagina: int = 1, limite: int = 100) -> dict:
-    return _request("notasfiscais", {"pagina": pagina, "limite": limite})
+    return _request("nfe", {"pagina": pagina, "limite": limite})
 
 def sincronizar_produtos() -> dict:
     async def _go():
