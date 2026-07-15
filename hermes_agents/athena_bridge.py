@@ -2843,8 +2843,13 @@ def bling_orders():
 
 @app.route('/api/bling/sync/products', methods=['POST'])
 def bling_sync_products():
-    from bling_erp import sincronizar_produtos
-    return jsonify(sincronizar_produtos())
+    try:
+        from bling_erp import sincronizar_produtos
+        result = sincronizar_produtos()
+        return jsonify(result)
+    except Exception as e:
+        import traceback
+        return jsonify({"sincronizados": 0, "erro": str(e), "traceback": traceback.format_exc()}), 500
 
 @app.route('/api/bling/sync/orders', methods=['POST'])
 def bling_sync_orders():

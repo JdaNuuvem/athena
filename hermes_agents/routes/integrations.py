@@ -306,9 +306,13 @@ def bling_orders():
 
 @integrations_bp.route("/api/bling/sync/products", methods=["POST"])
 def bling_sync_products():
-    from bling_erp import sincronizar_produtos
-    r = sincronizar_produtos()
-    return jsonify({"count": r.get("sincronizados", 0), "errors": [r["erro"]] if r.get("erro") else []})
+    try:
+        from bling_erp import sincronizar_produtos
+        r = sincronizar_produtos()
+        return jsonify({"count": r.get("sincronizados", 0), "errors": [r["erro"]] if r.get("erro") else []})
+    except Exception as e:
+        import traceback
+        return jsonify({"count": 0, "errors": [str(e), traceback.format_exc()]}), 500
 
 
 @integrations_bp.route("/api/bling/sync/orders", methods=["POST"])
