@@ -2935,12 +2935,17 @@ def listar_produtos():
         count = cur.fetchone()[0]
         # ponytail: usa catalogo_produtos (SSOT) que unifica fichas_tecnicas + anuncios + produtos
         cur.execute(f"""
-            SELECT c.id,c.sku,c.descricao AS nome,
-                   COALESCE(m.margem_pct,0) AS margem_pct,
-                   COALESCE(m.receita_total,0) AS receita_30d,
-                   COALESCE(m.quantidade_vendida,0) AS vendidos_30d
+            SELECT c.id, c.sku, c.descricao AS nome, c.imagem_url,
+                   COALESCE(c.categoria, '') AS categoria,
+                   COALESCE(a.preco, 0) AS valor,
+                   (SELECT COUNT(*) FROM catalogo_produtos f WHERE f.sku_pai = c.sku) AS total_variacoes,
+                   COALESCE((SELECT SUM(e.quantidade) FROM estoque_lojas e WHERE e.sku = c.sku), 0) AS estoque_atual,
+                   COALESCE(m.margem_pct, 0) AS margem_pct,
+                   COALESCE(m.receita_total, 0) AS receita_30d,
+                   COALESCE(m.quantidade_vendida, 0) AS vendidos_30d
             FROM catalogo_produtos c
-            LEFT JOIN margens_diarias m ON m.sku=c.sku AND m.data=CURRENT_DATE
+            LEFT JOIN anuncios a ON a.sku = c.sku AND a.marketplace = 'bling'
+            LEFT JOIN margens_diarias m ON m.sku = c.sku AND m.data = CURRENT_DATE
             WHERE {sql_where}
             ORDER BY c.id DESC
             LIMIT {por_pagina} OFFSET {offset}
@@ -2948,26 +2953,66 @@ def listar_produtos():
         rows = _dicts(cur)
         skus = [r["sku"] for r in rows]
         if skus:
-            cur.execute("SELECT sku,marketplace,preco,status FROM anuncios WHERE sku=ANY(%s)", (skus,))
-            estoques = {}
+            cur.execute("SELECT sku, marketplace, preco, status FROM anuncios WHERE sku = ANY(%s)", (skus,))
+            precos_por_sku = {}
             for e in _dicts(cur):
-                estoques.setdefault(e["sku"], []).append({"loja": e["marketplace"], "preco": float(e["preco"]) if e["preco"] else 0, "status": e["status"]})
+                precos_por_sku.setdefault(e["sku"], []).append({"loja": e["marketplace"], "preco": float(e["preco"]) if e["preco"] else 0, "status": e["status"]})
             for r in rows:
-                r["estoque_lojas"] = estoques.get(r["sku"], [])
+                r["estoque_lojas"] = precos_por_sku.get(r["sku"], [])
                 r["total_lojas"] = len(r["estoque_lojas"])
+                # ponytail: fallback price from any marketplace if bling price is 0
+                if not r.get("valor"):
+                    precos = precos_por_sku.get(r["sku"], [])
+                    r["valor"] = max((p["preco"] for p in precos), default=0)
         cur.close(); conn.close()
         return jsonify({"produtos": rows, "total": count, "pagina": pagina, "por_pagina": por_pagina})
     except Exception as e:
         return jsonify({"erro": str(e), "produtos": [], "total": 0})
+
+
+@app.route('/api/produtos/<sku>', methods=['PUT'])
+def editar_produto(sku):
+    try:
+        data = request.json or {}
+        conn = _db_sync(); cur = conn.cursor()
+        updates = []
+        values = []
+        idx = 0
+        campos = ["descricao","ncm","cest","categoria","marca","unidade_padrao","tipo",
+                  "peso_bruto","sku_pai","atributo"]
+        for campo in campos:
+            if campo in data and data[campo] is not None:
+                idx += 1
+                updates.append(f"{campo} = ${idx}")
+                values.append(data[campo])
+        if not updates:
+            return jsonify({"error": "Nenhum campo para atualizar"}), 400
+        updates.append("updated_at = NOW()")
+        idx += 1
+        values.append(sku)
+        sql = f"UPDATE catalogo_produtos SET {', '.join(updates)} WHERE sku = ${idx}"
+        cur.execute(sql, values)
+        # Tambem atualizar fichas_tecnicas se o campo existir la
+        if "descricao" in data:
+            cur.execute("UPDATE fichas_tecnicas SET descricao = %s WHERE sku = %s", (data["descricao"], sku))
+        conn.commit()
+        cur.close(); conn.close()
+        # Registrar auditoria
+        try:
+            from core.seguranca import auditar, registrar_alteracao
+            auditar("editar", "produtos", "produto", dados_depois=data)
+        except: pass
+        return jsonify({"success": True, "sku": sku})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/produtos/<sku>', methods=['GET'])
 def detalhe_produto(sku):
     try:
         conn = _db_sync(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("""
-            SELECT f.*,COALESCE(m.margem_pct,0) AS margem_pct,COALESCE(m.receita_total,0) AS receita_30d,
-                   COALESCE(m.quantidade_vendida,0) AS vendidos_30d,COALESCE(m.lucro_liquido,0) AS lucro_30d
-            FROM fichas_tecnicas f LEFT JOIN margens_diarias m ON m.sku=f.sku AND m.data=CURRENT_DATE WHERE f.sku=%s
+            SELECT c.*, COALESCE(a.preco,0) AS valor
+            FROM catalogo_produtos c LEFT JOIN anuncios a ON a.sku=c.sku AND a.marketplace='bling' WHERE c.sku=%s
         """, (sku,))
         p = cur.fetchone()
         if not p:
@@ -2975,6 +3020,10 @@ def detalhe_produto(sku):
         p = dict(p)
         cur.execute("SELECT marketplace,preco,posicao_busca,avaliacao_media,status FROM anuncios WHERE sku=%s", (sku,))
         p["estoque_lojas"] = [dict(r) for r in cur.fetchall()]
+
+        # Variacoes (filhos)
+        cur.execute("SELECT sku, descricao AS nome, atributo, (SELECT COALESCE(preco,0) FROM anuncios WHERE sku=catalogo_produtos.sku AND marketplace='bling' LIMIT 1) AS valor FROM catalogo_produtos WHERE sku_pai = %s ORDER BY sku", (sku,))
+        p["variacoes"] = [dict(r, valor=float(r["valor"]) if r.get("valor") else 0) for r in cur.fetchall()]
         cur.execute("SELECT data,marketplace,quantidade,preco_venda,receita_bruta FROM vendas WHERE sku=%s ORDER BY data DESC LIMIT 90", (sku,))
         p["vendas_30d"] = [dict(r, data=str(r["data"])) for r in cur.fetchall()]
         cur.execute("SELECT data,preco_venda FROM vendas WHERE sku=%s ORDER BY data ASC", (sku,))

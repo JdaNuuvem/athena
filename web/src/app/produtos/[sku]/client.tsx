@@ -74,7 +74,7 @@ export default function ProdutoClientPage() {
       </div>
 
       {tab === "visao-geral" && <VisaoGeralTab produto={produto} formatarMoeda={formatarMoeda} />}
-      {tab === "cadastro" && <CadastroTab />}
+      {tab === "cadastro" && <CadastroTab produto={produto} sku={sku as string} onUpdate={() => { api.detalheProduto(sku as string).then(d => setProduto(d as Record<string, unknown>)).catch(() => {}); }} />}
       {tab === "variacoes" && <VariacoesTab variacoes={(produto?.variacoes as any) || []} />}
       {tab === "kits-bom" && <KitsBomTab />}
       {tab === "lotes-series" && <LotesSeriesTab />}

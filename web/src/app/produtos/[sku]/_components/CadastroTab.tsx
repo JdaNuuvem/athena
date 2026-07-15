@@ -1,146 +1,78 @@
 "use client";
 
-const mock = {
-  sku: "MC-001-P", gtin: "7891234567890", codigoInterno: "INT001",
-  codigoFabricante: "FAB-789", marca: "MasterCool", categoria: "Utilidades Domésticas",
-  subcategoria: "Organizadores", unidade: "un",
-  pesoLiquido: 0.45, pesoBruto: 0.52,
-  largura: 25, altura: 15, profundidade: 10,
-  larguraEmbalagem: 27, alturaEmbalagem: 17, profundidadeEmbalagem: 12,
-  ncm: "3924.10.00", cest: "28.038.00", cfopPadrao: "5102",
-  origem: "0", regimeTributario: "Simples Nacional",
-  garantiaMeses: 3, descricaoCurta: "Organizador modular para geladeira com divisórias ajustáveis.",
-  descricaoCompleta: "Organizador plástico de alta resistência, ideal para otimizar o espaço interno da geladeira. Possui divisórias removíveis e ajustáveis, design modular que permite empilhamento. Material livre de BPA, fácil de limpar.",
-  seoTitulo: "Organizador de Geladeira Modular | MasterCool", seoDesc: "Organizador de geladeira com divisórias ajustáveis. Otimize o espaço da sua geladeira com o organizador modular MasterCool.", seoSlug: "organizador-geladeira-modular", seoKw: "organizador geladeira, divisória geladeira, organizador modular",
-};
+import { useState } from "react";
 
 function InputGroup({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1">
-      <label className="text-[10px] text-neutral-500 uppercase tracking-wider">{label}</label>
-      {children}
-    </div>
-  );
+  return <div className="space-y-1"><label className="text-[10px] text-neutral-500 uppercase tracking-wider">{label}</label>{children}</div>;
 }
-
-function Field({ label, value, type = "text" }: { label: string; value: string | number; type?: string }) {
-  return (
-    <input
-      type={type}
-      defaultValue={String(value)}
-      readOnly
-      className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 cursor-default focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
-      aria-label={label}
-    />
-  );
-}
-
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <fieldset className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 space-y-4">
-      <legend className="text-sm font-medium text-neutral-300 px-1">{title}</legend>
-      {children}
-    </fieldset>
-  );
+  return <fieldset className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 space-y-4"><legend className="text-sm font-medium text-neutral-300 px-1">{title}</legend>{children}</fieldset>;
 }
 
-const imagesMock = Array.from({ length: 4 }, (_, i) => `imagem_${i + 1}.jpg`);
-const videosMock = ["https://youtube.com/watch?v=abc123"];
-const docsMock = ["ficha_tecnica.pdf", "certificado_ncm.pdf"];
+export default function CadastroTab({ produto, sku, onUpdate }: { produto: Record<string, unknown> | null; sku: string; onUpdate?: () => void }) {
+  const [editando, setEditando] = useState(false);
+  const [form, setForm] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
 
-export default function CadastroTab() {
+  const startEdit = () => { setForm({ descricao: String(produto?.descricao || produto?.nome || ""), categoria: String(produto?.categoria || ""), marca: String(produto?.marca || ""), ncm: String(produto?.ncm || ""), tipo: String(produto?.tipo || "") }); setEditando(true); };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const r = await fetch("/api/produtos/" + sku, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+      const d = await r.json();
+      if (d.error) { setMsg(d.error); return; }
+      setMsg("Salvo!");
+      setEditando(false);
+      onUpdate?.();
+      setTimeout(() => setMsg(""), 2000);
+    } catch (e) { setMsg("Erro ao salvar"); }
+    finally { setSaving(false); }
+  };
+
+  const field = (k: string, label: string) => {
+    const val = editando ? form[k] || "" : String((produto as any)?.[k] || "");
+    if (editando) return <input type="text" value={val || ""} onChange={e => setForm({...form, [k]: e.target.value})} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-indigo-500" />;
+    return <div className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200">{val || "—"}</div>;
+  };
+
   return (
     <div className="space-y-6">
-      <Section title="Identificação">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-          <InputGroup label="SKU"><Field label="SKU" value={mock.sku} /></InputGroup>
-          <InputGroup label="GTIN / EAN"><Field label="GTIN" value={mock.gtin} /></InputGroup>
-          <InputGroup label="Código Interno"><Field label="Código Interno" value={mock.codigoInterno} /></InputGroup>
-          <InputGroup label="Código Fabricante"><Field label="Código Fabricante" value={mock.codigoFabricante} /></InputGroup>
-          <InputGroup label="Marca"><Field label="Marca" value={mock.marca} /></InputGroup>
-          <InputGroup label="Categoria"><Field label="Categoria" value={mock.categoria} /></InputGroup>
-          <InputGroup label="Subcategoria"><Field label="Subcategoria" value={mock.subcategoria} /></InputGroup>
-          <InputGroup label="Unidade"><Field label="Unidade" value={mock.unidade} /></InputGroup>
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-medium text-neutral-400">Dados do Produto</h2>
+        <div className="flex gap-2 items-center">
+          {msg && <span className="text-xs text-emerald-400">{msg}</span>}
+          {editando ? (
+            <>
+              <button onClick={handleSave} disabled={saving} className="px-3 py-1 bg-emerald-600 text-white text-xs rounded-lg">{saving ? "Salvando..." : "Salvar"}</button>
+              <button onClick={() => setEditando(false)} className="px-3 py-1 text-xs text-neutral-400">Cancelar</button>
+            </>
+          ) : (
+            <button onClick={startEdit} className="px-3 py-1 bg-indigo-600 text-white text-xs rounded-lg">Editar</button>
+          )}
         </div>
-      </Section>
+      </div>
 
-      <Section title="Dimensões e Peso">
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          <InputGroup label="Peso Líquido (kg)"><Field label="Peso Líquido" value={mock.pesoLiquido} type="number" /></InputGroup>
-          <InputGroup label="Peso Bruto (kg)"><Field label="Peso Bruto" value={mock.pesoBruto} type="number" /></InputGroup>
-          <InputGroup label="Largura (cm)"><Field label="Largura" value={mock.largura} type="number" /></InputGroup>
-          <InputGroup label="Altura (cm)"><Field label="Altura" value={mock.altura} type="number" /></InputGroup>
-          <InputGroup label="Profundidade (cm)"><Field label="Profundidade" value={mock.profundidade} type="number" /></InputGroup>
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          <InputGroup label="Larg. Embalagem (cm)"><Field label="Larg. Embalagem" value={mock.larguraEmbalagem} type="number" /></InputGroup>
-          <InputGroup label="Alt. Embalagem (cm)"><Field label="Alt. Embalagem" value={mock.alturaEmbalagem} type="number" /></InputGroup>
-          <InputGroup label="Prof. Embalagem (cm)"><Field label="Prof. Embalagem" value={mock.profundidadeEmbalagem} type="number" /></InputGroup>
+      <Section title="Identificacao">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          <InputGroup label="SKU"><div className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-indigo-400 font-mono">{sku}</div></InputGroup>
+          <InputGroup label="Nome"><InputGroup label="">{field("descricao", "Nome")}</InputGroup></InputGroup>
+          <InputGroup label="Categoria">{field("categoria", "Categoria")}</InputGroup>
+          <InputGroup label="Marca">{field("marca", "Marca")}</InputGroup>
         </div>
       </Section>
 
       <Section title="Fiscal">
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          <InputGroup label="NCM"><Field label="NCM" value={mock.ncm} /></InputGroup>
-          <InputGroup label="CEST"><Field label="CEST" value={mock.cest} /></InputGroup>
-          <InputGroup label="CFOP Padrão"><Field label="CFOP Padrão" value={mock.cfopPadrao} /></InputGroup>
-          <InputGroup label="Origem"><Field label="Origem" value={mock.origem === "0" ? "0 - Nacional" : mock.origem} /></InputGroup>
-          <InputGroup label="Regime Tributário"><Field label="Regime Tributário" value={mock.regimeTributario} /></InputGroup>
-          <InputGroup label="Garantia (meses)"><Field label="Garantia" value={mock.garantiaMeses} type="number" /></InputGroup>
+          <InputGroup label="NCM">{field("ncm", "NCM")}</InputGroup>
+          <InputGroup label="Tipo">{field("tipo", "Tipo")}</InputGroup>
         </div>
       </Section>
 
-      <Section title="Descrição e SEO">
-        <InputGroup label="Descrição Curta">
-          <textarea defaultValue={mock.descricaoCurta} readOnly rows={2} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 resize-none cursor-default focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent" />
-        </InputGroup>
-        <InputGroup label="Descrição Completa">
-          <textarea defaultValue={mock.descricaoCompleta} readOnly rows={4} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 resize-none cursor-default focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent" />
-        </InputGroup>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <InputGroup label="Título SEO"><Field label="Título SEO" value={mock.seoTitulo} /></InputGroup>
-          <InputGroup label="Slug"><Field label="Slug" value={mock.seoSlug} /></InputGroup>
-          <InputGroup label="Meta Description">
-            <textarea defaultValue={mock.seoDesc} readOnly rows={2} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 resize-none cursor-default focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent" />
-          </InputGroup>
-          <InputGroup label="Palavras-chave"><Field label="Palavras-chave" value={mock.seoKw} /></InputGroup>
-        </div>
-      </Section>
-
-      <Section title="Mídia">
-        <div>
-          <p className="text-[10px] text-neutral-500 uppercase tracking-wider mb-2">Imagens</p>
-          <div className="grid grid-cols-4 md:grid-cols-6 gap-2">
-            {imagesMock.map((nome) => (
-              <div key={nome} className="aspect-square bg-neutral-800 border border-neutral-700 rounded-lg flex items-center justify-center text-2xl text-neutral-600 hover:border-neutral-500 cursor-pointer transition-colors">
-                🖼️
-              </div>
-            ))}
-            <div className="aspect-square border border-dashed border-neutral-700 rounded-lg flex items-center justify-center text-2xl text-neutral-700 hover:border-neutral-500 cursor-pointer transition-colors">
-              +
-            </div>
-          </div>
-        </div>
-        <div>
-          <p className="text-[10px] text-neutral-500 uppercase tracking-wider mb-2">Vídeos</p>
-          {videosMock.map((url) => (
-            <div key={url} className="flex items-center gap-3 bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2">
-              <span className="text-sm">🎬</span>
-              <span className="text-xs text-neutral-400 truncate">{url}</span>
-            </div>
-          ))}
-        </div>
-        <div>
-          <p className="text-[10px] text-neutral-500 uppercase tracking-wider mb-2">Documentos</p>
-          <div className="flex flex-wrap gap-2">
-            {docsMock.map((nome) => (
-              <span key={nome} className="flex items-center gap-2 bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-1.5 text-xs text-neutral-400">
-                📄 {nome}
-              </span>
-            ))}
-          </div>
-        </div>
-      </Section>
+      <div className="text-xs text-neutral-600">
+        ID: {String(produto?.id || "—")} | Variacoes: {(produto?.variacoes as any[])?.length || 0}
+      </div>
     </div>
   );
 }
