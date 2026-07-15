@@ -41,6 +41,29 @@ def _ensure_tables():
             valor DECIMAL(12,2) DEFAULT 0, motivo TEXT, operador VARCHAR(100),
             data TIMESTAMP DEFAULT NOW()
         )""")
+        
+        await db.execute("""CREATE TABLE IF NOT EXISTS pdv_operadores (
+            id SERIAL PRIMARY KEY, nome VARCHAR(100) NOT NULL, senha VARCHAR(100),
+            role VARCHAR(50) DEFAULT 'operador', ativo BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT NOW()
+        )""")
+        await db.execute("""CREATE TABLE IF NOT EXISTS pdv_turnos (
+            id SERIAL PRIMARY KEY, caixa_id INT REFERENCES pdv_caixas(id),
+            operador_id INT REFERENCES pdv_operadores(id),
+            aberto_em TIMESTAMP DEFAULT NOW(), fechado_em TIMESTAMP,
+            saldo_abertura DECIMAL(12,2) DEFAULT 0, saldo_fechamento DECIMAL(12,2) DEFAULT 0,
+            status VARCHAR(20) DEFAULT 'aberto', observacoes TEXT
+        )""")
+        await db.execute("""CREATE TABLE IF NOT EXISTS pdv_devolucoes (
+            id SERIAL PRIMARY KEY, venda_id INT REFERENCES pdv_vendas(id),
+            motivo TEXT, valor DECIMAL(12,2) DEFAULT 0,
+            operador VARCHAR(100), data TIMESTAMP DEFAULT NOW()
+        )""")
+        # Seed operador padrao
+        op_count = await db.fetchval("SELECT COUNT(*) FROM pdv_operadores")
+        if op_count == 0:
+            await db.execute("INSERT INTO pdv_operadores (nome, role) VALUES ('Admin','admin')")
+
         await db.execute("""CREATE TABLE IF NOT EXISTS pdv_nfce (
             id SERIAL PRIMARY KEY, venda_id INT REFERENCES pdv_vendas(id),
             numero VARCHAR(20), chave_acesso VARCHAR(50), serie VARCHAR(10),
@@ -99,12 +122,23 @@ def _delete(t: str, id: int) -> dict:
     try: run_async(_go()); return {"success": True}
     except Exception as e: return {"error": str(e)}
 
-TABLES = ["caixas","vendas","itens","pagamentos","sangrias","suprimentos","nfce"]
-def list(t: str): return _list(f"pdv_{t}")
-def get(t: str, i: int): return _get(f"pdv_{t}", i)
-def create(t: str, d: dict): return _create(f"pdv_{t}", d)
-def update(t: str, i: int, d: dict): return _update(f"pdv_{t}", i, d)
-def delete(t: str, i: int): return _delete(f"pdv_{t}", i)
+TABLES = ["caixas","vendas","itens","pagamentos","sangrias","suprimentos","nfce","operadores","turnos","devolucoes"]
+def list(t: str):
+    extra = {"operadores":"pdv_operadores","turnos":"pdv_turnos","devolucoes":"pdv_devolucoes"}
+    tbl = extra.get(t, f"pdv_{t}")
+    return _list(tbl)
+def get(t: str, i: int):
+    extra = {"operadores":"pdv_operadores","turnos":"pdv_turnos","devolucoes":"pdv_devolucoes"}
+    return _get(extra.get(t, f"pdv_{t}"), i)
+def create(t: str, d: dict):
+    extra = {"operadores":"pdv_operadores","turnos":"pdv_turnos","devolucoes":"pdv_devolucoes"}
+    return _create(extra.get(t, f"pdv_{t}"), d)
+def update(t: str, i: int, d: dict):
+    extra = {"operadores":"pdv_operadores","turnos":"pdv_turnos","devolucoes":"pdv_devolucoes"}
+    return _update(extra.get(t, f"pdv_{t}"), i, d)
+def delete(t: str, i: int):
+    extra = {"operadores":"pdv_operadores","turnos":"pdv_turnos","devolucoes":"pdv_devolucoes"}
+    return _delete(extra.get(t, f"pdv_{t}"), i)
 
 # ── Operacoes ──
 
@@ -135,6 +169,55 @@ def fechar_caixa(caixa_id: int, saldo_final: float) -> dict:
         except: pass
         return result
     except Exception as e: return {"error": str(e)}
+
+
+
+def abrir_turno(caixa_id: int, operador_id: int = None, operador_nome: str = "", saldo_abertura: float = 0) -> dict:
+    return create("turnos", {"caixa_id": caixa_id, "operador_id": operador_id, "operador": operador_nome,
+        "saldo_abertura": saldo_abertura, "status": "aberto", "aberto_em": hoje()})
+
+def fechar_turno(turno_id: int, saldo_fechamento: float, observacoes: str = "") -> dict:
+    return update("turnos", turno_id, {"status": "fechado", "saldo_fechamento": saldo_fechamento,
+        "fechado_em": hoje(), "observacoes": observacoes})
+
+def buscar_produtos(q: str, limit: int = 15) -> list:
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch("SELECT id, codigo, nome, preco, estoque_atual, situacao FROM produtos WHERE (codigo ILIKE $1 OR nome ILIKE $1 OR CAST(id AS TEXT) = $2) AND situacao = 'A' LIMIT $3", f"%{q}%", q, limit)
+        return [dict(r) for r in rows]
+    try: return run_async(_go())
+    except: return []
+
+def cancelar_venda(venda_id: int, motivo: str = "", operador: str = "") -> dict:
+    async def _go():
+        db = await get_db()
+        venda = await db.fetchrow("SELECT * FROM pdv_vendas WHERE id = $1", venda_id)
+        if not venda: return {"error": "Venda nao encontrada"}
+        if venda["status"] == "cancelada": return {"error": "Venda ja cancelada"}
+        await db.execute("UPDATE pdv_vendas SET status = 'cancelada', observacoes = $2 WHERE id = $1", venda_id, f"Cancelada: {motivo}" if motivo else "Cancelada")
+        # Registrar devolucao
+        await db.execute("INSERT INTO pdv_devolucoes (venda_id, motivo, valor, operador) VALUES ($1,$2,$3,$4)",
+            venda_id, motivo, float(venda["total"] or 0), operador)
+        return {"success": True, "venda_id": venda_id}
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
+
+def historico_vendas(caixa_id: int = None, data_inicio: str = None, data_fim: str = None, limit: int = 50) -> list:
+    async def _go():
+        db = await get_db()
+        where = []; params = []; p = 0
+        if caixa_id:
+            p += 1; where.append(f"caixa_id = ${p}"); params.append(caixa_id)
+        if data_inicio:
+            p += 1; where.append(f"data::date >= ${p}::date"); params.append(data_inicio)
+        if data_fim:
+            p += 1; where.append(f"data::date <= ${p}::date"); params.append(data_fim)
+        clause = " AND ".join(where) if where else "1=1"
+        p += 1
+        rows = await db.fetch(f"SELECT * FROM pdv_vendas WHERE {clause} ORDER BY data DESC LIMIT ${p}", *params, limit)
+        return [dict(r) for r in rows]
+    try: return run_async(_go())
+    except: return []
 
 def sangria(caixa_id: int, valor: float, motivo: str, operador: str) -> dict:
     return create("sangrias", {"caixa_id": caixa_id, "valor": valor, "motivo": motivo, "operador": operador})
