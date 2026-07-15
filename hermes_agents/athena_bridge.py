@@ -1206,6 +1206,51 @@ def rel_previsao():
     from core.relatorios import previsao; dias=request.args.get('dias',30,type=int)
     return jsonify(previsao(dias))
 
+@app.route('/api/relatorios/compras', methods=['GET'])
+def rel_compras():
+    from core.relatorios import compras; dias=request.args.get('dias',30,type=int)
+    return jsonify(compras(dias))
+
+@app.route('/api/relatorios/impostos', methods=['GET'])
+def rel_impostos():
+    from core.relatorios import impostos; dias=request.args.get('dias',30,type=int)
+    return jsonify(impostos(dias))
+
+@app.route('/api/relatorios/comissao', methods=['GET'])
+def rel_comissao():
+    from core.relatorios import comissao; dias=request.args.get('dias',30,type=int)
+    return jsonify(comissao(dias))
+
+@app.route('/api/relatorios/marketplaces', methods=['GET'])
+def rel_marketplaces():
+    from core.relatorios import marketplaces; dias=request.args.get('dias',30,type=int)
+    return jsonify(marketplaces(dias))
+
+@app.route('/api/relatorios/devolucoes', methods=['GET'])
+def rel_devolucoes():
+    from core.relatorios import devolucoes; dias=request.args.get('dias',30,type=int)
+    return jsonify(devolucoes(dias))
+
+@app.route('/api/relatorios/rupturas', methods=['GET'])
+def rel_rupturas():
+    from core.relatorios import rupturas
+    return jsonify(rupturas())
+
+@app.route('/api/relatorios/curvas', methods=['GET'])
+def rel_curvas():
+    from core.relatorios import curvas; dias=request.args.get('dias',90,type=int)
+    return jsonify(curvas(dias))
+
+@app.route('/api/relatorios/produtos', methods=['GET'])
+def rel_produtos():
+    from core.relatorios import produtos; dias=request.args.get('dias',30,type=int)
+    return jsonify(produtos(dias))
+
+@app.route('/api/relatorios/financeiro', methods=['GET'])
+def rel_financeiro():
+    from core.relatorios import financeiro; dias=request.args.get('dias',30,type=int)
+    return jsonify(financeiro(dias))
+
 
 
 # ── Fiscal Routes ──
@@ -1214,6 +1259,39 @@ def rel_previsao():
 def fiscal_dashboard():
     from core.fiscal import dashboard
     return jsonify(dashboard())
+
+@app.route('/api/fiscal/tabelas/cfop', methods=['GET'])
+def fiscal_tabelas_cfop():
+    """Extrai CFOP distintos das NF-e syncadas do Bling."""
+    from core import run_async, get_db
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch("SELECT DISTINCT cfop as codigo, natureza_operacao as descricao, tipo FROM fiscal_notas_fiscais WHERE cfop IS NOT NULL AND cfop != '' ORDER BY cfop LIMIT 50")
+        return [dict(r) for r in (rows or [])]
+    try: return jsonify(run_async(_go()))
+    except: return jsonify([])
+
+@app.route('/api/fiscal/tabelas/ncm', methods=['GET'])
+def fiscal_tabelas_ncm():
+    """Extrai NCM distintos dos itens das NF-e syncadas."""
+    from core import run_async, get_db
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch("SELECT DISTINCT ncm as codigo, '' as descricao FROM fiscal_nfe_itens WHERE ncm IS NOT NULL AND ncm != '' ORDER BY ncm LIMIT 50")
+        return [dict(r) for r in (rows or [])]
+    try: return jsonify(run_async(_go()))
+    except: return jsonify([])
+
+@app.route('/api/fiscal/tabelas/cest', methods=['GET'])
+def fiscal_tabelas_cest():
+    """Extrai CEST distintos dos itens das NF-e syncadas."""
+    from core import run_async, get_db
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch("SELECT DISTINCT cest as codigo, '' as descricao FROM fiscal_nfe_itens WHERE cest IS NOT NULL AND cest != '' ORDER BY cest LIMIT 50")
+        return [dict(r) for r in (rows or [])]
+    try: return jsonify(run_async(_go()))
+    except: return jsonify([])
 
 @app.route('/api/fiscal/<tabela>', methods=['GET'])
 def fiscal_list(tabela):
@@ -1872,6 +1950,11 @@ def deletar_loja_manage(id):
     from core.lojas import deletar as deletar_loja_fn
     ok = deletar_loja_fn(id)
     return jsonify({"success": ok}) if ok else jsonify({"error": "Loja não encontrada"}), 404
+
+@app.route('/api/lojas/sync/bling', methods=['POST'])
+def lojas_sync_bling():
+    from core.lojas import sincronizar_bling
+    return jsonify(sincronizar_bling())
 
 # ── RH CRUD ──
 

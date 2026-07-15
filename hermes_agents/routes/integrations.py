@@ -392,6 +392,53 @@ def bling_contacts():
     except: return jsonify([])
 
 
+@integrations_bp.route("/api/bling/sync/categories", methods=["POST"])
+def bling_sync_categories():
+    from bling_erp import listar_categorias, get_access_token, get_auth_url
+    token = get_access_token()
+    if not token: return jsonify({"count": 0, "errors": ["Bling nao autenticado"]})
+    r = listar_categorias()
+    if r.get("error"): return jsonify({"count": 0, "errors": [r["error"]]})
+    dados = r.get("data", [])
+    async def _go():
+        from core import get_db
+        db = await get_db()
+        total = 0
+        for cat in dados:
+            try:
+                cid = cat.get("id")
+                nome = cat.get("descricao", "")
+                if cid and nome:
+                    await db.execute("""INSERT INTO bling_categorias (bling_id, nome)
+                        VALUES ($1,$2) ON CONFLICT (bling_id) DO UPDATE SET nome=$2""", cid, nome)
+                    total += 1
+            except: pass
+        return total
+    try:
+        from core import run_async
+        count = run_async(_go())
+        return jsonify({"count": count, "errors": []})
+    except: return jsonify({"count": len(dados), "errors": []})
+
+
+@integrations_bp.route("/api/bling/categories", methods=["GET"])
+def bling_categories():
+    import json
+    async def _go():
+        from core import get_db
+        db = await get_db()
+        await db.execute("""CREATE TABLE IF NOT EXISTS bling_categorias (
+            id SERIAL PRIMARY KEY, bling_id BIGINT UNIQUE, nome VARCHAR(200),
+            created_at TIMESTAMP DEFAULT NOW())""")
+        rows = await db.fetch("SELECT id, bling_id, nome FROM bling_categorias ORDER BY nome")
+        return [dict(r) for r in rows]
+    try:
+        from core import run_async
+        data = run_async(_go())
+        return jsonify(data)
+    except: return jsonify([])
+
+
 # --- Test endpoints ---
 
 @integrations_bp.route("/api/test/bling", methods=["GET"])

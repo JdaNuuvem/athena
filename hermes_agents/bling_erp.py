@@ -20,20 +20,39 @@ REDIRECT_URI = f"https://{BLING_DOMAIN}/api/bling/oauth/callback"
 BASE_URL = "https://www.bling.com.br/Api/v3"
 
 # ── Token management (persistido no DB) ──
-# ── Token storage (env var > cache) ──
-_TOKEN = {"access": "", "refresh": ""}
+# ponytail: env var > DB config > cache. Sobrevive a restarts.
 
 def get_access_token() -> str:
-    return os.environ.get("BLING_ACCESS_TOKEN", "") or _TOKEN["access"]
+    t = os.environ.get("BLING_ACCESS_TOKEN", "")
+    if t: return t
+    t = _TOKEN["access"]
+    if t: return t
+    try:
+        t = get_config("bling", "access_token") or ""
+        if t: _TOKEN["access"] = t
+    except: pass
+    return t
 
 def set_access_token(token: str):
     _TOKEN["access"] = token
+    try: set_config("bling", "access_token", token)
+    except: pass
 
 def get_refresh_token() -> str:
-    return os.environ.get("BLING_REFRESH_TOKEN", "") or _TOKEN["refresh"]
+    t = os.environ.get("BLING_REFRESH_TOKEN", "")
+    if t: return t
+    t = _TOKEN["refresh"]
+    if t: return t
+    try:
+        t = get_config("bling", "refresh_token") or ""
+        if t: _TOKEN["refresh"] = t
+    except: pass
+    return t
 
 def set_refresh_token(token: str):
     _TOKEN["refresh"] = token
+    try: set_config("bling", "refresh_token", token)
+    except: pass
 
 def get_auth_url() -> str:
     params = urlencode({
@@ -113,6 +132,9 @@ def listar_pedidos(pagina: int = 1, limite: int = 100) -> dict:
 def listar_contatos(pagina: int = 1, limite: int = 100) -> dict:
     return _request("contatos", {"pagina": pagina, "limite": limite})
 
+def listar_categorias(pagina: int = 1, limite: int = 100) -> dict:
+    return _request("categorias/produtos", {"pagina": pagina, "limite": limite})
+
 def listar_contas_receber(pagina: int = 1, limite: int = 100) -> dict:
     return _request("contas/receber", {"pagina": pagina, "limite": limite})
 
@@ -125,6 +147,53 @@ def listar_notas_fiscais(pagina: int = 1, limite: int = 100) -> dict:
 def get_nfe_detail(id_nota: int) -> dict:
     """Retorna detalhes completos de uma NF-e incluindo link do XML e DANFE."""
     return _request(f"nfe/{id_nota}")
+
+
+# ── Contatos (Clientes / Fornecedores) ──
+
+def listar_contatos(pagina: int = 1, limite: int = 100, tipo: str = "") -> dict:
+    """Lista contatos. tipo: 'C'=cliente, 'F'=fornecedor, ''=todos"""
+    params = {"pagina": pagina, "limite": limite}
+    if tipo: params["tipo"] = tipo
+    return _request("contatos", params)
+
+def get_contato(id_contato: int) -> dict:
+    return _request(f"contatos/{id_contato}")
+
+# ── Categorias de Produtos ──
+
+def listar_categorias(pagina: int = 1, limite: int = 100) -> dict:
+    return _request("categorias/produtos", {"pagina": pagina, "limite": limite})
+
+def get_categoria(id_categoria: int) -> dict:
+    return _request(f"categorias/produtos/{id_categoria}")
+
+# ── Detalhe do Pedido (com itens, frete, parcelas) ──
+
+def get_pedido_detalhe(id_pedido: int) -> dict:
+    """Retorna detalhes completos: itens, parcelas, transporte, vendedor."""
+    return _request(f"pedidos/vendas/{id_pedido}")
+
+# ── NF-e Completa ──
+
+def get_nfe_completa(id_nota: int) -> dict:
+    """Retorna NF-e com itens, impostos, transportadora, volumes."""
+    return _request(f"nfe/{id_nota}")
+
+# ── Contas a Pagar ──
+
+def listar_contas_pagar(pagina: int = 1, limite: int = 100, situacao: str = "") -> dict:
+    params = {"pagina": pagina, "limite": limite}
+    if situacao: params["situacao"] = situacao
+    return _request("contas/pagar", params)
+
+def get_conta_pagar(id_conta: int) -> dict:
+    return _request(f"contas/pagar/{id_conta}")
+
+# ── Formas de Pagamento ──
+
+def listar_formas_pagamento() -> dict:
+    return _request("formas-pagamento")
 
 def get_nfe_xml(id_nota: int) -> tuple[str | None, str | None]:
     """Retorna (conteudo_xml, content_type) do XML da NF-e ou (None, None) se erro."""

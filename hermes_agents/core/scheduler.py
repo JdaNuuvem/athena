@@ -59,8 +59,31 @@ def _sync_cr_cp():
         log(AGENT, f"CR/CP sync: CR={r1.get('sync',0)} CP={r2.get('sync',0)}")
     except: pass
 
+def _sync_categorias():
+    try:
+        from bling_erp import listar_categorias, get_access_token
+        if not get_access_token(): return
+        r = listar_categorias()
+        dados = r.get("data", [])
+        if dados:
+            from core import run_async, get_db
+            async def _go():
+                db = await get_db()
+                await db.execute("CREATE TABLE IF NOT EXISTS bling_categorias (id SERIAL PRIMARY KEY, bling_id BIGINT UNIQUE, nome VARCHAR(200), created_at TIMESTAMP DEFAULT NOW())")
+                for cat in dados:
+                    try:
+                        cid = cat.get("id"); nome = cat.get("descricao","")
+                        if cid and nome:
+                            await db.execute("INSERT INTO bling_categorias (bling_id, nome) VALUES ($1,$2) ON CONFLICT (bling_id) DO UPDATE SET nome=$2", cid, nome)
+                    except: pass
+                return len(dados)
+            c = run_async(_go())
+            log(AGENT, f"Categorias sync: {c}")
+    except: pass
+
 # ponytail: jobs run every N seconds. Adjust intervals based on volume.
 add_job(_sync_pedidos, "bling-pedidos", 300)          # 5 min
 add_job(_sync_nf, "bling-nf", 600)                     # 10 min
 add_job(_sync_contatos, "bling-contatos", 1800)        # 30 min
 add_job(_sync_cr_cp, "bling-cr-cp", 3600)              # 1 hour
+add_job(_sync_categorias, "bling-categorias", 7200)     # 2 hours
