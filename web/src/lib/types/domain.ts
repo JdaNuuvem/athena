@@ -79,6 +79,14 @@ export interface Product {
   nome: string;
   valor: number;
   total_variacoes: number;
+  imagem_url?: string;
+  categoria?: string;
+  estoque_atual?: number;
+  margem_pct?: number;
+  receita_30d?: number;
+  vendidos_30d?: number;
+  total_lojas?: number;
+  estoque_lojas?: Array<{ loja: string; preco: number; status: string }>;
 }
 
 export interface BlingProduct {

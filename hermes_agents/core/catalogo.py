@@ -15,6 +15,12 @@ def _ensure_tables():
             categoria VARCHAR(100), marca VARCHAR(100), peso_bruto DECIMAL(10,3),
             created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW()
         )""")
+        # ── Estoque por loja ──
+        await db.execute("""CREATE TABLE IF NOT EXISTS estoque_lojas (
+            id SERIAL PRIMARY KEY, sku VARCHAR(50) NOT NULL, loja VARCHAR(50) NOT NULL,
+            quantidade DECIMAL(12,3) DEFAULT 0, data_atualizacao TIMESTAMP DEFAULT NOW(),
+            UNIQUE (sku, loja)
+        )""")
         
         # ── Colunas de hierarquia pai/filho ──
         await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS id_bling BIGINT")
@@ -31,8 +37,10 @@ def _ensure_tables():
         except Exception as e:
             log(AGENT, f"pg_trgm indisponivel (permissoes?): {e}")
         # ── Covering indexes for PDV subqueries ──
-        await db.execute("CREATE INDEX IF NOT EXISTS idx_anuncios_sku_preco ON anuncios (sku, marketplace, preco)")
-        await db.execute("CREATE INDEX IF NOT EXISTS idx_estoque_lojas_sku_qtd ON estoque_lojas (sku, quantidade)")
+        try:
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_anuncios_sku_preco ON anuncios (sku, marketplace, preco)")
+        except Exception as e:
+            log(AGENT, f"idx_anuncios_sku_preco skip: {e}")
         # ── Migracao: popular a partir de tabelas existentes ──
         count = await db.fetchval("SELECT COUNT(*) FROM catalogo_produtos")
         if count == 0:

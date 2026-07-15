@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { api } from "@/lib/api";
 import { fmtBRL } from "@/lib/format";
 import { Can } from "@/lib/auth";
@@ -34,6 +34,7 @@ export default function CrudPanel({ tabela, columns, formFields, title, permissi
   const [modal, setModal] = useState<{ open: boolean; mode: "create" | "edit"; row?: Record<string, unknown> }>({ open: false, mode: "create" });
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
+  const [busca, setBusca] = useState("");
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -81,17 +82,34 @@ export default function CrudPanel({ tabela, columns, formFields, title, permissi
     catch (e) { alert(String(e)); }
   };
 
+  const filtered = useMemo(() => {
+    if (!busca) return data;
+    const q = busca.toLowerCase();
+    return data.filter(row =>
+      columns.some(c => String(row[c.key] ?? "").toLowerCase().includes(q))
+    );
+  }, [data, busca, columns]);
+
   const actionCol = columns.length > 0 ? 1 : 0;
 
   return (
     <div className="space-y-3">
       {title && <h3 className="text-sm font-semibold text-neutral-200">{title}</h3>}
-      {formFields && formFields.length > 0 && (
-        <Can permission={`${permissionPrefix}:create`}>
-          <button onClick={openCreate}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1.5 rounded-lg transition-colors">+ Novo</button>
-        </Can>
-      )}
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          placeholder="Buscar..."
+          value={busca}
+          onChange={e => setBusca(e.target.value)}
+          className="w-48 bg-neutral-800 border border-neutral-700 rounded px-3 py-1.5 text-xs text-neutral-200 placeholder-neutral-500 focus:outline-none focus:border-indigo-500"
+        />
+        {formFields && formFields.length > 0 && (
+          <Can permission={`${permissionPrefix}:create`}>
+            <button onClick={openCreate}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1.5 rounded-lg transition-colors">+ Novo</button>
+          </Can>
+        )}
+      </div>
 
       {loading ? <p className="text-xs text-neutral-500">Carregando...</p> :
        error ? <p className="text-xs text-red-400">{error}</p> : (
@@ -104,7 +122,7 @@ export default function CrudPanel({ tabela, columns, formFields, title, permissi
               </tr>
             </thead>
             <tbody>
-              {data.map(row => (
+              {filtered.map(row => (
                 <tr key={String(row.id)} className="border-b border-neutral-700/50 hover:bg-neutral-700/30 text-neutral-300">
                   {columns.map(c => (
                     <td key={c.key} className="px-4 py-2.5">
@@ -123,7 +141,7 @@ export default function CrudPanel({ tabela, columns, formFields, title, permissi
                   )}
                 </tr>
               ))}
-              {data.length === 0 && (
+              {filtered.length === 0 && (
                 <tr><td colSpan={columns.length + actionCol} className="px-4 py-6 text-center text-neutral-500">Nenhum registro encontrado</td></tr>
               )}
             </tbody>

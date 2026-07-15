@@ -1,12 +1,13 @@
 import { Metadata } from "next";
 import AgentClientPage from "./client";
 
-export function generateStaticParams() {
-  return [{ id: "index" }];
+type Props = { params: Promise<{ id: string }> };
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { id } = await params;
+  return { title: `Agente ${id} — Hermes` };
 }
 
-export const metadata: Metadata = { title: "Agente — Hermes" };
-
-export default function Page() {
+export default function Page({ params }: Props) {
   return <AgentClientPage />;
 }

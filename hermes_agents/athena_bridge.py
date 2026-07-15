@@ -2933,23 +2933,46 @@ def listar_produtos():
         offset = (pagina - 1) * por_pagina
         cur.execute(f"SELECT COUNT(*) FROM catalogo_produtos c WHERE {sql_where}")
         count = cur.fetchone()[0]
-        # ponytail: usa catalogo_produtos (SSOT) que unifica fichas_tecnicas + anuncios + produtos
-        cur.execute(f"""
-            SELECT c.id, c.sku, c.descricao AS nome, c.imagem_url,
-                   COALESCE(c.categoria, '') AS categoria,
-                   COALESCE(a.preco, 0) AS valor,
-                   (SELECT COUNT(*) FROM catalogo_produtos f WHERE f.sku_pai = c.sku) AS total_variacoes,
-                   COALESCE((SELECT SUM(e.quantidade) FROM estoque_lojas e WHERE e.sku = c.sku), 0) AS estoque_atual,
-                   COALESCE(m.margem_pct, 0) AS margem_pct,
-                   COALESCE(m.receita_total, 0) AS receita_30d,
-                   COALESCE(m.quantidade_vendida, 0) AS vendidos_30d
-            FROM catalogo_produtos c
-            LEFT JOIN anuncios a ON a.sku = c.sku AND a.marketplace = 'bling'
-            LEFT JOIN margens_diarias m ON m.sku = c.sku AND m.data = CURRENT_DATE
-            WHERE {sql_where}
-            ORDER BY c.id DESC
-            LIMIT {por_pagina} OFFSET {offset}
-        """)
+        # ponytail: resolve estoque com subquery tolerante a tabela ausente
+        _estoque_sub = "COALESCE((SELECT SUM(e.quantidade) FROM estoque_lojas e WHERE e.sku = c.sku), 0)"
+        cur.execute(f"SELECT COUNT(*) FROM catalogo_produtos c WHERE {sql_where}")
+        count = cur.fetchone()[0]
+        try:
+            cur.execute(f"""
+                SELECT c.id, c.sku, c.descricao AS nome, c.imagem_url,
+                       COALESCE(c.categoria, '') AS categoria,
+                       COALESCE(a.preco, 0) AS valor,
+                       (SELECT COUNT(*) FROM catalogo_produtos f WHERE f.sku_pai = c.sku) AS total_variacoes,
+                       {_estoque_sub} AS estoque_atual,
+                       COALESCE(m.margem_pct, 0) AS margem_pct,
+                       COALESCE(m.receita_total, 0) AS receita_30d,
+                       COALESCE(m.quantidade_vendida, 0) AS vendidos_30d
+                FROM catalogo_produtos c
+                LEFT JOIN anuncios a ON a.sku = c.sku AND a.marketplace = 'bling'
+                LEFT JOIN margens_diarias m ON m.sku = c.sku AND m.data = CURRENT_DATE
+                WHERE {sql_where}
+                ORDER BY c.id DESC
+                LIMIT {por_pagina} OFFSET {offset}
+            """)
+        except Exception:
+            conn.rollback()
+            cur = conn.cursor()
+            cur.execute(f"""
+                SELECT c.id, c.sku, c.descricao AS nome, c.imagem_url,
+                       COALESCE(c.categoria, '') AS categoria,
+                       COALESCE(a.preco, 0) AS valor,
+                       (SELECT COUNT(*) FROM catalogo_produtos f WHERE f.sku_pai = c.sku) AS total_variacoes,
+                       0 AS estoque_atual,
+                       COALESCE(m.margem_pct, 0) AS margem_pct,
+                       COALESCE(m.receita_total, 0) AS receita_30d,
+                       COALESCE(m.quantidade_vendida, 0) AS vendidos_30d
+                FROM catalogo_produtos c
+                LEFT JOIN anuncios a ON a.sku = c.sku AND a.marketplace = 'bling'
+                LEFT JOIN margens_diarias m ON m.sku = c.sku AND m.data = CURRENT_DATE
+                WHERE {sql_where}
+                ORDER BY c.id DESC
+                LIMIT {por_pagina} OFFSET {offset}
+            """)
         rows = _dicts(cur)
         skus = [r["sku"] for r in rows]
         if skus:

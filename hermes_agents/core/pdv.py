@@ -183,7 +183,19 @@ def fechar_turno(turno_id: int, saldo_fechamento: float, observacoes: str = "") 
 def buscar_produtos(q: str, limit: int = 15) -> list:
     async def _go():
         db = await get_db()
-        rows = await db.fetch("SELECT id, codigo, nome, preco, estoque_atual, situacao FROM produtos WHERE (codigo ILIKE $1 OR nome ILIKE $1 OR CAST(id AS TEXT) = $2) AND situacao = 'A' LIMIT $3", f"%{q}%", q, limit)
+        rows = await db.fetch("""
+            SELECT c.id, c.sku AS codigo, c.descricao AS nome,
+                   COALESCE(
+                       (SELECT a.preco FROM anuncios a WHERE a.sku = c.sku AND a.marketplace = 'bling' LIMIT 1),
+                       (SELECT a.preco FROM anuncios a WHERE a.sku = c.sku ORDER BY a.preco ASC LIMIT 1),
+                       0
+                   ) AS preco,
+                   COALESCE((SELECT SUM(e.quantidade) FROM estoque_lojas e WHERE e.sku = c.sku), 0) AS estoque_atual,
+                   'A' AS situacao
+            FROM catalogo_produtos c
+            WHERE c.situacao = 'A' AND (c.sku ILIKE $1 OR c.descricao ILIKE $1 OR CAST(c.id AS TEXT) = $2)
+            ORDER BY c.id DESC LIMIT $3
+        """, f"%{q}%", q, limit)
         return [dict(r) for r in rows]
     try: return run_async(_go())
     except: return []

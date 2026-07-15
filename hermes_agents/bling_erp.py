@@ -244,8 +244,13 @@ def sincronizar_produtos() -> dict:
 
                         # Upsert fichas_tecnicas
                         await db.execute("INSERT INTO fichas_tecnicas (sku, descricao) VALUES ($1, $2) ON CONFLICT (sku) DO NOTHING", sku, nome)
-                        # Upsert catalogo_produtos (agora com id_bling)
-                        await db.execute("INSERT INTO catalogo_produtos (sku, descricao, id_bling) VALUES ($1, $2, $3) ON CONFLICT (sku) DO UPDATE SET descricao = $2, id_bling = $3", sku, nome, bid)
+                        # Upsert catalogo_produtos (agora com id_bling, imagem_url, situacao)
+                        imagem = p.get("imagemURL") or p.get("urlImagem") or ""
+                        if not imagem and isinstance(p.get("imagem"), dict):
+                            imagem = (p["imagem"] or {}).get("link") or ""
+                        await db.execute(
+                            "INSERT INTO catalogo_produtos (sku, descricao, id_bling, imagem_url, situacao) VALUES ($1, $2, $3, $4, 'A') ON CONFLICT (sku) DO UPDATE SET descricao = $2, id_bling = $3, imagem_url = COALESCE($4, catalogo_produtos.imagem_url)",
+                            sku, nome, bid, imagem)
                         # Upsert anuncios
                         await db.execute("INSERT INTO anuncios (sku, marketplace, preco, status) VALUES ($1, 'bling', $2, 'ativo') ON CONFLICT (sku, marketplace) WHERE anuncio_id IS NULL DO UPDATE SET preco = $2", sku, preco)
 
