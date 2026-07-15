@@ -33,18 +33,26 @@ export default function EstoquePage() {
   const [bulkQty, setBulkQty] = useState(0);
   const [bulkDep, setBulkDep] = useState<number>(0);
 
+  const [grupos, setGrupos] = useState<any[]>([]);
+  const [avulsos, setAvulsos] = useState<any[]>([]);
+  const [expandedG, setExpandedG] = useState<Set<number>>(new Set());
+  const [viewMode, setViewMode] = useState<"agrupado" | "flat">("agrupado");
+
   // Stock modal
   const [modalProduto, setModalProduto] = useState<StockRow | null>(null);
 
   const carregar = useCallback(async () => {
     try {
       setLoading(true); setErro(null);
-      const [prodR, depR] = await Promise.all([
+      const [prodR, depR, groupedR] = await Promise.all([
         listarBlingProdutos(1, 200),
         listarBlingDepositos().catch(() => ({ data: [] })),
+        fetch("/api/bling/produtos/agrupados?limite=100").then(r => r.json()).catch(() => ({ grupos: [], avulsos: [] })),
       ]);
       const deps: BlingDeposito[] = depR.data || [];
       setDepositos(deps);
+      setGrupos(groupedR.grupos || []);
+      setAvulsos(groupedR.avulsos || []);
       if (selectedDeps.size === 0 && deps.length > 0) {
         setSelectedDeps(new Set([deps[0].id]));
       }
@@ -190,6 +198,74 @@ export default function EstoquePage() {
       </Can>
 
       {/* Table */}
+      {/* View mode toggle */}
+      <div className="flex items-center gap-2">
+        <button onClick={() => setViewMode("agrupado")} className={"px-3 py-1 text-xs rounded-lg " + (viewMode === "agrupado" ? "bg-indigo-600 text-white" : "bg-neutral-700 text-neutral-400")}>Agrupado (variações)</button>
+        <button onClick={() => setViewMode("flat")} className={"px-3 py-1 text-xs rounded-lg " + (viewMode === "flat" ? "bg-indigo-600 text-white" : "bg-neutral-700 text-neutral-400")}>Lista Simples</button>
+      </div>
+
+      {/* Grouped view */}
+      {viewMode === "agrupado" && !loading && (
+        <div className="space-y-3">
+          {grupos.map((g: any, gi: number) => {
+            const isExpanded = expandedG.has(gi);
+            const pai = g.pai || {};
+            const filhos: any[] = g.filhos || [];
+            const totalFilhos = filhos.reduce((s: number, f: any) => s + (f.estoque?.saldoVirtualTotal ?? 0), 0);
+            const paiId = pai.id || gi;
+            return (
+              <div key={gi} className="bg-neutral-800 border border-neutral-700 rounded-lg overflow-hidden">
+                <div className="flex items-center px-3 py-2 cursor-pointer hover:bg-neutral-750" onClick={() => { const s = new Set(expandedG); s.has(gi) ? s.delete(gi) : s.add(gi); setExpandedG(s); }}>
+                  <span className="text-neutral-400 text-xs mr-2">{isExpanded ? "▼" : "▶"}</span>
+                  {pai.imagemURL ? <img src={pai.imagemURL} alt="" className="w-8 h-8 object-cover rounded mr-3" /> : <div className="w-8 h-8 rounded bg-neutral-700 mr-3 flex items-center justify-center text-[8px] text-neutral-500">IMG</div>}
+                  <div className="flex-1">
+                    <span className="text-sm font-semibold text-neutral-200">{pai.nome || pai.codigo || "Produto " + paiId}</span>
+                    <span className="text-xs text-neutral-500 ml-2">{filhos.length} variações</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs text-neutral-400">{totalFilhos} total</span>
+                  </div>
+                </div>
+                {isExpanded && (
+                  <div className="border-t border-neutral-700">
+                    <table className="w-full text-xs">
+                      <thead><tr className="text-neutral-500 border-b border-neutral-700/50"><th className="text-left p-2 pl-10">SKU</th><th className="text-left p-2">Variação</th><th className="text-right p-2">Preço</th><th className="text-right p-2">Estoque</th><th className="text-center p-2">Status</th></tr></thead>
+                      <tbody>
+                        {filhos.map((f: any, fi: number) => (
+                          <tr key={fi} className={"border-b border-neutral-700/30 " + (fi % 2 === 0 ? "bg-neutral-800/50" : "")}>
+                            <td className="p-2 pl-10 text-neutral-300 font-mono text-[11px]">{f.codigo}</td>
+                            <td className="p-2 text-neutral-400 text-[11px]">{f.nome?.replace(pai.nome || "", "").trim() || f.codigo}</td>
+                            <td className="p-2 text-right text-emerald-400">R$ {Number(f.preco || 0).toFixed(2)}</td>
+                            <td className="p-2 text-right text-neutral-300">{f.estoque?.saldoVirtualTotal ?? f.saldoFisicoTotal ?? "—"}</td>
+                            <td className="p-2 text-center"><span className={"px-1.5 py-0.5 rounded text-[9px] " + (f.situacao === "A" ? "bg-emerald-900/30 text-emerald-400" : "bg-neutral-700 text-neutral-400")}>{f.situacao === "A" ? "Ativo" : "Inativo"}</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {avulsos.length > 0 && (
+            <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-3">
+              <h3 className="text-xs font-semibold text-neutral-400 mb-2">Produtos sem variação ({avulsos.length})</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {avulsos.map((a: any, ai: number) => (
+                  <div key={ai} className="flex items-center gap-2 bg-neutral-750 rounded px-2 py-1.5">
+                    {a.imagemURL ? <img src={a.imagemURL} alt="" className="w-6 h-6 rounded" /> : <div className="w-6 h-6 rounded bg-neutral-700" />}
+                    <div className="min-w-0"><div className="text-[10px] text-neutral-300 truncate">{a.nome || a.codigo}</div><div className="text-[9px] text-emerald-400">R$ {Number(a.preco || 0).toFixed(2)}</div></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Flat view */}
+      {viewMode === "flat" && (
+      <>
       {loading ? <div className="text-neutral-500 text-sm py-8 text-center">Carregando estoque...</div> : filtered.length === 0 ? (
         <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-8 text-center"><p className="text-neutral-400 text-sm">Nenhum produto encontrado</p></div>
       ) : (
@@ -242,6 +318,8 @@ export default function EstoquePage() {
           onClose={() => setModalProduto(null)}
           onSaved={() => { setModalProduto(null); carregar(); }}
         />
+      )}
+      </>
       )}
     </div>
   );

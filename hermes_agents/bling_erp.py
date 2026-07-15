@@ -275,6 +275,54 @@ def atualizar_situacao_produtos(ids: list, situacao: str) -> dict:
 
 # ── Depósitos e Estoque ──
 
+
+def listar_produtos_agrupados(pagina: int = 1, limite: int = 100) -> dict:
+    """Lista produtos agrupados por pai/filho (variacoes)."""
+    raw = listar_produtos(pagina, limite)
+    produtos = raw.get("data", [])
+    if not produtos:
+        return {"grupos": [], "avulsos": [], "total": 0}
+
+    # Separar pais e filhos
+    pais_ids = set()
+    filhos_por_pai = {}
+    avulsos = []
+    filhos_sem_pai = []
+
+    for p in produtos:
+        pid = p.get("idProdutoPai")
+        if pid:
+            if pid not in filhos_por_pai:
+                filhos_por_pai[pid] = []
+            filhos_por_pai[pid].append(p)
+            pais_ids.add(pid)
+        else:
+            # Pode ser um pai real ou avulso
+            avulsos.append(p)
+
+    # Buscar dados dos pais (se nao estao na lista atual)
+    grupos = []
+    for pid in pais_ids:
+        pai = next((a for a in avulsos if a.get("id") == pid), None)
+        if not pai:
+            # Buscar o pai via API
+            try:
+                parent_raw = _request(f"produtos/{pid}")
+                pai = parent_raw.get("data", {}) if isinstance(parent_raw, dict) else {}
+            except:
+                pai = {"id": pid, "codigo": f"PAI-{pid}", "nome": "Produto Pai"}
+        filhos = filhos_por_pai.get(pid, [])
+        grupos.append({"pai": pai, "filhos": filhos})
+        # Remover pais que ja estao em avulsos para nao duplicar
+        avulsos = [a for a in avulsos if a.get("id") != pid]
+
+    return {
+        "grupos": grupos,
+        "avulsos": avulsos,
+        "total": len(grupos) + len(avulsos),
+        "total_filhos": sum(len(g["filhos"]) for g in grupos),
+    }
+
 def listar_depositos(pagina: int = 1, limite: int = 100) -> dict:
     """Lista depositos/lojas internas do Bling."""
     return _request("depositos", {"pagina": pagina, "limite": limite})

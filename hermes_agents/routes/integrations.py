@@ -440,7 +440,7 @@ def test_whatsapp():
 
 from bling_erp import (
     status as bling_status_fn, get_auth_url, exchange_code,
-    listar_produtos, criar_produto, atualizar_produto, deletar_produto,
+    listar_produtos, listar_produtos_agrupados, criar_produto, atualizar_produto, deletar_produto,
     atualizar_situacao_produtos,
     listar_depositos, obter_saldo_deposito, atualizar_estoque_deposito,
     listar_pedidos, listar_contas_receber, listar_notas_fiscais,
@@ -479,6 +479,13 @@ def api_produtos():
     limite = request.args.get("limite", 100, type=int)
     return jsonify(listar_produtos(pagina, limite))
 
+
+
+@bling_bp.route("/produtos/agrupados")
+def api_produtos_agrupados():
+    pagina = request.args.get("pagina", 1, type=int)
+    limite = request.args.get("limite", 100, type=int)
+    return jsonify(listar_produtos_agrupados(pagina, limite))
 
 @bling_bp.route("/produtos", methods=["POST"])
 def api_criar_produto():
