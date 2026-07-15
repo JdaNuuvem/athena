@@ -492,6 +492,8 @@ from bling_erp import (
     listar_depositos, obter_saldo_deposito, atualizar_estoque_deposito,
     listar_pedidos, listar_contas_receber, listar_notas_fiscais,
     get_nfe_detail, get_nfe_xml,
+    listar_contatos, get_contato, listar_categorias, get_categoria,
+    get_pedido_detalhe, listar_contas_pagar, listar_formas_pagamento,
     resumo_vendas, sincronizar_produtos, sincronizar_pedidos,
     listar_webhooks, criar_webhook, deletar_webhook,
     listar_notificacoes, confirmar_leitura_notificacao,
@@ -599,6 +601,44 @@ def api_sincronizar_pedidos():
 def api_resumo_vendas():
     dias = request.args.get("dias", 30, type=int)
     return jsonify(resumo_vendas(dias))
+
+
+
+@bling_bp.route("/contatos")
+def api_contatos():
+    pagina = request.args.get("pagina", 1, type=int)
+    limite = request.args.get("limite", 100, type=int)
+    tipo = request.args.get("tipo", "")
+    return jsonify(listar_contatos(pagina, limite, tipo))
+
+@bling_bp.route("/contatos/<int:id_contato>")
+def api_contato_detalhe(id_contato):
+    return jsonify(get_contato(id_contato))
+
+@bling_bp.route("/categorias")
+def api_categorias():
+    pagina = request.args.get("pagina", 1, type=int)
+    limite = request.args.get("limite", 100, type=int)
+    return jsonify(listar_categorias(pagina, limite))
+
+@bling_bp.route("/categorias/<int:id_categoria>")
+def api_categoria_detalhe(id_categoria):
+    return jsonify(get_categoria(id_categoria))
+
+@bling_bp.route("/vendas/<int:id_pedido>")
+def api_pedido_detalhe(id_pedido):
+    return jsonify(get_pedido_detalhe(id_pedido))
+
+@bling_bp.route("/financeiro/contas-pagar")
+def api_contas_pagar():
+    pagina = request.args.get("pagina", 1, type=int)
+    limite = request.args.get("limite", 100, type=int)
+    situacao = request.args.get("situacao", "")
+    return jsonify(listar_contas_pagar(pagina, limite, situacao))
+
+@bling_bp.route("/formas-pagamento")
+def api_formas_pagamento():
+    return jsonify(listar_formas_pagamento())
 
 
 @bling_bp.route("/financeiro/contas-receber")
