@@ -82,13 +82,21 @@ class FactoryConfig:
 # ---------------------------------------------------------------------------
 
 _db_pool: Optional[Any] = None
+_db_pool_loop: Optional[Any] = None
 
 async def get_db():
-    """Retorna ou cria pool de conexões asyncpg."""
-    global _db_pool
+    """Retorna ou cria pool de conexões asyncpg.
+
+    run_async() roda cada chamada em um asyncio.run() novo (loop novo e
+    descartado ao final). Um pool asyncpg fica preso ao loop em que foi
+    criado, entao cachear _db_pool globalmente quebra silenciosamente a
+    partir da segunda chamada. Recriamos o pool sempre que o loop mudar.
+    """
+    global _db_pool, _db_pool_loop
     if not HAS_ASYNCPG:
         raise RuntimeError("asyncpg não instalado")
-    if _db_pool is None:
+    current_loop = asyncio.get_running_loop()
+    if _db_pool is None or _db_pool_loop is not current_loop:
         cfg = FactoryConfig.load()
         _db_pool = await asyncpg.create_pool(
             host=cfg.db_host,
@@ -99,6 +107,7 @@ async def get_db():
             min_size=2,
             max_size=10,
         )
+        _db_pool_loop = current_loop
     return _db_pool
 
 def run_async(coro):
