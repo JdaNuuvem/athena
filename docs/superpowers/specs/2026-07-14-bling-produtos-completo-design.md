@@ -1,7 +1,11 @@
 # Bling — Aba de Produtos completa (busca, filtros, dados completos)
 
 **Data:** 2026-07-14
-**Status:** Aprovado para implementação
+**Status:** SUPERADO por [2026-07-15-produtos-hierarquia-pai-filho-design.md](2026-07-15-produtos-hierarquia-pai-filho-design.md) —
+nunca chegou a ser implementado (tabela `bling_produtos` não existe no código). Em 2026-07-15 decidimos
+consolidar produtos do Bling em `catalogo_produtos` (SSOT) em vez de criar uma tabela paralela, para não
+sincronizar a mesma API do Bling duas vezes com dois caches divergentes. Mantido aqui só para histórico; não
+implementar o modelo de dados abaixo.
 
 ## Contexto
 
