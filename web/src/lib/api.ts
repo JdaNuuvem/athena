@@ -452,6 +452,29 @@ export async function confirmarLeituraNotificacao(
   return res.json();
 }
 
+
+export async function listarBlingContatos(pagina = 1, limite = 100, tipo = ""): Promise<{ data: unknown[] }> {
+  const params = new URLSearchParams({ pagina: String(pagina), limite: String(limite) });
+  if (tipo) params.set("tipo", tipo);
+  const res = await fetch("/api/bling/contatos?" + params);
+  return res.json();
+}
+
+export async function listarBlingCategorias(pagina = 1, limite = 100): Promise<{ data: unknown[] }> {
+  const res = await fetch("/api/bling/categorias?pagina=" + pagina + "&limite=" + limite);
+  return res.json();
+}
+
+export async function getBlingPedidoDetalhe(id: number): Promise<{ data: unknown }> {
+  const res = await fetch("/api/bling/vendas/" + id);
+  return res.json();
+}
+
+export async function listarBlingContasPagar(pagina = 1, limite = 100): Promise<{ data: unknown[] }> {
+  const res = await fetch("/api/bling/financeiro/contas-pagar?pagina=" + pagina + "&limite=" + limite);
+  return res.json();
+}
+
 // ── NFe Download ──
 
 export function baixarNFeXML(idNota: number): void {
