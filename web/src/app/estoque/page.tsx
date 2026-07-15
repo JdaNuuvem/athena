@@ -45,9 +45,9 @@ export default function EstoquePage() {
     try {
       setLoading(true); setErro(null);
       const [prodR, depR, groupedR] = await Promise.all([
-        listarBlingProdutos(1, 200),
+        listarBlingProdutos(1, 200).catch(() => ({ data: [], error: "Bling indisponivel" })),
         listarBlingDepositos().catch(() => ({ data: [] })),
-        fetch("/api/bling/produtos/agrupados?limite=100").then(r => r.json()).catch(() => ({ grupos: [], avulsos: [] })),
+        fetch("/api/bling/produtos/agrupados?limite=100").then(r => r.ok ? r.json() : ({ grupos: [], avulsos: [] })).catch(() => ({ grupos: [], avulsos: [] })),
       ]);
       const deps: BlingDeposito[] = depR.data || [];
       setDepositos(deps);

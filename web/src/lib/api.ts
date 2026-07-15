@@ -277,6 +277,9 @@ export async function listarBlingProdutos(
   limite = 100
 ): Promise<BlingProdutosResponse> {
   const res = await fetch(`/api/bling/produtos?pagina=${pagina}&limite=${limite}`);
+  if (!res.ok) return { data: [], error: `HTTP ${res.status}` };
+  const ct = res.headers.get("content-type") || "";
+  if (!ct.includes("application/json")) return { data: [], error: "resposta nao-JSON" };
   return res.json();
 }
 
@@ -335,7 +338,8 @@ export async function listarBlingDepositos(
   limite = 100
 ): Promise<{ data: BlingDeposito[] }> {
   const res = await fetch(`/api/bling/depositos?pagina=${pagina}&limite=${limite}`);
-  return res.json();
+  if (!res.ok) return { data: [] };
+  return res.json().catch(() => ({ data: [] }));
 }
 
 export async function obterSaldoDeposito(
