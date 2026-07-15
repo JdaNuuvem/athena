@@ -20,7 +20,7 @@ const AuthContext = createContext<AuthContextType>({
 const fetchMe = (): Promise<{ id: string; name: string; role: string; roles: string[]; permissions: string[] } | null> => {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
   if (!token) return Promise.resolve(null);
-  return fetch("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } })
+  return fetch("/api/me", { headers: { Authorization: `Bearer ${token}` } })
     .then(r => r.ok ? r.json() : null)
     .catch(() => null);
 };
@@ -40,7 +40,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const hasPermission = (code: string) => {
-    if (permissions.length === 0) return false;
+    if (permissions.length === 0) return true; // ponytail: fallback — mostrar botoes ate carregar permissoes
+    if (permissions.includes("*")) return true;
     return permissions.includes(code);
   };
 
