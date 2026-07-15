@@ -1,5 +1,6 @@
 """Catalogo SSOT — Fonte unica de verdade para Produtos. Todas as tabelas referenciam este catalogo."""
 from core import get_db, run_async, log, hoje
+from core.bling_logger import log_alteracao as bling_log_change
 
 AGENT = "Catalogo SSOT"
 
@@ -20,6 +21,18 @@ def _ensure_tables():
         await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS sku_pai VARCHAR(50)")
         await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS atributo VARCHAR(200)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_catalogo_produtos_sku_pai ON catalogo_produtos (sku_pai)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS imagem_url VARCHAR(500)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS situacao VARCHAR(1) DEFAULT 'A'")
+        # ── Full-text search indexes (pg_trgm for ILIKE with leading wildcard) ──
+        try:
+            await db.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_catalogo_sku_trgm ON catalogo_produtos USING gin (sku gin_trgm_ops)")
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_catalogo_desc_trgm ON catalogo_produtos USING gin (descricao gin_trgm_ops)")
+        except Exception as e:
+            log(AGENT, f"pg_trgm indisponivel (permissoes?): {e}")
+        # ── Covering indexes for PDV subqueries ──
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_anuncios_sku_preco ON anuncios (sku, marketplace, preco)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_estoque_lojas_sku_qtd ON estoque_lojas (sku, quantidade)")
         # ── Migracao: popular a partir de tabelas existentes ──
         count = await db.fetchval("SELECT COUNT(*) FROM catalogo_produtos")
         if count == 0:

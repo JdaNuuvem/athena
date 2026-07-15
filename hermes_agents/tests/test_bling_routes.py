@@ -19,7 +19,7 @@ fake_pool.acquire.return_value = fake_conn
 patcher = patch("asyncpg.create_pool", return_value=fake_pool)
 patcher.start()
 
-from hermes_agents.routes.integrations import bling_bp
+from routes.integrations import bling_bp
 from flask import Flask
 import unittest
 
@@ -47,17 +47,17 @@ class TestBlingFlaskRoutes(unittest.TestCase):
         self.assertIn("url", data)
 
     def test_produtos_route(self):
-        with patch("hermes_agents.routes.integrations.listar_produtos", return_value={"data": []}):
+        with patch("routes.integrations.listar_produtos", return_value={"data": []}):
             rv = self.client.get("/api/bling/produtos")
             self.assertIn(rv.status_code, [200, 401])
 
     def test_depositos_route(self):
-        with patch("hermes_agents.routes.integrations.listar_depositos", return_value={"data": []}):
+        with patch("routes.integrations.listar_depositos", return_value={"data": []}):
             rv = self.client.get("/api/bling/depositos")
             self.assertIn(rv.status_code, [200, 401])
 
     def test_vendas_route(self):
-        with patch("hermes_agents.routes.integrations.listar_pedidos", return_value={"data": []}):
+        with patch("routes.integrations.listar_pedidos", return_value={"data": []}):
             rv = self.client.get("/api/bling/vendas")
             self.assertIn(rv.status_code, [200, 401])
 
@@ -70,7 +70,7 @@ class TestBlingFlaskRoutes(unittest.TestCase):
         self.assertIn(rv.status_code, [200, 401])
 
     def test_notificacoes_route(self):
-        with patch("hermes_agents.routes.integrations.listar_notificacoes", return_value={"data": []}):
+        with patch("routes.integrations.listar_notificacoes", return_value={"data": []}):
             rv = self.client.get("/api/bling/notificacoes")
             self.assertIn(rv.status_code, [200, 401])
 
