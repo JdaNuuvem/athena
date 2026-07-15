@@ -9,6 +9,7 @@ import "./globals.css";
 const NAV_ITEMS: Array<{href:string;label:string;icon:string}> = [
   { href: "/dashboard", label: "Dashboard", icon: "⊞" },
   { href: "/cadastros", label: "Cadastros", icon: "📋" },
+  { href: "/lojas", label: "Lojas", icon: "🏪" },
   { href: "/produtos", label: "Produtos", icon: "📦" },
   { href: "/estoque", label: "Estoque", icon: "🏭" },
   { href: "/compras", label: "Compras", icon: "🛒" },
