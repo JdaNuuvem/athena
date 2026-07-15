@@ -237,6 +237,10 @@ def sincronizar_produtos() -> dict:
                             ON CONFLICT (sku) DO NOTHING
                         """, sku, nome)
                         await db.execute("""
+                            INSERT INTO catalogo_produtos (sku, descricao) VALUES ($1, $2)
+                            ON CONFLICT (sku) DO UPDATE SET descricao = $2
+                        """, sku, nome)
+                        await db.execute("""
                             INSERT INTO anuncios (sku, marketplace, preco, status)
                             VALUES ($1, 'bling', $2, 'ativo')
                             ON CONFLICT (sku, marketplace) WHERE anuncio_id IS NULL

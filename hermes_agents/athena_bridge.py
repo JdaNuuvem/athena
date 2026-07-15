@@ -2920,22 +2920,24 @@ def listar_produtos():
         conn = _db_sync()
         cur = conn.cursor()
         where = ["1=1"]
-        params = []
         if busca:
-            where.append(f"(f.sku ILIKE '%{busca}%' OR f.descricao ILIKE '%{busca}%')")
+            where.append(f"(c.sku ILIKE '%{busca}%' OR c.descricao ILIKE '%{busca}%')")
         if loja:
-            where.append("EXISTS(SELECT 1 FROM anuncios a WHERE a.sku=f.sku AND a.marketplace='%s')" % loja)
+            where.append("EXISTS(SELECT 1 FROM anuncios a WHERE a.sku=c.sku AND a.marketplace='%s')" % loja)
         sql_where = " AND ".join(where)
         offset = (pagina - 1) * por_pagina
-        cur.execute(f"SELECT COUNT(*) FROM fichas_tecnicas f WHERE {sql_where}")
+        cur.execute(f"SELECT COUNT(*) FROM catalogo_produtos c WHERE {sql_where}")
         count = cur.fetchone()[0]
+        # ponytail: usa catalogo_produtos (SSOT) que unifica fichas_tecnicas + anuncios + produtos
         cur.execute(f"""
-            SELECT f.id,f.sku,f.descricao AS nome,COALESCE(m.margem_pct,0) AS margem_pct,
-                   COALESCE(m.receita_total,0) AS receita_30d,COALESCE(m.quantidade_vendida,0) AS vendidos_30d
-            FROM fichas_tecnicas f
-            LEFT JOIN margens_diarias m ON m.sku=f.sku AND m.data=CURRENT_DATE
+            SELECT c.id,c.sku,c.descricao AS nome,
+                   COALESCE(m.margem_pct,0) AS margem_pct,
+                   COALESCE(m.receita_total,0) AS receita_30d,
+                   COALESCE(m.quantidade_vendida,0) AS vendidos_30d
+            FROM catalogo_produtos c
+            LEFT JOIN margens_diarias m ON m.sku=c.sku AND m.data=CURRENT_DATE
             WHERE {sql_where}
-            ORDER BY m.quantidade_vendida DESC NULLS LAST
+            ORDER BY c.id DESC
             LIMIT {por_pagina} OFFSET {offset}
         """)
         rows = _dicts(cur)
