@@ -79,16 +79,57 @@ const versoesMock: Versao[] = [
 const fmtDate = (d: Date) => d.toLocaleDateString("pt-BR")
 const fmtBRL = (v: number) => `R$ ${v.toFixed(2).replace(".", ",")}`
 
+type RawRow = Record<string, unknown>
+async function rawQuery<T extends Record<string, unknown>>(sql: string): Promise<T[]> {
+  const prisma = getPrisma()
+  return (prisma as unknown as { $queryRawUnsafe: (sql: string) => Promise<T[]> }).$queryRawUnsafe(sql)
+}
+
 async function queryNFsFromDB(): Promise<NotaFiscalDoc[] | null> {
   try {
-    const invoices = await getPrisma().invoice.findMany({ orderBy: { generatedAt: 'desc' }, take: 20 })
-    if (invoices.length === 0) return null
-    return invoices.map(inv => ({
-      numero: inv.number,
-      emissao: fmtDate(inv.generatedAt),
-      valor: fmtBRL(inv.amount),
-      status: "Emitida",
-      tipo: "Saída",
+    const rows = await rawQuery<RawRow>(
+      `SELECT numero, data_emissao, valor_nf, status, tipo, xml_url, danfe_url
+       FROM fiscal_notas_fiscais ORDER BY data_emissao DESC LIMIT 20`)
+    if (rows.length === 0) {
+      const invoices = await getPrisma().invoice.findMany({ orderBy: { generatedAt: 'desc' }, take: 20 })
+      if (invoices.length === 0) return null
+      return invoices.map(inv => ({
+        numero: inv.number, emissao: fmtDate(inv.generatedAt),
+        valor: fmtBRL(inv.amount), status: "Emitida", tipo: "Saída",
+      }))
+    }
+    return rows.map((r: RawRow) => ({
+      numero: String(r.numero || ''),
+      emissao: r.data_emissao ? fmtDate(new Date(r.data_emissao as string)) : '—',
+      valor: fmtBRL(Number(r.valor_nf || 0)),
+      status: String(r.status || 'emitida'),
+      tipo: String(r.tipo || 'saida') === 'entrada' ? 'Entrada' : 'Saída',
+    }))
+  } catch { return null }
+}
+
+async function queryXMLsFromDB(): Promise<XMLDoc[] | null> {
+  try {
+    const rows = await rawQuery<RawRow>(
+      `SELECT numero, xml_url, data_emissao FROM fiscal_notas_fiscais WHERE xml_url IS NOT NULL AND xml_url != '' ORDER BY data_emissao DESC LIMIT 20`)
+    if (rows.length === 0) return null
+    return rows.map((r: RawRow) => ({
+      nome: `NFe-${String(r.numero || '')}.xml`,
+      tamanho: '—',
+      data: r.data_emissao ? fmtDate(new Date(r.data_emissao as string)) : '—',
+    }))
+  } catch { return null }
+}
+
+async function queryPDFsFromDB(): Promise<PDFDoc[] | null> {
+  try {
+    const rows = await rawQuery<RawRow>(
+      `SELECT numero, danfe_url, data_emissao FROM fiscal_notas_fiscais WHERE danfe_url IS NOT NULL AND danfe_url != '' ORDER BY data_emissao DESC LIMIT 20`)
+    if (rows.length === 0) return null
+    return rows.map((r: RawRow) => ({
+      nome: `DANFE-${String(r.numero || '')}.pdf`,
+      tamanho: '—',
+      data: r.data_emissao ? fmtDate(new Date(r.data_emissao as string)) : '—',
     }))
   } catch { return null }
 }
@@ -138,6 +179,8 @@ export function registerDocumentosRoutes(server: FastifyInstance): void {
   })
 
   server.get('/api/documentos/xml', async () => {
+    const dbXMLs = await queryXMLsFromDB()
+    if (dbXMLs) return dbXMLs
     try {
       const files = await getPrisma().documentFile.findMany({ where: { type: 'xml' }, orderBy: { createdAt: 'desc' } })
       if (files.length > 0) return files.map(f => ({ nome: f.name, tamanho: f.size, data: fmtDate(f.createdAt) }))
@@ -146,6 +189,8 @@ export function registerDocumentosRoutes(server: FastifyInstance): void {
   })
 
   server.get('/api/documentos/pdf', async () => {
+    const dbPDFs = await queryPDFsFromDB()
+    if (dbPDFs) return dbPDFs
     try {
       const files = await getPrisma().documentFile.findMany({ where: { type: 'pdf' }, orderBy: { createdAt: 'desc' } })
       if (files.length > 0) return files.map(f => ({ nome: f.name, tamanho: f.size, data: fmtDate(f.createdAt) }))
