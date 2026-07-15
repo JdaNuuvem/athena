@@ -1468,6 +1468,33 @@ def pdv_dashboard_api():
     from core.pdv import dashboard as pdv_dash
     return jsonify(pdv_dash())
 
+
+@app.route('/api/pdv/turno/abrir', methods=['POST'])
+def pdv_abrir_turno():
+    data = request.json or {}; from core.pdv import abrir_turno
+    return jsonify(abrir_turno(data.get("caixa_id",0), data.get("operador_id"), data.get("operador",""), float(data.get("saldo_abertura",0))))
+
+@app.route('/api/pdv/turno/<int:id>/fechar', methods=['POST'])
+def pdv_fechar_turno(id):
+    data = request.json or {}; from core.pdv import fechar_turno
+    return jsonify(fechar_turno(id, float(data.get("saldo_fechamento",0)), data.get("observacoes","")))
+
+@app.route('/api/pdv/produtos/buscar', methods=['GET'])
+def pdv_buscar_produtos():
+    from core.pdv import buscar_produtos
+    return jsonify({"data": buscar_produtos(request.args.get("q",""))})
+
+@app.route('/api/pdv/venda/<int:id>/cancelar', methods=['POST'])
+def pdv_cancelar_venda(id):
+    data = request.json or {}; from core.pdv import cancelar_venda
+    return jsonify(cancelar_venda(id, data.get("motivo",""), data.get("operador","")))
+
+@app.route('/api/pdv/historico', methods=['GET'])
+def pdv_historico():
+    from core.pdv import historico_vendas
+    caixa = request.args.get("caixa_id"); di = request.args.get("data_inicio"); df = request.args.get("data_fim")
+    return jsonify({"data": historico_vendas(int(caixa) if caixa else None, di, df)})
+
 @app.route('/api/pdv/caixa/abrir', methods=['POST'])
 def pdv_abrir_caixa():
     data = request.json or {}
@@ -2764,6 +2791,11 @@ def serve_frontend(path):
 
 if __name__ == "__main__":
     # Rodar como servidor Flask
+    try:
+        from core.scheduler import start as start_scheduler
+        start_scheduler()
+    except Exception as e:
+        print(f"[Scheduler] Failed to start: {e}")
     port = int(os.environ.get("PORT", 5000))
     debug = os.environ.get("DEBUG", "false").lower() == "true"
     app.run(host="0.0.0.0", port=port, debug=debug)

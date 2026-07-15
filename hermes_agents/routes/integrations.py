@@ -369,6 +369,29 @@ def bling_sync_receivables():
     return jsonify({"count": len(dados), "errors": []})
 
 
+@integrations_bp.route("/api/bling/sync/contacts", methods=["POST"])
+def bling_sync_contacts():
+    from core.entidades import sincronizar_contatos_bling
+    r = sincronizar_contatos_bling()
+    if r.get("error"): return jsonify({"count": 0, "errors": [r["error"]]})
+    return jsonify({"count": r.get("sync", 0), "errors": []})
+
+
+@integrations_bp.route("/api/bling/contacts", methods=["GET"])
+def bling_contacts():
+    import json
+    async def _go():
+        from core import get_db
+        db = await get_db()
+        rows = await db.fetch("SELECT id, nome, tipo, documento, email, telefone, status FROM cad_clientes ORDER BY id DESC LIMIT 200")
+        return [dict(r) for r in rows]
+    try:
+        from core import run_async
+        data = run_async(_go())
+        return jsonify(data)
+    except: return jsonify([])
+
+
 # --- Test endpoints ---
 
 @integrations_bp.route("/api/test/bling", methods=["GET"])

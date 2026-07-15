@@ -98,6 +98,47 @@ def vincular_todos_clientes() -> dict:
     except: return {"vinculados": 0}
 
 # ─────────────────────────────────────────────────────────
+# Integracao #2b: Sync Contatos do Bling → cad_clientes
+# ─────────────────────────────────────────────────────────
+
+def sincronizar_contatos_bling(pagina: int = 1, limite: int = 100) -> dict:
+    """Sync contatos do Bling para cad_clientes. Cria/atualiza clientes por documento ou nome."""
+    from bling_erp import listar_contatos, get_access_token, get_auth_url
+    token = get_access_token()
+    if not token: return {"error": "Bling nao autenticado", "auth_url": get_auth_url()}
+    r = listar_contatos(pagina, limite)
+    if r.get("error"): return r
+    dados = r.get("data", [])
+    if not dados: return {"sync": 0, "message": "sem dados"}
+    async def _go():
+        db = await get_db()
+        total = 0
+        for c in dados:
+            try:
+                doc = (c.get("numeroDocumento") or "").replace(".","").replace("/","").replace("-","").strip()
+                nome = c.get("nome", "")
+                email = c.get("email", "")
+                telefone = c.get("telefone", "")
+                tipo_pessoa = c.get("tipoPessoa", "F")
+                existing = None
+                if doc:
+                    existing = await db.fetchrow("SELECT id FROM cad_clientes WHERE REPLACE(REPLACE(REPLACE(documento,'.',''),'/',''),'-','') = $1 LIMIT 1", doc)
+                if existing:
+                    await db.execute("""UPDATE cad_clientes SET nome=$1, email=$2, telefone=$3, tipo=$4, updated_at=NOW()
+                        WHERE id=$5""", nome, email, telefone, "PJ" if tipo_pessoa == "J" else "PF", existing["id"])
+                    total += 1
+                else:
+                    row = await db.fetchrow("""INSERT INTO cad_clientes (nome, tipo, documento, email, telefone, status)
+                        VALUES ($1,$2,$3,$4,$5,'ativo') ON CONFLICT (documento) WHERE documento IS NOT NULL AND documento != ''
+                        DO UPDATE SET nome=$1, email=$4, telefone=$5, updated_at=NOW() RETURNING id""",
+                        nome, "PJ" if tipo_pessoa == "J" else "PF", c.get("numeroDocumento",""), email, telefone)
+                    if row: total += 1
+            except Exception as e:
+                log(AGENT, f"Erro sync contato {c.get('nome')}: {e}")
+        return {"sync": total}
+    return run_async(_go())
+
+# ─────────────────────────────────────────────────────────
 # Integracao #3: Fornecedores — migrar compras_fornecedores → cad_fornecedores
 # ─────────────────────────────────────────────────────────
 
