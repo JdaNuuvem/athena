@@ -2867,9 +2867,17 @@ def serve_frontend(path):
     static_dir = Path(__file__).parent / 'dashboard'
     if not path:
         return send_from_directory(static_dir, 'index.html')
+    # ponytail: Next.js static export naming — check .html file first, then directory, then SPA fallback
+    html_file = static_dir / f"{path}.html"
+    if html_file.exists() and html_file.is_file():
+        return send_from_directory(static_dir, f"{path}.html")
     target = static_dir / path
     if target.exists() and target.is_file():
         return send_from_directory(static_dir, path)
+    if target.exists() and target.is_dir():
+        dir_index = target / 'index.html'
+        if dir_index.exists():
+            return send_from_directory(str(target), 'index.html')
     return send_from_directory(static_dir, 'index.html')
 
 if __name__ == "__main__":

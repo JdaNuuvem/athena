@@ -18,8 +18,8 @@ export default function ProdutosPage() {
     setError(null);
     try {
       const r = await api.listarProdutos({ busca: search });
-      setProdutos(r.produtos as Product[]);
-      setTotal(r.total);
+      setProdutos((r.produtos ?? []) as Product[]);
+      setTotal(r.total ?? 0);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erro ao carregar produtos");
     } finally {
