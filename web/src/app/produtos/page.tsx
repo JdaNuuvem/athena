@@ -96,10 +96,8 @@ export default function ProdutosPage() {
               <tr className="border-b border-neutral-800 text-neutral-500 text-[10px] uppercase tracking-wider">
                 <th className="text-left p-3 font-medium">SKU</th>
                 <th className="text-left p-3 font-medium">Nome</th>
-                <th className="text-right p-3 font-medium">Margem</th>
-                <th className="text-right p-3 font-medium">Receita (30d)</th>
-                <th className="text-right p-3 font-medium">Vendidos</th>
-                <th className="text-center p-3 font-medium">Lojas</th>
+                <th className="text-right p-3 font-medium">Valor</th>
+                <th className="text-center p-3 font-medium w-20"></th>
               </tr>
             </thead>
             <tbody>
@@ -114,21 +112,18 @@ export default function ProdutosPage() {
                   onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") navigate(p.sku); }}
                 >
                   <td className="p-3 text-indigo-400 font-mono text-xs numeric">{p.sku}</td>
-                  <td className="p-3 text-neutral-300">{p.nome}</td>
-                  <td className="p-3 text-right numeric">
-                      <span className={Number(p.margem_pct ?? 0) >= 25 ? "text-green-400" : Number(p.margem_pct ?? 0) >= 15 ? "text-yellow-400" : "text-red-400"}>
-                        {Number(p.margem_pct ?? 0).toFixed(1)}%
+                  <td className="p-3 text-neutral-300">
+                    {p.nome}
+                    {(p as any).total_variacoes > 0 && (
+                      <span className="ml-2 text-[10px] bg-indigo-900/30 text-indigo-400 px-1.5 py-0.5 rounded-full">
+                        {(p as any).total_variacoes} variacoes
                       </span>
+                    )}
                   </td>
-                  <td className="p-3 text-right text-neutral-300 numeric">
-                    R$ {Number(p.receita_30d ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                  <td className="p-3 text-right text-emerald-400 numeric font-medium">
+                    R$ {Number((p as any).valor ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                   </td>
-                  <td className="p-3 text-right text-neutral-400 numeric">{p.vendidos_30d ?? 0}</td>
-                  <td className="p-3 text-center">
-                    <span className="text-xs bg-neutral-800 text-neutral-400 px-2 py-0.5 rounded-full numeric">
-                      {p.total_lojas ?? 0}
-                    </span>
-                  </td>
+                  <td className="p-3 text-center text-neutral-500 text-xs">›</td>
                 </tr>
               ))}
               {produtos.length === 0 && (

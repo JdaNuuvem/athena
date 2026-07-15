@@ -77,11 +77,8 @@ export interface ContaFinanceira {
 export interface Product {
   sku: string;
   nome: string;
-  margem_pct: number;
-  receita_30d: number;
-  vendidos_30d: number;
-  estoque_lojas: Array<{ loja: string; preco: number; status: string }>;
-  total_lojas: number;
+  valor: number;
+  total_variacoes: number;
 }
 
 export interface BlingProduct {

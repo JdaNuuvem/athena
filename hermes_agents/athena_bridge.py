@@ -2979,7 +2979,7 @@ def detalhe_produto(sku):
         p["vendas_30d"] = [dict(r, data=str(r["data"])) for r in cur.fetchall()]
         cur.execute("SELECT data,preco_venda FROM vendas WHERE sku=%s ORDER BY data ASC", (sku,))
         p["historico_precos"] = [{"data": str(r["data"]), "preco": float(r["preco_venda"])} for r in cur.fetchall()]
-        for k in ("peso_gramas","tempo_ciclo_segundos","margem_pct","receita_30d","lucro_30d"):
+        for k in ("peso_gramas","tempo_ciclo_segundos","valor"):
             if k in p and p[k] is not None: p[k] = float(p[k])
         cur.close(); conn.close()
         return jsonify(p)

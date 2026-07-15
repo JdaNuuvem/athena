@@ -14,6 +14,12 @@ def _ensure_tables():
             categoria VARCHAR(100), marca VARCHAR(100), peso_bruto DECIMAL(10,3),
             created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW()
         )""")
+        
+        # ── Colunas de hierarquia pai/filho ──
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS id_bling BIGINT")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS sku_pai VARCHAR(50)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS atributo VARCHAR(200)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_catalogo_produtos_sku_pai ON catalogo_produtos (sku_pai)")
         # ── Migracao: popular a partir de tabelas existentes ──
         count = await db.fetchval("SELECT COUNT(*) FROM catalogo_produtos")
         if count == 0:

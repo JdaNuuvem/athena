@@ -75,7 +75,7 @@ export default function ProdutoClientPage() {
 
       {tab === "visao-geral" && <VisaoGeralTab produto={produto} formatarMoeda={formatarMoeda} />}
       {tab === "cadastro" && <CadastroTab />}
-      {tab === "variacoes" && <VariacoesTab />}
+      {tab === "variacoes" && <VariacoesTab variacoes={(produto?.variacoes as any) || []} />}
       {tab === "kits-bom" && <KitsBomTab />}
       {tab === "lotes-series" && <LotesSeriesTab />}
       {tab === "localizacao" && <LocalizacaoTab />}
