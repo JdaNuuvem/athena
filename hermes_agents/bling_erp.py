@@ -22,6 +22,8 @@ BASE_URL = "https://www.bling.com.br/Api/v3"
 # ── Token management (persistido no DB) ──
 # ponytail: env var > DB config > cache. Sobrevive a restarts.
 
+_TOKEN = {"access": "", "refresh": ""}
+
 def get_access_token() -> str:
     t = os.environ.get("BLING_ACCESS_TOKEN", "")
     if t: return t

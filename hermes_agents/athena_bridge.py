@@ -158,6 +158,11 @@ from routes.webhooks import webhook_bp
 app.register_blueprint(bling_bp)
 app.register_blueprint(webhook_bp)
 
+# ponytail: importar aqui garante que catalogo_produtos (SSOT) exista antes de
+# qualquer sync/listagem — sincronizar_produtos()/listar_produtos() fazem SQL
+# bruto contra essa tabela sem criá-la, então o import precisa acontecer no boot.
+import core.catalogo  # noqa: F401
+
 # ===========================================================================
 # Autenticação e Health Check (Athena OS)
 # ===========================================================================
