@@ -60,3 +60,57 @@ def deletar(id_loja: int) -> bool:
         return r != "DELETE 0"
     try: return run_async(_go())
     except Exception as e: log(AGENT, f"Erro deletar: {e}"); return False
+
+# ── Sync Bling ──
+
+def _ensure_bling_id():
+    async def _go():
+        db = await get_db()
+        try:
+            exists = await db.fetchval("SELECT column_name FROM information_schema.columns WHERE table_name='lojas' AND column_name='bling_id'")
+            if not exists:
+                await db.execute("ALTER TABLE lojas ADD COLUMN bling_id BIGINT")
+                await db.execute("ALTER TABLE lojas ADD COLUMN bling_descricao VARCHAR(200)")
+        except: pass
+    try: run_async(_go())
+    except: pass
+
+_ensure_bling_id()
+
+def sincronizar_bling() -> dict:
+    """Puxa depositos/lojas do Bling e cria cada um como loja no Athena."""
+    from bling_erp import listar_depositos, get_access_token, get_auth_url
+    token = get_access_token()
+    if not token:
+        return {"error": "Bling nao autenticado", "auth_url": get_auth_url()}
+    _ensure_table()
+    async def _go():
+        db = await get_db()
+        resultados = []
+        pagina = 1
+        while True:
+            r = listar_depositos(pagina=pagina, limite=100)
+            dados = r.get("data", [])
+            if not dados or r.get("error"):
+                break
+            for dep in dados:
+                bling_id = dep.get("id")
+                nome = dep.get("descricao", f"Deposito {bling_id}")
+                situacao = dep.get("situacao", "A")
+                ativa = situacao == "A"
+                existing = await db.fetchrow("SELECT id FROM lojas WHERE bling_id = $1", bling_id)
+                if existing:
+                    await db.execute("UPDATE lojas SET nome = $1, ativa = $2, bling_descricao = $3 WHERE bling_id = $4",
+                        nome, ativa, nome, bling_id)
+                    resultados.append({"acao": "atualizado", "id": existing["id"], "nome": nome})
+                else:
+                    row = await db.fetchrow(
+                        "INSERT INTO lojas (nome, ativa, bling_id, bling_descricao) VALUES ($1, $2, $3, $4) RETURNING id",
+                        nome, ativa, bling_id, nome)
+                    resultados.append({"acao": "criado", "id": row["id"] if row else 0, "nome": nome})
+            if len(dados) < 100:
+                break
+            pagina += 1
+        return {"sync": len(resultados), "lojas": resultados}
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}

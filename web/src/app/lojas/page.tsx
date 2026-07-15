@@ -5,11 +5,12 @@ import { api } from "@/lib/api";
 import StatusBadge from "@/app/_components/StatusBadge";
 import LoadingState from "@/app/_components/LoadingState";
 
-interface Loja { id: number; nome: string; ativa: boolean; created_at?: string; }
+interface Loja { id: number; nome: string; ativa: boolean; bling_id?: number; bling_descricao?: string; }
 
 export default function LojasPage() {
   const [lojas, setLojas] = useState<Loja[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [modal, setModal] = useState<{ open: boolean; nome: string; editId?: number }>({ open: false, nome: "" });
 
   const carregar = () => {
@@ -35,6 +36,16 @@ export default function LojasPage() {
     carregar();
   };
 
+  const syncBling = async () => {
+    setSyncing(true);
+    try {
+      const r = await fetch("/api/lojas/sync/bling", { method: "POST" }).then(r => r.json());
+      if (r.error) alert(r.error);
+      carregar();
+    } catch (e) { alert(String(e)); }
+    finally { setSyncing(false); }
+  };
+
   return (
     <div className="p-6 space-y-4">
       <div className="flex justify-between items-end">
@@ -42,12 +53,21 @@ export default function LojasPage() {
           <h1 className="text-lg font-bold text-neutral-100">🏪 Lojas</h1>
           <p className="text-xs text-neutral-500 mt-1">Gerencie os ambientes e filiais do sistema</p>
         </div>
-        <button
-          onClick={() => setModal({ open: true, nome: "" })}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1.5 rounded-lg"
-        >
-          + Nova Loja
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={syncBling}
+            disabled={syncing}
+            className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded-lg"
+          >
+            {syncing ? "Sincronizando..." : "Sync Bling"}
+          </button>
+          <button
+            onClick={() => setModal({ open: true, nome: "" })}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1.5 rounded-lg"
+          >
+            + Nova Loja
+          </button>
+        </div>
       </div>
 
       {loading ? <LoadingState /> : (
@@ -58,7 +78,7 @@ export default function LojasPage() {
                 <h3 className="text-sm font-semibold text-neutral-200">{l.nome}</h3>
                 <StatusBadge label={l.ativa ? "Ativa" : "Inativa"} variant={l.ativa ? "success" : "neutral"} />
               </div>
-              <p className="text-[10px] text-neutral-600">ID: {l.id}</p>
+              <p className="text-[10px] text-neutral-600">ID: {l.id}{l.bling_id ? ` · Bling #${l.bling_id}` : ""}</p>
               <div className="flex gap-2">
                 <button
                   onClick={() => setModal({ open: true, nome: l.nome, editId: l.id })}
