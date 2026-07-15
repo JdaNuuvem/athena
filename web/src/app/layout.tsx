@@ -203,6 +203,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   </button>
                   <span className="font-semibold text-sm tracking-wide text-neutral-200 select-none">ATHENA</span>
                 </div>
+                {(() => {
+                  const parts = pathname?.split("/").filter(Boolean) || [];
+                  if (parts.length < 2) return null;
+                  const parentPath = "/" + parts.slice(0, -1).join("/");
+                  const parentLabel = parts[parts.length - 2]?.replace(/-/g, " ").replace(/\w/g, c => c.toUpperCase()) || "Voltar";
+                  return (
+                    <div className="px-4 pt-3 pb-1">
+                      <Link href={parentPath} className="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-300 transition-colors">
+                        <span className="text-base leading-none">&larr;</span>
+                        <span>{parentLabel}</span>
+                      </Link>
+                    </div>
+                  );
+                })()}
                 {children}
               </main>
             </>
