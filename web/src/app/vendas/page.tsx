@@ -9,6 +9,7 @@ import KpiCard from "@/app/_components/KpiCard";
 import StatusBadge from "@/app/_components/StatusBadge";
 import LoadingState from "@/app/_components/LoadingState";
 import ErrorAlert from "@/app/_components/ErrorAlert";
+import { Can } from "@/lib/auth";
 
 interface PedidoRow {
   id: number;
@@ -117,6 +118,7 @@ export default function VendasPage() {
         <PageHeader title="Vendas" subtitle="Pedidos de venda e faturamento" />
         <div className="flex items-center gap-3">
           <DateFilter value={dateFilter} onChange={setDateFilter} />
+          <Can permission="orders:edit">
           <button
             onClick={sync}
             disabled={syncing}
@@ -124,6 +126,7 @@ export default function VendasPage() {
           >
             {syncing ? "Sincronizando..." : "Sync Bling"}
           </button>
+          </Can>
         </div>
       </div>
 
@@ -273,6 +276,7 @@ export default function VendasPage() {
               </div>
 
               {/* Ações de status */}
+              <Can permission="orders:edit">
               <div className="flex gap-2 flex-wrap">
                 {["aberto", "em_andamento", "faturado", "concluido", "cancelado"].map(s => (
                   <button
@@ -284,6 +288,7 @@ export default function VendasPage() {
                   </button>
                 ))}
               </div>
+              </Can>
             </div>
           )}
         </>

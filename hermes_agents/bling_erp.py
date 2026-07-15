@@ -110,6 +110,9 @@ def listar_produtos(pagina: int = 1, limite: int = 100) -> dict:
 def listar_pedidos(pagina: int = 1, limite: int = 100) -> dict:
     return _request("pedidos/vendas", {"pagina": pagina, "limite": limite})
 
+def listar_contatos(pagina: int = 1, limite: int = 100) -> dict:
+    return _request("contatos", {"pagina": pagina, "limite": limite})
+
 def listar_contas_receber(pagina: int = 1, limite: int = 100) -> dict:
     return _request("contas/receber", {"pagina": pagina, "limite": limite})
 
@@ -447,6 +450,90 @@ def processar_evento_webhook(evento: str, payload: dict) -> dict:
                 VALUES ($1, $2, $3, NOW())
                 ON CONFLICT (sku, loja) DO UPDATE SET quantidade = $3, data_atualizacao = NOW()
             """, sku, str(id_deposito), saldo)
+
+        elif resource in ("conta-receber", "conta-receber"):
+            cr = payload.get("contaReceber", payload)
+            bling_id = cr.get("id")
+            if bling_id:
+                existing = await db.fetchval("SELECT id FROM fin_contas_receber WHERE bling_id = $1", bling_id)
+                contato = cr.get("contato", {}) or {}
+                vencimento = (cr.get("vencimento") or "")[:10] or None
+                data_rec = (cr.get("dataRecebimento") or "")[:10] or None
+                valor = float(cr.get("valor", 0) or 0)
+                if existing:
+                    await db.execute("""UPDATE fin_contas_receber SET cliente=$1, valor=$2, vencimento=$3::date,
+                        data_recebimento=$4::date, status=$5, origem='bling' WHERE bling_id=$6""",
+                        contato.get("nome",""), valor, vencimento, data_rec, str(cr.get("situacao","pendente")), bling_id)
+                else:
+                    await db.execute("""INSERT INTO fin_contas_receber (cliente, descricao, valor, vencimento,
+                        data_recebimento, status, forma_pagamento, bling_id, origem)
+                        VALUES ($1,$2,$3,$4::date,$5::date,$6,$7,$8,'bling')""",
+                        contato.get("nome",""), cr.get("descricao",""), valor, vencimento, data_rec,
+                        str(cr.get("situacao","pendente")), cr.get("formaPagamento",""), bling_id)
+
+        elif resource in ("conta-pagar", "conta-pagar"):
+            cp = payload.get("contaPagar", payload)
+            bling_id = cp.get("id")
+            if bling_id:
+                existing = await db.fetchval("SELECT id FROM fin_contas_pagar WHERE bling_id = $1", bling_id)
+                fornecedor = cp.get("fornecedor", cp.get("contato", {})) or {}
+                vencimento = (cp.get("vencimento") or "")[:10] or None
+                data_pgto = (cp.get("dataPagamento") or "")[:10] or None
+                valor = float(cp.get("valor", 0) or 0)
+                if existing:
+                    await db.execute("""UPDATE fin_contas_pagar SET fornecedor=$1, valor=$2, vencimento=$3::date,
+                        data_pagamento=$4::date, status=$5, origem='bling' WHERE bling_id=$6""",
+                        fornecedor.get("nome",""), valor, vencimento, data_pgto, str(cp.get("situacao","pendente")), bling_id)
+                else:
+                    await db.execute("""INSERT INTO fin_contas_pagar (fornecedor, descricao, valor, vencimento,
+                        data_pagamento, status, forma_pagamento, bling_id, origem)
+                        VALUES ($1,$2,$3,$4::date,$5::date,$6,$7,$8,'bling')""",
+                        fornecedor.get("nome",""), cp.get("descricao",""), valor, vencimento, data_pgto,
+                        str(cp.get("situacao","pendente")), cp.get("formaPagamento",""), bling_id)
+
+        elif resource in ("nota-fiscal", "nota_fiscal", "nfe"):
+            nf = payload.get("notaFiscal", payload.get("nfe", payload))
+            bling_id = nf.get("id")
+            if bling_id:
+                existing = await db.fetchval("SELECT id FROM fiscal_notas_fiscais WHERE bling_id = $1", bling_id)
+                contato = nf.get("contato", {}) or {}
+                natureza = nf.get("naturezaOperacao", {}) or {}
+                data_emissao = (nf.get("dataEmissao") or "")[:10] or None
+                valor_nf = float(nf.get("total", 0) or 0)
+                if existing:
+                    await db.execute("""UPDATE fiscal_notas_fiscais SET numero=$1, data_emissao=$2::date,
+                        contato_nome=$3, contato_documento=$4, valor_nf=$5, natureza_operacao=$6,
+                        status=$7, sincronizado_em=NOW() WHERE bling_id=$8""",
+                        str(nf.get("numero","")), data_emissao, contato.get("nome",""),
+                        contato.get("numeroDocumento",""), valor_nf, natureza.get("descricao",""),
+                        {1:"emitida",2:"cancelada",3:"inutilizada",4:"denegada"}.get(nf.get("situacao",1),"emitida"), bling_id)
+                else:
+                    await db.execute("""INSERT INTO fiscal_notas_fiscais (numero, modelo, data_emissao,
+                        natureza_operacao, contato_nome, contato_documento, valor_nf, status, bling_id, sincronizado_em)
+                        VALUES ($1,$2,$3::date,$4,$5,$6,$7,$8,$9,NOW())""",
+                        str(nf.get("numero","")), str(nf.get("modelo","55")), data_emissao,
+                        natureza.get("descricao",""), contato.get("nome",""),
+                        contato.get("numeroDocumento",""), valor_nf,
+                        {1:"emitida",2:"cancelada",3:"inutilizada",4:"denegada"}.get(nf.get("situacao",1),"emitida"), bling_id)
+
+        elif resource in ("contato", "contact"):
+            contato = payload.get("contato", payload)
+            doc = (contato.get("numeroDocumento") or "").replace(".","").replace("/","").replace("-","").strip()
+            nome = contato.get("nome", "")
+            if doc or nome:
+                existing = None
+                if doc:
+                    existing = await db.fetchrow("SELECT id FROM cad_clientes WHERE REPLACE(REPLACE(REPLACE(documento,'.',''),'/',''),'-','') = $1 LIMIT 1", doc)
+                if not existing:
+                    await db.execute("""INSERT INTO cad_clientes (nome, tipo, documento, status)
+                        VALUES ($1, 'PF', $2, 'ativo') ON CONFLICT DO NOTHING""",
+                        nome, contato.get("numeroDocumento",""))
+                    # ponytail: upsert via nome se nao tiver documento
+                    if not doc:
+                        try:
+                            await db.execute("""INSERT INTO cad_clientes (nome, tipo, status)
+                                VALUES ($1, 'PF', 'ativo') ON CONFLICT DO NOTHING""", nome)
+                        except: pass
 
         return {"processed": True, "evento": evento, "resource": resource}
 

@@ -46,6 +46,15 @@ export const api = {
 
   me: () => request<{ id: string; name: string; role: string; roles: string[]; permissions: string[] }>("/api/auth/me"),
 
+  // RBAC
+  roles: () => request<{ roles: Array<{ id: string; name: string; description: string | null; active: boolean; isSystem: boolean; permissionCodes: string[]; createdAt: string }> }>("/api/roles"),
+  permissions: () => request<{ permissions: Array<{ id: string; code: string; module: string; action: string; description: string | null }> }>("/api/permissions"),
+  rolesUpdatePermissions: (roleId: string, permissionIds: string[]) =>
+    request<{ roleId: string; permissionCodes: string[] }>(`/api/roles/${roleId}/permissions`, {
+      method: "PUT",
+      body: JSON.stringify({ permissionIds }),
+    }),
+
   // Health
   health: () => request<{ status: string; agents: Record<string, number>; infrastructure: Record<string, { connected: boolean }> }>("/api/health"),
 
@@ -625,5 +634,68 @@ export async function vendasSyncBling(pagina?: number, limite?: number): Promise
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ pagina: pagina || 1, limite: limite || 100 }),
   });
+  return res.json();
+}
+
+// ── Integracoes / SSOT ──
+
+export async function catalogoListar(): Promise<{ data: unknown[] }> {
+  const res = await fetch("/api/catalogo");
+  return res.json();
+}
+export async function catalogoBuscarSku(sku: string): Promise<Record<string, unknown>> {
+  const res = await fetch(`/api/catalogo/sku/${sku}`);
+  return res.json();
+}
+export async function integrVincularClientes(): Promise<{ vinculados: number }> {
+  const res = await fetch("/api/integracoes/vincular-clientes", { method: "POST" });
+  return res.json();
+}
+export async function integrMigrarFornecedores(): Promise<{ migrados: number }> {
+  const res = await fetch("/api/integracoes/migrar-fornecedores", { method: "POST" });
+  return res.json();
+}
+export async function integrMigrarContas(): Promise<Record<string, number>> {
+  const res = await fetch("/api/integracoes/migrar-contas", { method: "POST" });
+  return res.json();
+}
+export async function integrMigrarTudo(): Promise<Record<string, unknown>> {
+  const res = await fetch("/api/integracoes/migrar-tudo", { method: "POST" });
+  return res.json();
+}
+export async function evtFaturarVenda(id: number): Promise<Record<string, unknown>> {
+  const res = await fetch(`/api/eventos/venda/${id}/faturar`, { method: "POST" });
+  return res.json();
+}
+export async function evtReceberCompra(id: number): Promise<Record<string, unknown>> {
+  const res = await fetch(`/api/eventos/compra/${id}/receber`, { method: "POST" });
+  return res.json();
+}
+export async function evtFinalizarProducao(id: number): Promise<Record<string, unknown>> {
+  const res = await fetch(`/api/eventos/producao/${id}/finalizar`, { method: "POST" });
+  return res.json();
+}
+export async function evtFecharCaixaPDV(id: number, saldoFinal?: number): Promise<Record<string, unknown>> {
+  const res = await fetch(`/api/eventos/pdv/${id}/fechar-caixa`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ saldo_final: saldoFinal || 0 }),
+  });
+  return res.json();
+}
+export async function evtConverterLead(id: number): Promise<Record<string, unknown>> {
+  const res = await fetch(`/api/eventos/crm/lead/${id}/converter`, { method: "POST" });
+  return res.json();
+}
+export async function evtNegociacaoGanha(id: number): Promise<Record<string, unknown>> {
+  const res = await fetch(`/api/eventos/crm/negociacao/${id}/ganha`, { method: "POST" });
+  return res.json();
+}
+export async function evtProcessarFila(limit?: number): Promise<{ processados: number }> {
+  const res = await fetch(`/api/eventos/processar${limit ? "?limit=" + limit : ""}`, { method: "POST" });
+  return res.json();
+}
+export async function fiscalAlertasObrigacoes(): Promise<Record<string, unknown>> {
+  const res = await fetch("/api/fiscal/obrigacoes/alertas");
   return res.json();
 }

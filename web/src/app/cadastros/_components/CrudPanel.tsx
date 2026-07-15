@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import { fmtBRL } from "@/lib/format";
+import { Can } from "@/lib/auth";
 
 export interface FieldDef {
   key: string;
@@ -23,9 +24,10 @@ interface CrudPanelProps {
   columns: Column[];
   formFields?: FieldDef[];
   title?: string;
+  permissionPrefix?: string;
 }
 
-export default function CrudPanel({ tabela, columns, formFields, title }: CrudPanelProps) {
+export default function CrudPanel({ tabela, columns, formFields, title, permissionPrefix = "registrations" }: CrudPanelProps) {
   const [data, setData] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -85,8 +87,10 @@ export default function CrudPanel({ tabela, columns, formFields, title }: CrudPa
     <div className="space-y-3">
       {title && <h3 className="text-sm font-semibold text-neutral-200">{title}</h3>}
       {formFields && formFields.length > 0 && (
-        <button onClick={openCreate}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1.5 rounded-lg transition-colors">+ Novo</button>
+        <Can permission={`${permissionPrefix}:create`}>
+          <button onClick={openCreate}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1.5 rounded-lg transition-colors">+ Novo</button>
+        </Can>
       )}
 
       {loading ? <p className="text-xs text-neutral-500">Carregando...</p> :
@@ -109,8 +113,12 @@ export default function CrudPanel({ tabela, columns, formFields, title }: CrudPa
                   ))}
                   {formFields && formFields.length > 0 && (
                     <td className="px-4 py-2.5">
-                      <button onClick={() => openEdit(row)} className="text-indigo-400 hover:text-indigo-300 mr-2 text-[11px]">Editar</button>
-                      <button onClick={() => setConfirmDelete(Number(row.id))} className="text-red-400 hover:text-red-300 text-[11px]">Excluir</button>
+                      <Can permission={`${permissionPrefix}:edit`}>
+                        <button onClick={() => openEdit(row)} className="text-indigo-400 hover:text-indigo-300 mr-2 text-[11px]">Editar</button>
+                      </Can>
+                      <Can permission={`${permissionPrefix}:delete`}>
+                        <button onClick={() => setConfirmDelete(Number(row.id))} className="text-red-400 hover:text-red-300 text-[11px]">Excluir</button>
+                      </Can>
                     </td>
                   )}
                 </tr>

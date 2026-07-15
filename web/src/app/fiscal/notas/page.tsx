@@ -8,9 +8,10 @@ import type { Column, TabOption } from "../types";
 import PageHeader from "@/app/_components/PageHeader";
 import TabBar from "@/app/_components/TabBar";
 import DataTable from "@/app/_components/DataTable";
-import StatusBadge from "@/app/_components/StatusBadge";
 import LoadingState from "@/app/_components/LoadingState";
 import ErrorAlert from "@/app/_components/ErrorAlert";
+import { Can } from "@/lib/auth";
+import StatusBadge from "@/app/_components/StatusBadge";
 
 interface NotaRow {
   id: number;
@@ -124,6 +125,7 @@ export default function NotasFiscaisPage() {
         <PageHeader title="Notas Fiscais" subtitle="NF-e, NFC-e, NFS-e, CT-e e MDF-e" />
         <div className="flex items-center gap-3">
           <DateFilter value={dateFilter} onChange={setDateFilter} />
+          <Can permission="fiscal:edit">
           <button
             onClick={sync}
             disabled={syncing}
@@ -131,6 +133,7 @@ export default function NotasFiscaisPage() {
           >
             {syncing ? "Sincronizando..." : "Sync Bling"}
           </button>
+          </Can>
         </div>
       </div>
       <TabBar tabs={TABS} active={tab} onChange={setTab} />
