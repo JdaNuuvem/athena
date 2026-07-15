@@ -217,30 +217,37 @@ def get_nfe_xml(id_nota: int) -> tuple[str | None, str | None]:
 def sincronizar_produtos() -> dict:
     async def _go():
         db = await get_db()
-        r = listar_produtos()
-        dados = r.get("data", [])
-        if not dados:
-            return {"erro": r.get("error", "sem dados"), "total": 0}
         total = 0
-        for p in dados:
-            try:
-                sku = p.get("codigo", "") or str(p["id"])
-                nome = p.get("descricao", "")
-                preco = float(p.get("preco", 0)) if p.get("preco") else 0
-                await db.execute("""
-                    INSERT INTO fichas_tecnicas (sku, descricao) VALUES ($1, $2)
-                    ON CONFLICT (sku) DO NOTHING
-                """, sku, nome)
-                await db.execute("""
-                    INSERT INTO anuncios (sku, marketplace, preco, status)
-                    VALUES ($1, 'bling', $2, 'ativo')
-                    ON CONFLICT (sku, marketplace) WHERE anuncio_id IS NULL
-                    DO UPDATE SET preco = $2
-                """, sku, preco)
-                total += 1
-            except Exception as e:
-                log(AGENT, f"Erro produto {p.get('codigo')}: {e}")
-        return {"sincronizados": total}
+        erros = []
+        pagina = 1
+        while True:
+            r = listar_produtos(pagina=pagina, limite=100)
+            dados = r.get("data", [])
+            if not dados or r.get("error"):
+                if r.get("error"): erros.append(f"pag {pagina}: {r['error']}")
+                break
+            for p in dados:
+                try:
+                    sku = p.get("codigo", "") or str(p["id"])
+                    nome = p.get("descricao", "")
+                    preco = float(p.get("preco", 0)) if p.get("preco") else 0
+                    await db.execute("""
+                        INSERT INTO fichas_tecnicas (sku, descricao) VALUES ($1, $2)
+                        ON CONFLICT (sku) DO NOTHING
+                    """, sku, nome)
+                    await db.execute("""
+                        INSERT INTO anuncios (sku, marketplace, preco, status)
+                        VALUES ($1, 'bling', $2, 'ativo')
+                        ON CONFLICT (sku, marketplace) WHERE anuncio_id IS NULL
+                        DO UPDATE SET preco = $2
+                    """, sku, preco)
+                    total += 1
+                except Exception as e:
+                    log(AGENT, f"Erro produto {p.get('codigo')}: {e}")
+            if len(dados) < 100:
+                break
+            pagina += 1
+        return {"sincronizados": total, "erros": erros}
     return run_async(_go())
 
 def sincronizar_pedidos() -> dict:

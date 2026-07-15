@@ -9,6 +9,7 @@ export default function ProdutosPage() {
   const [total, setTotal] = useState(0);
   const [busca, setBusca] = useState("");
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
@@ -28,6 +29,20 @@ export default function ProdutosPage() {
 
   useEffect(() => { load(); }, []);
 
+  const syncBling = async () => {
+    setSyncing(true);
+    setError(null);
+    try {
+      const r = await api.blingSyncProducts();
+      if (r.errors && r.errors.length > 0) setError(r.errors.join("; "));
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao sincronizar com Bling");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     load(busca);
@@ -37,7 +52,16 @@ export default function ProdutosPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-lg font-light text-neutral-300">Produtos</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-lg font-light text-neutral-300">Produtos</h1>
+        <button
+          onClick={syncBling}
+          disabled={syncing}
+          className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"
+        >
+          {syncing ? "Sincronizando..." : "Sync Bling"}
+        </button>
+      </div>
 
       {error && (
         <div className="text-red-400 text-sm bg-red-950/40 border border-red-900/50 rounded-lg px-4 py-3">
