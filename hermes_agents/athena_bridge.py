@@ -2939,7 +2939,12 @@ def listar_produtos():
         count = cur.fetchone()[0]
         try:
             cur.execute(f"""
-                SELECT c.id, c.sku, c.descricao AS nome, c.imagem_url,
+                SELECT c.id, c.sku, c.descricao AS nome,
+                       COALESCE(c.imagem_url,
+                           CASE WHEN c.id_bling IS NOT NULL
+                               THEN 'https://bling.com.br/Api/v3/produtos/' || c.id_bling || '/imagem'
+                           END
+                       ) AS imagem_url,
                        COALESCE(c.categoria, '') AS categoria,
                        COALESCE(a.preco, 0) AS valor,
                        (SELECT COUNT(*) FROM catalogo_produtos f WHERE f.sku_pai = c.sku) AS total_variacoes,
@@ -2958,7 +2963,12 @@ def listar_produtos():
             conn.rollback()
             cur = conn.cursor()
             cur.execute(f"""
-                SELECT c.id, c.sku, c.descricao AS nome, c.imagem_url,
+                SELECT c.id, c.sku, c.descricao AS nome,
+                       COALESCE(c.imagem_url,
+                           CASE WHEN c.id_bling IS NOT NULL
+                               THEN 'https://bling.com.br/Api/v3/produtos/' || c.id_bling || '/imagem'
+                           END
+                       ) AS imagem_url,
                        COALESCE(c.categoria, '') AS categoria,
                        COALESCE(a.preco, 0) AS valor,
                        (SELECT COUNT(*) FROM catalogo_produtos f WHERE f.sku_pai = c.sku) AS total_variacoes,

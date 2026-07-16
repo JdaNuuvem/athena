@@ -1,11 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { api, type Product } from "@/lib/api";
 
 const ESTOQUE_ALERT = 10;
 const ESTOQUE_CRITICO = 3;
+const POR_PAGINA = 30;
+
+function colorFromName(nome: string) {
+  let h = 0;
+  for (let i = 0; i < nome.length; i++) h = nome.charCodeAt(i) + ((h << 5) - h);
+  return `hsl(${Math.abs(h) % 360}, 45%, 35%)`;
+}
 
 function StockBadge({ qty }: { qty: number }) {
   if (qty <= 0) return <span className="text-[10px] bg-red-900/40 text-red-400 px-1.5 py-0.5 rounded-full font-medium">Sem estoque</span>;
@@ -21,23 +28,76 @@ function MargemBadge({ pct }: { pct: number }) {
   return <span className="text-[10px] text-emerald-400">{pct.toFixed(0)}%</span>;
 }
 
-function ProdutoImagem({ src, nome }: { src?: string; nome: string }) {
+function ProdutoImagem({ src, nome }: { src?: string | null; nome: string }) {
   const [erro, setErro] = useState(false);
-  if (!src || erro) {
-    const inicial = (nome || "?").charAt(0).toUpperCase();
+  const inicial = (nome || "?").charAt(0).toUpperCase();
+  const bg = colorFromName(nome);
+
+  if (src && !erro) {
     return (
-      <div className="w-10 h-10 rounded-md bg-neutral-800 border border-neutral-700 flex items-center justify-center text-neutral-500 text-sm font-bold shrink-0">
-        {inicial}
-      </div>
+      <img
+        src={src}
+        alt={nome}
+        className="w-12 h-12 rounded-lg object-cover border border-neutral-700 shrink-0"
+        onError={() => setErro(true)}
+      />
     );
   }
+
   return (
-    <img
-      src={src}
-      alt={nome}
-      className="w-10 h-10 rounded-md object-cover border border-neutral-700 shrink-0"
-      onError={() => setErro(true)}
-    />
+    <div
+      className="w-12 h-12 rounded-lg border border-neutral-700 flex items-center justify-center text-white text-lg font-bold shrink-0"
+      style={{ backgroundColor: bg }}
+    >
+      {inicial}
+    </div>
+  );
+}
+
+function Pagination({ pagina, total, onChange }: { pagina: number; total: number; onChange: (p: number) => void }) {
+  const totalPaginas = Math.max(1, Math.ceil(total / POR_PAGINA));
+  if (totalPaginas <= 1) return null;
+
+  const paginas: number[] = [];
+  for (let i = 1; i <= totalPaginas; i++) {
+    if (i === 1 || i === totalPaginas || Math.abs(i - pagina) <= 2) paginas.push(i);
+    else if (paginas[paginas.length - 1] !== -1) paginas.push(-1);
+  }
+
+  return (
+    <div className="flex items-center justify-center gap-1 pt-4">
+      <button
+        disabled={pagina <= 1}
+        onClick={() => onChange(pagina - 1)}
+        className="px-2 py-1 text-xs rounded bg-neutral-800 text-neutral-400 hover:bg-neutral-700 disabled:opacity-30"
+      >
+        ‹
+      </button>
+      {paginas.map((p, i) =>
+        p === -1 ? (
+          <span key={`gap-${i}`} className="text-neutral-600 text-xs px-1">…</span>
+        ) : (
+          <button
+            key={p}
+            onClick={() => onChange(p)}
+            className={`px-2.5 py-1 text-xs rounded ${
+              p === pagina
+                ? "bg-indigo-600 text-white"
+                : "bg-neutral-800 text-neutral-400 hover:bg-neutral-700"
+            }`}
+          >
+            {p}
+          </button>
+        )
+      )}
+      <button
+        disabled={pagina >= totalPaginas}
+        onClick={() => onChange(pagina + 1)}
+        className="px-2 py-1 text-xs rounded bg-neutral-800 text-neutral-400 hover:bg-neutral-700 disabled:opacity-30"
+      >
+        ›
+      </button>
+    </div>
   );
 }
 
@@ -45,26 +105,29 @@ export default function ProdutosPage() {
   const [produtos, setProdutos] = useState<Product[]>([]);
   const [total, setTotal] = useState(0);
   const [busca, setBusca] = useState("");
+  const [pagina, setPagina] = useState(1);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  const load = async (search?: string) => {
+  const load = useCallback(async (search?: string, pg?: number) => {
     setLoading(true);
     setError(null);
     try {
-      const r = await api.listarProdutos({ busca: search });
+      const p = pg ?? 1;
+      const r = await api.listarProdutos({ busca: search, pagina: p });
       setProdutos((r.produtos ?? []) as Product[]);
       setTotal(r.total ?? 0);
+      if (!search) setPagina(p);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erro ao carregar produtos");
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(undefined, 1); }, [load]);
 
   const syncBling = async () => {
     setSyncing(true);
@@ -74,7 +137,7 @@ export default function ProdutosPage() {
       if (r.erros && r.erros.length > 0) setError(r.erros.join("; "));
       else if (r.sincronizados !== undefined) setError(`Sincronizados: ${r.sincronizados} produtos`);
       else if (r.erro) setError(r.erro);
-      load();
+      load(busca, 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao sincronizar com Bling");
     } finally {
@@ -84,7 +147,7 @@ export default function ProdutosPage() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    load(busca);
+    load(busca, 1);
   };
 
   const navigate = (sku: string) => router.push(`/produtos/${sku}`);
@@ -94,7 +157,7 @@ export default function ProdutosPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-light text-neutral-300">Produtos</h1>
-          <p className="text-xs text-neutral-500 mt-0.5">{total} produto{(total as number) !== 1 ? "s" : ""} no catálogo</p>
+          <p className="text-xs text-neutral-500 mt-0.5">{total} produto{total !== 1 ? "s" : ""} no catálogo</p>
         </div>
         <button
           onClick={syncBling}
@@ -137,7 +200,7 @@ export default function ProdutosPage() {
               onClick={() => navigate(p.sku)}
               onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") navigate(p.sku); }}
             >
-              <div className="flex items-center gap-4 p-4">
+              <div className="flex items-center gap-4 p-3">
                 <ProdutoImagem src={p.imagem_url} nome={p.nome} />
 
                 <div className="flex-1 min-w-0">
@@ -184,6 +247,8 @@ export default function ProdutosPage() {
               Nenhum produto encontrado
             </div>
           )}
+
+          <Pagination pagina={pagina} total={total} onChange={(p) => load(busca, p)} />
         </div>
       )}
     </div>
