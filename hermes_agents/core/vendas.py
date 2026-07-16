@@ -222,7 +222,7 @@ def sincronizar_pedidos_bling(pagina: int = 1, limite: int = 100) -> dict:
     async def _go():
         db = await get_db()
         total = 0
-        mapa_status = {1:"aberto", 6:"concluido", 9:"cancelado", 12:"em_andamento", 15:"faturado", 18:"devolvido"}
+        mapa_status = {1:"pendente", 2:"aberto", 6:"concluido", 9:"cancelado", 12:"em_andamento", 15:"faturado", 18:"enviado", 21:"entregue", 24:"devolvido"}
         for ped in dados:
             try:
                 bling_id = ped.get("id")

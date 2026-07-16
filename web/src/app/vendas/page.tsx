@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { vendasDashboard, vendasList, vendasSyncBling, vendasDetalhePedido, vendasAtualizarStatus } from "@/lib/api";
+import { vendasDashboard, vendasList, vendasSyncBling, vendasDetalhePedido, vendasAtualizarStatus, vendasCriarPedido } from "@/lib/api";
 import DateFilter, { type DateFilterValue } from "@/app/_components/DateFilter";
 import { fmtBRL } from "@/lib/format";
 import PageHeader from "@/app/_components/PageHeader";
@@ -35,15 +35,19 @@ interface DashboardData {
 }
 
 const STATUS_VARIANT: Record<string, "success" | "danger" | "warning" | "neutral"> = {
-  aberto: "warning", em_andamento: "warning", faturado: "success",
+  pendente: "warning", aberto: "warning", em_andamento: "warning",
+  faturado: "warning", enviado: "neutral", entregue: "success",
   concluido: "success", cancelado: "danger", devolvido: "neutral",
 };
 
 const TABS = [
   { key: "", label: "Todos" },
+  { key: "pendente", label: "Pendentes" },
   { key: "aberto", label: "Abertos" },
   { key: "em_andamento", label: "Andamento" },
   { key: "faturado", label: "Faturados" },
+  { key: "enviado", label: "Enviados" },
+  { key: "entregue", label: "Entregues" },
   { key: "concluido", label: "Concluídos" },
   { key: "cancelado", label: "Cancelados" },
 ];
@@ -58,6 +62,10 @@ export default function VendasPage() {
   const [statusTab, setStatusTab] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [detalhe, setDetalhe] = useState<Record<string, unknown> | null>(null);
+  const [showNovoPedido, setShowNovoPedido] = useState(false);
+  const [novoCliente, setNovoCliente] = useState("");
+  const [novoItens, setNovoItens] = useState([{ sku: "", qtd: 1, preco: 0 }]);
+  const [novoFormaPg, setNovoFormaPg] = useState("pix");
 
   const carregarDashboard = useCallback(() => {
     const dias = dateFilter.dias || (dateFilter.data_inicio ? 0 : 30);
@@ -112,6 +120,24 @@ export default function VendasPage() {
     setExpandedId(null);
   };
 
+  const criarPedido = async () => {
+    const itens = novoItens.filter(i => i.sku.trim()).map(i => ({
+      sku: i.sku, descricao: i.sku, quantidade: i.qtd, valor_unitario: i.preco,
+      valor_total: i.qtd * i.preco,
+    }));
+    if (!novoCliente.trim() || itens.length === 0) return;
+    setErro(null);
+    try {
+      const r = await vendasCriarPedido({
+        cliente: novoCliente, itens,
+        pagamentos: [{ forma: novoFormaPg, valor: itens.reduce((s, i) => s + (i.valor_total as number), 0) }],
+        status: "pendente",
+      });
+      if ((r as Record<string, unknown>).erro) setErro(String((r as Record<string, unknown>).erro));
+      else { setShowNovoPedido(false); setNovoCliente(""); setNovoItens([{ sku: "", qtd: 1, preco: 0 }]); carregarPedidos(); carregarDashboard(); }
+    } catch (e) { setErro(e instanceof Error ? e.message : "Erro ao criar pedido"); }
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -119,6 +145,12 @@ export default function VendasPage() {
         <div className="flex items-center gap-3">
           <DateFilter value={dateFilter} onChange={setDateFilter} />
           <Can permission="orders:edit">
+          <button
+            onClick={() => setShowNovoPedido(true)}
+            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs rounded whitespace-nowrap"
+          >
+            + Novo Pedido
+          </button>
           <button
             onClick={sync}
             disabled={syncing}
@@ -278,7 +310,7 @@ export default function VendasPage() {
               {/* Ações de status */}
               <Can permission="orders:edit">
               <div className="flex gap-2 flex-wrap">
-                {["aberto", "em_andamento", "faturado", "concluido", "cancelado"].map(s => (
+                {["pendente", "aberto", "em_andamento", "faturado", "enviado", "entregue", "concluido", "cancelado"].map(s => (
                   <button
                     key={s}
                     onClick={() => mudarStatus(expandedId, s)}
@@ -289,6 +321,41 @@ export default function VendasPage() {
                 ))}
               </div>
               </Can>
+             </div>
+          )}
+
+          {/* Modal Novo Pedido */}
+          {showNovoPedido && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setShowNovoPedido(false)}>
+              <div className="bg-neutral-900 border border-neutral-700 rounded-xl p-6 w-full max-w-md space-y-4" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-neutral-200">Novo Pedido</h3>
+                  <button onClick={() => setShowNovoPedido(false)} className="text-neutral-500 hover:text-neutral-300">✕</button>
+                </div>
+                <input type="text" value={novoCliente} onChange={e => setNovoCliente(e.target.value)} placeholder="Nome do cliente" className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-neutral-200 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-indigo-600" />
+                <div className="space-y-2">
+                  {novoItens.map((item, idx) => (
+                    <div key={idx} className="flex gap-2">
+                      <input type="text" value={item.sku} onChange={e => { const cp = [...novoItens]; cp[idx].sku = e.target.value; setNovoItens(cp); }} placeholder="SKU" className="flex-1 bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-xs text-neutral-200 placeholder-neutral-500 focus:outline-none" />
+                      <input type="number" value={item.qtd} onChange={e => { const cp = [...novoItens]; cp[idx].qtd = Number(e.target.value); setNovoItens(cp); }} min={1} className="w-14 bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-xs text-right text-neutral-200 focus:outline-none" />
+                      <input type="number" value={item.preco} onChange={e => { const cp = [...novoItens]; cp[idx].preco = Number(e.target.value); setNovoItens(cp); }} step="0.01" min={0} className="w-20 bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-xs text-right text-neutral-200 focus:outline-none" />
+                      <span className="text-xs text-neutral-400 self-center w-16 text-right">{fmtBRL(item.qtd * item.preco)}</span>
+                      {novoItens.length > 1 && <button onClick={() => setNovoItens(novoItens.filter((_, i) => i !== idx))} className="text-red-400 text-xs">✕</button>}
+                    </div>
+                  ))}
+                  <button onClick={() => setNovoItens([...novoItens, { sku: "", qtd: 1, preco: 0 }])} className="text-xs text-indigo-400 hover:text-indigo-300">+ Adicionar item</button>
+                </div>
+                <div className="flex gap-2 items-center">
+                  <span className="text-xs text-neutral-400">Pagamento:</span>
+                  <select value={novoFormaPg} onChange={e => setNovoFormaPg(e.target.value)} className="bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-xs text-neutral-200">
+                    {["pix", "dinheiro", "cartao", "boleto"].map(f => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                  <span className="text-xs text-emerald-400 ml-auto font-semibold">
+                    Total: {fmtBRL(novoItens.reduce((s, i) => s + i.qtd * i.preco, 0))}
+                  </span>
+                </div>
+                <button onClick={criarPedido} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-sm py-2 rounded-lg transition-colors">Criar Pedido</button>
+              </div>
             </div>
           )}
         </>
