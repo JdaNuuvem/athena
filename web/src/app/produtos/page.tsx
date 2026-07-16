@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { api, type Product } from "@/lib/api";
+import { useStore } from "@/lib/store-context";
 
 const ESTOQUE_ALERT = 10;
 const ESTOQUE_CRITICO = 3;
@@ -102,6 +103,7 @@ function Pagination({ pagina, total, onChange }: { pagina: number; total: number
 }
 
 export default function ProdutosPage() {
+  const { lojaId } = useStore();
   const [produtos, setProdutos] = useState<Product[]>([]);
   const [total, setTotal] = useState(0);
   const [busca, setBusca] = useState("");
@@ -118,8 +120,7 @@ export default function ProdutosPage() {
     try {
       const p = pg ?? 1;
       const v = vars ?? mostrarVariacoes;
-      const loja = typeof window !== "undefined" ? localStorage.getItem("loja") || "" : "";
-      const r = await api.listarProdutos({ busca: search, pagina: p, variacoes: v, loja: loja === "todas" ? undefined : loja });
+      const r = await api.listarProdutos({ busca: search, pagina: p, variacoes: v, loja: lojaId === "todas" ? undefined : lojaId });
       setProdutos((r.produtos ?? []) as Product[]);
       setTotal(r.total ?? 0);
       if (!search) setPagina(p);
@@ -128,7 +129,7 @@ export default function ProdutosPage() {
     } finally {
       setLoading(false);
     }
-  }, [mostrarVariacoes]);
+  }, [mostrarVariacoes, lojaId]);
 
   useEffect(() => { load(undefined, 1); }, [load]);
 

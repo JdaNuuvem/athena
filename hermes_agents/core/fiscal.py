@@ -427,6 +427,64 @@ def sincronizar_tudo_bling() -> dict:
     r3 = sincronizar_contas_pagar_bling()
     return {"notas_fiscais": r1.get("sync",0), "contas_receber": r2.get("sync",0), "contas_pagar": r3.get("sync",0)}
 
+# ── Apuração de Impostos ──
+
+def apuracao_impostos(ano: int = None, mes: int = None, dias: int = 365) -> dict:
+    """Apuração consolidada de ICMS, PIS, COFINS, IPI por período (mensal ou últimos N dias)."""
+    async def _go():
+        db = await get_db()
+        where = []
+        if ano and mes:
+            where.append(f"EXTRACT(YEAR FROM COALESCE(data_emissao, created_at)) = {ano}")
+            where.append(f"EXTRACT(MONTH FROM COALESCE(data_emissao, created_at)) = {mes}")
+        elif dias:
+            where.append(f"COALESCE(data_emissao, created_at) >= CURRENT_DATE - {dias}")
+        clause = ("WHERE " + " AND ".join(where)) if where else ""
+
+        row = await db.fetchrow(f"""
+            SELECT
+                COUNT(*) as total_notas,
+                COALESCE(SUM(valor_nf), 0) as valor_total,
+                COALESCE(SUM(valor_produtos), 0) as valor_produtos,
+                COALESCE(SUM(base_icms), 0) as base_icms,
+                COALESCE(SUM(valor_icms), 0) as total_icms,
+                COALESCE(SUM(valor_ipi), 0) as total_ipi,
+                COALESCE(SUM(valor_pis), 0) as total_pis,
+                COALESCE(SUM(valor_cofins), 0) as total_cofins,
+                COALESCE(SUM(valor_iss), 0) as total_iss,
+                COALESCE(SUM(valor_total_tributos), 0) as total_tributos
+            FROM fiscal_notas_fiscais
+            {clause}
+        """)
+
+        monthly = await db.fetch(f"""
+            SELECT
+                EXTRACT(YEAR FROM COALESCE(data_emissao, created_at))::int as ano,
+                EXTRACT(MONTH FROM COALESCE(data_emissao, created_at))::int as mes,
+                COUNT(*) as total_notas,
+                COALESCE(SUM(valor_nf), 0) as valor_total,
+                COALESCE(SUM(valor_icms), 0) as icms,
+                COALESCE(SUM(valor_pis), 0) as pis,
+                COALESCE(SUM(valor_cofins), 0) as cofins,
+                COALESCE(SUM(valor_ipi), 0) as ipi,
+                COALESCE(SUM(valor_total_tributos), 0) as total_tributos
+            FROM fiscal_notas_fiscais
+            {clause}
+            GROUP BY ano, mes
+            ORDER BY ano DESC, mes DESC
+            LIMIT 24
+        """)
+
+        return {
+            "resumo": dict(row) if row else {},
+            "mensal": [dict(r) for r in (monthly or [])],
+        }
+    try:
+        return run_async(_go())
+    except Exception as e:
+        return {"error": str(e), "resumo": {}, "mensal": []}
+
+
 # ── Seed ──
 
 def _seed():

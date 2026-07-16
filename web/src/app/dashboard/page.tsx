@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from "recharts";
 import { api, type KPIOverview, type Agent } from "@/lib/api";
+import { useStore } from "@/lib/store-context";
 
 const fmtBRL = (v: number) => "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
 
@@ -33,6 +34,8 @@ interface DashboardData {
 }
 
 export default function DashboardPage() {
+  const { lojaId } = useStore();
+  const lojaParam = lojaId !== "todas" ? `&loja_id=${lojaId}` : "";
   const [kpi, setKpi] = useState<KPIOverview | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [dash, setDash] = useState<DashboardData>({ vendasDia:0, vendasMes:0, vendasMesChart:[], estoqueCritico:0, estoqueTotal:0, fluxoCaixa:0, clientesNovos:0, clientesTotal:0, vendasHoje:0, vendasQtd:0, topProdutos:[], alertas:[] });
@@ -41,12 +44,13 @@ export default function DashboardPage() {
 
   useEffect(() => {
     Promise.all([
-      api.kpiOverview(), api.agentsList(),
-      fetch("/api/relatorios/vendas?dias=1").then(r => r.json()).catch(() => ({})),
-      fetch("/api/relatorios/vendas?dias=30").then(r => r.json()).catch(() => ({})),
-      fetch("/api/relatorios/estoque").then(r => r.json()).catch(() => ({})),
-      fetch("/api/relatorios/fluxo-caixa?dias=30").then(r => r.json()).catch(() => ({})),
-      fetch("/api/relatorios/clientes?dias=30").then(r => r.json()).catch(() => ({})),
+      api.kpiOverview(),
+      api.agentsList(),
+      fetch(`/api/relatorios/vendas?dias=1${lojaParam}`).then(r => r.json()).catch(() => ({})),
+      fetch(`/api/relatorios/vendas?dias=30${lojaParam}`).then(r => r.json()).catch(() => ({})),
+      fetch(`/api/relatorios/estoque${lojaParam ? `?${lojaParam.slice(1)}` : ""}`).then(r => r.json()).catch(() => ({})),
+      fetch(`/api/relatorios/fluxo-caixa?dias=30${lojaParam}`).then(r => r.json()).catch(() => ({})),
+      fetch(`/api/relatorios/clientes?dias=30${lojaParam}`).then(r => r.json()).catch(() => ({})),
     ]).then(([k, a, r1, r30, est, fc, cli]) => {
       setKpi(k as unknown as KPIOverview);
       setAgents(a.agents);
@@ -67,7 +71,7 @@ export default function DashboardPage() {
       });
     }).catch((e: unknown) => setError(e instanceof Error ? e.message : "Erro ao carregar"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [lojaId]);
 
   if (loading) return <div className="p-6 text-neutral-500">Carregando...</div>;
 

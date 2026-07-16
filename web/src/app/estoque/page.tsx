@@ -1,216 +1,221 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import {
-  listarBlingProdutos, listarBlingDepositos, obterSaldoDeposito,
-  atualizarEstoqueDeposito, sincronizarBlingProdutos,
-  BlingProduto, BlingDeposito,
-} from "@/lib/api";
 import { Can } from "@/lib/auth";
 
-interface StockRow {
-  id: number; codigo: string; nome: string; preco: number;
-  situacao: string; imagemURL: string; estoques: Record<number, number>;
-  totalEstoque: number;
-}
+interface LojaItem { id: number; nome: string; ativa: boolean; }
+interface EstoqueRow { id: number; sku: string; nome: string; loja: string; quantidade: number; imagem_url: string; situacao: string; data_atualizacao: string; }
 
 export default function EstoquePage() {
-  const [rows, setRows] = useState<StockRow[]>([]);
-  const [depositos, setDepositos] = useState<BlingDeposito[]>([]);
-  const [selectedDeps, setSelectedDeps] = useState<Set<number>>(new Set());
-  const [showDepSelect, setShowDepSelect] = useState(false);
+  const [rows, setRows] = useState<EstoqueRow[]>([]);
+  const [lojas, setLojas] = useState<LojaItem[]>([]);
+  const [lojaSel, setLojaSel] = useState("");
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
 
-  // Filters
   const [busca, setBusca] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("");
-  const [stockFilter, setStockFilter] = useState<string>("");
-
-  // Bulk edit
-  const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [bulkQty, setBulkQty] = useState(0);
-  const [bulkDep, setBulkDep] = useState<number>(0);
+  const [pagina, setPagina] = useState(1);
+  const [total, setTotal] = useState(0);
 
   const [grupos, setGrupos] = useState<any[]>([]);
   const [avulsos, setAvulsos] = useState<any[]>([]);
   const [expandedG, setExpandedG] = useState<Set<number>>(new Set());
-  const [viewMode, setViewMode] = useState<"agrupado" | "flat">("agrupado");
+  const [viewMode, setViewMode] = useState<"agrupado" | "flat">("flat");
 
-  // Stock modal
-  const [modalProduto, setModalProduto] = useState<StockRow | null>(null);
+  // Modal state
+  const [modalRow, setModalRow] = useState<EstoqueRow | null>(null);
+  const [modalTipo, setModalTipo] = useState<"editar" | "transferir" | "entrada" | "saida">("editar");
+  const [transferDestino, setTransferDestino] = useState("");
+  const [transferOrigem, setTransferOrigem] = useState("");
 
-  const carregar = useCallback(async () => {
+  const carregarLojas = useCallback(async () => {
+    try {
+      const r = await fetch("/api/lojas/manage");
+      const d = await r.json();
+      const list: LojaItem[] = d.lojas || [];
+      setLojas(list);
+      if (!lojaSel && list.length > 0) setLojaSel(String(list[0].id));
+    } catch { /* silencioso */ }
+  }, []);
+
+  const carregarEstoque = useCallback(async (p: number = 1) => {
+    if (!lojaSel) return;
     try {
       setLoading(true); setErro(null);
-      const [prodR, depR, groupedR] = await Promise.all([
-        listarBlingProdutos(1, 200).catch(() => ({ data: [], error: "Bling indisponivel" })),
-        listarBlingDepositos().catch(() => ({ data: [] })),
-        fetch("/api/bling/produtos/agrupados?limite=100").then(r => r.ok ? r.json() : ({ grupos: [], avulsos: [] })).catch(() => ({ grupos: [], avulsos: [] })),
-      ]);
-      const deps: BlingDeposito[] = depR.data || [];
-      setDepositos(deps);
-      setGrupos(groupedR.grupos || []);
-      setAvulsos(groupedR.avulsos || []);
-      if (selectedDeps.size === 0 && deps.length > 0) {
-        setSelectedDeps(new Set([deps[0].id]));
-      }
-      const products: BlingProduto[] = prodR.data || [];
-      const stockRows: StockRow[] = [];
-      for (const p of products) {
-        const estoques: Record<number, number> = {};
-        let total = 0;
-        for (const d of deps) {
-          try {
-            const r = await obterSaldoDeposito(d.id, [p.id]);
-            const item = (r.data || []).find((x: any) => x.idProduto === p.id);
-            const saldo = item ? (item.saldo ?? 0) : 0;
-            estoques[d.id] = saldo;
-            total += saldo;
-          } catch { estoques[d.id] = 0; }
-        }
-        stockRows.push({
-          id: p.id, codigo: p.codigo,
-          nome: (p as any).nome || p.descricao || (p as any).descricaoCurta || "—",
-          preco: p.preco || 0, situacao: p.situacao || "A",
-          imagemURL: (p as any).imagemURL || "",
-          estoques, totalEstoque: total,
-        });
-      }
-      setRows(stockRows);
+      const params = new URLSearchParams({ loja: lojaSel, pagina: String(p), por_pagina: "50" });
+      if (busca) params.set("busca", busca);
+      const r = await fetch(`/api/estoque/lojas?${params}`);
+      const d = await r.json();
+      setRows(d.estoque || []);
+      setTotal(d.total || 0);
+      setPagina(p);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao carregar");
     } finally { setLoading(false); }
+  }, [lojaSel, busca]);
+
+  const carregarAgrupados = useCallback(async () => {
+    try {
+      const r = await fetch("/api/bling/produtos/agrupados?limite=100");
+      if (r.ok) {
+        const d = await r.json();
+        setGrupos(d.grupos || []);
+        setAvulsos(d.avulsos || []);
+      }
+    } catch { /* silencioso */ }
   }, []);
 
-  useEffect(() => { carregar(); }, [carregar]);
+  useEffect(() => { carregarLojas(); carregarAgrupados(); }, []);
+  useEffect(() => { if (lojaSel) carregarEstoque(1); }, [lojaSel, busca]);
 
-  const toggleDep = (id: number) => {
-    setSelectedDeps(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
+  const handleEntrada = async (sku: string, qtd: number, motivo: string) => {
+    const lojaNome = lojas.find(l => String(l.id) === lojaSel)?.nome || lojaSel;
+    const r = await fetch("/api/estoque/entrada", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sku, loja: lojaNome, quantidade: qtd, motivo }),
     });
+    const d = await r.json();
+    if (d.erro) { setErro(d.erro); return false; }
+    setSucesso(`+${qtd} ${sku} → ${lojaNome}`);
+    carregarEstoque(pagina);
+    return true;
   };
 
-  const toggleProduct = (id: number) => {
-    setSelected(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
+  const handleSaida = async (sku: string, qtd: number, motivo: string) => {
+    const lojaNome = lojas.find(l => String(l.id) === lojaSel)?.nome || lojaSel;
+    const r = await fetch("/api/estoque/saida", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sku, loja: lojaNome, quantidade: qtd, motivo }),
     });
+    const d = await r.json();
+    if (d.erro) { setErro(d.erro); return false; }
+    setSucesso(`-${qtd} ${sku} ← ${lojaNome}`);
+    carregarEstoque(pagina);
+    return true;
   };
 
-  const handleBulkAdjust = async (delta: number) => {
-    if (selected.size === 0 || bulkDep === 0) return;
+  const handleTransferir = async (sku: string, origem: string, destino: string, qtd: number, motivo: string) => {
+    const r = await fetch("/api/estoque/transferir", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sku, origem, destino, quantidade: qtd, motivo }),
+    });
+    const d = await r.json();
+    if (d.erro) { setErro(d.erro); return false; }
+    setSucesso(`${qtd} ${sku}: ${origem} → ${destino}`);
+    carregarEstoque(pagina);
+    return true;
+  };
+
+  const handleSyncBling = async () => {
     try {
-      for (const pid of Array.from(selected)) {
-        await atualizarEstoqueDeposito({
-          idDeposito: bulkDep, idProduto: pid,
-          operacao: delta > 0 ? "E" : "S", quantidade: Math.abs(delta),
-        });
-      }
-      setSucesso(`${selected.size} produtos ajustados em ${delta > 0 ? "+" : ""}${delta}`);
-      carregar();
+      setErro(null);
+      const r = await fetch("/api/lojas/sync/bling", { method: "POST" });
+      const d = await r.json();
+      if (d.error) { setErro(d.error); return; }
+      setSucesso(`Bling sincronizado: ${d.sync || 0} lojas`);
+      carregarLojas();
+      carregarEstoque(1);
     } catch (e) { setErro(e instanceof Error ? e.message : "Erro"); }
   };
 
-  const filtered = rows.filter(r => {
-    if (statusFilter && r.situacao !== statusFilter) return false;
-    if (stockFilter === "zero" && r.totalEstoque > 0) return false;
-    if (stockFilter === "baixo" && r.totalEstoque >= 10) return false;
-    if (stockFilter === "ok" && r.totalEstoque < 10) return false;
-    if (!busca) return true;
-    const t = busca.toLowerCase();
-    return r.codigo.toLowerCase().includes(t) || r.nome.toLowerCase().includes(t) || String(r.id).includes(t);
-  });
-
-  const totalGeral = rows.reduce((s, r) => s + r.totalEstoque, 0);
-  const stockColor = (q: number) => q <= 0 ? "text-red-400" : q < 10 ? "text-yellow-400" : "text-emerald-400";
+  const sc = (q: number) => q <= 0 ? "text-red-400" : q < 10 ? "text-yellow-400" : "text-emerald-400";
 
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-bold text-neutral-100">Estoque</h1>
-          <p className="text-xs text-neutral-500 mt-1">{rows.length} produtos &middot; {totalGeral} itens em estoque</p>
+          <h1 className="text-lg font-bold text-neutral-100">Estoque por Loja</h1>
+          <p className="text-xs text-neutral-500 mt-1">
+            {lojaSel ? `${rows.length} produtos &middot; ${total} total` : "Selecione uma loja"}
+          </p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => carregar()} className="px-3 py-1.5 bg-indigo-600 text-white text-xs rounded-lg hover:bg-indigo-500">🔄 Atualizar</button>
+          <button onClick={() => carregarEstoque(pagina)} className="px-3 py-1.5 bg-indigo-600 text-white text-xs rounded-lg hover:bg-indigo-500">Atualizar</button>
           <Can permission="inventory:edit">
-            <button onClick={async () => { await sincronizarBlingProdutos(); carregar(); }} className="px-3 py-1.5 bg-indigo-600 text-white text-xs rounded-lg hover:bg-indigo-500">📥 Sincronizar Bling</button>
+            <button onClick={handleSyncBling} className="px-3 py-1.5 bg-indigo-600 text-white text-xs rounded-lg hover:bg-indigo-500">Sincronizar Bling</button>
           </Can>
         </div>
       </div>
 
-      {erro && <div className="bg-red-900/30 border border-red-800 text-red-400 text-xs px-3 py-2 rounded-lg">{erro}</div>}
-      {sucesso && <div className="bg-emerald-900/30 border border-emerald-800 text-emerald-400 text-xs px-3 py-2 rounded-lg">{sucesso}</div>}
+      {erro && <div className="bg-red-900/30 border border-red-800 text-red-400 text-xs px-3 py-2 rounded-lg flex items-center justify-between"><span>{erro}</span><button onClick={() => setErro(null)} className="text-red-300 ml-2">X</button></div>}
+      {sucesso && <div className="bg-emerald-900/30 border border-emerald-800 text-emerald-400 text-xs px-3 py-2 rounded-lg flex items-center justify-between"><span>{sucesso}</span><button onClick={() => setSucesso(null)} className="text-emerald-300 ml-2">X</button></div>}
 
       {/* Store selector */}
-      <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-3">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-medium text-neutral-300">Lojas / Depositos</span>
-          <button onClick={() => setShowDepSelect(!showDepSelect)} className="text-xs text-indigo-400">
-            {showDepSelect ? "OK" : selectedDeps.size === depositos.length ? "Todas selecionadas" : `${selectedDeps.size} selecionadas`}
-          </button>
-        </div>
-        {showDepSelect && (
-          <div className="flex flex-wrap gap-1.5">
-            {depositos.map(d => (
-              <button key={d.id} onClick={() => toggleDep(d.id)}
-                className={`px-2 py-0.5 text-[10px] rounded-full border transition-colors ${selectedDeps.has(d.id) ? "bg-indigo-600/30 border-indigo-500 text-indigo-300" : "border-neutral-600 text-neutral-500 hover:border-neutral-500"}`}>
-                {d.descricao}
-              </button>
-            ))}
-          </div>
-        )}
+      <div className="flex items-center gap-3 bg-neutral-800 border border-neutral-700 rounded-lg p-3">
+        <span className="text-xs font-medium text-neutral-300">Loja / Depósito:</span>
+        <select value={lojaSel} onChange={e => { setLojaSel(e.target.value); setPagina(1); }}
+          className="bg-neutral-700 border border-neutral-600 rounded-lg px-3 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-indigo-500 min-w-[200px]">
+          <option value="">-- Selecionar --</option>
+          {lojas.map(l => <option key={l.id} value={String(l.id)}>{l.nome}{!l.ativa ? " (inativa)" : ""}</option>)}
+        </select>
       </div>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2">
-        <input type="text" value={busca} onChange={e => setBusca(e.target.value)}
-          placeholder="Buscar SKU, nome ou ID..." className="flex-1 min-w-[200px] bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-1.5 text-xs text-neutral-200 placeholder-neutral-500 focus:outline-none focus:border-indigo-500" />
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="bg-neutral-800 border border-neutral-700 rounded-lg px-2 py-1.5 text-xs text-neutral-200">
-          <option value="">Todos status</option><option value="A">Ativos</option><option value="I">Inativos</option>
-        </select>
-        <select value={stockFilter} onChange={e => setStockFilter(e.target.value)} className="bg-neutral-800 border border-neutral-700 rounded-lg px-2 py-1.5 text-xs text-neutral-200">
-          <option value="">Todo estoque</option><option value="zero">Sem estoque</option><option value="baixo">Baixo (&lt;10)</option><option value="ok">Com estoque</option>
-        </select>
-        <span className="text-xs text-neutral-500 py-1.5">{filtered.length} resultados</span>
+        <input type="text" value={busca} onChange={e => { setBusca(e.target.value); setPagina(1); }}
+          placeholder="Buscar SKU ou nome..." className="flex-1 min-w-[200px] bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-1.5 text-xs text-neutral-200 placeholder-neutral-500 focus:outline-none focus:border-indigo-500" />
+        <span className="text-xs text-neutral-500 py-1.5">{rows.length} resultados</span>
       </div>
 
-      {/* Bulk actions */}
-      <Can permission="inventory:edit">
-      {selected.size > 0 && (
-        <div className="bg-indigo-900/20 border border-indigo-800 rounded-lg p-3 flex items-center gap-3">
-          <span className="text-xs text-indigo-300">{selected.size} selecionados</span>
-          <select value={bulkDep} onChange={e => setBulkDep(Number(e.target.value))} className="bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-xs text-neutral-200">
-            <option value={0}>Deposito...</option>
-            {depositos.map(d => <option key={d.id} value={d.id}>{d.descricao}</option>)}
-          </select>
-          <input type="number" value={bulkQty} onChange={e => setBulkQty(Number(e.target.value))} placeholder="Qtd" className="w-20 bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-xs text-neutral-200" />
-          <button onClick={() => handleBulkAdjust(bulkQty)} className="px-2 py-1 bg-emerald-600 text-white text-xs rounded">+ Adicionar</button>
-          <button onClick={() => handleBulkAdjust(-bulkQty)} className="px-2 py-1 bg-red-600 text-white text-xs rounded">− Remover</button>
-          <button onClick={() => setSelected(new Set())} className="text-xs text-neutral-500 ml-auto">Limpar</button>
-        </div>
-      )}
-      </Can>
-
-      {/* Table */}
       {/* View mode toggle */}
       <div className="flex items-center gap-2">
-        <button onClick={() => setViewMode("agrupado")} className={"px-3 py-1 text-xs rounded-lg " + (viewMode === "agrupado" ? "bg-indigo-600 text-white" : "bg-neutral-700 text-neutral-400")}>Agrupado (variações)</button>
         <button onClick={() => setViewMode("flat")} className={"px-3 py-1 text-xs rounded-lg " + (viewMode === "flat" ? "bg-indigo-600 text-white" : "bg-neutral-700 text-neutral-400")}>Lista Simples</button>
+        <button onClick={() => setViewMode("agrupado")} className={"px-3 py-1 text-xs rounded-lg " + (viewMode === "agrupado" ? "bg-indigo-600 text-white" : "bg-neutral-700 text-neutral-400")}>Agrupado (variações)</button>
       </div>
 
+      {/* Flat view */}
+      {viewMode === "flat" && (
+        <>
+          {loading ? <div className="text-neutral-500 text-sm py-8 text-center">Carregando estoque...</div> : !lojaSel ? (
+            <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-8 text-center"><p className="text-neutral-400 text-sm">Selecione uma loja acima</p></div>
+          ) : rows.length === 0 ? (
+            <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-8 text-center"><p className="text-neutral-400 text-sm">Nenhum produto em estoque nesta loja</p></div>
+          ) : (
+            <div className="bg-neutral-800 border border-neutral-700 rounded-lg overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-neutral-700 text-neutral-400 bg-neutral-850">
+                    <th className="text-left p-2">SKU</th>
+                    <th className="text-left p-2">Nome</th>
+                    <th className="text-right p-2 w-24">Quantidade</th>
+                    <th className="text-center p-2 w-20">Status</th>
+                    <th className="text-right p-2 w-28">Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r, i) => (
+                    <tr key={r.id} className={`border-b border-neutral-700/50 ${i % 2 === 0 ? "bg-neutral-800" : "bg-neutral-800/50"}`}>
+                      <td className="p-2 text-neutral-200 font-mono text-[11px]">{r.sku}</td>
+                      <td className="p-2 text-neutral-200 max-w-[200px] truncate" title={r.nome}>{r.nome}</td>
+                      <td className={`p-2 text-right font-bold font-mono ${sc(r.quantidade)}`}>{r.quantidade}</td>
+                      <td className="p-2 text-center">
+                        <span className={`px-1.5 py-0.5 rounded text-[9px] ${r.situacao === "A" ? "bg-emerald-900/30 text-emerald-400" : "bg-neutral-700 text-neutral-400"}`}>{r.situacao === "A" ? "Ativo" : "Inativo"}</span>
+                      </td>
+                      <td className="p-1.5 text-right">
+                        <div className="flex items-center gap-1 justify-end">
+                          <button onClick={() => { setModalRow(r); setModalTipo("editar"); }}
+                            className="px-2 py-0.5 bg-neutral-700 text-neutral-300 text-[10px] rounded hover:bg-neutral-600" title="Editar">Editar</button>
+                          <button onClick={() => { setModalRow(r); setModalTipo("transferir"); setTransferOrigem(r.loja); setTransferDestino(""); }}
+                            className="px-2 py-0.5 bg-neutral-700 text-neutral-300 text-[10px] rounded hover:bg-neutral-600" title="Transferir">Transferir</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+
       {/* Grouped view */}
-      {viewMode === "agrupado" && !loading && (
+      {viewMode === "agrupado" && (
         <div className="space-y-3">
           {grupos.map((g: any, gi: number) => {
             const isExpanded = expandedG.has(gi);
-            const pai = g.pai || {};
-            const filhos: any[] = g.filhos || [];
+            const pai = g.pai || g;
+            const filhos: any[] = g.filhos || g.variacoes || [];
             const totalFilhos = filhos.reduce((s: number, f: any) => s + (f.estoque?.saldoVirtualTotal ?? 0), 0);
             const paiId = pai.id || gi;
             return (
@@ -222,21 +227,18 @@ export default function EstoquePage() {
                     <span className="text-sm font-semibold text-neutral-200">{pai.nome || pai.codigo || "Produto " + paiId}</span>
                     <span className="text-xs text-neutral-500 ml-2">{filhos.length} variações</span>
                   </div>
-                  <div className="text-right">
-                    <span className="text-xs text-neutral-400">{totalFilhos} total</span>
-                  </div>
+                  <div className="text-right"><span className="text-xs text-neutral-400">{totalFilhos} total</span></div>
                 </div>
                 {isExpanded && (
                   <div className="border-t border-neutral-700">
                     <table className="w-full text-xs">
-                      <thead><tr className="text-neutral-500 border-b border-neutral-700/50"><th className="text-left p-2 pl-10">SKU</th><th className="text-left p-2">Variação</th><th className="text-right p-2">Preço</th><th className="text-right p-2">Estoque</th><th className="text-center p-2">Status</th></tr></thead>
+                      <thead><tr className="text-neutral-500 border-b border-neutral-700/50"><th className="text-left p-2 pl-10">SKU</th><th className="text-left p-2">Variação</th><th className="text-right p-2">Estoque</th><th className="text-center p-2">Status</th></tr></thead>
                       <tbody>
                         {filhos.map((f: any, fi: number) => (
                           <tr key={fi} className={"border-b border-neutral-700/30 " + (fi % 2 === 0 ? "bg-neutral-800/50" : "")}>
                             <td className="p-2 pl-10 text-neutral-300 font-mono text-[11px]">{f.codigo}</td>
                             <td className="p-2 text-neutral-400 text-[11px]">{f.nome?.replace(pai.nome || "", "").trim() || f.codigo}</td>
-                            <td className="p-2 text-right text-emerald-400">R$ {Number(f.preco || 0).toFixed(2)}</td>
-                            <td className="p-2 text-right text-neutral-300">{f.estoque?.saldoVirtualTotal ?? f.saldoFisicoTotal ?? "—"}</td>
+                            <td className="p-2 text-right text-neutral-300">{f.estoque?.saldoVirtualTotal ?? "—"}</td>
                             <td className="p-2 text-center"><span className={"px-1.5 py-0.5 rounded text-[9px] " + (f.situacao === "A" ? "bg-emerald-900/30 text-emerald-400" : "bg-neutral-700 text-neutral-400")}>{f.situacao === "A" ? "Ativo" : "Inativo"}</span></td>
                           </tr>
                         ))}
@@ -254,7 +256,7 @@ export default function EstoquePage() {
                 {avulsos.map((a: any, ai: number) => (
                   <div key={ai} className="flex items-center gap-2 bg-neutral-750 rounded px-2 py-1.5">
                     {a.imagemURL ? <img src={a.imagemURL} alt="" className="w-6 h-6 rounded" /> : <div className="w-6 h-6 rounded bg-neutral-700" />}
-                    <div className="min-w-0"><div className="text-[10px] text-neutral-300 truncate">{a.nome || a.codigo}</div><div className="text-[9px] text-emerald-400">R$ {Number(a.preco || 0).toFixed(2)}</div></div>
+                    <div className="min-w-0"><div className="text-[10px] text-neutral-300 truncate">{a.nome || a.codigo}</div></div>
                   </div>
                 ))}
               </div>
@@ -263,140 +265,124 @@ export default function EstoquePage() {
         </div>
       )}
 
-      {/* Flat view */}
-      {viewMode === "flat" && (
-      <>
-      {loading ? <div className="text-neutral-500 text-sm py-8 text-center">Carregando estoque...</div> : filtered.length === 0 ? (
-        <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-8 text-center"><p className="text-neutral-400 text-sm">Nenhum produto encontrado</p></div>
-      ) : (
-        <div className="bg-neutral-800 border border-neutral-700 rounded-lg overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-neutral-700 text-neutral-400 bg-neutral-850">
-                <th className="p-2 w-8"><input type="checkbox" checked={selected.size === filtered.length && filtered.length > 0} onChange={() => selected.size === filtered.length ? setSelected(new Set()) : setSelected(new Set(filtered.map(r => r.id)))} /></th>
-                <th className="text-left p-2 w-10"></th>
-                <th className="text-left p-2">SKU</th>
-                <th className="text-left p-2">Nome</th>
-                {Array.from(selectedDeps).map(did => <th key={did} className="text-right p-2 w-20">{depositos.find(d => d.id === did)?.descricao?.slice(0,12)}</th>)}
-                <th className="text-right p-2 w-20 font-bold">Total</th>
-                <th className="text-right p-2">Preco</th>
-                <th className="text-center p-2">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((r, i) => (
-                <tr key={r.id} className={`border-b border-neutral-700/50 ${i % 2 === 0 ? "bg-neutral-800" : "bg-neutral-800/50"} ${selected.has(r.id) ? "bg-indigo-900/20" : ""}`}>
-                  <td className="p-2"><input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleProduct(r.id)} /></td>
-                  <td className="p-1.5">{r.imagemURL ? <img src={r.imagemURL} alt="" className="w-6 h-6 object-cover rounded bg-neutral-700" /> : <div className="w-6 h-6 rounded bg-neutral-700" />}</td>
-                  <td className="p-2 text-neutral-200 font-mono text-[11px]">{r.codigo}</td>
-                  <td className="p-2 text-neutral-200 max-w-[180px] truncate" title={r.nome}>{r.nome}</td>
-                  {Array.from(selectedDeps).map(did => (
-                    <td key={did} className="p-2 text-right font-mono">
-                      <span className={`cursor-pointer hover:underline ${stockColor(r.estoques[did] || 0)}`}
-                        onClick={() => setModalProduto(r)} title="Clique para editar estoque">
-                        {r.estoques[did] || 0}
-                      </span>
-                    </td>
-                  ))}
-                  <td className={`p-2 text-right font-bold ${stockColor(r.totalEstoque)}`}>{r.totalEstoque}</td>
-                  <td className="p-2 text-right text-emerald-400">R$ {(r.preco||0).toLocaleString("pt-BR",{minimumFractionDigits:2})}</td>
-                  <td className="p-2 text-center">
-                    <span className={`px-1.5 py-0.5 rounded text-[9px] ${r.situacao==="A"?"bg-emerald-900/30 text-emerald-400":"bg-neutral-700 text-neutral-400"}`}>{r.situacao==="A"?"Ativo":"Inativo"}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Stock Modal */}
-      {modalProduto && (
-        <StockEditModal
-          produto={modalProduto}
-          depositos={depositos}
-          onClose={() => setModalProduto(null)}
-          onSaved={() => { setModalProduto(null); carregar(); }}
+      {/* Modal */}
+      {modalRow && (
+        <StockModal
+          row={modalRow}
+          tipo={modalTipo}
+          lojas={lojas}
+          lojaAtual={lojaSel}
+          transferOrigem={transferOrigem}
+          transferDestino={transferDestino}
+          setTransferDestino={setTransferDestino}
+          onClose={() => setModalRow(null)}
+          onEntrada={handleEntrada}
+          onSaida={handleSaida}
+          onTransferir={(orig, dest, qtd, motivo) => handleTransferir(modalRow.sku, orig, dest, qtd, motivo)}
         />
-      )}
-      </>
       )}
     </div>
   );
 }
 
-// Internal stock modal
-function StockEditModal({ produto, depositos, onClose, onSaved }: { produto: StockRow; depositos: BlingDeposito[]; onClose: () => void; onSaved: () => void; }) {
-  const [saldos, setSaldos] = useState<{idDep:number;nome:string;saldo:number;ajuste:number}[]>([]);
+function StockModal({ row, tipo, lojas, lojaAtual, transferOrigem, transferDestino, setTransferDestino, onClose, onEntrada, onSaida, onTransferir }: {
+  row: EstoqueRow; tipo: string; lojas: LojaItem[]; lojaAtual: string;
+  transferOrigem: string; transferDestino: string;
+  setTransferDestino: (v: string) => void;
+  onClose: () => void;
+  onEntrada: (sku: string, qtd: number, motivo: string) => Promise<boolean>;
+  onSaida: (sku: string, qtd: number, motivo: string) => Promise<boolean>;
+  onTransferir: (origem: string, destino: string, qtd: number, motivo: string) => Promise<boolean>;
+}) {
+  const [qtd, setQtd] = useState(0);
+  const [motivo, setMotivo] = useState("");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
 
-  useEffect(() => {
-    setSaldos(depositos.map(d => ({
-      idDep: d.id, nome: d.descricao,
-      saldo: produto.estoques[d.id] || 0, ajuste: 0,
-    })));
-  }, [produto, depositos]);
+  const lojaNome = lojas.find(l => String(l.id) === lojaAtual)?.nome || lojaAtual;
 
-  const total = saldos.reduce((s,d) => s + d.saldo, 0);
-  const handleAjuste = (i: number, v: number) => {
-    setSaldos(prev => { const n = [...prev]; n[i] = {...n[i], ajuste: Math.max(-n[i].saldo, v)}; return n; });
+  const handleSubmit = async () => {
+    if (qtd <= 0) { setMsg("Quantidade deve ser > 0"); return; }
+    setSaving(true); setMsg("");
+    let ok = false;
+    if (tipo === "entrada") ok = await onEntrada(row.sku, qtd, motivo);
+    else if (tipo === "saida") ok = await onSaida(row.sku, qtd, motivo);
+    else if (tipo === "transferir") {
+      if (!transferDestino) { setMsg("Selecione o destino"); setSaving(false); return; }
+      ok = await onTransferir(transferOrigem, transferDestino, qtd, motivo);
+    }
+    setSaving(false);
+    if (ok) onClose();
   };
-  const handleSplit = () => {
-    const per = Math.floor(total / (saldos.length || 1));
-    setSaldos(prev => prev.map(d => ({...d, ajuste: per - d.saldo})));
-  };
-  const handleSave = async (i: number) => {
-    const s = saldos[i]; if (s.ajuste === 0) return;
-    try {
-      setSaving(true);
-      await atualizarEstoqueDeposito({ idDeposito: s.idDep, idProduto: produto.id, operacao: s.ajuste > 0 ? "E" : "S", quantidade: Math.abs(s.ajuste) });
-      setMsg(`${s.nome}: ${s.ajuste > 0 ? "+" : ""}${s.ajuste}`);
-      setSaldos(prev => { const n = [...prev]; n[i] = { ...n[i], saldo: n[i].saldo + n[i].ajuste, ajuste: 0 }; return n; });
-    } catch (e) { setMsg("Erro: " + (e instanceof Error ? e.message : "")); }
-    finally { setSaving(false); }
-  };
-
-  const sc = (q: number) => q <= 0 ? "text-red-400" : q < 10 ? "text-yellow-400" : "text-emerald-400";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
-      <div className="bg-neutral-850 border border-neutral-700 rounded-xl w-full max-w-md mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+      <div className="bg-neutral-850 border border-neutral-700 rounded-xl w-full max-w-sm mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-3 border-b border-neutral-700">
-          <div><h3 className="text-sm font-semibold text-neutral-100">{produto.codigo}</h3><p className="text-[10px] text-neutral-500">{produto.nome}</p></div>
+          <div><h3 className="text-sm font-semibold text-neutral-100">{row.sku}</h3><p className="text-[10px] text-neutral-500">{row.nome}</p></div>
           <button onClick={onClose} className="text-neutral-500 hover:text-neutral-300">✕</button>
         </div>
-        <div className="p-3 space-y-2 max-h-[70vh] overflow-y-auto">
-          {msg && <div className="bg-emerald-900/30 text-emerald-400 text-[10px] px-2 py-1 rounded">{msg}</div>}
-          <div className="flex items-center justify-between bg-neutral-900 rounded px-3 py-2">
-            <span className="text-xs text-neutral-400">Total</span>
-            <div className="flex items-center gap-2">
-              <span className={`text-sm font-bold ${sc(total)}`}>{total}</span>
-              <button onClick={handleSplit} className="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded">Dividir</button>
-            </div>
+        <div className="p-3 space-y-3">
+          {msg && <div className="bg-red-900/30 text-red-400 text-[10px] px-2 py-1 rounded">{msg}</div>}
+          <div className="bg-neutral-800 rounded px-3 py-2 flex items-center justify-between">
+            <span className="text-xs text-neutral-400">Estoque atual ({row.loja})</span>
+            <span className="text-sm font-bold font-mono text-emerald-400">{row.quantidade}</span>
           </div>
-          {saldos.map((s, i) => (
-            <div key={s.idDep} className="bg-neutral-800 border border-neutral-700/50 rounded px-3 py-2">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-neutral-300 truncate max-w-[150px]">{s.nome}</span>
-                <div className="flex items-center gap-2">
-                  {s.ajuste !== 0 && <button onClick={() => handleSave(i)} disabled={saving} className="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded">Salvar</button>}
-                  <span className={`text-sm font-bold font-mono ${sc(s.saldo)}`}>{s.saldo}</span>
-                  {s.ajuste !== 0 && <span className={`text-[10px] font-bold ${s.ajuste > 0 ? "text-emerald-400" : "text-red-400"}`}>{s.ajuste > 0 ? "+" + s.ajuste : s.ajuste}</span>}
-                </div>
+
+          {tipo === "transferir" ? (
+            <>
+              <div>
+                <span className="text-[10px] text-neutral-500">Origem</span>
+                <div className="bg-neutral-700 rounded px-3 py-1.5 text-xs text-neutral-300">{transferOrigem}</div>
               </div>
-              <div className="flex items-center gap-1">
-                {[-10, -1].map(v => <button key={v} onClick={() => handleAjuste(i, s.ajuste + v)} className="text-[10px] bg-neutral-700 hover:bg-neutral-600 text-neutral-300 px-1.5 py-0.5 rounded">{v}</button>)}
-                <input type="number" value={s.ajuste} onChange={e => handleAjuste(i, Number(e.target.value))}
-                  className="flex-1 bg-neutral-900 border border-neutral-600 rounded px-2 py-1 text-xs text-neutral-200 text-center w-14" />
-                {[1, 10].map(v => <button key={v} onClick={() => handleAjuste(i, s.ajuste + v)} className="text-[10px] bg-neutral-700 hover:bg-neutral-600 text-neutral-300 px-1.5 py-0.5 rounded">+{v}</button>)}
+              <div>
+                <span className="text-[10px] text-neutral-500">Destino</span>
+                <select value={transferDestino} onChange={e => setTransferDestino(e.target.value)}
+                  className="w-full bg-neutral-700 border border-neutral-600 rounded px-3 py-1.5 text-xs text-neutral-200 mt-0.5">
+                  <option value="">-- Selecionar --</option>
+                  {lojas.filter(l => l.nome !== transferOrigem && l.ativa).map(l => <option key={l.id} value={l.nome}>{l.nome}</option>)}
+                </select>
               </div>
+            </>
+          ) : (
+            <div className="bg-neutral-800 rounded px-3 py-2">
+              <span className="text-[10px] text-neutral-500">{tipo === "entrada" ? "Loja destino" : "Loja origem"}</span>
+              <div className="text-xs text-neutral-300">{lojaNome}</div>
             </div>
-          ))}
-          {saldos.some(s => s.ajuste !== 0) && (
-            <button onClick={async () => { for (let i=0; i<saldos.length; i++) await handleSave(i); onSaved(); }}
-              className="w-full py-2 bg-indigo-600 text-white text-xs rounded-lg">Salvar Tudo</button>
           )}
+
+          <div>
+            <span className="text-[10px] text-neutral-500">Quantidade</span>
+            <input type="number" value={qtd || ""} onChange={e => setQtd(Number(e.target.value))} min={1}
+              className="w-full bg-neutral-800 border border-neutral-600 rounded px-3 py-1.5 text-xs text-neutral-200 mt-0.5 focus:outline-none focus:border-indigo-500"
+              placeholder="0" autoFocus />
+          </div>
+
+          <div>
+            <span className="text-[10px] text-neutral-500">Motivo (opcional)</span>
+            <input type="text" value={motivo} onChange={e => setMotivo(e.target.value)}
+              className="w-full bg-neutral-800 border border-neutral-600 rounded px-3 py-1.5 text-xs text-neutral-200 mt-0.5 focus:outline-none focus:border-indigo-500"
+              placeholder="ex: reposição, venda..." />
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            <Can permission="inventory:edit">
+              <button onClick={handleSubmit} disabled={saving}
+                className={"flex-1 py-2 text-xs rounded-lg text-white " + (tipo === "saida" ? "bg-red-600 hover:bg-red-500" : tipo === "transferir" ? "bg-amber-600 hover:bg-amber-500" : "bg-emerald-600 hover:bg-emerald-500")}>
+                {saving ? "Salvando..." : tipo === "entrada" ? "Registrar Entrada" : tipo === "saida" ? "Registrar Saída" : "Transferir"}
+              </button>
+            </Can>
+          </div>
+
+          {/* Quick action buttons */}
+          <div className="flex items-center gap-1 pt-1 border-t border-neutral-700">
+            <Can permission="inventory:edit">
+              <button onClick={() => onEntrada(row.sku, 1, "entrada rapida").then(ok => ok && onClose())}
+                className="flex-1 py-1.5 bg-emerald-900/30 text-emerald-400 text-[10px] rounded hover:bg-emerald-900/50">+1 Entrada</button>
+              <button onClick={() => onSaida(row.sku, 1, "saida rapida").then(ok => ok && onClose())}
+                className="flex-1 py-1.5 bg-red-900/30 text-red-400 text-[10px] rounded hover:bg-red-900/50">-1 Saída</button>
+            </Can>
+          </div>
         </div>
       </div>
     </div>

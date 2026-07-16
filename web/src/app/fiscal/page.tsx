@@ -11,8 +11,9 @@ import LoadingState from "@/app/_components/LoadingState";
 
 const SUBMENU: SubmenuItem[] = [
   { href: "/fiscal/notas", label: "Notas Fiscais", color: "bg-blue-600" },
+  { href: "/fiscal/apuracao", label: "Apuração", color: "bg-red-600" },
   { href: "/fiscal/tributos", label: "Tributos", color: "bg-amber-600" },
-  { href: "/fiscal/obrigacoes", label: "Obrigações Acessórias", color: "bg-purple-600" },
+  { href: "/fiscal/obrigacoes", label: "Obrigações", color: "bg-purple-600" },
   { href: "/fiscal/tabelas", label: "Tabelas Fiscais", color: "bg-emerald-600" },
 ];
 
