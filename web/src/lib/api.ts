@@ -175,6 +175,7 @@ export const api = {
   lojasCriar: (nome: string) => request<{ loja: { id: number; nome: string } }>("/api/lojas/manage", { method: "POST", body: JSON.stringify({ nome }) }),
   lojasAtualizar: (id: number, nome: string) => request<{ success: boolean }>(`/api/lojas/manage/${id}`, { method: "PUT", body: JSON.stringify({ nome }) }),
   lojasDeletar: (id: number) => request<{ success: boolean }>(`/api/lojas/manage/${id}`, { method: "DELETE" }),
+  lojasSyncBling: () => request<{ sync: number; lojas: Array<{ acao: string; id: number; nome: string }> }>("/api/lojas/sync/bling", { method: "POST" }),
 
   // KPI
   kpiOverview: (periodo?: number) =>
@@ -737,13 +738,14 @@ export interface EstoqueLojaRow {
   loja: string;
   quantidade: number;
   data_atualizacao: string;
+  sync_status?: string;
 }
 
 export const estoqueLojas = (params: string) =>
   request<{ estoque: EstoqueLojaRow[]; total: number; pagina: number }>(`/api/estoque/lojas?${params}`);
 
 export const estoqueAtualizar = (sku: string, loja: string, quantidade: number) =>
-  request<{ ok: boolean; bling_sync?: { error?: string } }>("/api/estoque/lojas", {
+  request<{ ok: boolean; bling_sync?: { ok?: boolean; error?: string } }>("/api/estoque/lojas", {
     method: "PUT",
     body: JSON.stringify({ sku, loja, quantidade, sync_bling: "1" }),
     headers: { "Content-Type": "application/json" },

@@ -1,8 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { estoqueLojas, estoqueAtualizar, type EstoqueLojaRow } from "@/lib/api";
+import { estoqueLojas, estoqueAtualizar, request, type EstoqueLojaRow } from "@/lib/api";
 import { Can } from "@/lib/auth";
+
+function SyncBadge({ status }: { status?: string }) {
+  if (!status || status === "ok") return <span className="text-[10px] text-emerald-500" title="Sincronizado">✓</span>;
+  if (status === "pendente") return <span className="text-[10px] text-amber-400 animate-pulse" title="Pendente">⏳</span>;
+  return <span className="text-[10px] text-red-400" title="Erro">✗</span>;
+}
 
 export default function EstoqueLojasPage() {
   const [rows, setRows] = useState<EstoqueLojaRow[]>([]);
@@ -10,6 +16,7 @@ export default function EstoqueLojasPage() {
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
 
   const [busca, setBusca] = useState("");
   const [pagina, setPagina] = useState(1);
@@ -97,6 +104,16 @@ export default function EstoqueLojasPage() {
         </p>
       </div>
 
+      <div className="flex items-center gap-2">
+        <button
+          onClick={async () => { setRetrying(true); await request("/api/estoque/sync/processar", { method: "POST" }).catch(() => {}); setRetrying(false); load(busca, pagina); }}
+          disabled={retrying}
+          className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"
+        >
+          {retrying ? "Processando..." : "Retry Sync"}
+        </button>
+      </div>
+
       {erro && (
         <div className="text-red-400 text-sm bg-red-950/40 border border-red-900/50 rounded-lg px-4 py-3">{erro}</div>
       )}
@@ -136,6 +153,7 @@ export default function EstoqueLojasPage() {
                   <th className="text-left px-4 py-3 font-medium">Depósito</th>
                   <th className="text-right px-4 py-3 font-medium w-28">Qtd</th>
                   <th className="text-right px-4 py-3 font-medium w-48">Atualizado</th>
+                  <th className="text-center px-2 py-3 font-medium w-10">Sync</th>
                   <th className="text-center px-4 py-3 font-medium w-20">Ações</th>
                 </tr>
               </thead>
@@ -167,6 +185,9 @@ export default function EstoqueLojasPage() {
                     </td>
                     <td className="px-4 py-2.5 text-right text-xs text-neutral-600">
                       {r.data_atualizacao ? new Date(r.data_atualizacao).toLocaleString("pt-BR") : "—"}
+                    </td>
+                    <td className="px-2 py-2.5 text-center">
+                      <SyncBadge status={r.sync_status} />
                     </td>
                     <td className="px-4 py-2.5 text-center">
                       {editing === r.id ? (

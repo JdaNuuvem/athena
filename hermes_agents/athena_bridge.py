@@ -878,7 +878,7 @@ def estoque_por_loja():
         total = cur.fetchone()[0]
         offset = (pagina - 1) * por_pagina
         cur.execute(f"""
-            SELECT e.id, e.sku, c.descricao AS nome, e.loja, e.quantidade, e.data_atualizacao
+            SELECT e.id, e.sku, c.descricao AS nome, e.loja, e.quantidade, e.data_atualizacao, e.sync_status
             FROM estoque_lojas e
             JOIN catalogo_produtos c ON c.sku = e.sku
             WHERE {sql_where}
@@ -893,7 +893,7 @@ def estoque_por_loja():
 
 @app.route('/api/estoque/lojas', methods=['PUT'])
 def atualizar_estoque_loja():
-    """Atualiza quantidade de estoque em uma loja/depósito. Two-way sync opcional para Bling."""
+    """Atualiza quantidade de estoque em uma loja/depósito. Two-way sync via fila offline."""
     dados = request.json or {}
     sku = dados.get("sku", "").strip()
     loja_nome = str(dados.get("loja", "")).strip()
@@ -905,19 +905,102 @@ def atualizar_estoque_loja():
         conn = _db_sync()
         cur = conn.cursor()
         cur.execute("""
-            INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao)
-            VALUES (%s, %s, %s, NOW())
-            ON CONFLICT (sku, loja) DO UPDATE SET quantidade = %s, data_atualizacao = NOW()
+            INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao, sync_status)
+            VALUES (%s, %s, %s, NOW(), 'pendente')
+            ON CONFLICT (sku, loja) DO UPDATE SET quantidade = %s, data_atualizacao = NOW(), sync_status = 'pendente'
         """, (sku, loja_nome, float(quantidade), float(quantidade)))
         cur.close(); conn.close()
         result = {"ok": True, "sku": sku, "loja": loja_nome, "quantidade": quantidade}
         if sync_bling:
-            from bling_erp import sincronizar_estoque_para_bling
-            bling_r = sincronizar_estoque_para_bling(sku, loja_nome, float(quantidade))
+            from core.estoque import sync_para_bling
+            bling_r = sync_para_bling(loja_nome, sku, float(quantidade))
             result["bling_sync"] = bling_r
+            # sync_para_bling ja atualiza sync_status para ok/erro
         return jsonify(result)
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
+
+@app.route('/api/estoque/sync/processar', methods=['POST'])
+def processar_fila_estoque():
+    """Processa fila de sync pendente (retry offline)."""
+    from core.estoque import processar_fila_sync
+    limite = request.args.get("limite", 50, type=int)
+    return jsonify(processar_fila_sync(limite))
+
+@app.route('/api/estoque/sync/status/<sku>', methods=['GET'])
+def status_sync_sku(sku):
+    """Status de sync para um SKU."""
+    from core.estoque import status_sync_sku
+    return jsonify(status_sync_sku(sku))
+
+@app.route('/api/estoque/entrada', methods=['POST'])
+def estoque_entrada():
+    """Registra entrada de estoque em uma loja."""
+    from core.estoque import entrada as est_entrada
+    dados = request.json or {}
+    sku = str(dados.get("sku", "")).strip()
+    loja = str(dados.get("loja", "")).strip()
+    quantidade = dados.get("quantidade")
+    motivo = str(dados.get("motivo", "")).strip()
+    if not sku or not loja or quantidade is None:
+        return jsonify({"erro": "sku, loja e quantidade obrigatórios"}), 400
+    try:
+        qtd = float(quantidade)
+        if qtd <= 0:
+            return jsonify({"erro": "quantidade deve ser > 0"}), 400
+    except (ValueError, TypeError):
+        return jsonify({"erro": "quantidade inválida"}), 400
+    return jsonify(est_entrada(sku, loja, qtd, motivo))
+
+@app.route('/api/estoque/saida', methods=['POST'])
+def estoque_saida():
+    """Registra saída de estoque de uma loja."""
+    from core.estoque import saida as est_saida
+    dados = request.json or {}
+    sku = str(dados.get("sku", "")).strip()
+    loja = str(dados.get("loja", "")).strip()
+    quantidade = dados.get("quantidade")
+    motivo = str(dados.get("motivo", "")).strip()
+    if not sku or not loja or quantidade is None:
+        return jsonify({"erro": "sku, loja e quantidade obrigatórios"}), 400
+    try:
+        qtd = float(quantidade)
+        if qtd <= 0:
+            return jsonify({"erro": "quantidade deve ser > 0"}), 400
+    except (ValueError, TypeError):
+        return jsonify({"erro": "quantidade inválida"}), 400
+    return jsonify(est_saida(sku, loja, qtd, motivo))
+
+@app.route('/api/estoque/transferir', methods=['POST'])
+def estoque_transferir():
+    """Transfere estoque entre duas lojas/depósitos."""
+    from core.estoque import transferir as est_transferir
+    dados = request.json or {}
+    sku = str(dados.get("sku", "")).strip()
+    origem = str(dados.get("origem", "")).strip()
+    destino = str(dados.get("destino", "")).strip()
+    quantidade = dados.get("quantidade")
+    motivo = str(dados.get("motivo", "")).strip()
+    if not sku or not origem or not destino or quantidade is None:
+        return jsonify({"erro": "sku, origem, destino e quantidade obrigatórios"}), 400
+    if origem == destino:
+        return jsonify({"erro": "origem e destino devem ser diferentes"}), 400
+    try:
+        qtd = float(quantidade)
+        if qtd <= 0:
+            return jsonify({"erro": "quantidade deve ser > 0"}), 400
+    except (ValueError, TypeError):
+        return jsonify({"erro": "quantidade inválida"}), 400
+    return jsonify(est_transferir(sku, origem, destino, qtd, motivo))
+
+@app.route('/api/estoque/movimentacoes', methods=['GET'])
+def estoque_movimentacoes():
+    """Lista movimentações de estoque."""
+    from core.estoque import movimentacoes as est_movs
+    sku = request.args.get("sku", "")
+    loja = request.args.get("loja", "")
+    limite = request.args.get("limite", 50, type=int)
+    return jsonify({"movimentacoes": est_movs(sku, loja, limite)})
 
 @app.route('/api/estoque/lote/<int:lote_id>/concluir', methods=['POST'])
 def concluir_lote_estoque(lote_id):
@@ -3138,7 +3221,10 @@ def listar_lojas():
     try:
         conn = _db_sync(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         periodo = request.args.get("periodo", 30, type=int)
-        fisicas = [{"id":i,"nome":n,"tipo":"fisica"} for i,n in enumerate(["Loja Centro","Loja Shopping","Loja Norte","Loja Sul","Loja Leste"],1)]
+        cur.execute("SELECT id, nome FROM lojas WHERE ativa = TRUE ORDER BY id")
+        fisicas = [{"id":r["id"],"nome":r["nome"],"tipo":"fisica"} for r in cur.fetchall()]
+        if not fisicas:
+            fisicas = [{"id":1,"nome":"Loja Padrão","tipo":"fisica"}]
         try:
             cur.execute("SELECT DISTINCT marketplace FROM vendas WHERE marketplace IS NOT NULL")
             mps = [{"id":10+i,"nome":r["marketplace"],"tipo":"digital"} for i,r in enumerate(cur.fetchall())]
