@@ -52,15 +52,6 @@ class FactoryConfig:
     # Telegram
     telegram_bot_token: str = ""
 
-    # Lojas físicas
-    lojas: list = field(default_factory=lambda: [
-        {"id": 1, "nome": "Loja Centro"},
-        {"id": 2, "nome": "Loja Shopping"},
-        {"id": 3, "nome": "Loja Norte"},
-        {"id": 4, "nome": "Loja Sul"},
-        {"id": 5, "nome": "Loja Leste"},
-    ])
-
     # Alerta
     margem_minima_pct: float = 15.0
     ruptura_estoque_dias: int = 7

@@ -1,5 +1,6 @@
 """Entidades SSOT — Unificacao Clientes, Fornecedores, Vendedores, Lojas + Eventos cross-module"""
 from core import get_db, run_async, log, hoje
+from core.lojas import LOJA_PRINCIPAL, LOJA_PRODUCAO
 import datetime
 
 AGENT = "Entidades SSOT"
@@ -238,7 +239,7 @@ def ao_faturar_pedido(pedido_id: int) -> dict:
                 sku = item.get("sku","")
                 qtd = float(item.get("quantidade",0) or 0)
                 if sku and qtd > 0:
-                    await db.execute("INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao) VALUES ($1, 'principal', -$2, NOW()) ON CONFLICT (sku, loja) DO UPDATE SET quantidade = estoque_lojas.quantidade - $2, data_atualizacao = NOW()", sku, qtd)
+                    await db.execute(f"INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao) VALUES ($1, '{LOJA_PRINCIPAL}', -$2, NOW()) ON CONFLICT (sku, loja) DO UPDATE SET quantidade = estoque_lojas.quantidade - $2, data_atualizacao = NOW()", sku, qtd)
                     # Atualizar catalogo FK
                     from core.catalogo import buscar_por_sku_ou_criar
                     pid = buscar_por_sku_ou_criar(sku, item.get("descricao",""))
@@ -295,7 +296,7 @@ def ao_receber_compra(recebimento_id: int) -> dict:
                 sku = item.get("produto_codigo","")
                 qtd = float(item.get("quantidade",0) or 0)
                 if sku and qtd > 0:
-                    await db.execute("INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao) VALUES ($1, 'principal', $2, NOW()) ON CONFLICT (sku, loja) DO UPDATE SET quantidade = estoque_lojas.quantidade + $2, data_atualizacao = NOW()", sku, qtd)
+                    await db.execute(f"INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao) VALUES ($1, '{LOJA_PRINCIPAL}', $2, NOW()) ON CONFLICT (sku, loja) DO UPDATE SET quantidade = estoque_lojas.quantidade + $2, data_atualizacao = NOW()", sku, qtd)
                     from core.catalogo import buscar_por_sku_ou_criar
                     pid_cat = buscar_por_sku_ou_criar(sku, item.get("descricao",""))
                     if pid_cat:
@@ -333,7 +334,7 @@ def ao_finalizar_producao(op_id: int) -> dict:
             sku = op["produto_codigo"]
             qtd = float(op["quantidade"] or 0)
             if sku and qtd > 0:
-                await db.execute("INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao) VALUES ($1, 'producao', $2, NOW()) ON CONFLICT (sku, loja) DO UPDATE SET quantidade = estoque_lojas.quantidade + $2, data_atualizacao = NOW()", sku, qtd)
+                await db.execute(f"INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao) VALUES ($1, '{LOJA_PRODUCAO}', $2, NOW()) ON CONFLICT (sku, loja) DO UPDATE SET quantidade = estoque_lojas.quantidade + $2, data_atualizacao = NOW()", sku, qtd)
                 from core.catalogo import buscar_por_sku_ou_criar
                 pid = buscar_por_sku_ou_criar(sku, op.get("descricao",""))
                 if pid:
@@ -348,7 +349,7 @@ def ao_finalizar_producao(op_id: int) -> dict:
                 csku = comp["componente_codigo"]
                 cqtd = float(comp["quantidade"] or 0)
                 if csku and cqtd > 0:
-                    await db.execute("INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao) VALUES ($1, 'producao', -$2, NOW()) ON CONFLICT (sku, loja) DO UPDATE SET quantidade = estoque_lojas.quantidade - $2, data_atualizacao = NOW()", csku, cqtd)
+                    await db.execute(f"INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao) VALUES ($1, '{LOJA_PRODUCAO}', -$2, NOW()) ON CONFLICT (sku, loja) DO UPDATE SET quantidade = estoque_lojas.quantidade - $2, data_atualizacao = NOW()", csku, cqtd)
             resultados["consumo_componentes"] = "baixado"
         except Exception as e: resultados["consumo_componentes"] = f"erro: {e}"
         # 13) Custos no financeiro

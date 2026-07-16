@@ -114,3 +114,27 @@ def sincronizar_bling() -> dict:
         return {"sync": len(resultados), "lojas": resultados}
     try: return run_async(_go())
     except Exception as e: return {"error": str(e)}
+
+# ── Helpers para entidades ──
+
+def _primeira_loja() -> str:
+    """Nome da primeira loja ativa — usado como loja padrao em operacoes internas."""
+    _ensure_table()
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow("SELECT nome FROM lojas WHERE ativa = TRUE ORDER BY id LIMIT 1")
+        return row["nome"] if row else "Loja Centro"
+    try: return run_async(_go())
+    except: return "Loja Centro"
+
+LOJA_PRINCIPAL: str = ""
+LOJA_PRODUCAO: str = ""
+
+def _init_loja_names():
+    global LOJA_PRINCIPAL, LOJA_PRODUCAO
+    if LOJA_PRINCIPAL:
+        return
+    LOJA_PRINCIPAL = _primeira_loja()
+    LOJA_PRODUCAO = "Produção"
+
+_init_loja_names()

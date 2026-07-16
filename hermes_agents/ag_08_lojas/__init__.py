@@ -12,7 +12,18 @@ from core import run_async, get_db, log, hoje, FactoryConfig
 
 AGENT = "AG-08 | Analista das Lojas Físicas"
 
-LOJAS = FactoryConfig.load().lojas  # 5 lojas
+def _lojas() -> list:
+    """Carrega lojas do banco, fallback hardcoded se vazio."""
+    try:
+        from core.lojas import listar as listar_lojas
+        lojas = run_async(listar_lojas())
+        if lojas:
+            return [{"id": l["id"], "nome": l["nome"]} for l in lojas]
+    except Exception:
+        pass
+    return [
+        {"id": 1, "nome": "Loja Padrão"},
+    ]
 
 def ranking_lojas() -> list:
     """Ranking de desempenho das lojas hoje."""
