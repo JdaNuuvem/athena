@@ -108,15 +108,17 @@ export default function ProdutosPage() {
   const [pagina, setPagina] = useState(1);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [mostrarVariacoes, setMostrarVariacoes] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  const load = useCallback(async (search?: string, pg?: number) => {
+  const load = useCallback(async (search?: string, pg?: number, vars?: boolean) => {
     setLoading(true);
     setError(null);
     try {
       const p = pg ?? 1;
-      const r = await api.listarProdutos({ busca: search, pagina: p });
+      const v = vars ?? mostrarVariacoes;
+      const r = await api.listarProdutos({ busca: search, pagina: p, variacoes: v });
       setProdutos((r.produtos ?? []) as Product[]);
       setTotal(r.total ?? 0);
       if (!search) setPagina(p);
@@ -125,9 +127,15 @@ export default function ProdutosPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [mostrarVariacoes]);
 
   useEffect(() => { load(undefined, 1); }, [load]);
+
+  const toggleVariacoes = () => {
+    const next = !mostrarVariacoes;
+    setMostrarVariacoes(next);
+    load(busca, 1, next);
+  };
 
   const syncBling = async () => {
     setSyncing(true);
@@ -159,13 +167,25 @@ export default function ProdutosPage() {
           <h1 className="text-lg font-light text-neutral-300">Produtos</h1>
           <p className="text-xs text-neutral-500 mt-0.5">{total} produto{total !== 1 ? "s" : ""} no catálogo</p>
         </div>
-        <button
-          onClick={syncBling}
-          disabled={syncing}
-          className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"
-        >
-          {syncing ? "Sincronizando..." : "Sync Bling"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={toggleVariacoes}
+            className={`text-xs px-3 py-1.5 rounded-lg transition-colors ${
+              mostrarVariacoes
+                ? "bg-amber-600 hover:bg-amber-500 text-white"
+                : "bg-neutral-800 hover:bg-neutral-700 text-neutral-400"
+            }`}
+          >
+            {mostrarVariacoes ? "Só pais" : "Mostrar variações"}
+          </button>
+          <button
+            onClick={syncBling}
+            disabled={syncing}
+            className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"
+          >
+            {syncing ? "Sincronizando..." : "Sync Bling"}
+          </button>
+        </div>
       </div>
 
       {error && (

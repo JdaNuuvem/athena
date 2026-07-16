@@ -157,11 +157,12 @@ export const api = {
     }),
 
   // Produtos
-  listarProdutos: (params?: { busca?: string; loja?: string; pagina?: number }) => {
+  listarProdutos: (params?: { busca?: string; loja?: string; pagina?: number; variacoes?: boolean }) => {
     const q = new URLSearchParams();
     if (params?.busca) q.set("busca", params.busca);
     if (params?.loja) q.set("loja", params.loja);
     if (params?.pagina) q.set("pagina", String(params.pagina));
+    if (params?.variacoes) q.set("variacoes", "1");
     return request<{ produtos: unknown[]; total: number; pagina: number }>(`/api/produtos?${q}`);
   },
 

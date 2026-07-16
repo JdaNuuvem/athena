@@ -2918,6 +2918,7 @@ def _dicts(cur):
 def listar_produtos():
     busca = request.args.get("busca", "").strip()
     loja = request.args.get("loja", "")
+    variacoes = request.args.get("variacoes", "0") == "1"
     margem_min = request.args.get("margem_min", type=float)
     pagina = request.args.get("pagina", 1, type=int)
     por_pagina = request.args.get("por_pagina", 50, type=int)
@@ -2929,6 +2930,8 @@ def listar_produtos():
             where.append(f"(c.sku ILIKE '%{busca}%' OR c.descricao ILIKE '%{busca}%')")
         if loja:
             where.append("EXISTS(SELECT 1 FROM anuncios a WHERE a.sku=c.sku AND a.marketplace='%s')" % loja)
+        if not variacoes:
+            where.append("c.sku_pai IS NULL")
         sql_where = " AND ".join(where)
         offset = (pagina - 1) * por_pagina
         cur.execute(f"SELECT COUNT(*) FROM catalogo_produtos c WHERE {sql_where}")
