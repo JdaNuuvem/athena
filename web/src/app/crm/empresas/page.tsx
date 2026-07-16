@@ -9,7 +9,7 @@ export default function Page() {
   const [form, setForm] = useState<Record<string,string>>({});
 
   const carregar = () => {
-    fetch("/api/crm/empresas")
+    fetch("/api/cadastros/empresas")
       .then(r => r.json())
       .then(d => setItems(d.data || []))
       .catch(() => {})
@@ -18,12 +18,12 @@ export default function Page() {
   useEffect(() => { carregar(); }, []);
 
   const handleCreate = async () => {
-    await fetch("/api/crm/empresas", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(form) });
+    await fetch("/api/cadastros/empresas", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(form) });
     setShowForm(false); setForm({}); carregar();
   };
   const handleDelete = async (id: number) => {
     if (!confirm("Remover?")) return;
-    await fetch("/api/crm/empresas/" + id, { method: "DELETE" });
+    await fetch("/api/cadastros/empresas/" + id, { method: "DELETE" });
     carregar();
   };
 

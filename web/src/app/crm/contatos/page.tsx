@@ -9,7 +9,7 @@ export default function Page() {
   const [form, setForm] = useState<Record<string,string>>({});
 
   const carregar = () => {
-    fetch("/api/crm/contatos")
+    fetch("/api/cadastros/clientes")
       .then(r => r.json())
       .then(d => setItems(d.data || []))
       .catch(() => {})
@@ -23,7 +23,7 @@ export default function Page() {
   };
   const handleDelete = async (id: number) => {
     if (!confirm("Remover?")) return;
-    await fetch("/api/crm/contatos/" + id, { method: "DELETE" });
+    await fetch("/api/cadastros/clientes/" + id, { method: "DELETE" });
     carregar();
   };
 
