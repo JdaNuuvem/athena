@@ -67,10 +67,13 @@ export default function EstoqueLojasPage() {
 
   const saveEdit = async (row: EstoqueLojaRow) => {
     try {
-      await estoqueAtualizar(row.sku, row.loja, editQty);
-      setRows(prev => prev.map(r => r.id === row.id ? { ...r, quantidade: editQty } : r));
-      setOkMsg(`Estoque de ${row.sku} atualizado`);
-      setTimeout(() => setOkMsg(null), 2000);
+      const r = await estoqueAtualizar(row.sku, row.loja, editQty);
+      setRows(prev => prev.map(r2 => r2.id === row.id ? { ...r2, quantidade: editQty } : r2));
+      let msg = `Estoque de ${row.sku} atualizado`;
+      if (r.bling_sync && (r.bling_sync as Record<string, unknown>).error) msg += " (Bling: erro)";
+      else if (r.bling_sync) msg += " (Bling: ✓)";
+      setOkMsg(msg);
+      setTimeout(() => setOkMsg(null), 2500);
     } catch (e: unknown) {
       setErro(e instanceof Error ? e.message : "Erro ao salvar");
     }

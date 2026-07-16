@@ -743,8 +743,8 @@ export const estoqueLojas = (params: string) =>
   request<{ estoque: EstoqueLojaRow[]; total: number; pagina: number }>(`/api/estoque/lojas?${params}`);
 
 export const estoqueAtualizar = (sku: string, loja: string, quantidade: number) =>
-  request<{ ok: boolean }>("/api/estoque/lojas", {
+  request<{ ok: boolean; bling_sync?: { error?: string } }>("/api/estoque/lojas", {
     method: "PUT",
-    body: JSON.stringify({ sku, loja, quantidade }),
+    body: JSON.stringify({ sku, loja, quantidade, sync_bling: "1" }),
     headers: { "Content-Type": "application/json" },
   });

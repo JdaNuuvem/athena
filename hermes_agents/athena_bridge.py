@@ -893,11 +893,12 @@ def estoque_por_loja():
 
 @app.route('/api/estoque/lojas', methods=['PUT'])
 def atualizar_estoque_loja():
-    """Atualiza quantidade de estoque em uma loja/depósito."""
+    """Atualiza quantidade de estoque em uma loja/depósito. Two-way sync opcional para Bling."""
     dados = request.json or {}
     sku = dados.get("sku", "").strip()
     loja_nome = str(dados.get("loja", "")).strip()
     quantidade = dados.get("quantidade")
+    sync_bling = str(dados.get("sync_bling", "1")) == "1"
     if not sku or not loja_nome or quantidade is None:
         return jsonify({"erro": "sku, loja e quantidade obrigatórios"}), 400
     try:
@@ -909,7 +910,12 @@ def atualizar_estoque_loja():
             ON CONFLICT (sku, loja) DO UPDATE SET quantidade = %s, data_atualizacao = NOW()
         """, (sku, loja_nome, float(quantidade), float(quantidade)))
         cur.close(); conn.close()
-        return jsonify({"ok": True, "sku": sku, "loja": loja_nome, "quantidade": quantidade})
+        result = {"ok": True, "sku": sku, "loja": loja_nome, "quantidade": quantidade}
+        if sync_bling:
+            from bling_erp import sincronizar_estoque_para_bling
+            bling_r = sincronizar_estoque_para_bling(sku, loja_nome, float(quantidade))
+            result["bling_sync"] = bling_r
+        return jsonify(result)
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 

@@ -492,6 +492,34 @@ def atualizar_estoque_deposito(dados: dict) -> dict:
     quantidade, preco (opcional)."""
     return _request("estoques", dados, method="PUT")
 
+def sincronizar_estoque_para_bling(sku: str, loja_nome: str, quantidade: float) -> dict:
+    """Two-way sync: Athena → Bling. Resolve SKU e loja para IDs Bling e envia atualizacao."""
+    try:
+        from core import get_db, run_async
+        async def _go():
+            db = await get_db()
+            # Resolve Bling product ID
+            prod = await db.fetchrow("SELECT id_bling FROM catalogo_produtos WHERE sku = $1", sku)
+            if not prod or not prod["id_bling"]:
+                return {"error": f"SKU {sku} sem id_bling no catalogo"}
+            id_produto = int(prod["id_bling"])
+            # Resolve Bling deposito ID
+            dep = await db.fetchrow("SELECT bling_id FROM lojas WHERE nome = $1", loja_nome)
+            if not dep or not dep["bling_id"]:
+                return {"error": f"Loja '{loja_nome}' sem bling_id vinculado"}
+            id_deposito = int(dep["bling_id"])
+            # Envia para Bling
+            payload = {
+                "idDeposito": id_deposito,
+                "idProduto": id_produto,
+                "operacao": "B",  # B = balanco (seta estoque exato)
+                "quantidade": quantidade,
+            }
+            return atualizar_estoque_deposito(payload)
+        return run_async(_go())
+    except Exception as e:
+        return {"error": str(e)}
+
 
 # ── Analytics de Vendas ──
 
