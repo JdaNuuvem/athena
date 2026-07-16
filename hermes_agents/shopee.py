@@ -213,12 +213,14 @@ if __name__ == "__main__":
 
 # ── OAuth2 Authorization Flow ──
 
-def get_auth_url(redirect_uri: str = "") -> str:
+def get_auth_url(redirect_uri: str = "", sandbox: bool = None) -> str:
     """Gera URL de autorizacao Shopee. Usuario clica para autorizar o app."""
     cfg = get_shopee_config()
     if not cfg["partner_id"]:
         return ""
-    base = _base_url().replace("/api/v2", "") + "/api/v2/shop/auth_partner"
+    if sandbox is None:
+        sandbox = _is_sandbox()
+    base = (BASE_URL_SANDBOX if sandbox else (BASE_URL_BRAZIL if SHOPEE_REGION=="br" else BASE_URL_LIVE)).replace("/api/v2", "") + "/api/v2/shop/auth_partner"
     if not redirect_uri:
         # Usar dominio do Bling como fallback
         from core.config import get_config as gc

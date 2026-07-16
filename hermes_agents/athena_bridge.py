@@ -3476,7 +3476,8 @@ def shopee_oauth_callback():
 @app.route('/api/shopee/auth-url', methods=['GET'])
 def shopee_auth_url():
     from shopee import get_auth_url
-    url = get_auth_url()
+    sandbox = request.args.get("sandbox", "").lower() == "true"
+    url = get_auth_url(sandbox=sandbox)
     if not url:
         return jsonify({"error": "Partner ID nao configurado"}), 400
     return jsonify({"url": url})
