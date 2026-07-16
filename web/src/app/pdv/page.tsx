@@ -23,6 +23,14 @@ export default function PDVPage() {
 
   const notify = (text: string, type: "success" | "error" | "info" = "info") => { setMsg({ text, type }); setTimeout(() => setMsg(null), 3000); };
 
+  // Auto-fill search from ?sku= query param (link from Products)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const sku = params.get("sku");
+    if (sku) { setSearchQ(sku); searchProducts(sku); }
+  }, []);
+
   const loadDashboard = useCallback(async () => {
     try { const r = await fetch("/api/pdv/dashboard"); const d = await r.json(); setCaixa(d.caixa_aberto); } catch {}
   }, []);

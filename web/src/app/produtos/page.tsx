@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { api, type Product } from "@/lib/api";
 import { useStore } from "@/lib/store-context";
 
@@ -260,6 +261,7 @@ export default function ProdutosPage() {
 
                   <div className="flex items-center gap-2">
                     <div className="flex flex-col items-center gap-0.5">
+                      <Link href={"/pdv?sku=" + p.sku} onClick={e => e.stopPropagation()} className="px-2 py-1 bg-amber-600 hover:bg-amber-500 text-white text-[10px] rounded-lg shrink-0" title="Vender este produto">🛒</Link>
                       <StockBadge qty={p.estoque_atual ?? 0} />
                       <MargemBadge pct={p.margem_pct ?? 0} />
                     </div>
