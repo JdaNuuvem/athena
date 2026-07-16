@@ -25,4 +25,4 @@ ENV DB_NAME=hermes_factory
 
 EXPOSE 3000 3001
 
-CMD bash -c "(cd /app/web && npx next start -p 3001) & python /app/hermes_agents/athena_bridge.py & wait -n"
+CMD bash -c "(cd /app/web && npx next start -p 3000) & python /app/hermes_agents/athena_bridge.py & wait -n"
