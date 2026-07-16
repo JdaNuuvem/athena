@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { estoqueLojas, estoqueAtualizar, request, type EstoqueLojaRow } from "@/lib/api";
+import { estoqueLojas, estoqueAtualizar, type EstoqueLojaRow } from "@/lib/api";
 import { Can } from "@/lib/auth";
 
 function SyncBadge({ status }: { status?: string }) {
@@ -92,7 +92,7 @@ export default function EstoqueLojasPage() {
   const retrySync = async () => {
     setRetrying(true);
     try {
-      await request("/api/estoque/sync/processar", { method: "POST" });
+      await fetch("/api/estoque/sync/processar", { method: "POST" });
     } catch { /* ok */ }
     setRetrying(false);
     load(busca, pagina);
