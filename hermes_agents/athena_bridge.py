@@ -3460,6 +3460,27 @@ def kpi_overview():
 # Rota padrão — SPA fallback: serve index.html pra qualquer rota do frontend
 # ===========================================================================
 @app.route('/', defaults={'path': ''})
+
+@app.route('/api/shopee/callback', methods=['GET'])
+def shopee_oauth_callback():
+    code = request.args.get("code", "")
+    shop_id = request.args.get("shop_id", "")
+    if not code:
+        return jsonify({"error": "Parametro code ausente"}), 400
+    from shopee import exchange_shopee_code
+    result = exchange_shopee_code(code, shop_id)
+    if result.get("success"):
+        return jsonify(result)
+    return jsonify({"error": result.get("error", "Falha na autenticacao"), "detail": result}), 400
+
+@app.route('/api/shopee/auth-url', methods=['GET'])
+def shopee_auth_url():
+    from shopee import get_auth_url
+    url = get_auth_url()
+    if not url:
+        return jsonify({"error": "Partner ID nao configurado"}), 400
+    return jsonify({"url": url})
+
 @app.route('/<path:path>')
 def serve_frontend(path):
     static_dir = Path(__file__).parent / 'dashboard'
@@ -3492,23 +3513,3 @@ if __name__ == "__main__":
 
 
 # ── Shopee OAuth Callback ──
-
-@app.route('/api/shopee/callback', methods=['GET'])
-def shopee_oauth_callback():
-    code = request.args.get("code", "")
-    shop_id = request.args.get("shop_id", "")
-    if not code:
-        return jsonify({"error": "Parametro code ausente"}), 400
-    from shopee import exchange_shopee_code
-    result = exchange_shopee_code(code, shop_id)
-    if result.get("success"):
-        return jsonify(result)
-    return jsonify({"error": result.get("error", "Falha na autenticacao"), "detail": result}), 400
-
-@app.route('/api/shopee/auth-url', methods=['GET'])
-def shopee_auth_url():
-    from shopee import get_auth_url
-    url = get_auth_url()
-    if not url:
-        return jsonify({"error": "Partner ID nao configurado"}), 400
-    return jsonify({"url": url})
