@@ -124,6 +124,7 @@ function Sidebar() {
             onChange={(e) => {
               setLoja(e.target.value);
               localStorage.setItem("loja", e.target.value);
+              window.dispatchEvent(new Event("loja-changed"));
             }}
             className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-indigo-500"
           >

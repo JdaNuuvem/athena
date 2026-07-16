@@ -118,7 +118,8 @@ export default function ProdutosPage() {
     try {
       const p = pg ?? 1;
       const v = vars ?? mostrarVariacoes;
-      const r = await api.listarProdutos({ busca: search, pagina: p, variacoes: v });
+      const loja = typeof window !== "undefined" ? localStorage.getItem("loja") || "" : "";
+      const r = await api.listarProdutos({ busca: search, pagina: p, variacoes: v, loja: loja === "todas" ? undefined : loja });
       setProdutos((r.produtos ?? []) as Product[]);
       setTotal(r.total ?? 0);
       if (!search) setPagina(p);
@@ -130,6 +131,12 @@ export default function ProdutosPage() {
   }, [mostrarVariacoes]);
 
   useEffect(() => { load(undefined, 1); }, [load]);
+
+  useEffect(() => {
+    const handler = () => load(busca, 1);
+    window.addEventListener("loja-changed", handler);
+    return () => window.removeEventListener("loja-changed", handler);
+  }, [load, busca]);
 
   const toggleVariacoes = () => {
     const next = !mostrarVariacoes;

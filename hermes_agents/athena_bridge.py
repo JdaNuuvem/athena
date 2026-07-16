@@ -2929,7 +2929,12 @@ def listar_produtos():
         if busca:
             where.append(f"(c.sku ILIKE '%{busca}%' OR c.descricao ILIKE '%{busca}%')")
         if loja:
-            where.append("EXISTS(SELECT 1 FROM anuncios a WHERE a.sku=c.sku AND a.marketplace='%s')" % loja)
+            if loja.isdigit():
+                # Loja física: filtra via estoque_lojas usando nome da tabela lojas
+                where.append(f"EXISTS(SELECT 1 FROM lojas l JOIN estoque_lojas e ON e.loja = l.nome WHERE e.sku = c.sku AND l.id = {int(loja)})")
+            else:
+                # Marketplace: filtra via anuncios
+                where.append("EXISTS(SELECT 1 FROM anuncios a WHERE a.sku=c.sku AND a.marketplace='%s')" % loja)
         if not variacoes:
             where.append("c.sku_pai IS NULL")
         sql_where = " AND ".join(where)

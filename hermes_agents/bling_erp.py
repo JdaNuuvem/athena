@@ -644,11 +644,17 @@ def processar_evento_webhook(evento: str, payload: dict) -> dict:
             id_deposito = estoque.get("idDeposito", 0)
             sku = estoque.get("codigo", "")
             saldo = float(estoque.get("saldo", 0))
+            # Resolve nome da loja via tabela lojas (bling_id → nome)
+            loja_nome = str(id_deposito)
+            try:
+                row = await db.fetchrow("SELECT nome FROM lojas WHERE bling_id = $1", id_deposito)
+                if row: loja_nome = row["nome"]
+            except: pass
             await db.execute("""
                 INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao)
                 VALUES ($1, $2, $3, NOW())
                 ON CONFLICT (sku, loja) DO UPDATE SET quantidade = $3, data_atualizacao = NOW()
-            """, sku, str(id_deposito), saldo)
+            """, sku, loja_nome, saldo)
 
         elif resource in ("conta-receber", "conta-receber"):
             cr = payload.get("contaReceber", payload)
