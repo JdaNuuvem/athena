@@ -27,8 +27,11 @@ def get_shopee_config() -> dict:
     }
     # ponytail: access_token is the OAuth token from Shopee, separate from partner key
 
+def _is_sandbox() -> bool:
+    return os.environ.get("SHOPEE_SANDBOX","false").lower()=="true" or get_config("shopee","sandbox")=="true"
+
 def _base_url() -> str:
-    if SHOPEE_SANDBOX:
+    if _is_sandbox():
         return BASE_URL_SANDBOX
     return BASE_URL_BRAZIL if SHOPEE_REGION == "br" else BASE_URL_LIVE
 
