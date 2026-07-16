@@ -38,9 +38,15 @@ def _ensure_tables():
             log(AGENT, f"pg_trgm indisponivel (permissoes?): {e}")
         # ── Covering indexes for PDV subqueries ──
         try:
+            # Remove duplicates before adding unique constraint
+            await db.execute("""DELETE FROM anuncios a USING (
+                SELECT sku, marketplace, MIN(ctid) as keep_ctid FROM anuncios
+                GROUP BY sku, marketplace HAVING COUNT(*) > 1
+            ) dup WHERE a.sku = dup.sku AND a.marketplace = dup.marketplace AND a.ctid <> dup.keep_ctid""")
+            await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_anuncios_sku_mkt_unique ON anuncios (sku, marketplace)")
             await db.execute("CREATE INDEX IF NOT EXISTS idx_anuncios_sku_preco ON anuncios (sku, marketplace, preco)")
         except Exception as e:
-            log(AGENT, f"idx_anuncios_sku_preco skip: {e}")
+            log(AGENT, f"idx_anuncios skip: {e}")
         # ── Migracao: popular a partir de tabelas existentes ──
         count = await db.fetchval("SELECT COUNT(*) FROM catalogo_produtos")
         if count == 0:

@@ -37,7 +37,7 @@ new_sync = '''def sincronizar_produtos() -> dict:
                             "INSERT INTO catalogo_produtos (sku, descricao, id_bling, imagem_url, situacao) VALUES ($1, $2, $3, $4, 'A') ON CONFLICT (sku) DO UPDATE SET descricao = $2, id_bling = $3, imagem_url = COALESCE($4, catalogo_produtos.imagem_url)",
                             sku, nome, bid, imagem)
                         # Upsert anuncios
-                        await db.execute("INSERT INTO anuncios (sku, marketplace, preco, status) VALUES ($1, 'bling', $2, 'ativo') ON CONFLICT (sku, marketplace) WHERE anuncio_id IS NULL DO UPDATE SET preco = $2", sku, preco)
+                        await db.execute("INSERT INTO anuncios (sku, marketplace, preco, status) VALUES ($1, 'bling', $2, 'ativo') ON CONFLICT (sku, marketplace) DO UPDATE SET preco = $2, status = 'ativo'", sku, preco)
 
                         # Coletar filhos para resolucao posterior
                         if id_pai:
