@@ -206,3 +206,80 @@ if __name__ == "__main__":
     log(AGENT, "Auto-teste")
     log(AGENT, f"Configurado: {configurado()}")
     log(AGENT, f"Base URL: {_base_url()}")
+
+
+# ── OAuth2 Authorization Flow ──
+
+def get_auth_url(redirect_uri: str = "") -> str:
+    """Gera URL de autorizacao Shopee. Usuario clica para autorizar o app."""
+    cfg = get_shopee_config()
+    if not cfg["partner_id"]:
+        return ""
+    base = _base_url().replace("/api/v2", "") + "/api/v2/shop/auth_partner"
+    if not redirect_uri:
+        # Usar dominio do Bling como fallback
+        from core.config import get_config as gc
+        domain = os.environ.get("SHOPEE_REDIRECT_URL", "https://athena.zoikom.site/api/shopee/callback")
+        redirect_uri = domain
+    params = {
+        "partner_id": int(cfg["partner_id"]),
+        "redirect": redirect_uri,
+        "timestamp": int(time.time()),
+    }
+    sign_str = f"{cfg['partner_id']}{'/api/v2/shop/auth_partner'}{params['timestamp']}{cfg['api_key']}"
+    signature = hmac.new(cfg["api_key"].encode(), sign_str.encode(), hashlib.sha256).hexdigest()
+    params["sign"] = signature
+    qs = "&".join(f"{k}={v}" for k, v in params.items())
+    return f"{base}?{qs}"
+
+def exchange_shopee_code(code: str, shop_id: str = "") -> dict:
+    """Troca o codigo de autorizacao por access_token e refresh_token."""
+    cfg = get_shopee_config()
+    if not cfg["partner_id"] or not code:
+        return {"error": "partner_id ou code ausente"}
+    base = _base_url().replace("/api/v2", "") + "/api/v2/auth/token/get"
+    timestamp = int(time.time())
+    body = {"code": code, "partner_id": int(cfg["partner_id"])}
+    if shop_id:
+        body["shop_id"] = int(shop_id)
+    body_str = json.dumps(body)
+    sign_str = f"{cfg['partner_id']}{'/api/v2/auth/token/get'}{timestamp}{cfg['api_key']}"
+    signature = hmac.new(cfg["api_key"].encode(), sign_str.encode(), hashlib.sha256).hexdigest()
+    
+    try:
+        r = requests.post(base, json=body, params={
+            "partner_id": cfg["partner_id"], "timestamp": timestamp, "sign": signature,
+        }, timeout=30)
+        data = r.json()
+        if data.get("access_token"):
+            set_config("shopee", "access_token", data["access_token"])
+            set_config("shopee", "refresh_token", data.get("refresh_token", ""))
+            set_config("shopee", "shop_id", str(body.get("shop_id", data.get("shop_id", ""))))
+            return {"success": True, "expire_in": data.get("expire_in", 0)}
+        return {"error": data.get("message", data.get("error", "unknown"))}
+    except Exception as e:
+        return {"error": str(e)}
+
+def refresh_shopee_token() -> dict:
+    """Renova o access_token usando o refresh_token."""
+    cfg = get_shopee_config()
+    refresh = cfg.get("refresh_token") or get_config("shopee", "refresh_token") or ""
+    if not refresh:
+        return {"error": "refresh_token ausente"}
+    base = _base_url().replace("/api/v2", "") + "/api/v2/auth/access_token/get"
+    timestamp = int(time.time())
+    body = {"refresh_token": refresh, "partner_id": int(cfg["partner_id"])}
+    sign_str = f"{cfg['partner_id']}{'/api/v2/auth/access_token/get'}{timestamp}{cfg['api_key']}"
+    signature = hmac.new(cfg["api_key"].encode(), sign_str.encode(), hashlib.sha256).hexdigest()
+    try:
+        r = requests.post(base, json=body, params={
+            "partner_id": cfg["partner_id"], "timestamp": timestamp, "sign": signature,
+        }, timeout=30)
+        data = r.json()
+        if data.get("access_token"):
+            set_config("shopee", "access_token", data["access_token"])
+            set_config("shopee", "refresh_token", data.get("refresh_token", ""))
+            return {"success": True}
+        return {"error": data.get("message", "unknown")}
+    except Exception as e:
+        return {"error": str(e)}
