@@ -19,7 +19,7 @@ RUN npm install && npm run build
 
 WORKDIR /app/hermes_agents
 
-ENV PORT=3001
+ENV API_PORT=3001
 ENV PYTHONUNBUFFERED=1
 ENV DB_PORT=5432
 ENV DB_NAME=hermes_factory
