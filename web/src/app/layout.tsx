@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { api } from "@/lib/api";
 import Icon from "./_components/Icon";
 import { AuthProvider, useAuth } from "@/lib/auth";
+import { StoreProvider, useStore, type LojaInfo } from "@/lib/store-context";
 import "./globals.css";
 
 const NAV_PERMS: Record<string, string> = {
@@ -58,17 +59,9 @@ const NAV_ITEMS = [
 
 function Sidebar() {
   const { user, hasPermission, logout } = useAuth();
+  const { lojaId, lojas, setLojaId } = useStore();
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [lojas, setLojas] = useState<Array<{ id: number; nome: string }>>([]);
-  const [loja, setLoja] = useState<string>(() => {
-    if (typeof window === "undefined") return "todas";
-    return localStorage.getItem("loja") || "todas";
-  });
   const pathname = usePathname();
-
-  useEffect(() => {
-    api.lojasManage().then(r => setLojas(r.lojas)).catch(() => {});
-  }, []);
 
   return (
     <aside aria-label="Navegação principal" className={[
@@ -120,12 +113,8 @@ function Sidebar() {
         <div className="px-3 pb-2">
           <label className="text-[9px] text-neutral-500 uppercase tracking-wider mb-1 block">Loja</label>
           <select
-            value={loja}
-            onChange={(e) => {
-              setLoja(e.target.value);
-              localStorage.setItem("loja", e.target.value);
-              window.dispatchEvent(new Event("loja-changed"));
-            }}
+            value={lojaId}
+            onChange={(e) => setLojaId(e.target.value)}
             className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-indigo-500"
           >
             <option value="todas">🏢 Todas as Lojas</option>
@@ -137,7 +126,7 @@ function Sidebar() {
       )}
       {!sidebarOpen && (
         <div className="px-1.5 pb-2 flex justify-center">
-          <span className="text-[9px] text-neutral-500 cursor-help" title={`Loja: ${loja}`}>🏢</span>
+          <span className="text-[9px] text-neutral-500 cursor-help" title={`Loja: ${lojaId}`}>🏢</span>
         </div>
       )}
 
@@ -188,6 +177,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           children
         ) : (
           <AuthProvider>
+            <StoreProvider>
             <>
               {sidebarOpen && (
                 <div className="sm:hidden fixed inset-0 bg-black/60 z-40" onClick={() => setSidebarOpen(false)} aria-hidden="true" />
@@ -221,6 +211,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 {children}
               </main>
             </>
+            </StoreProvider>
           </AuthProvider>
         )}
       </body>

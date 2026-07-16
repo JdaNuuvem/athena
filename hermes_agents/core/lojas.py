@@ -17,8 +17,29 @@ def _ensure_table():
         """)
         count = await db.fetchval("SELECT COUNT(*) FROM lojas")
         if count == 0:
-            for nome in ["Loja Centro", "Loja Shopping", "Loja Norte", "Loja Sul"]:
-                await db.execute("INSERT INTO lojas (nome) VALUES ($1)", nome)
+            try:
+                from bling_erp import listar_depositos, get_access_token
+                token = get_access_token()
+                if token:
+                    pagina = 1
+                    while True:
+                        r = listar_depositos(pagina=pagina, limite=100)
+                        dados = r.get("data", [])
+                        if not dados or r.get("error"):
+                            break
+                        for dep in dados:
+                            nome = dep.get("descricao", f"Deposito {dep.get('id')}")
+                            ativa = dep.get("situacao", "A") == "A"
+                            await db.execute(
+                                "INSERT INTO lojas (nome, ativa, bling_id, bling_descricao) VALUES ($1, $2, $3, $4)",
+                                nome, ativa, dep.get("id"), nome)
+                        if len(dados) < 100:
+                            break
+                        pagina += 1
+                else:
+                    await db.execute("INSERT INTO lojas (nome) VALUES ($1)", "Loja Padrão")
+            except Exception:
+                await db.execute("INSERT INTO lojas (nome) VALUES ($1)", "Loja Padrão")
     try:
         run_async(_go())
         _table_ok = True
@@ -29,7 +50,7 @@ def listar() -> list:
     _ensure_table()
     async def _go():
         db = await get_db()
-        rows = await db.fetch("SELECT id, nome, ativa, created_at FROM lojas ORDER BY id")
+        rows = await db.fetch("SELECT id, nome, ativa, created_at, bling_id FROM lojas ORDER BY id")
         return [dict(r) for r in rows]
     try: return run_async(_go())
     except Exception as e: log(AGENT, f"Erro listar: {e}"); return []

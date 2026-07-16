@@ -2017,6 +2017,11 @@ def crm_funil():
     from core.crm import funil as crm_funil_fn
     return jsonify(crm_funil_fn())
 
+@app.route('/api/crm/importar-bling', methods=['POST'])
+def crm_importar_bling():
+    from core.crm import importar_contatos_bling
+    return jsonify(importar_contatos_bling())
+
 @app.route('/api/crm/<tabela>', methods=['GET'])
 def crm_list(tabela):
     from core.crm import list as crm_list_fn, CRM_TABLES
@@ -2157,6 +2162,15 @@ def ev_processar_fila():
     limit = request.args.get('limit', 10, type=int)
     return jsonify(processar_eventos_pendentes(limit))
 
+@app.route('/api/fiscal/apuracao', methods=['GET'])
+def fiscal_apuracao():
+    """Apuração consolidada de impostos por período."""
+    from core.fiscal import apuracao_impostos
+    ano = request.args.get("ano", type=int)
+    mes = request.args.get("mes", type=int)
+    dias = request.args.get("dias", 365, type=int)
+    return jsonify(apuracao_impostos(ano, mes, dias))
+
 @app.route('/api/fiscal/obrigacoes/alertas', methods=['GET'])
 def fiscal_alertas():
     from core.entidades import gerar_alertas_obrigacoes
@@ -2168,6 +2182,54 @@ def bling_webhook_completo():
     payload = request.json or {}
     evento = payload.get("evento", request.args.get("evento", "desconhecido"))
     return jsonify(processar_webhook_bling_completo(evento, payload))
+
+
+
+# ── Documentos Routes ──
+
+@app.route('/api/documentos', methods=['GET'])
+def doc_listar():
+    from core.documentos import listar
+    tipo = request.args.get("entidade_tipo","")
+    eid = request.args.get("entidade_id")
+    return jsonify({"data": listar(tipo, int(eid) if eid else None)})
+
+@app.route('/api/documentos', methods=['POST'])
+def doc_upload():
+    if 'file' not in request.files:
+        return jsonify({"error": "Nenhum arquivo enviado"}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "Nome vazio"}), 400
+    from core.documentos import upload
+    result = upload(file.read(), file.filename,
+        entidade_tipo=request.form.get("entidade_tipo",""),
+        entidade_id=int(request.form.get("entidade_id",0)) or None,
+        criado_por=request.form.get("criado_por",""),
+        mime_type=file.content_type or "application/octet-stream")
+    return jsonify(result)
+
+@app.route('/api/documentos/<int:id>', methods=['GET'])
+def doc_download(id):
+    from core.documentos import download
+    from flask import Response
+    data, nome, mime = download(id)
+    if data is None:
+        return jsonify({"error": "Arquivo nao encontrado"}), 404
+    return Response(data, mimetype=mime, headers={
+        "Content-Disposition": f"inline; filename="{nome}"",
+        "Content-Type": mime,
+    })
+
+@app.route('/api/documentos/<int:id>', methods=['DELETE'])
+def doc_deletar(id):
+    from core.documentos import deletar
+    return jsonify(deletar(id))
+
+@app.route('/api/documentos/stats', methods=['GET'])
+def doc_stats():
+    from core.documentos import stats
+    return jsonify(stats())
 
 # ── Seguranca / Auditoria Routes ──
 
@@ -2280,6 +2342,18 @@ def deletar_loja_manage(id):
 def lojas_sync_bling():
     from core.lojas import sincronizar_bling
     return jsonify(sincronizar_bling())
+
+@app.route('/api/lojas/deposito-map', methods=['GET'])
+def lojas_deposito_map():
+    from core import get_db, run_async
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch("SELECT id, nome, bling_id FROM lojas WHERE bling_id IS NOT NULL AND ativa = TRUE ORDER BY id")
+        return [{"loja_id": r["id"], "nome": r["nome"], "deposito_id": r["bling_id"]} for r in rows]
+    try:
+        return jsonify({"map": run_async(_go())})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # ── RH CRUD ──
 

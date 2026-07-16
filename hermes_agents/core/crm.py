@@ -179,6 +179,77 @@ def create(tabela: str, data: dict): return _create(f"crm_{tabela}", data)
 def update(tabela: str, id: int, data: dict): return _update(f"crm_{tabela}", id, data)
 def delete(tabela: str, id: int): return _delete(f"crm_{tabela}", id)
 
+def importar_contatos_bling() -> dict:
+    """Importa contatos do Bling para o CRM (empresas, contatos, leads).
+       tipo C=cliente vira lead+contato, tipo F=fornecedor vira empresa+contato."""
+    from bling_erp import listar_contatos, get_access_token, get_auth_url
+    token = get_access_token()
+    if not token:
+        return {"error": "Bling nao autenticado", "auth_url": get_auth_url()}
+
+    _ensure_tables()
+    async def _go():
+        db = await get_db()
+        res = {"empresas": 0, "contatos": 0, "leads": 0, "total": 0}
+        pagina = 1
+        while True:
+            r = listar_contatos(pagina=pagina, limite=100)
+            dados = r.get("data", [])
+            if not dados or r.get("error"):
+                break
+            for c in dados:
+                nome = (c.get("nome") or "").strip()
+                if not nome:
+                    continue
+                email = (c.get("email") or "").strip().lower() or None
+                tel = (c.get("telefone") or c.get("celular") or "").strip() or None
+                tipo = (c.get("tipo") or "").upper()
+                doc = (c.get("numeroDocumento") or "").strip()
+
+                if email:
+                    exists = await db.fetchval("SELECT id FROM crm_contatos WHERE email = $1", email)
+                    if exists:
+                        res["total"] += 1
+                        continue
+
+                if tipo == "F":
+                    if doc:
+                        empresa_exists = await db.fetchval("SELECT id FROM crm_empresas WHERE cnpj = $1", doc)
+                    else:
+                        empresa_exists = await db.fetchval("SELECT id FROM crm_empresas WHERE nome = $1", nome)
+                    if not empresa_exists:
+                        row = await db.fetchrow(
+                            "INSERT INTO crm_empresas (nome, cnpj, telefone, email) VALUES ($1, $2, $3, $4) RETURNING id",
+                            nome, doc, tel, email)
+                        empresa_id = row["id"] if row else None
+                        res["empresas"] += 1
+                    else:
+                        empresa_id = empresa_exists
+                    if empresa_id:
+                        await db.execute(
+                            "INSERT INTO crm_contatos (nome, email, telefone, empresa_id) VALUES ($1, $2, $3, $4)",
+                            nome, email, tel, empresa_id)
+                        res["contatos"] += 1
+                else:
+                    lead_row = await db.fetchrow(
+                        "INSERT INTO crm_leads (nome, email, telefone, origem, status) VALUES ($1, $2, $3, 'bling', 'novo') RETURNING id",
+                        nome, email, tel)
+                    if lead_row:
+                        res["leads"] += 1
+                        await db.execute(
+                            "INSERT INTO crm_contatos (nome, email, telefone, lead_id) VALUES ($1, $2, $3, $4)",
+                            nome, email, tel, lead_row["id"])
+                        res["contatos"] += 1
+                res["total"] += 1
+            if len(dados) < 100:
+                break
+            pagina += 1
+        return res
+    try:
+        return run_async(_go())
+    except Exception as e:
+        return {"error": str(e)}
+
 if __name__ == "__main__":
     log(AGENT, "Auto-teste CRM")
     print("Funil:", funil())

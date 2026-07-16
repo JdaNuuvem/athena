@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 
 interface FunilData { categorias: string[]; series: {name:string;total:number;valor:number}[]; total_leads: number; total_negociacoes: number; total_propostas: number; etapas: string[]; }
@@ -24,6 +24,27 @@ const ETAPA_COLORS: Record<string, string> = {
 export default function CRMPage() {
   const [funil, setFunil] = useState<FunilData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [blingStatus, setBlingStatus] = useState<string | null>(null);
+  const [blingCounts, setBlingCounts] = useState<{ empresas: number; contatos: number; leads: number; total: number } | null>(null);
+
+  const importarBling = useCallback(async () => {
+    setBlingStatus("Importando contatos do Bling...");
+    setBlingCounts(null);
+    try {
+      const r = await fetch("/api/crm/importar-bling", { method: "POST" });
+      const d = await r.json();
+      if (d.error) {
+        setBlingStatus("Erro: " + d.error);
+        if (d.auth_url) setBlingStatus(status => status + " — Autorize em /integracoes/bling");
+      } else {
+        setBlingCounts(d);
+        setBlingStatus("Importacao concluida!");
+        fetch("/api/crm/funil").then(r => r.json()).then(d => setFunil(d)).catch(() => {});
+      }
+    } catch {
+      setBlingStatus("Erro de conexao ao importar.");
+    }
+  }, []);
 
   useEffect(() => {
     fetch("/api/crm/funil")
@@ -58,6 +79,23 @@ export default function CRMPage() {
           <p className="text-xs text-neutral-500">Conversao</p>
           <p className="text-xl font-bold text-emerald-400">{funil && funil.total_leads > 0 ? Math.round((funil.total_propostas / funil.total_leads) * 100) : 0}%</p>
         </div>
+      </div>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={importarBling}
+          disabled={blingStatus?.startsWith("Importando")}
+          className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs px-4 py-2 rounded-lg transition-colors"
+        >
+          {blingStatus?.startsWith("Importando") ? "⏳ Importando..." : "📥 Importar do Bling"}
+        </button>
+        {blingStatus && !blingStatus.startsWith("Importando") && blingCounts && (
+          <span className="text-xs text-emerald-400">
+            {blingStatus} ({blingCounts.empresas} empresas, {blingCounts.leads} leads, {blingCounts.contatos} contatos)
+          </span>
+        )}
+        {blingStatus && !blingStatus.startsWith("Importando") && !blingCounts && (
+          <span className="text-xs text-red-400">{blingStatus}</span>
+        )}
       </div>
       <div>
         <h2 className="text-sm font-semibold text-neutral-300 mb-3">Funil de Vendas</h2>
