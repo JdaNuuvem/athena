@@ -2358,6 +2358,58 @@ def lojas_deposito_map():
 
 # ── RH CRUD ──
 
+
+
+# ── RH — Vale / Adiantamento ──
+
+@app.route('/api/rh/vale', methods=['GET'])
+def rh_vale_list():
+    from core.rh import list_vale as lv
+    return jsonify({"data": lv()})
+
+@app.route('/api/rh/vale', methods=['POST'])
+def rh_vale_create():
+    data = request.json or {}
+    from core.rh import criar_vale
+    return jsonify(criar_vale(
+        int(data.get("funcionario_id", 0)),
+        data.get("nome", ""),
+        float(data.get("valor", 0)),
+        data.get("motivo", "")
+    ))
+
+@app.route('/api/rh/vale/<int:id>', methods=['PUT'])
+def rh_vale_update(id):
+    data = request.json or {}
+    from core.rh import atualizar_vale
+    return jsonify(atualizar_vale(id, data.get("status", "")))
+
+# ── RH — Comissoes ──
+
+@app.route('/api/rh/comissoes', methods=['GET'])
+def rh_comissoes_list():
+    from core.rh import list_comissoes
+    return jsonify({"data": list_comissoes()})
+
+@app.route('/api/rh/comissoes', methods=['POST'])
+def rh_comissoes_create():
+    data = request.json or {}
+    from core.rh import criar_comissao
+    return jsonify(criar_comissao(
+        int(data.get("vendedor_id", 0)),
+        data.get("nome", ""),
+        data.get("mes", ""),
+        float(data.get("total_vendas", 0)),
+        float(data.get("comissao_pct", 0)),
+        float(data.get("total_comissoes", 0))
+    ))
+
+@app.route('/api/rh/comissoes/<int:id>', methods=['PUT'])
+def rh_comissoes_update(id):
+    data = request.json or {}
+    from core.rh import atualizar_comissao
+    return jsonify(atualizar_comissao(id, data.get("status", "")))
+
 @app.route('/api/rh/dashboard', methods=['GET'])
 def rh_dashboard():
     from core.rh import dashboard
@@ -3168,6 +3220,9 @@ def listar_produtos():
                            END
                        ) AS imagem_url,
                        COALESCE(c.categoria, '') AS categoria,
+                       COALESCE(c.marca, '') AS marca,
+                       COALESCE(c.codigo_barras, '') AS codigo_barras,
+                       c.estoque_minimo, c.estoque_maximo, c.preco_custo,
                        COALESCE(a.preco, 0) AS valor,
                        (SELECT COUNT(*) FROM catalogo_produtos f WHERE f.sku_pai = c.sku) AS total_variacoes,
                        {_estoque_sub} AS estoque_atual,
@@ -3192,6 +3247,9 @@ def listar_produtos():
                            END
                        ) AS imagem_url,
                        COALESCE(c.categoria, '') AS categoria,
+                       COALESCE(c.marca, '') AS marca,
+                       COALESCE(c.codigo_barras, '') AS codigo_barras,
+                       c.estoque_minimo, c.estoque_maximo, c.preco_custo,
                        COALESCE(a.preco, 0) AS valor,
                        (SELECT COUNT(*) FROM catalogo_produtos f WHERE f.sku_pai = c.sku) AS total_variacoes,
                        0 AS estoque_atual,
@@ -3206,6 +3264,10 @@ def listar_produtos():
                 LIMIT {por_pagina} OFFSET {offset}
             """)
         rows = _dicts(cur)
+        for r in rows:
+            for k in ("estoque_minimo", "estoque_maximo", "preco_custo"):
+                if r.get(k) is not None:
+                    r[k] = float(r[k])
         skus = [r["sku"] for r in rows]
         if skus:
             cur.execute("SELECT sku, marketplace, preco, status FROM anuncios WHERE sku = ANY(%s)", (skus,))
@@ -3234,7 +3296,12 @@ def editar_produto(sku):
         values = []
         idx = 0
         campos = ["descricao","ncm","cest","categoria","marca","unidade_padrao","tipo",
-                  "peso_bruto","sku_pai","atributo"]
+                  "peso_bruto","sku_pai","atributo",
+                  "codigo_barras","gtin_embalagem","descricao_curta","descricao_complementar",
+                  "peso_liquido","largura","altura","profundidade","unidade_medida_dimensao",
+                  "volumes","itens_por_caixa","cfop_padrao","observacoes","link_externo",
+                  "fornecedor_nome","fornecedor_codigo","preco_custo",
+                  "estoque_minimo","estoque_maximo","estoque_localizacao"]
         for campo in campos:
             if campo in data and data[campo] is not None:
                 idx += 1
@@ -3276,6 +3343,12 @@ def detalhe_produto(sku):
         cur.execute("SELECT marketplace,preco,posicao_busca,avaliacao_media,status FROM anuncios WHERE sku=%s", (sku,))
         p["estoque_lojas"] = [dict(r) for r in cur.fetchall()]
 
+        # Estoque real por loja/deposito (tabela estoque_lojas — quantidade fisica, nao confundir com o campo acima)
+        cur.execute("SELECT loja, quantidade, data_atualizacao FROM estoque_lojas WHERE sku=%s ORDER BY loja", (sku,))
+        p["estoque_por_loja"] = [dict(r, quantidade=float(r["quantidade"]) if r.get("quantidade") is not None else 0,
+                                      data_atualizacao=str(r["data_atualizacao"]) if r.get("data_atualizacao") else None)
+                                 for r in cur.fetchall()]
+
         # Variacoes (filhos)
         cur.execute("SELECT sku, descricao AS nome, atributo, (SELECT COALESCE(preco,0) FROM anuncios WHERE sku=catalogo_produtos.sku AND marketplace='bling' LIMIT 1) AS valor FROM catalogo_produtos WHERE sku_pai = %s ORDER BY sku", (sku,))
         p["variacoes"] = [dict(r, valor=float(r["valor"]) if r.get("valor") else 0) for r in cur.fetchall()]
@@ -3283,12 +3356,37 @@ def detalhe_produto(sku):
         p["vendas_30d"] = [dict(r, data=str(r["data"])) for r in cur.fetchall()]
         cur.execute("SELECT data,preco_venda FROM vendas WHERE sku=%s ORDER BY data ASC", (sku,))
         p["historico_precos"] = [{"data": str(r["data"]), "preco": float(r["preco_venda"])} for r in cur.fetchall()]
-        for k in ("peso_gramas","tempo_ciclo_segundos","valor"):
+        for k in ("peso_gramas","tempo_ciclo_segundos","valor",
+                  "peso_bruto","peso_liquido","largura","altura","profundidade",
+                  "percentual_tributos","valor_base_st_retencao","valor_st_retencao","valor_icms_st",
+                  "preco_custo","estoque_minimo","estoque_maximo"):
             if k in p and p[k] is not None: p[k] = float(p[k])
         cur.close(); conn.close()
         return jsonify(p)
     except Exception as e:
         return jsonify({"sku": sku, "erro": str(e), "estoque_lojas": []})
+
+@app.route('/api/produtos/limites', methods=['GET'])
+def produtos_limites():
+    """Estoque minimo/maximo, fornecedor e custo por SKU vindos do catalogo local.
+    Usado pela tela de Estoque para enriquecer os dados ao vivo do Bling sem duplicar toda a busca do catalogo."""
+    try:
+        conn = _db_sync(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("""SELECT sku, marca, fornecedor_nome, estoque_minimo, estoque_maximo, preco_custo
+                       FROM catalogo_produtos""")
+        out = {}
+        for r in cur.fetchall():
+            out[r["sku"]] = {
+                "marca": r["marca"] or "",
+                "fornecedor_nome": r["fornecedor_nome"] or "",
+                "estoque_minimo": float(r["estoque_minimo"]) if r["estoque_minimo"] is not None else None,
+                "estoque_maximo": float(r["estoque_maximo"]) if r["estoque_maximo"] is not None else None,
+                "preco_custo": float(r["preco_custo"]) if r["preco_custo"] is not None else None,
+            }
+        cur.close(); conn.close()
+        return jsonify(out)
+    except Exception as e:
+        return jsonify({"erro": str(e)})
 
 @app.route('/api/lojas', methods=['GET'])
 def listar_lojas():

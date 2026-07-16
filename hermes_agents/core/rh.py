@@ -353,3 +353,82 @@ def funcionario_detalhe(id: int) -> dict:
         }
     try: return run_async(_go())
     except Exception as e: return {"error": str(e)}
+
+# ── Vale / Adiantamento ──
+
+def _ensure_vale():
+    async def _go():
+        db = await get_db()
+        await db.execute("""CREATE TABLE IF NOT EXISTS rh_vales (
+            id SERIAL PRIMARY KEY, funcionario_id INT, nome VARCHAR(100),
+            valor DECIMAL(12,2) DEFAULT 0, motivo TEXT, data DATE DEFAULT CURRENT_DATE,
+            status VARCHAR(20) DEFAULT 'pendente', created_at TIMESTAMP DEFAULT NOW()
+        )""")
+    try: run_async(_go())
+    except: pass
+
+_ensure_vale()
+
+def list_vale() -> list:
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch("SELECT * FROM rh_vales ORDER BY id DESC LIMIT 100")
+        return [dict(r) for r in rows]
+    try: return run_async(_go())
+    except: return []
+
+def criar_vale(func_id: int, nome: str, valor: float, motivo: str = "") -> dict:
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow("INSERT INTO rh_vales (funcionario_id, nome, valor, motivo) VALUES ($1,$2,$3,$4) RETURNING *", func_id, nome, valor, motivo)
+        return dict(row) if row else {"error": "erro"}
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
+
+def atualizar_vale(vale_id: int, status: str) -> dict:
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow("UPDATE rh_vales SET status=$1 WHERE id=$2 RETURNING *", status, vale_id)
+        return dict(row) if row else {"error": "not found"}
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
+
+# ── Comissoes ──
+
+def _ensure_comissoes():
+    async def _go():
+        db = await get_db()
+        await db.execute("""CREATE TABLE IF NOT EXISTS rh_comissoes (
+            id SERIAL PRIMARY KEY, vendedor_id INT, nome VARCHAR(100),
+            total_vendas DECIMAL(12,2) DEFAULT 0, comissao_pct DECIMAL(5,2) DEFAULT 0,
+            total_comissoes DECIMAL(12,2) DEFAULT 0, mes VARCHAR(10),
+            status VARCHAR(20) DEFAULT 'pendente', created_at TIMESTAMP DEFAULT NOW()
+        )""")
+    try: run_async(_go())
+    except: pass
+
+_ensure_comissoes()
+
+def list_comissoes() -> list:
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch("SELECT * FROM rh_comissoes ORDER BY id DESC LIMIT 100")
+        return [dict(r) for r in rows]
+    try: return run_async(_go())
+    except: return []
+
+def criar_comissao(vendedor_id: int, nome: str, mes: str, total_vendas: float, comissao_pct: float, total_comissoes: float) -> dict:
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow("INSERT INTO rh_comissoes (vendedor_id, nome, total_vendas, comissao_pct, total_comissoes, mes) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *", vendedor_id, nome, total_vendas, comissao_pct, total_comissoes, mes)
+        return dict(row) if row else {"error": "erro"}
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
+
+def atualizar_comissao(comissao_id: int, status: str) -> dict:
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow("UPDATE rh_comissoes SET status=$1 WHERE id=$2 RETURNING *", status, comissao_id)
+        return dict(row) if row else {"error": "not found"}
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
