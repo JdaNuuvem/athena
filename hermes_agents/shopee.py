@@ -28,7 +28,10 @@ def get_shopee_config() -> dict:
     # ponytail: access_token is the OAuth token from Shopee, separate from partner key
 
 def _is_sandbox() -> bool:
-    return os.environ.get("SHOPEE_SANDBOX","false").lower()=="true" or str(get_config("shopee","sandbox","")).lower()=="true"
+    try:
+        return os.environ.get("SHOPEE_SANDBOX","false").lower()=="true" or str(get_config("shopee","sandbox") or "").lower()=="true"
+    except:
+        return os.environ.get("SHOPEE_SANDBOX","false").lower()=="true"
 
 def _base_url() -> str:
     if _is_sandbox():
