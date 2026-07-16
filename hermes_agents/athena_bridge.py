@@ -2218,7 +2218,7 @@ def doc_download(id):
     if data is None:
         return jsonify({"error": "Arquivo nao encontrado"}), 404
     return Response(data, mimetype=mime, headers={
-        "Content-Disposition": f"inline; filename="{nome}"",
+        "Content-Disposition": f'inline; filename="{nome}"',
         "Content-Type": mime,
     })
 
