@@ -15,8 +15,8 @@ AGENT = "AG-03 | Shopee Integration"
 BASE_URL_LIVE = "https://partner.shopeemobile.com/api/v2"
 BASE_URL_BRAZIL = "https://openplatform.shopee.com.br/api/v2"
 BASE_URL_SANDBOX = "https://openplatform.sandbox.test-stable.shopee.sg/api/v2"
-SHOPEE_SANDBOX = os.environ.get("SHOPEE_SANDBOX", "false").lower() == "true"
-SHOPEE_REGION = os.environ.get("SHOPEE_REGION", "br")
+SHOPEE_SANDBOX = os.environ.get("SHOPEE_SANDBOX", "false").lower() == "true" or get_config("shopee", "sandbox") == "true"
+SHOPEE_REGION = os.environ.get("SHOPEE_REGION", "br") or get_config("shopee", "region", "br")
 
 def get_shopee_config() -> dict:
     return {
