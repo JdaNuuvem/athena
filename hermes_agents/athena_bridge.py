@@ -853,15 +853,65 @@ def kpi_manutencao():
     kpis = obter_kpi_manutencao(periodo)
     return jsonify(kpis)
 
-# AG-04: Estoque
-@app.route('/api/estoque/produtos', methods=['GET'])
-def estoque_produtos():
-    """Obtém estoque de produtos acabados."""
-    from ag_04_planejador import obter_estoque_produtos
-    
-    sku = request.args.get('sku', '')
-    estoque = obter_estoque_produtos(sku)
-    return jsonify(estoque)
+# ── Estoque por loja/depósito ──
+
+@app.route('/api/estoque/lojas', methods=['GET'])
+def estoque_por_loja():
+    """Lista estoque por depósito com filtro de loja e busca."""
+    loja = request.args.get("loja", "")
+    busca = request.args.get("busca", "").strip()
+    pagina = request.args.get("pagina", 1, type=int)
+    por_pagina = request.args.get("por_pagina", 30, type=int)
+    try:
+        conn = _db_sync()
+        cur = conn.cursor()
+        where = ["1=1"]
+        if loja and loja != "todas":
+            if loja.isdigit():
+                where.append(f"e.loja = (SELECT nome FROM lojas WHERE id = {int(loja)})")
+            else:
+                where.append(f"e.loja = '{loja.replace(chr(39), chr(39)+chr(39))}'")
+        if busca:
+            where.append(f"(c.sku ILIKE '%{busca}%' OR c.descricao ILIKE '%{busca}%')")
+        sql_where = " AND ".join(where)
+        cur.execute(f"SELECT COUNT(*) FROM estoque_lojas e JOIN catalogo_produtos c ON c.sku = e.sku WHERE {sql_where}")
+        total = cur.fetchone()[0]
+        offset = (pagina - 1) * por_pagina
+        cur.execute(f"""
+            SELECT e.id, e.sku, c.descricao AS nome, e.loja, e.quantidade, e.data_atualizacao
+            FROM estoque_lojas e
+            JOIN catalogo_produtos c ON c.sku = e.sku
+            WHERE {sql_where}
+            ORDER BY e.data_atualizacao DESC
+            LIMIT {por_pagina} OFFSET {offset}
+        """)
+        rows = _dicts(cur)
+        cur.close(); conn.close()
+        return jsonify({"estoque": rows, "total": total, "pagina": pagina})
+    except Exception as e:
+        return jsonify({"erro": str(e), "estoque": [], "total": 0})
+
+@app.route('/api/estoque/lojas', methods=['PUT'])
+def atualizar_estoque_loja():
+    """Atualiza quantidade de estoque em uma loja/depósito."""
+    dados = request.json or {}
+    sku = dados.get("sku", "").strip()
+    loja_nome = str(dados.get("loja", "")).strip()
+    quantidade = dados.get("quantidade")
+    if not sku or not loja_nome or quantidade is None:
+        return jsonify({"erro": "sku, loja e quantidade obrigatórios"}), 400
+    try:
+        conn = _db_sync()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao)
+            VALUES (%s, %s, %s, NOW())
+            ON CONFLICT (sku, loja) DO UPDATE SET quantidade = %s, data_atualizacao = NOW()
+        """, (sku, loja_nome, float(quantidade), float(quantidade)))
+        cur.close(); conn.close()
+        return jsonify({"ok": True, "sku": sku, "loja": loja_nome, "quantidade": quantidade})
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
 
 @app.route('/api/estoque/lote/<int:lote_id>/concluir', methods=['POST'])
 def concluir_lote_estoque(lote_id):

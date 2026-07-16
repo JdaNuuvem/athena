@@ -727,3 +727,24 @@ export async function fiscalAlertasObrigacoes(): Promise<Record<string, unknown>
   const res = await fetch("/api/fiscal/obrigacoes/alertas");
   return res.json();
 }
+
+// ── Estoque por Loja ──
+
+export interface EstoqueLojaRow {
+  id: number;
+  sku: string;
+  nome: string;
+  loja: string;
+  quantidade: number;
+  data_atualizacao: string;
+}
+
+export const estoqueLojas = (params: string) =>
+  request<{ estoque: EstoqueLojaRow[]; total: number; pagina: number }>(`/api/estoque/lojas?${params}`);
+
+export const estoqueAtualizar = (sku: string, loja: string, quantidade: number) =>
+  request<{ ok: boolean }>("/api/estoque/lojas", {
+    method: "PUT",
+    body: JSON.stringify({ sku, loja, quantidade }),
+    headers: { "Content-Type": "application/json" },
+  });
