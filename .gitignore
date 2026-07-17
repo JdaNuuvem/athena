@@ -1,2 +1,8 @@
 node_modules
 .playwright-mcp/
+
+# Segredos — nunca versionar
+.env
+.env.*
+!.env.*.example
+hermes_agents/config/api_config.json

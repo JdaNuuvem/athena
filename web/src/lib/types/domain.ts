@@ -81,12 +81,25 @@ export interface Product {
   total_variacoes: number;
   imagem_url?: string;
   categoria?: string;
+  marca?: string;
+  codigo_barras?: string;
   estoque_atual?: number;
+  estoque_minimo?: number;
+  estoque_maximo?: number;
+  preco_custo?: number;
   margem_pct?: number;
   receita_30d?: number;
   vendidos_30d?: number;
   total_lojas?: number;
   estoque_lojas?: Array<{ loja: string; preco: number; status: string }>;
+}
+
+export interface ProdutoLimites {
+  marca: string;
+  fornecedor_nome: string;
+  estoque_minimo: number | null;
+  estoque_maximo: number | null;
+  preco_custo: number | null;
 }
 
 export interface BlingProduct {

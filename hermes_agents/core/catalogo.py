@@ -29,6 +29,52 @@ def _ensure_tables():
         await db.execute("CREATE INDEX IF NOT EXISTS idx_catalogo_produtos_sku_pai ON catalogo_produtos (sku_pai)")
         await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS imagem_url VARCHAR(500)")
         await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS situacao VARCHAR(1) DEFAULT 'A'")
+
+        # ── Campos completos da Bling (GET /produtos/{id}) ──
+        # bling_tipo = tipo nativo do Bling (P/S/N); nao confundir com a coluna 'tipo' (classificacao de producao/BOM)
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS bling_tipo VARCHAR(1)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS formato VARCHAR(1)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS codigo_barras VARCHAR(50)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS gtin_embalagem VARCHAR(50)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS descricao_curta TEXT")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS descricao_complementar TEXT")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS peso_liquido DECIMAL(10,3)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS volumes INTEGER")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS itens_por_caixa INTEGER")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS tipo_producao VARCHAR(1)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS condicao SMALLINT")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS frete_gratis BOOLEAN")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS link_externo VARCHAR(500)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS observacoes TEXT")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS categoria_id BIGINT")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS estoque_minimo DECIMAL(12,3)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS estoque_maximo DECIMAL(12,3)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS estoque_crossdocking INTEGER")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS estoque_localizacao VARCHAR(100)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS controlar_estoque BOOLEAN")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS largura DECIMAL(10,3)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS altura DECIMAL(10,3)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS profundidade DECIMAL(10,3)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS unidade_medida_dimensao VARCHAR(10)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS origem_fiscal VARCHAR(2)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS nfci VARCHAR(50)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS codigo_lista_servicos VARCHAR(20)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS cnae VARCHAR(20)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS codigo_item_fiscal VARCHAR(20)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS percentual_tributos DECIMAL(10,4)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS valor_base_st_retencao DECIMAL(12,2)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS valor_st_retencao DECIMAL(12,2)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS valor_icms_st DECIMAL(12,2)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS fornecedor_id BIGINT")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS fornecedor_nome VARCHAR(200)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS fornecedor_codigo VARCHAR(50)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS preco_custo DECIMAL(12,2)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS imagens JSONB")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS campos_customizados JSONB")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS estrutura JSONB")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS variacoes_detalhe JSONB")
+        # Payload bruto completo do Bling — garante 100% dos campos, inclusive os que a Bling adicionar no futuro
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS dados_brutos_bling JSONB")
         # ── Full-text search indexes (pg_trgm for ILIKE with leading wildcard) ──
         try:
             await db.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
@@ -36,14 +82,19 @@ def _ensure_tables():
             await db.execute("CREATE INDEX IF NOT EXISTS idx_catalogo_desc_trgm ON catalogo_produtos USING gin (descricao gin_trgm_ops)")
         except Exception as e:
             log(AGENT, f"pg_trgm indisponivel (permissoes?): {e}")
+        # ── shop_id: permite o mesmo SKU anunciado em varias lojas do mesmo marketplace
+        # (ex: 2 contas Shopee). marketplaces de conta unica (bling) usam shop_id = '' ──
+        await db.execute("ALTER TABLE anuncios ADD COLUMN IF NOT EXISTS shop_id VARCHAR(50) NOT NULL DEFAULT ''")
+
         # ── Covering indexes for PDV subqueries ──
         try:
             # Remove duplicates before adding unique constraint
             await db.execute("""DELETE FROM anuncios a USING (
-                SELECT sku, marketplace, MIN(ctid) as keep_ctid FROM anuncios
-                GROUP BY sku, marketplace HAVING COUNT(*) > 1
-            ) dup WHERE a.sku = dup.sku AND a.marketplace = dup.marketplace AND a.ctid <> dup.keep_ctid""")
-            await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_anuncios_sku_mkt_unique ON anuncios (sku, marketplace)")
+                SELECT sku, marketplace, shop_id, MIN(ctid) as keep_ctid FROM anuncios
+                GROUP BY sku, marketplace, shop_id HAVING COUNT(*) > 1
+            ) dup WHERE a.sku = dup.sku AND a.marketplace = dup.marketplace AND a.shop_id = dup.shop_id AND a.ctid <> dup.keep_ctid""")
+            await db.execute("DROP INDEX IF EXISTS idx_anuncios_sku_mkt_unique")
+            await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_anuncios_sku_mkt_shop_unique ON anuncios (sku, marketplace, shop_id)")
             await db.execute("CREATE INDEX IF NOT EXISTS idx_anuncios_sku_preco ON anuncios (sku, marketplace, preco)")
         except Exception as e:
             log(AGENT, f"idx_anuncios skip: {e}")

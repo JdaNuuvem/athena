@@ -23,14 +23,19 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
   const idBling = p?.id_bling;
   const imagemURL = p?.imagemURL || p?.imagem_url;
 
+  const CAMPOS_EDITAVEIS = [
+    "descricao", "categoria", "marca", "ncm", "tipo",
+    "codigo_barras", "gtin_embalagem", "descricao_curta", "descricao_complementar",
+    "peso_bruto", "peso_liquido", "largura", "altura", "profundidade", "unidade_medida_dimensao",
+    "volumes", "itens_por_caixa", "cfop_padrao", "observacoes", "link_externo",
+    "fornecedor_nome", "fornecedor_codigo", "preco_custo",
+    "estoque_minimo", "estoque_maximo", "estoque_localizacao",
+  ];
+
   const startEdit = () => {
-    setForm({
-      descricao: String(p?.descricao || p?.nome || ""),
-      categoria: String(p?.categoria || ""),
-      marca: String(p?.marca || ""),
-      ncm: String(p?.ncm || ""),
-      tipo: String(p?.tipo || ""),
-    });
+    const f: Record<string, string> = {};
+    for (const campo of CAMPOS_EDITAVEIS) f[campo] = String(p?.[campo] ?? "");
+    setForm(f);
     setEditando(true);
   };
 
@@ -87,6 +92,26 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
     return <div className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200">{val || "—"}</div>;
   };
 
+  const textareaField = (k: string, rows = 3) => {
+    const val = editando ? form[k] || "" : String(p?.[k] || "");
+    if (editando) return <textarea rows={rows} value={val || ""} onChange={e => setForm({...form, [k]: e.target.value})} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-indigo-500" />;
+    return <div className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 whitespace-pre-wrap min-h-[2.5rem]">{val || "—"}</div>;
+  };
+
+  const dimensoes = () => {
+    if (editando) return null;
+    const l = p?.largura, a = p?.altura, prof = p?.profundidade, un = p?.unidade_medida_dimensao || "cm";
+    if (!l && !a && !prof) return "—";
+    return `${l || 0} x ${a || 0} x ${prof || 0} ${un}`;
+  };
+
+  const margemReal = () => {
+    const custo = Number(p?.preco_custo || 0);
+    const valor = Number(p?.valor || 0);
+    if (!custo || !valor) return null;
+    return (((valor - custo) / valor) * 100).toFixed(1);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -132,14 +157,61 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
           <InputGroup label="Nome"><div>{field("descricao")}</div></InputGroup>
           <InputGroup label="Categoria">{field("categoria")}</InputGroup>
           <InputGroup label="Marca">{field("marca")}</InputGroup>
+          <InputGroup label="Código de Barras (GTIN)">{field("codigo_barras")}</InputGroup>
+          <InputGroup label="GTIN Embalagem">{field("gtin_embalagem")}</InputGroup>
+          <InputGroup label="Tipo Bling"><div className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-500">{String(p?.bling_tipo || "—")} / {String(p?.formato || "—")}</div></InputGroup>
+          <InputGroup label="Situação"><div className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-500">{p?.situacao === "A" ? "Ativo" : p?.situacao === "I" ? "Inativo" : String(p?.situacao || "—")}</div></InputGroup>
         </div>
       </Section>
 
       <Section title="Fiscal">
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
           <InputGroup label="NCM">{field("ncm")}</InputGroup>
+          <InputGroup label="CFOP Padrão">{field("cfop_padrao")}</InputGroup>
           <InputGroup label="Tipo">{field("tipo")}</InputGroup>
+          <InputGroup label="Origem"><div className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-500">{String(p?.origem_fiscal || "—")}</div></InputGroup>
         </div>
+      </Section>
+
+      <Section title="Logística">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          <InputGroup label="Peso Bruto (kg)">{field("peso_bruto")}</InputGroup>
+          <InputGroup label="Peso Líquido (kg)">{field("peso_liquido")}</InputGroup>
+          <InputGroup label="Largura">{field("largura")}</InputGroup>
+          <InputGroup label="Altura">{field("altura")}</InputGroup>
+          <InputGroup label="Profundidade">{field("profundidade")}</InputGroup>
+          <InputGroup label="Unidade Dimensão">{field("unidade_medida_dimensao")}</InputGroup>
+          <InputGroup label="Volumes">{field("volumes")}</InputGroup>
+          <InputGroup label="Itens por Caixa">{field("itens_por_caixa")}</InputGroup>
+          {!editando && <InputGroup label="Dimensões (L x A x P)"><div className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200">{dimensoes()}</div></InputGroup>}
+        </div>
+      </Section>
+
+      <Section title="Fornecimento">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          <InputGroup label="Fornecedor">{field("fornecedor_nome")}</InputGroup>
+          <InputGroup label="Código no Fornecedor">{field("fornecedor_codigo")}</InputGroup>
+          <InputGroup label="Preço de Custo">{field("preco_custo")}</InputGroup>
+          {!editando && (
+            <InputGroup label="Margem Real">
+              <div className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-emerald-400">
+                {margemReal() !== null ? `${margemReal()}%` : "—"}
+              </div>
+            </InputGroup>
+          )}
+          <InputGroup label="Estoque Mínimo">{field("estoque_minimo")}</InputGroup>
+          <InputGroup label="Estoque Máximo">{field("estoque_maximo")}</InputGroup>
+          <InputGroup label="Localização">{field("estoque_localizacao")}</InputGroup>
+        </div>
+      </Section>
+
+      <Section title="Descrição">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <InputGroup label="Descrição Curta">{textareaField("descricao_curta", 2)}</InputGroup>
+          <InputGroup label="Link Externo">{field("link_externo")}</InputGroup>
+        </div>
+        <InputGroup label="Descrição Complementar">{textareaField("descricao_complementar", 4)}</InputGroup>
+        <InputGroup label="Observações">{textareaField("observacoes", 2)}</InputGroup>
       </Section>
 
       <div className="text-xs text-neutral-600 space-y-1">

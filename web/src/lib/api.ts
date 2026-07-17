@@ -23,6 +23,7 @@ import type {
   Agent,
   KPIOverview,
   Product,
+  ProdutoLimites,
   BlingProduct,
   BlingOrder,
   BlingInvoice,
@@ -142,8 +143,77 @@ export const api = {
       body: JSON.stringify({ tipo: tipo || "pedido", url }),
     }),
 
-  // Shopee
-  shopeeSync: () => request<{ total: number; itens: unknown[] }>("/api/shopee/produtos/sincronizar", { method: "POST" }),
+  // Shopee (multiloja)
+  shopeeSync: (lojaId?: number) =>
+    request<{ total: number; erros: number; detalhes_erros?: string[] }>("/api/shopee/produtos/sincronizar", {
+      method: "POST",
+      body: JSON.stringify(lojaId ? { loja_id: lojaId } : {}),
+    }),
+  shopeeLojas: () =>
+    request<{ lojas: Array<{ id: number; nome: string; shopee_shop_id: string; shopee_shop_name: string | null; shopee_token_expira_em: string | null }> }>("/api/shopee/lojas"),
+  shopeeConectarLoja: (lojaId: number) =>
+    request<{ url: string }>(`/api/shopee/lojas/${lojaId}/conectar`, { method: "POST" }),
+  shopeeAuthUrl: () => request<{ url: string }>("/api/shopee/auth-url"),
+  shopeeAtualizarEstoqueProduto: (sku: string, lojaId: number, quantidade: number) =>
+    request<{ error?: string }>(`/api/shopee/produtos/${sku}/estoque`, {
+      method: "PUT",
+      body: JSON.stringify({ loja_id: lojaId, quantidade }),
+    }),
+  shopeeEstoqueTodasLojas: (sku: string, quantidade: number) =>
+    request<{ total: number; sucesso: number; erro?: string; resultados: Array<{ loja_id: number; loja_nome: string; resultado: Record<string, unknown> }> }>("/api/shopee/estoque/todas-lojas", {
+      method: "POST",
+      body: JSON.stringify({ sku, quantidade }),
+    }),
+  shopeeAtualizarPreco: (itemId: number, lojaId: number, price: number) =>
+    request<{ error?: string }>(`/api/shopee/produtos/${itemId}/preco`, {
+      method: "POST",
+      body: JSON.stringify({ loja_id: lojaId, price }),
+    }),
+
+  // Shopee — cadastro de produto (categorias, atributos, marcas, imagens)
+  shopeeCategorias: (params?: { busca?: string; parentId?: number; apenasFolhas?: boolean }) => {
+    const q = new URLSearchParams();
+    if (params?.busca) q.set("busca", params.busca);
+    if (params?.parentId != null) q.set("parent_id", String(params.parentId));
+    if (params?.apenasFolhas) q.set("apenas_folhas", "true");
+    return request<{ categorias: ShopeeCategoria[] | null }>(`/api/shopee/categorias?${q}`);
+  },
+  shopeeSincronizarCategorias: (lojaId?: number) =>
+    request<{ total: number; erro?: string }>("/api/shopee/categorias/sincronizar", {
+      method: "POST",
+      body: JSON.stringify(lojaId ? { loja_id: lojaId } : {}),
+    }),
+  shopeeAtributos: (categoryId: number, lojaId?: number) =>
+    request<{ atributos: ShopeeAtributo[]; erro?: string }>(`/api/shopee/categorias/${categoryId}/atributos${lojaId ? `?loja_id=${lojaId}` : ""}`),
+  shopeeMarcas: (categoryId: number, lojaId?: number) =>
+    request<{ marcas: ShopeeMarca[]; obrigatorio: boolean; erro?: string }>(`/api/shopee/categorias/${categoryId}/marcas${lojaId ? `?loja_id=${lojaId}` : ""}`),
+  shopeeCanaisLogistica: (lojaId?: number) =>
+    request<{ canais: Array<{ logistic_id: number; logistic_name: string; enabled: boolean }>; erro?: string }>(`/api/shopee/logistica/canais${lojaId ? `?loja_id=${lojaId}` : ""}`),
+  shopeeUploadImagem: async (lojaId: number, source: File | string) => {
+    const formData = new FormData();
+    formData.append("loja_id", String(lojaId));
+    if (typeof source === "string") formData.append("image_url", source);
+    else formData.append("file", source);
+    const res = await fetch("/api/shopee/upload-imagem", { method: "POST", body: formData });
+    return res.json() as Promise<{ image_id?: string; image_url?: string; erro?: string }>;
+  },
+  shopeeCriarProduto: (lojaId: number, dados: Record<string, unknown>) =>
+    request<{ response?: { item_id: number }; error?: string; message?: string }>("/api/shopee/produtos", {
+      method: "POST",
+      body: JSON.stringify({ ...dados, loja_id: lojaId }),
+    }),
+  shopeeEditarProdutoShopee: (itemId: number, lojaId: number, dados: Record<string, unknown>) =>
+    request<{ response?: unknown; error?: string }>(`/api/shopee/produtos/${itemId}`, {
+      method: "PUT",
+      body: JSON.stringify({ ...dados, loja_id: lojaId }),
+    }),
+  shopeeDeletarProdutoShopee: (itemId: number, lojaId: number) =>
+    request<{ response?: unknown; error?: string }>(`/api/shopee/produtos/${itemId}?loja_id=${lojaId}`, { method: "DELETE" }),
+  shopeeUnlistProduto: (itemId: number, lojaId: number, unlist: boolean) =>
+    request<{ response?: unknown; error?: string }>(`/api/shopee/produtos/${itemId}/unlist`, {
+      method: "POST",
+      body: JSON.stringify({ loja_id: lojaId, unlist }),
+    }),
 
   // Hermes
   hermesAgents: () => request<unknown[]>("/api/hermes/agents"),
@@ -167,6 +237,7 @@ export const api = {
   },
 
   detalheProduto: (sku: string) => request<Record<string, unknown>>(`/api/produtos/${sku}`),
+  produtosLimites: () => request<Record<string, ProdutoLimites>>("/api/produtos/limites"),
 
   // Lojas
   lojas: (periodo?: number) =>
@@ -236,6 +307,7 @@ export type {
   Agent,
   KPIOverview,
   Product,
+  ProdutoLimites,
   BlingProduct,
   BlingOrder,
   BlingInvoice,
@@ -248,6 +320,26 @@ export type {
   BlingWebhook,
   Integration,
 } from "@/lib/types/domain";
+
+export interface ShopeeCategoria {
+  category_id: number;
+  parent_category_id: number;
+  nome: string;
+  tem_filhos: boolean;
+}
+
+export interface ShopeeAtributo {
+  attribute_id: number;
+  original_attribute_name: string;
+  is_mandatory: boolean;
+  input_validation_type?: string;
+  attribute_value_list?: Array<{ value_id: number; original_value_name: string }>;
+}
+
+export interface ShopeeMarca {
+  brand_id: number;
+  original_brand_name: string;
+}
 
 export interface BlingProduto {
   id: number;

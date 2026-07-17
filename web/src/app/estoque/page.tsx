@@ -3,12 +3,17 @@
 import { useState, useEffect, useCallback } from "react";
 import { useStore } from "@/lib/store-context";
 import {
+  api,
   listarBlingProdutos, listarBlingDepositos, obterSaldoDeposito,
   atualizarEstoqueDeposito, BlingDeposito,
 } from "@/lib/api";
 
 interface LojaInfo { id: number; nome: string; ativa: boolean; bling_id?: number | null; }
-interface EstoqueRow { id: number; sku: string; nome: string; deposito: string; quantidade: number; imagemURL: string; situacao: string; preco: number; totalEstoque: number; estoques: Record<number, number>; }
+interface EstoqueRow {
+  id: number; sku: string; nome: string; deposito: string; quantidade: number; imagemURL: string;
+  situacao: string; preco: number; totalEstoque: number; estoques: Record<number, number>;
+  marca: string; fornecedorNome: string; estoqueMinimo: number | null; estoqueMaximo: number | null; custoUnit: number | null;
+}
 
 export default function EstoquePage() {
   const { lojaId, lojas } = useStore();
@@ -45,6 +50,9 @@ export default function EstoquePage() {
       const prodR = await listarBlingProdutos(1, 200);
       const products = prodR.data || [];
 
+      // Carregar limites (min/max, fornecedor, custo) do catalogo local, indexado por SKU
+      const limites = await api.produtosLimites().catch(() => ({} as Record<string, import("@/lib/api").ProdutoLimites>));
+
       // Carregar estoque para cada produto nos depositos filtrados
       const stockRows: EstoqueRow[] = [];
       for (const p of products) {
@@ -59,6 +67,7 @@ export default function EstoquePage() {
             total += saldo;
           } catch { estoques[d.id] = 0; }
         }
+        const lim = limites[p.codigo];
         stockRows.push({
           id: p.id, sku: p.codigo,
           nome: (p as any).nome || p.descricao || (p as any).descricaoCurta || "—",
@@ -69,6 +78,11 @@ export default function EstoquePage() {
           preco: p.preco || 0,
           totalEstoque: total,
           estoques,
+          marca: lim?.marca || "",
+          fornecedorNome: lim?.fornecedor_nome || "",
+          estoqueMinimo: lim?.estoque_minimo ?? null,
+          estoqueMaximo: lim?.estoque_maximo ?? null,
+          custoUnit: lim?.preco_custo ?? null,
         });
       }
       setRows(stockRows);
@@ -109,13 +123,17 @@ export default function EstoquePage() {
     const t = busca.toLowerCase();
     return r.sku.toLowerCase().includes(t) || r.nome.toLowerCase().includes(t) || String(r.id).includes(t);
   }).filter(r => {
+    const limite = r.estoqueMinimo ?? 10; // usa o minimo real do Bling quando disponivel
     if (stockFilter === "zero") return r.totalEstoque <= 0;
-    if (stockFilter === "baixo") return r.totalEstoque > 0 && r.totalEstoque < 10;
-    if (stockFilter === "ok") return r.totalEstoque >= 10;
+    if (stockFilter === "baixo") return r.totalEstoque > 0 && r.totalEstoque < limite;
+    if (stockFilter === "ok") return r.totalEstoque >= limite;
     return true;
   });
 
-  const stockColor = (q: number) => q <= 0 ? "text-red-400" : q < 10 ? "text-yellow-400" : "text-emerald-400";
+  const stockColor = (q: number, minimo?: number | null) => {
+    const limite = minimo ?? 10;
+    return q <= 0 ? "text-red-400" : q < limite ? "text-yellow-400" : "text-emerald-400";
+  };
   const totalGeral = rows.reduce((s, r) => s + r.totalEstoque, 0);
 
   return (
@@ -187,6 +205,8 @@ export default function EstoquePage() {
                   <th key={d.id} className="text-right p-2 w-16">{d.descricao?.slice(0, 8)}</th>
                 ))}
                 <th className="text-right p-2 font-bold">Total</th>
+                <th className="text-right p-2">Mín/Máx</th>
+                <th className="text-left p-2">Fornecedor</th>
                 <th className="text-right p-2">Preco</th>
                 <th className="text-center p-2">Acoes</th>
               </tr>
@@ -198,10 +218,13 @@ export default function EstoquePage() {
                     {r.imagemURL ? <img src={r.imagemURL} alt="" className="w-6 h-6 object-cover rounded bg-neutral-700" /> : <div className="w-6 h-6 rounded bg-neutral-700" />}
                   </td>
                   <td className="p-2 text-neutral-200 font-mono text-[11px]">{r.sku}</td>
-                  <td className="p-2 text-neutral-200 max-w-[160px] truncate" title={r.nome}>{r.nome}</td>
+                  <td className="p-2 text-neutral-200 max-w-[160px] truncate" title={r.nome}>
+                    {r.nome}
+                    {r.marca && <span className="block text-[9px] text-neutral-500">{r.marca}</span>}
+                  </td>
                   {lojaId === "todas" && depositos.slice(0, 4).map(d => (
                     <td key={d.id} className="p-2 text-right font-mono">
-                      <span className={stockColor(r.estoques[d.id] || 0)} title="Clique +/- para ajustar">
+                      <span className={stockColor(r.estoques[d.id] || 0, r.estoqueMinimo)} title="Clique +/- para ajustar">
                         {r.estoques[d.id] || 0}
                       </span>
                       <div className="flex justify-end gap-0.5 mt-0.5">
@@ -210,7 +233,13 @@ export default function EstoquePage() {
                       </div>
                     </td>
                   ))}
-                  <td className={`p-2 text-right font-bold ${stockColor(r.totalEstoque)}`}>{r.totalEstoque}</td>
+                  <td className={`p-2 text-right font-bold ${stockColor(r.totalEstoque, r.estoqueMinimo)}`}>{r.totalEstoque}</td>
+                  <td className="p-2 text-right text-neutral-500 font-mono text-[10px]">
+                    {r.estoqueMinimo != null || r.estoqueMaximo != null
+                      ? `${r.estoqueMinimo ?? "—"} / ${r.estoqueMaximo ?? "—"}`
+                      : "—"}
+                  </td>
+                  <td className="p-2 text-neutral-400 max-w-[140px] truncate" title={r.fornecedorNome}>{r.fornecedorNome || "—"}</td>
                   <td className="p-2 text-right text-emerald-400">R$ {(r.preco || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
                   <td className="p-2 text-center">
                     <span className={`px-1.5 py-0.5 rounded text-[9px] ${r.situacao === "A" ? "bg-emerald-900/30 text-emerald-400" : "bg-neutral-700 text-neutral-400"}`}>{r.situacao === "A" ? "Ativo" : "Inativo"}</span>

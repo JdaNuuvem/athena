@@ -11,6 +11,7 @@ import KitsBomTab from "./_components/KitsBomTab";
 import LotesSeriesTab from "./_components/LotesSeriesTab";
 import LocalizacaoTab from "./_components/LocalizacaoTab";
 import ControleTab from "./_components/ControleTab";
+import PublicarShopeeTab from "./_components/PublicarShopeeTab";
 
 const TABS = [
   { id: "visao-geral", label: "Visão Geral" },
@@ -20,6 +21,7 @@ const TABS = [
   { id: "lotes-series", label: "Lotes & Séries" },
   { id: "localizacao", label: "Localização" },
   { id: "controle", label: "Controle" },
+  { id: "shopee", label: "Publicar Shopee" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -82,7 +84,8 @@ export default function ProdutoPage() {
       {tab === "kits-bom" && <KitsBomTab />}
       {tab === "lotes-series" && <LotesSeriesTab />}
       {tab === "localizacao" && <LocalizacaoTab />}
-      {tab === "controle" && <ControleTab />}
+      {tab === "controle" && <ControleTab produto={produto} />}
+      {tab === "shopee" && <PublicarShopeeTab produto={produto} sku={sku} />}
     </div>
   );
 }

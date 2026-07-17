@@ -16,10 +16,13 @@ function colorFromName(nome: string) {
   return `hsl(${Math.abs(h) % 360}, 45%, 35%)`;
 }
 
-function StockBadge({ qty }: { qty: number }) {
+function StockBadge({ qty, minimo }: { qty: number; minimo?: number }) {
+  // Usa o estoque_minimo real do Bling quando disponivel; caso contrario cai nos limiares genericos
+  const critico = minimo ? minimo * 0.3 : ESTOQUE_CRITICO;
+  const alerta = minimo || ESTOQUE_ALERT;
   if (qty <= 0) return <span className="text-[10px] bg-red-900/40 text-red-400 px-1.5 py-0.5 rounded-full font-medium">Sem estoque</span>;
-  if (qty <= ESTOQUE_CRITICO) return <span className="text-[10px] bg-orange-900/40 text-orange-400 px-1.5 py-0.5 rounded-full font-medium">{qty} un</span>;
-  if (qty <= ESTOQUE_ALERT) return <span className="text-[10px] bg-amber-900/30 text-amber-400 px-1.5 py-0.5 rounded-full">{qty} un</span>;
+  if (qty <= critico) return <span className="text-[10px] bg-orange-900/40 text-orange-400 px-1.5 py-0.5 rounded-full font-medium">{qty} un</span>;
+  if (qty <= alerta) return <span className="text-[10px] bg-amber-900/30 text-amber-400 px-1.5 py-0.5 rounded-full">{qty} un</span>;
   return <span className="text-[10px] bg-emerald-900/20 text-emerald-400 px-1.5 py-0.5 rounded-full">{qty} un</span>;
 }
 
@@ -245,6 +248,11 @@ export default function ProdutosPage() {
                         {p.categoria}
                       </span>
                     )}
+                    {p.marca && (
+                      <span className="text-[10px] bg-neutral-800/60 text-neutral-500 px-1.5 py-0.5 rounded-full shrink-0" title="Marca">
+                        {p.marca}
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs font-mono text-neutral-500 mt-0.5">{p.sku}</p>
                 </div>
@@ -262,7 +270,7 @@ export default function ProdutosPage() {
                   <div className="flex items-center gap-2">
                     <div className="flex flex-col items-center gap-0.5">
                       <Link href={"/pdv?sku=" + p.sku} onClick={e => e.stopPropagation()} className="px-2 py-1 bg-amber-600 hover:bg-amber-500 text-white text-[10px] rounded-lg shrink-0" title="Vender este produto">🛒</Link>
-                      <StockBadge qty={p.estoque_atual ?? 0} />
+                      <StockBadge qty={p.estoque_atual ?? 0} minimo={p.estoque_minimo} />
                       <MargemBadge pct={p.margem_pct ?? 0} />
                     </div>
                     <span className="text-neutral-600 text-sm">›</span>
