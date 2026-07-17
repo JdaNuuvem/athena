@@ -3641,48 +3641,6 @@ def shopee_unlist_produto(item_id):
 
 
 
-# ── Shopee API v2 ──
-
-@app.route('/api/shopee/categorias', methods=['GET'])
-def shopee_categorias():
-    from shopee import get_category
-    r = get_category()
-    return jsonify(r.get("response", r) if isinstance(r, dict) else {"response": r})
-
-@app.route('/api/shopee/categorias/<int:cid>/atributos', methods=['GET'])
-def shopee_categoria_atributos(cid):
-    from shopee import get_attribute_tree
-    r = get_attribute_tree(cid)
-    return jsonify(r.get("response", r) if isinstance(r, dict) else {"response": r})
-
-@app.route('/api/shopee/produtos', methods=['POST'])
-def shopee_criar_produto():
-    data = request.json or {}
-    from shopee import add_item
-    r = add_item(data)
-    return jsonify(r.get("response", r) if isinstance(r, dict) else {"response": r})
-
-@app.route('/api/shopee/produtos/<int:item_id>/unlist', methods=['POST'])
-def shopee_unlist_produto(item_id):
-    from shopee import unlist_item
-    r = unlist_item(item_id)
-    return jsonify(r.get("response", r) if isinstance(r, dict) else {"response": r})
-
-@app.route('/api/shopee/estoque/todas-lojas', methods=['GET'])
-def shopee_estoque_todas_lojas():
-    from shopee import sincronizar_estoque_todas_lojas
-    sku = request.args.get("sku", "")
-    qtd = request.args.get("quantidade", 0, type=int)
-    r = sincronizar_estoque_todas_lojas(sku, qtd) if sku and qtd else {"error": "Forneca sku e quantidade"}
-    return jsonify(r)
-
-@app.route('/api/shopee/logistica/canais', methods=['GET'])
-def shopee_logistica_canais():
-    from shopee import get_shipping_parameter
-    r = get_shipping_parameter()
-    return jsonify(r.get("response", r) if isinstance(r, dict) else {"response": r})
-
-
 @app.route('/<path:path>')
 def serve_frontend(path):
     static_dir = Path(__file__).parent / 'dashboard'
