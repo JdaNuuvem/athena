@@ -17,12 +17,16 @@ COPY web/ /app/web/
 WORKDIR /app/web
 RUN npm install && npm run build
 
+# Copia o build estatico do Next.js para onde o Flask serve
+RUN cp -r /app/web/out/* /app/hermes_agents/dashboard/
+
 WORKDIR /app/hermes_agents
 
 ENV PYTHONUNBUFFERED=1
+ENV PORT=3000
 ENV DB_PORT=5432
 ENV DB_NAME=hermes_factory
 
-EXPOSE 3000 3001
+EXPOSE 3000
 
-CMD bash -c "(cd /app/web && npx next start -p 3000) & python /app/hermes_agents/athena_bridge.py & wait -n"
+CMD python athena_bridge.py
