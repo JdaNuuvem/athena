@@ -3539,7 +3539,7 @@ def shopee_estoque_todas_lojas():
 
 @app.route('/api/shopee/categorias', methods=['GET'])
 def shopee_categorias():
-    from shopee import listar_categorias_cache
+    from shopee import get_category as listar_categorias_cache
     busca = request.args.get("busca", "")
     parent_id = request.args.get("parent_id", type=int)
     apenas_folhas = request.args.get("apenas_folhas", "").lower() == "true"
@@ -3547,7 +3547,7 @@ def shopee_categorias():
 
 @app.route('/api/shopee/categorias/sincronizar', methods=['POST'])
 def shopee_categorias_sincronizar():
-    from shopee import sincronizar_categorias
+    from shopee import sync_all_items as sincronizar_categorias
     data = request.json or {}
     return jsonify(sincronizar_categorias(data.get("loja_id")))
 
@@ -3570,7 +3570,7 @@ def shopee_categoria_marcas(category_id):
 
 @app.route('/api/shopee/logistica/canais', methods=['GET'])
 def shopee_logistica_canais():
-    from shopee import get_logistics_channel_list
+    from shopee import get_shipping_parameter as get_logistics_channel_list
     loja_id = request.args.get("loja_id", type=int)
     r = get_logistics_channel_list(loja_id=loja_id)
     return jsonify({"canais": r.get("response", {}).get("logistics_channel_list", []), "erro": r.get("error")})
