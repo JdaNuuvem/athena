@@ -3639,82 +3639,49 @@ def shopee_unlist_produto(item_id):
 @app.route('/', defaults={'path': ''})
 
 
+
+
 # ── Shopee API v2 ──
 
 @app.route('/api/shopee/categorias', methods=['GET'])
 def shopee_categorias():
-    from shopee import get_category as shopee_get
-    r = shopee_get()
-    return jsonify(r.get("response", r))
-
-@app.route('/api/shopee/categorias/sincronizar', methods=['POST'])
-def shopee_categorias_sync():
-    from shopee import sync_all_categories as shopee_sync
-    return jsonify(shopee_sync())
+    from shopee import get_category
+    r = get_category()
+    return jsonify(r.get("response", r) if isinstance(r, dict) else {"response": r})
 
 @app.route('/api/shopee/categorias/<int:cid>/atributos', methods=['GET'])
 def shopee_categoria_atributos(cid):
-    from shopee import get_attribute_tree as shopee_attrs
-    r = shopee_attrs(cid)
-    return jsonify(r.get("response", r))
-
-@app.route('/api/shopee/categorias/<int:cid>/marcas', methods=['GET'])
-def shopee_categoria_marcas(cid):
-    from shopee import get_brand_list as shopee_brands
-    r = shopee_brands(cid)
-    return jsonify(r.get("response", r))
-
-@app.route('/api/shopee/upload-imagem', methods=['POST'])
-def shopee_upload_imagem():
-    if 'file' in request.files:
-        file = request.files['file']
-        from shopee import upload_image as shopee_upload
-        r = shopee_upload(file.read(), file.filename)
-        return jsonify(r.get("response", r))
-    data = request.json or {}
-    image_url = data.get("url") or data.get("image_url")
-    if image_url:
-        from shopee import upload_image_url as shopee_upload_url
-        r = shopee_upload_url(image_url)
-        return jsonify(r.get("response", r))
-    return jsonify({"error": "Envie um arquivo (multipart) ou uma URL no body"}), 400
+    from shopee import get_attribute_tree
+    r = get_attribute_tree(cid)
+    return jsonify(r.get("response", r) if isinstance(r, dict) else {"response": r})
 
 @app.route('/api/shopee/produtos', methods=['POST'])
 def shopee_criar_produto():
     data = request.json or {}
-    from shopee import add_item as shopee_add
-    r = shopee_add(data)
-    return jsonify(r.get("response", r))
-
-@app.route('/api/shopee/produtos/<int:item_id>', methods=['PUT'])
-def shopee_editar_produto(item_id):
-    data = request.json or {}
-    from shopee import update_item as shopee_update
-    r = shopee_update(item_id, data)
-    return jsonify(r.get("response", r))
-
-@app.route('/api/shopee/produtos/<int:item_id>', methods=['DELETE'])
-def shopee_deletar_produto(item_id):
-    from shopee import delete_item as shopee_delete
-    r = shopee_delete(item_id)
-    return jsonify(r.get("response", r))
+    from shopee import add_item
+    r = add_item(data)
+    return jsonify(r.get("response", r) if isinstance(r, dict) else {"response": r})
 
 @app.route('/api/shopee/produtos/<int:item_id>/unlist', methods=['POST'])
 def shopee_unlist_produto(item_id):
-    from shopee import unlist_item as shopee_unlist
-    r = shopee_unlist(item_id)
-    return jsonify(r.get("response", r))
+    from shopee import unlist_item
+    r = unlist_item(item_id)
+    return jsonify(r.get("response", r) if isinstance(r, dict) else {"response": r})
 
 @app.route('/api/shopee/estoque/todas-lojas', methods=['GET'])
 def shopee_estoque_todas_lojas():
-    from shopee import estoque_todas_lojas as shopee_etl
-    return jsonify(shopee_etl())
+    from shopee import sincronizar_estoque_todas_lojas
+    sku = request.args.get("sku", "")
+    qtd = request.args.get("quantidade", 0, type=int)
+    r = sincronizar_estoque_todas_lojas(sku, qtd) if sku and qtd else {"error": "Forneca sku e quantidade"}
+    return jsonify(r)
 
 @app.route('/api/shopee/logistica/canais', methods=['GET'])
 def shopee_logistica_canais():
-    from shopee import get_shipping_channel as shopee_ship
-    r = shopee_ship()
-    return jsonify(r.get("response", r))
+    from shopee import get_shipping_parameter
+    r = get_shipping_parameter()
+    return jsonify(r.get("response", r) if isinstance(r, dict) else {"response": r})
+
 
 @app.route('/<path:path>')
 def serve_frontend(path):
