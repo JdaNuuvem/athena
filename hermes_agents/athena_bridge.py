@@ -3078,6 +3078,23 @@ def shopee_logistica_canais():
     } for c in canais_brutos]
     return jsonify({"canais": canais, "erro": r.get("error") or None})
 
+def _url_publica_segura(url: str) -> bool:
+    """Bloqueia SSRF: recusa URLs cujo host resolve para IP privado/loopback/link-local
+    (evita usar o upload de imagem como proxy para sondar rede interna ou metadata de nuvem)."""
+    import socket, ipaddress
+    from urllib.parse import urlparse
+    try:
+        host = urlparse(url).hostname
+        if not host:
+            return False
+        for info in socket.getaddrinfo(host, None):
+            ip = ipaddress.ip_address(info[4][0])
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+                return False
+        return True
+    except Exception:
+        return False
+
 @app.route('/api/shopee/upload-imagem', methods=['POST'])
 def shopee_upload_imagem():
     """Envia uma imagem para a Shopee. Aceita um arquivo (multipart 'file') OU uma
@@ -3094,13 +3111,17 @@ def shopee_upload_imagem():
         image_url = request.form.get("image_url", "")
         if not image_url.startswith(("http://", "https://")):
             return jsonify({"error": "Envie um arquivo ou informe uma image_url http(s) valida"}), 400
+        if not _url_publica_segura(image_url):
+            return jsonify({"error": "image_url nao permitida"}), 400
         try:
-            resp = req_lib.get(image_url, timeout=20)
+            resp = req_lib.get(image_url, timeout=20, allow_redirects=False)
             resp.raise_for_status()
             image_bytes = resp.content
             filename = image_url.rsplit("/", 1)[-1].split("?")[0] or "imagem.jpg"
         except Exception as e:
-            return jsonify({"error": f"Falha ao baixar imagem: {e}"}), 400
+            from core import log
+            log("Shopee Upload", f"Falha ao baixar {image_url}: {e}")
+            return jsonify({"error": "Falha ao baixar imagem"}), 400
     r = upload_image(image_bytes, filename, loja_id=loja_id)
     resp = r.get("response", {})
     image_info = resp.get("image_info", {})

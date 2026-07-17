@@ -275,6 +275,18 @@ class TestRotasFlask(unittest.TestCase):
         resp = self.client.post("/api/shopee/upload-imagem", data={"loja_id": "1", "image_url": "file:///etc/passwd"})
         self.assertEqual(resp.status_code, 400)
 
+    def test_rota_upload_imagem_rejeita_ip_privado_ssrf(self):
+        # ponytail: protecao contra SSRF — nao pode usar o upload de imagem pra sondar rede interna
+        for url in ["http://127.0.0.1/imagem.jpg", "http://169.254.169.254/latest/meta-data/", "http://10.0.0.5/x.jpg"]:
+            resp = self.client.post("/api/shopee/upload-imagem", data={"loja_id": "1", "image_url": url})
+            self.assertEqual(resp.status_code, 400, f"deveria bloquear {url}")
+
+    @patch("requests.get", side_effect=Exception("connection refused to internal-db.corp.local:5432"))
+    def test_rota_upload_imagem_nao_vaza_detalhe_de_erro(self, mock_get):
+        resp = self.client.post("/api/shopee/upload-imagem", data={"loja_id": "1", "image_url": "https://www.google.com/x.jpg"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertNotIn("internal-db.corp.local", resp.get_json().get("error", ""))
+
     @patch("shopee.add_item")
     def test_rota_criar_produto(self, mock_add):
         mock_add.return_value = {"response": {"item_id": 42}}
