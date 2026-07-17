@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import HelpTooltip from "@/app/_components/HelpTooltip";
 
 export default function AtendimentoPage() {
   const [dash, setDash] = useState<any>(null);

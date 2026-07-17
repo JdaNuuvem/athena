@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import HelpTooltip from "@/app/_components/HelpTooltip";
 
 export default function AutomacoesPage() {
   const [dash, setDash] = useState<any>(null);
@@ -20,8 +21,8 @@ export default function AutomacoesPage() {
       </div>
       <div><h2 className="text-sm font-semibold text-neutral-300 mb-3">Modulos</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[{href:"/automacoes/webhooks",label:"Webhooks",c:"bg-blue-600"},{href:"/automacoes/filas",label:"Filas",c:"bg-amber-600"},{href:"/automacoes/eventos",label:"Eventos",c:"bg-purple-600"},{href:"/automacoes/agendamentos",label:"Agendamentos",c:"bg-emerald-600"},{href:"/automacoes/integracoes",label:"Integracoes",c:"bg-indigo-600"},{href:"/automacoes/bots",label:"Bots",c:"bg-pink-600"},{href:"/automacoes/ia",label:"IA",c:"bg-teal-600"}].map(m=>(
-            <Link key={m.href} href={m.href} className={m.c+" hover:opacity-90 text-white rounded-lg p-4"}><p className="text-sm font-semibold">{m.label}</p></Link>
+          {[{href:"/automacoes/webhooks",label:"Webhooks",c:"bg-blue-600",h:"Notificacoes HTTP em tempo real — receba eventos externos"},{href:"/automacoes/filas",label:"Filas",c:"bg-amber-600",h:"Filas de processamento assincrono — enfileire tarefas"},{href:"/automacoes/eventos",label:"Eventos",c:"bg-purple-600"},{href:"/automacoes/agendamentos",label:"Agendamentos",c:"bg-emerald-600",h:"Tarefas agendadas com cron — execute periodicamente"},{href:"/automacoes/integracoes",label:"Integracoes",c:"bg-indigo-600"},{href:"/automacoes/bots",label:"Bots",c:"bg-pink-600"},{href:"/automacoes/ia",label:"IA",c:"bg-teal-600"}].map(m=>(
+            <Link key={m.href} href={m.href} className={m.c+" hover:opacity-90 text-white rounded-lg p-4"}><p className="text-sm font-semibold">{m.label}<span className="opacity-0 group-hover:opacity-100 transition-opacity text-[9px] bg-white/20 rounded-full w-4 h-4 flex items-center justify-center ml-1.5">?</span></p></Link>
           ))}</div>
       </div>
     </div>

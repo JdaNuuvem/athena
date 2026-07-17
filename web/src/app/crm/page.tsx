@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import HelpTooltip from "@/app/_components/HelpTooltip";
 
 interface FunilData { categorias: string[]; series: {name:string;total:number;valor:number}[]; total_leads: number; total_negociacoes: number; total_propostas: number; etapas: string[]; }
 
