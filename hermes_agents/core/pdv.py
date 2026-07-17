@@ -81,7 +81,13 @@ def _list(t: str, cols="*", order="id DESC", limit=100) -> list:
     async def _go():
         db = await get_db()
         rows = await db.fetch(f"SELECT {cols} FROM {t} ORDER BY {order} LIMIT {limit}")
-        return [dict(r) for r in rows]
+        result = []
+        for r in rows:
+            d = dict(r)
+            if d.get('preco'): d['preco'] = float(d['preco'])
+            if d.get('estoque_atual'): d['estoque_atual'] = int(d['estoque_atual'])
+            result.append(d)
+        return result
     try: return run_async(_go())
     except Exception as e: log(AGENT, f"list {t}: {e}"); return []
 

@@ -83,7 +83,7 @@ export default function PDVPage() {
   };
 
   const addFromSearch = (prod: SearchResult) => {
-    if (!prod.preco || prod.preco <= 0) { notify("Preco zerado! Verifique o cadastro.", "error"); return; }
+    if (!Number(prod.preco) || Number(prod.preco) <= 0) { notify("Preco zerado! Verifique o cadastro.", "error"); return; }
     setCart(prev => {
       const existing = prev.findIndex(i => i.codigo === prod.codigo);
       if (existing >= 0) {
@@ -202,8 +202,8 @@ export default function PDVPage() {
                       className="flex items-center justify-between px-3 py-2 hover:bg-neutral-700 cursor-pointer text-sm border-b border-neutral-700/50 last:border-0">
                       <div><span className="text-neutral-200">{p.codigo}</span><span className="text-neutral-500 ml-2">{p.nome}</span></div>
                       <div className="flex items-center gap-3">
-                        <span className="text-neutral-400 text-xs">{p.estoque_atual ?? "—"} und</span>
-                        <span className="text-emerald-400 font-medium">R$ {p.preco?.toFixed(2)}</span>
+                        <span className="text-neutral-400 text-xs">{Number(p.estoque_atual ?? 0) || "—"} und</span>
+                        <span className="text-emerald-400 font-medium">R$ {Number(p.preco || 0).toFixed(2)}</span>
                       </div>
                     </div>
                   ))}
