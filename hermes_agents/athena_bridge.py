@@ -2953,30 +2953,39 @@ def health_real():
 def shopee_detalhes_produtos():
     from shopee import get_item_base_info
     data = request.json
-    resultado = get_item_base_info(data.get("item_ids", []))
+    resultado = get_item_base_info(data.get("item_ids", []), loja_id=data.get("loja_id"))
     return jsonify(resultado)
 
 @app.route('/api/shopee/produtos/<int:item_id>/estoque', methods=['GET'])
 def shopee_estoque_item(item_id):
     from shopee import check_stock
-    return jsonify(check_stock(item_id))
+    loja_id = request.args.get("loja_id", type=int)
+    return jsonify(check_stock(item_id, loja_id=loja_id))
 
 @app.route('/api/shopee/produtos/<int:item_id>/preco', methods=['POST'])
 def shopee_atualizar_preco(item_id):
     from shopee import update_price
     data = request.json
-    return jsonify(update_price(item_id, data.get("price", 0)))
+    return jsonify(update_price(item_id, data.get("price", 0), loja_id=data.get("loja_id")))
 
 @app.route('/api/shopee/produtos/sincronizar', methods=['POST'])
 def shopee_sync():
-    from shopee import sync_all_items
-    itens = sync_all_items()
-    return jsonify({"total": len(itens), "itens": itens})
+    """Sincroniza produtos da Shopee -> catalogo local (anuncios/fichas_tecnicas).
+    ponytail: antes chamava sync_all_items() que so retornava a lista sem persistir nada no banco."""
+    from shopee_sync import sync_produtos
+    from core import run_async
+    data = request.json or {}
+    try:
+        resultado = run_async(sync_produtos(data.get("loja_id")))
+        return jsonify(resultado)
+    except Exception as e:
+        return jsonify({"total": 0, "erro": str(e)}), 500
 
 @app.route('/api/shopee/pedidos/<order_sn>', methods=['GET'])
 def shopee_detalhe_pedido(order_sn):
     from shopee import get_order_detail
-    return jsonify(get_order_detail(order_sn))
+    loja_id = request.args.get("loja_id", type=int)
+    return jsonify(get_order_detail(order_sn, loja_id=loja_id))
 
 # ===========================================================================
 # Webhooks externos
@@ -3459,16 +3468,15 @@ def kpi_overview():
 # ===========================================================================
 # Rota padrão — SPA fallback: serve index.html pra qualquer rota do frontend
 # ===========================================================================
-@app.route('/', defaults={'path': ''})
-
 @app.route('/api/shopee/callback', methods=['GET'])
 def shopee_oauth_callback():
     code = request.args.get("code", "")
     shop_id = request.args.get("shop_id", "")
+    loja_id = request.args.get("loja_id", type=int)
     if not code:
         return jsonify({"error": "Parametro code ausente"}), 400
     from shopee import exchange_shopee_code
-    result = exchange_shopee_code(code, shop_id)
+    result = exchange_shopee_code(code, shop_id, loja_id=loja_id)
     if result.get("success"):
         return jsonify(result)
     return jsonify({"error": result.get("error", "Falha na autenticacao"), "detail": result}), 400
@@ -3477,10 +3485,236 @@ def shopee_oauth_callback():
 def shopee_auth_url():
     from shopee import get_auth_url
     sandbox = request.args.get("sandbox", "").lower() == "true"
-    url = get_auth_url(sandbox=sandbox)
+    loja_id = request.args.get("loja_id", type=int)
+    url = get_auth_url(sandbox=sandbox, loja_id=loja_id)
     if not url:
         return jsonify({"error": "Partner ID nao configurado"}), 400
     return jsonify({"url": url})
+
+@app.route('/api/shopee/lojas', methods=['GET'])
+def shopee_listar_lojas():
+    """Lojas Shopee ja conectadas (multiloja)."""
+    from core.lojas import listar_lojas_shopee
+    return jsonify({"lojas": listar_lojas_shopee()})
+
+@app.route('/api/shopee/lojas/<int:loja_id>/conectar', methods=['POST'])
+def shopee_conectar_loja(loja_id):
+    """Gera a URL de autorizacao Shopee vinculada a uma loja especifica."""
+    from shopee import get_auth_url
+    sandbox = (request.json or {}).get("sandbox", False) if request.is_json else False
+    url = get_auth_url(sandbox=sandbox, loja_id=loja_id)
+    if not url:
+        return jsonify({"error": "Partner ID nao configurado"}), 400
+    return jsonify({"url": url})
+
+@app.route('/api/shopee/produtos/<sku>/estoque', methods=['PUT'])
+def shopee_atualizar_estoque_produto(sku):
+    """Push de estoque local -> Shopee para uma loja especifica (estoque multiloja)."""
+    from shopee import sincronizar_estoque_shopee
+    data = request.json or {}
+    loja_id = data.get("loja_id")
+    quantidade = data.get("quantidade")
+    if loja_id is None or quantidade is None:
+        return jsonify({"error": "loja_id e quantidade sao obrigatorios"}), 400
+    try:
+        return jsonify(sincronizar_estoque_shopee(sku, int(quantidade), loja_id=int(loja_id)))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/shopee/estoque/todas-lojas', methods=['POST'])
+def shopee_estoque_todas_lojas():
+    """Envia o estoque de um SKU para TODAS as lojas Shopee conectadas de uma vez."""
+    from shopee import sincronizar_estoque_todas_lojas
+    data = request.json or {}
+    sku = data.get("sku")
+    quantidade = data.get("quantidade")
+    if not sku or quantidade is None:
+        return jsonify({"error": "sku e quantidade sao obrigatorios"}), 400
+    try:
+        return jsonify(sincronizar_estoque_todas_lojas(sku, int(quantidade)))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ── Cadastro de produtos na Shopee: categorias, atributos, marcas, imagens ──
+
+@app.route('/api/shopee/categorias', methods=['GET'])
+def shopee_categorias():
+    from shopee import listar_categorias_cache
+    busca = request.args.get("busca", "")
+    parent_id = request.args.get("parent_id", type=int)
+    apenas_folhas = request.args.get("apenas_folhas", "").lower() == "true"
+    return jsonify({"categorias": listar_categorias_cache(busca, parent_id, apenas_folhas)})
+
+@app.route('/api/shopee/categorias/sincronizar', methods=['POST'])
+def shopee_categorias_sincronizar():
+    from shopee import sincronizar_categorias
+    data = request.json or {}
+    return jsonify(sincronizar_categorias(data.get("loja_id")))
+
+@app.route('/api/shopee/categorias/<int:category_id>/atributos', methods=['GET'])
+def shopee_categoria_atributos(category_id):
+    from shopee import get_attribute_tree
+    loja_id = request.args.get("loja_id", type=int)
+    r = get_attribute_tree(category_id, loja_id=loja_id)
+    arvore = r.get("response", {}).get("attribute_tree", [])
+    atributos = arvore[0].get("attribute_list", []) if arvore else []
+    return jsonify({"atributos": atributos, "erro": r.get("error")})
+
+@app.route('/api/shopee/categorias/<int:category_id>/marcas', methods=['GET'])
+def shopee_categoria_marcas(category_id):
+    from shopee import get_brand_list
+    loja_id = request.args.get("loja_id", type=int)
+    r = get_brand_list(category_id, loja_id=loja_id)
+    resp = r.get("response", {})
+    return jsonify({"marcas": resp.get("brand_list", []), "obrigatorio": resp.get("is_mandatory", False), "erro": r.get("error")})
+
+@app.route('/api/shopee/logistica/canais', methods=['GET'])
+def shopee_logistica_canais():
+    from shopee import get_logistics_channel_list
+    loja_id = request.args.get("loja_id", type=int)
+    r = get_logistics_channel_list(loja_id=loja_id)
+    return jsonify({"canais": r.get("response", {}).get("logistics_channel_list", []), "erro": r.get("error")})
+
+@app.route('/api/shopee/upload-imagem', methods=['POST'])
+def shopee_upload_imagem():
+    """Envia uma imagem para a Shopee. Aceita um arquivo (multipart 'file') OU uma
+    image_url (ex: a imagem que ja esta no catalogo/Bling) — evita o usuario ter
+    que baixar e re-subir manualmente a mesma foto que ja tem cadastrada."""
+    from shopee import upload_image
+    import requests as req_lib
+    loja_id = request.form.get("loja_id", type=int)
+    if "file" in request.files:
+        file = request.files["file"]
+        image_bytes = file.read()
+        filename = file.filename or "imagem.jpg"
+    else:
+        image_url = request.form.get("image_url", "")
+        if not image_url.startswith(("http://", "https://")):
+            return jsonify({"error": "Envie um arquivo ou informe uma image_url http(s) valida"}), 400
+        try:
+            resp = req_lib.get(image_url, timeout=20)
+            resp.raise_for_status()
+            image_bytes = resp.content
+            filename = image_url.rsplit("/", 1)[-1].split("?")[0] or "imagem.jpg"
+        except Exception as e:
+            return jsonify({"error": f"Falha ao baixar imagem: {e}"}), 400
+    r = upload_image(image_bytes, filename, loja_id=loja_id)
+    resp = r.get("response", {})
+    image_info = resp.get("image_info", {})
+    return jsonify({"image_id": image_info.get("image_id"), "image_url": (image_info.get("image_url_list") or [{}])[0].get("image_url", ""), "erro": r.get("error")})
+
+@app.route('/api/shopee/produtos', methods=['POST'])
+def shopee_criar_produto():
+    """Cria um produto novo direto na Shopee."""
+    from shopee import add_item
+    data = request.json or {}
+    loja_id = data.pop("loja_id", None)
+    if loja_id is None:
+        return jsonify({"error": "loja_id e obrigatorio"}), 400
+    return jsonify(add_item(data, loja_id=int(loja_id)))
+
+@app.route('/api/shopee/produtos/<int:item_id>', methods=['PUT'])
+def shopee_editar_produto(item_id):
+    from shopee import update_item
+    data = request.json or {}
+    loja_id = data.pop("loja_id", None)
+    if loja_id is None:
+        return jsonify({"error": "loja_id e obrigatorio"}), 400
+    return jsonify(update_item(item_id, data, loja_id=int(loja_id)))
+
+@app.route('/api/shopee/produtos/<int:item_id>', methods=['DELETE'])
+def shopee_deletar_produto(item_id):
+    from shopee import delete_item_shopee
+    loja_id = request.args.get("loja_id", type=int)
+    return jsonify(delete_item_shopee(item_id, loja_id=loja_id))
+
+@app.route('/api/shopee/produtos/<int:item_id>/unlist', methods=['POST'])
+def shopee_unlist_produto(item_id):
+    from shopee import unlist_item
+    data = request.json or {}
+    loja_id = data.get("loja_id")
+    unlist = data.get("unlist", True)
+    return jsonify(unlist_item([item_id], unlist=unlist, loja_id=loja_id))
+
+@app.route('/', defaults={'path': ''})
+
+
+# ── Shopee API v2 ──
+
+@app.route('/api/shopee/categorias', methods=['GET'])
+def shopee_categorias():
+    from shopee import get_category as shopee_get
+    r = shopee_get()
+    return jsonify(r.get("response", r))
+
+@app.route('/api/shopee/categorias/sincronizar', methods=['POST'])
+def shopee_categorias_sync():
+    from shopee import sync_all_categories as shopee_sync
+    return jsonify(shopee_sync())
+
+@app.route('/api/shopee/categorias/<int:cid>/atributos', methods=['GET'])
+def shopee_categoria_atributos(cid):
+    from shopee import get_attribute_tree as shopee_attrs
+    r = shopee_attrs(cid)
+    return jsonify(r.get("response", r))
+
+@app.route('/api/shopee/categorias/<int:cid>/marcas', methods=['GET'])
+def shopee_categoria_marcas(cid):
+    from shopee import get_brand_list as shopee_brands
+    r = shopee_brands(cid)
+    return jsonify(r.get("response", r))
+
+@app.route('/api/shopee/upload-imagem', methods=['POST'])
+def shopee_upload_imagem():
+    if 'file' in request.files:
+        file = request.files['file']
+        from shopee import upload_image as shopee_upload
+        r = shopee_upload(file.read(), file.filename)
+        return jsonify(r.get("response", r))
+    data = request.json or {}
+    image_url = data.get("url") or data.get("image_url")
+    if image_url:
+        from shopee import upload_image_url as shopee_upload_url
+        r = shopee_upload_url(image_url)
+        return jsonify(r.get("response", r))
+    return jsonify({"error": "Envie um arquivo (multipart) ou uma URL no body"}), 400
+
+@app.route('/api/shopee/produtos', methods=['POST'])
+def shopee_criar_produto():
+    data = request.json or {}
+    from shopee import add_item as shopee_add
+    r = shopee_add(data)
+    return jsonify(r.get("response", r))
+
+@app.route('/api/shopee/produtos/<int:item_id>', methods=['PUT'])
+def shopee_editar_produto(item_id):
+    data = request.json or {}
+    from shopee import update_item as shopee_update
+    r = shopee_update(item_id, data)
+    return jsonify(r.get("response", r))
+
+@app.route('/api/shopee/produtos/<int:item_id>', methods=['DELETE'])
+def shopee_deletar_produto(item_id):
+    from shopee import delete_item as shopee_delete
+    r = shopee_delete(item_id)
+    return jsonify(r.get("response", r))
+
+@app.route('/api/shopee/produtos/<int:item_id>/unlist', methods=['POST'])
+def shopee_unlist_produto(item_id):
+    from shopee import unlist_item as shopee_unlist
+    r = shopee_unlist(item_id)
+    return jsonify(r.get("response", r))
+
+@app.route('/api/shopee/estoque/todas-lojas', methods=['GET'])
+def shopee_estoque_todas_lojas():
+    from shopee import estoque_todas_lojas as shopee_etl
+    return jsonify(shopee_etl())
+
+@app.route('/api/shopee/logistica/canais', methods=['GET'])
+def shopee_logistica_canais():
+    from shopee import get_shipping_channel as shopee_ship
+    r = shopee_ship()
+    return jsonify(r.get("response", r))
 
 @app.route('/<path:path>')
 def serve_frontend(path):
@@ -3510,7 +3744,3 @@ if __name__ == "__main__":
     port = int(os.environ.get("API_PORT", "3001"))
     debug = os.environ.get("DEBUG", "false").lower() == "true"
     app.run(host="0.0.0.0", port=port, debug=debug)
-
-
-
-# ── Shopee OAuth Callback ──
