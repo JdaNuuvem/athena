@@ -8,6 +8,8 @@ WORKDIR /app/hermes_agents
 ENV PYTHONUNBUFFERED=1
 ENV PORT=3000
 ENV DB_PORT=5432
+ENV DB_HOST=postgresql-database-h3bdeft4hgsbg9rcxklxidwt
+ENV DB_PORT=5432
 ENV DB_NAME=hermes_factory
 EXPOSE 3000
 CMD python athena_bridge.py
