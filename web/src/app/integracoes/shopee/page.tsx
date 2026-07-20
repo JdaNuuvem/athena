@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { Suspense, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 
 interface LojaShopee {
@@ -18,7 +19,31 @@ interface LojaSimples {
   ativa: boolean;
 }
 
-export default function ShopeeIntegrationPage() {
+function ResultadoAutorizacao() {
+  const params = useSearchParams();
+  const status = params.get("shopee_auth");
+  if (!status) return null;
+
+  const ok = status === "ok";
+  const shopId = params.get("shopee_shop_id");
+  const lojaNome = params.get("shopee_loja_nome");
+  const expireIn = params.get("shopee_expire_in");
+  const mensagem = params.get("shopee_msg");
+
+  return (
+    <div className={`text-xs px-3 py-3 rounded-lg border space-y-1 ${ok ? "bg-green-950/40 border-green-900/50 text-green-400" : "bg-red-950/40 border-red-900/50 text-red-400"}`}>
+      <p className="font-medium">
+        {ok ? "✓ Autorização concluída com sucesso" : "✗ Falha na autorização"}
+      </p>
+      {ok && shopId && <p className="text-neutral-400">shop_id: <span className="font-mono">{shopId}</span></p>}
+      {ok && lojaNome && <p className="text-neutral-400">Loja vinculada: {lojaNome}</p>}
+      {ok && expireIn && <p className="text-neutral-400">Token válido por {Math.round(Number(expireIn) / 3600)}h</p>}
+      {mensagem && <p className="text-neutral-400">{mensagem}</p>}
+    </div>
+  );
+}
+
+function ShopeeIntegrationContent() {
   const [lojasShopee, setLojasShopee] = useState<LojaShopee[]>([]);
   const [lojasDisponiveis, setLojasDisponiveis] = useState<LojaSimples[]>([]);
   const [loading, setLoading] = useState(true);
@@ -80,6 +105,8 @@ export default function ShopeeIntegrationPage() {
         <h1 className="text-lg font-light text-neutral-300 mt-1">Shopee</h1>
         <p className="text-xs text-neutral-500 mt-0.5">Gerencie suas lojas Shopee e sincronize produtos/estoque — suporta múltiplas contas.</p>
       </div>
+
+      <ResultadoAutorizacao />
 
       {msg && (
         <div className={`text-xs px-3 py-2 rounded-lg border ${msg.ok ? "bg-green-950/40 border-green-900/50 text-green-400" : "bg-red-950/40 border-red-900/50 text-red-400"}`}>
@@ -149,5 +176,13 @@ export default function ShopeeIntegrationPage() {
         </button>
       </div>
     </div>
+  );
+}
+
+export default function ShopeeIntegrationPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-neutral-500 text-sm">Carregando...</div>}>
+      <ShopeeIntegrationContent />
+    </Suspense>
   );
 }

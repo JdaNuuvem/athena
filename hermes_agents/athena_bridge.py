@@ -4,7 +4,7 @@ ATHENA OS tem 52 agentes, 40+ queries GraphQL, 30+ endpoints REST.
 """
 import os, sys, json, urllib.request
 from typing import Optional
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, redirect
 from flask_cors import CORS
 from core import run_async, get_db, FactoryConfig
 from pathlib import Path
@@ -2951,16 +2951,28 @@ def health_real():
 
 @app.route('/api/shopee/callback', methods=['GET'])
 def shopee_oauth_callback():
+    """Recebe o redirect da Shopee apos autorizacao e manda o resultado pra tela de
+    Integracoes -> Shopee (nao devolve o access_token na URL, so' o status/shop_id)."""
+    from urllib.parse import urlencode
     code = request.args.get("code", "")
     shop_id = request.args.get("shop_id", "")
     loja_id = request.args.get("loja_id", type=int)
     if not code:
-        return jsonify({"error": "Parametro code ausente"}), 400
+        return redirect("/integracoes/shopee?" + urlencode({"shopee_auth": "erro", "shopee_msg": "Parametro code ausente"}))
     from shopee import exchange_shopee_code
     result = exchange_shopee_code(code, shop_id, loja_id=loja_id)
     if result.get("success"):
-        return jsonify(result)
-    return jsonify({"error": result.get("error", "Falha na autenticacao"), "detail": result}), 400
+        loja = result.get("loja") or {}
+        params = {
+            "shopee_auth": "ok",
+            "shopee_shop_id": result.get("shop_id", ""),
+            "shopee_loja_nome": loja.get("nome", ""),
+            "shopee_expire_in": result.get("expire_in", ""),
+        }
+        if loja.get("error"):
+            params["shopee_msg"] = f"Autorizado, mas nao foi possivel vincular a loja: {loja['error']}"
+        return redirect("/integracoes/shopee?" + urlencode(params))
+    return redirect("/integracoes/shopee?" + urlencode({"shopee_auth": "erro", "shopee_msg": result.get("error", "Falha na autenticacao")}))
 
 @app.route('/api/shopee/auth-url', methods=['GET'])
 def shopee_auth_url():

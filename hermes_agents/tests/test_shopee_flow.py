@@ -233,6 +233,26 @@ class TestRotasFlask(unittest.TestCase):
         app.config["TESTING"] = True
         cls.client = app.test_client()
 
+    def test_callback_sem_code_redireciona_com_erro(self):
+        resp = self.client.get("/api/shopee/callback", follow_redirects=False)
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("/integracoes/shopee?", resp.headers["Location"])
+        self.assertIn("shopee_auth=erro", resp.headers["Location"])
+
+    @patch("shopee.exchange_shopee_code")
+    def test_callback_sucesso_redireciona_sem_expor_token(self, mock_exchange):
+        mock_exchange.return_value = {
+            "success": True, "shop_id": "227748635", "expire_in": 14400,
+            "loja": {"id": 1, "nome": "Minha Loja BR", "shopee_shop_id": "227748635"},
+        }
+        resp = self.client.get("/api/shopee/callback?code=abc123&shop_id=227748635", follow_redirects=False)
+        self.assertEqual(resp.status_code, 302)
+        location = resp.headers["Location"]
+        self.assertIn("shopee_auth=ok", location)
+        self.assertIn("shopee_shop_id=227748635", location)
+        self.assertNotIn("access_token", location)
+        self.assertNotIn("abc123", location)  # o code usado nao deve vazar na URL de resultado
+
     @patch("shopee.listar_categorias_cache")
     def test_rota_categorias(self, mock_listar):
         mock_listar.return_value = [{"category_id": 1, "parent_category_id": 0, "nome": "Casa", "tem_filhos": False}]
