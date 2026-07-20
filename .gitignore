@@ -6,3 +6,33 @@ node_modules
 .env.*
 !.env.*.example
 hermes_agents/config/api_config.json
+
+# Bytecode Python
+__pycache__/
+*.pyc
+
+# Saida gerada pela skill /graphify — regeneravel, nao e' codigo fonte
+graphify-out/
+
+# Scripts de debug/deploy soltos na raiz (nao sao parte do codigo do projeto)
+/_*.py
+
+# Arquivos-lixo (sobras de redirecionamento de shell por engano)
+/1
+/data
+/dict
+/fill
+/hermes_agents/'
+/hermes_agents/,
+/hermes_agents/,+
+/hermes_agents/200
+/hermes_agents/302
+/hermes_agents/ERRO
+/hermes_agents/ERRO'
+/hermes_agents/Shopee
+/hermes_agents/bool
+/hermes_agents/catalogo
+/hermes_agents/dict
+/"shopee
+/web/,-
+athena/
