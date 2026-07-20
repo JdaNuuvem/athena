@@ -2976,13 +2976,17 @@ def shopee_oauth_callback():
 
 @app.route('/api/shopee/auth-url', methods=['GET'])
 def shopee_auth_url():
-    from shopee import get_auth_url
-    sandbox = request.args.get("sandbox", "").lower() == "true"
-    loja_id = request.args.get("loja_id", type=int)
-    url = get_auth_url(sandbox=sandbox, loja_id=loja_id)
-    if not url:
-        return jsonify({"error": "Partner ID nao configurado"}), 400
-    return jsonify({"url": url})
+    try:
+        from shopee import get_auth_url
+        sandbox = request.args.get("sandbox", "").lower() == "true"
+        loja_id = request.args.get("loja_id", type=int)
+        url = get_auth_url(sandbox=sandbox, loja_id=loja_id)
+        if not url:
+            return jsonify({"error": "Partner ID nao configurado"}), 400
+        return jsonify({"url": url})
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()[:500]}), 500
 
 @app.route('/api/shopee/lojas', methods=['GET'])
 def shopee_listar_lojas():
