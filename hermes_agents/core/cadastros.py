@@ -53,6 +53,13 @@ def _ensure_tables():
             limite_credito DECIMAL(12,2) DEFAULT 0, score INT DEFAULT 0,
             status VARCHAR(20) DEFAULT 'ativo', created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW()
         )""")
+        # ponytail: sincronizar_contatos_bling() (core/entidades.py) grava email/telefone
+        # direto aqui e faz ON CONFLICT (documento) — colunas e indice nunca existiram,
+        # causando "column email does not exist" em todo sync de contato do Bling.
+        await db.execute("ALTER TABLE cad_clientes ADD COLUMN IF NOT EXISTS email VARCHAR(200)")
+        await db.execute("ALTER TABLE cad_clientes ADD COLUMN IF NOT EXISTS telefone VARCHAR(30)")
+        await db.execute("""CREATE UNIQUE INDEX IF NOT EXISTS idx_cad_clientes_documento_unico
+            ON cad_clientes (documento) WHERE documento IS NOT NULL AND documento != ''""")
         await db.execute("""CREATE TABLE IF NOT EXISTS cad_cliente_enderecos (
             id SERIAL PRIMARY KEY, cliente_id INT REFERENCES cad_clientes(id),
             logradouro VARCHAR(200), numero VARCHAR(10), complemento VARCHAR(100),
