@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from core import log, run_async, get_db, hoje
 from shopee import (
     configurado, get_items, get_item_base_info,
-    get_orders_by_time_range, get_order_detail,
+    get_orders_by_time_range, get_order_detail, get_shopee_config,
 )
 
 AGENT = "Shopee Sync"
@@ -57,33 +57,36 @@ async def _init_tables():
         )
     """)
 
-async def sync_produtos() -> dict:
+async def sync_produtos(loja_id: int = None) -> dict:
+    """Sincroniza produtos da Shopee para o catalogo local. loja_id identifica qual conta
+    Shopee usar (multiloja); quando omitido, usa a config global legada (loja unica)."""
     await _init_tables()
     db = await get_db()
+    shop_id = get_shopee_config(loja_id).get("shop_id") or ""
     log_id = await db.fetchval("INSERT INTO shopee_sync_log (tipo, status) VALUES ('produtos', 'executando') RETURNING id")
     total = 0
     erros = []
     offset = 0
     for pagina in range(50):
-        r = get_items("NORMAL", offset)
+        r = get_items("NORMAL", offset, loja_id=loja_id)
         resp = r.get("response", {})
         items = resp.get("item", [])
         if not items:
             break
         ids = [i["item_id"] for i in items]
-        details = get_item_base_info(ids)
+        details = get_item_base_info(ids, loja_id=loja_id)
         for d in details.get("response", {}).get("item_list", []):
             try:
                 s = d.get("stock_info_v2", {}).get("summary_info", {}) or {}
                 price_info = (d.get("price_info") or [{}])[0] or {}
                 agora = datetime.now()
-                # Upsert em anuncios (tabela do AG-03)
+                # Upsert em anuncios (tabela do AG-03) — shop_id permite o mesmo SKU em varias lojas Shopee
                 await db.execute("""
-                    INSERT INTO anuncios (sku, marketplace, anuncio_id, titulo, preco, status, ultima_atualizacao)
-                    VALUES ($1, 'shopee', $2::text, $3, $4, $5, $6)
-                    ON CONFLICT (sku, marketplace) WHERE anuncio_id IS NOT NULL
-                    DO UPDATE SET preco = $4, status = $5, ultima_atualizacao = $6
-                """, d.get("item_sku", str(d["item_id"])), str(d["item_id"]),
+                    INSERT INTO anuncios (sku, marketplace, shop_id, anuncio_id, titulo, preco, status, ultima_atualizacao)
+                    VALUES ($1, 'shopee', $2, $3::text, $4, $5, $6, $7)
+                    ON CONFLICT (sku, marketplace, shop_id)
+                    DO UPDATE SET anuncio_id = $3, titulo = $4, preco = $5, status = $6, ultima_atualizacao = $7
+                """, d.get("item_sku", str(d["item_id"])), shop_id, str(d["item_id"]),
                     d.get("item_name", ""), price_info.get("current_price", 0),
                     d.get("item_status", "NORMAL").lower(), agora)
                 # Inserir/atualizar em fichas_tecnicas
@@ -101,7 +104,7 @@ async def sync_produtos() -> dict:
                      total, json.dumps(erros[:20]) if erros else None, log_id)
     return {"total": total, "erros": len(erros), "detalhes_erros": erros[:5]}
 
-async def sync_pedidos(dias: int = 30) -> dict:
+async def sync_pedidos(dias: int = 30, loja_id: int = None) -> dict:
     await _init_tables()
     db = await get_db()
     log_id = await db.fetchval("INSERT INTO shopee_sync_log (tipo, status) VALUES ('pedidos', 'executando') RETURNING id")
@@ -109,7 +112,7 @@ async def sync_pedidos(dias: int = 30) -> dict:
     erros = []
     now = int(time.time())
     for status in ["READY_TO_SHIP", "PROCESSED", "SHIPPED", "COMPLETED"]:
-        r = get_orders_by_time_range(now - dias * 86400, now, [status], 100)
+        r = get_orders_by_time_range(now - dias * 86400, now, [status], 100, loja_id=loja_id)
         orders = r.get("response", {}).get("order_list", [])
         for o in orders:
             try:
@@ -135,9 +138,9 @@ async def sync_pedidos(dias: int = 30) -> dict:
                      total, json.dumps(erros[:20]) if erros else None, log_id)
     return {"total": total, "erros": len(erros), "detalhes_erros": erros[:5]}
 
-def sync_all(dias: int = 30) -> dict:
-    produtos = run_async(sync_produtos())
-    pedidos = run_async(sync_pedidos(dias))
+def sync_all(dias: int = 30, loja_id: int = None) -> dict:
+    produtos = run_async(sync_produtos(loja_id))
+    pedidos = run_async(sync_pedidos(dias, loja_id))
     return {"produtos": produtos, "pedidos": pedidos}
 
 def status_ultimo_sync() -> dict:

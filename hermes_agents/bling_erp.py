@@ -216,55 +216,164 @@ def get_nfe_xml(id_nota: int) -> tuple[str | None, str | None]:
         pass
     return None, None
 
+def _mapear_produto_bling(p: dict) -> dict:
+    """Mapeia o payload de detalhe do Bling (GET /produtos/{id}) para as colunas de catalogo_produtos.
+    dados_brutos_bling guarda o JSON completo, entao nenhum campo se perde mesmo que falte um mapeamento aqui."""
+    categoria = p.get("categoria") or {}
+    estoque = p.get("estoque") or {}
+    tributacao = p.get("tributacao") or {}
+    dimensoes = p.get("dimensoes") or {}
+    fornecedor = p.get("fornecedor") or {}
+    fornecedor_contato = fornecedor.get("contato") or {}
+
+    imagem = p.get("imagemURL") or p.get("urlImagem") or ""
+    if not imagem and isinstance(p.get("imagem"), dict):
+        imagem = (p["imagem"] or {}).get("link") or ""
+    imagens_lista = p.get("imagens") or (p.get("midia") or {}).get("imagens") or []
+
+    return {
+        "sku": p.get("codigo", "") or str(p.get("id", "")),
+        "descricao": p.get("descricao", "") or p.get("nome", ""),
+        "id_bling": p.get("id"),
+        "imagem_url": imagem,
+        "situacao": p.get("situacao") or "A",
+        "bling_tipo": p.get("tipo", ""),
+        "formato": p.get("formato", ""),
+        "codigo_barras": p.get("gtin", ""),
+        "gtin_embalagem": p.get("gtinEmbalagem", ""),
+        "descricao_curta": p.get("descricaoCurta", ""),
+        "descricao_complementar": p.get("descricaoComplementar", ""),
+        "unidade_padrao": p.get("unidade") or "UN",
+        "peso_bruto": p.get("pesoBruto"),
+        "peso_liquido": p.get("pesoLiquido"),
+        "volumes": p.get("volumes"),
+        "itens_por_caixa": p.get("itensPorCaixa"),
+        "tipo_producao": p.get("tipoProducao", ""),
+        "condicao": p.get("condicao"),
+        "frete_gratis": bool(p.get("freteGratis", False)),
+        "link_externo": p.get("linkExterno", ""),
+        "observacoes": p.get("observacoes", ""),
+        "marca": p.get("marca", ""),
+        "categoria": categoria.get("descricao", "") if isinstance(categoria, dict) else str(categoria or ""),
+        "categoria_id": categoria.get("id") if isinstance(categoria, dict) else None,
+        "estoque_minimo": estoque.get("minimo"),
+        "estoque_maximo": estoque.get("maximo"),
+        "estoque_crossdocking": estoque.get("crossdocking"),
+        "estoque_localizacao": estoque.get("localizacao", ""),
+        "controlar_estoque": p.get("actionEstoque", "T") != "N",
+        "largura": dimensoes.get("largura"),
+        "altura": dimensoes.get("altura"),
+        "profundidade": dimensoes.get("profundidade"),
+        "unidade_medida_dimensao": dimensoes.get("unidadeMedida", ""),
+        "ncm": tributacao.get("ncm") or p.get("ncm", ""),
+        "cest": tributacao.get("cest") or p.get("cest", ""),
+        "origem_fiscal": tributacao.get("origem", ""),
+        "nfci": tributacao.get("nFCI", ""),
+        "codigo_lista_servicos": tributacao.get("codigoListaServicos", ""),
+        "cnae": tributacao.get("cnae", ""),
+        "codigo_item_fiscal": tributacao.get("codigoItem", ""),
+        "percentual_tributos": tributacao.get("percentualTributos"),
+        "valor_base_st_retencao": tributacao.get("valorBaseStRetencao"),
+        "valor_st_retencao": tributacao.get("valorStRetencao"),
+        "valor_icms_st": tributacao.get("valorICMSSubstituto"),
+        "fornecedor_id": fornecedor_contato.get("id"),
+        "fornecedor_nome": fornecedor_contato.get("nome", ""),
+        "fornecedor_codigo": fornecedor.get("codigo", ""),
+        "preco_custo": fornecedor.get("precoCusto") if fornecedor.get("precoCusto") is not None else p.get("precoCusto"),
+        "imagens": json.dumps(imagens_lista, ensure_ascii=False),
+        "campos_customizados": json.dumps(p.get("camposCustomizados") or p.get("camposPersonalizados") or [], ensure_ascii=False),
+        "estrutura": json.dumps(p.get("estrutura") or [], ensure_ascii=False),
+        "variacoes_detalhe": json.dumps(p.get("variacoes") or [], ensure_ascii=False),
+        "dados_brutos_bling": json.dumps(p, ensure_ascii=False),
+    }
+
+
+async def _upsert_produto_completo(db, campos: dict):
+    """Upsert dinamico em catalogo_produtos cobrindo todas as colunas mapeadas de um produto Bling."""
+    campos = {k: v for k, v in campos.items() if v is not None}
+    if not campos.get("sku"):
+        return
+    jsonb_cols = {"imagens", "campos_customizados", "estrutura", "variacoes_detalhe", "dados_brutos_bling"}
+    keys = list(campos.keys())
+    vals = [campos[k] for k in keys]
+    placeholders = ", ".join(f"${i+1}::jsonb" if k in jsonb_cols else f"${i+1}" for i, k in enumerate(keys))
+    col_list = ", ".join(keys)
+    updates = ", ".join(f"{k} = COALESCE(EXCLUDED.{k}, catalogo_produtos.{k})" for k in keys if k != "sku")
+    sql = f"""INSERT INTO catalogo_produtos ({col_list}) VALUES ({placeholders})
+              ON CONFLICT (sku) DO UPDATE SET {updates}, updated_at = NOW()"""
+    await db.execute(sql, *vals)
+
+
 def sincronizar_produtos() -> dict:
-    """Sync completo: produtos + hierarquia pai/filho + atributos de variacao."""
+    """Sync completo: busca o detalhe de CADA produto no Bling (GET /produtos/{id}) para
+    importar todos os campos oferecidos (fiscal, dimensoes, estoque min/max, fornecedor,
+    imagens, variacoes, campos customizados, etc), alem da hierarquia pai/filho."""
     try:
         async def _go():
             db = await get_db()
-            total = 0; erros = []; pagina = 1; id_to_sku = {}; filhos_pendentes = []
+            total = 0; erros = []; pagina = 1; produtos_resumo = []
 
-            # ── Passo 1: sync base + mapa de IDs ──
+            # ── Passo 1: listar todos os produtos (resumo) para descobrir os IDs ──
             while True:
                 r = listar_produtos(pagina=pagina, limite=100)
                 dados = r.get("data", [])
                 if not dados or r.get("error"):
                     if r.get("error"): erros.append(f"pag {pagina}: {r['error']}")
                     break
-                for p in dados:
-                    try:
-                        sku = p.get("codigo", "") or str(p["id"])
-                        bid = p.get("id")
-                        nome = p.get("descricao", "") or p.get("nome", "")
-                        preco = float(p.get("preco", 0)) if p.get("preco") else 0
-                        formato = p.get("formato", "")
-                        id_pai = p.get("idProdutoPai")
-
-                        # Registrar no mapa id->sku
-                        if bid: id_to_sku[bid] = sku
-
-                        # Upsert fichas_tecnicas
-                        await db.execute("INSERT INTO fichas_tecnicas (sku, descricao) VALUES ($1, $2) ON CONFLICT (sku) DO NOTHING", sku, nome)
-                        # Upsert catalogo_produtos (agora com id_bling, imagem_url, situacao)
-                        imagem = p.get("imagemURL") or p.get("urlImagem") or ""
-                        if not imagem and isinstance(p.get("imagem"), dict):
-                            imagem = (p["imagem"] or {}).get("link") or ""
-                        await db.execute(
-                            "INSERT INTO catalogo_produtos (sku, descricao, id_bling, imagem_url, situacao) VALUES ($1, $2, $3, $4, 'A') ON CONFLICT (sku) DO UPDATE SET descricao = $2, id_bling = $3, imagem_url = COALESCE($4, catalogo_produtos.imagem_url)",
-                            sku, nome, bid, imagem)
-                        # Upsert anuncios
-                        await db.execute("INSERT INTO anuncios (sku, marketplace, preco, status) VALUES ($1, 'bling', $2, 'ativo') ON CONFLICT (sku, marketplace) DO UPDATE SET preco = $2, status = 'ativo'", sku, preco)
-
-                        # Coletar filhos para resolucao posterior
-                        if id_pai:
-                            filhos_pendentes.append({"sku": sku, "idPai": id_pai})
-                        total += 1
-                    except Exception as e:
-                        log(AGENT, f"Erro produto {p.get('codigo')}: {e}")
+                produtos_resumo.extend(dados)
                 if len(dados) < 100:
                     break
                 pagina += 1
 
-            # ── Passo 2: resolver hierarquia pai/filho ──
+            id_to_sku = {}
+            filhos_pendentes = []
+
+            # ── Passo 2: buscar detalhe completo de cada produto e gravar todos os campos ──
+            for p_resumo in produtos_resumo:
+                bid = p_resumo.get("id")
+                if not bid:
+                    continue
+                detalhe = None
+                for attempt in range(3):
+                    r_detalhe = _request(f"produtos/{bid}")
+                    if not r_detalhe.get("error"):
+                        detalhe = r_detalhe.get("data", {})
+                        break
+                    if r_detalhe.get("status_code") == 429:
+                        time.sleep(2 ** attempt)
+                        continue
+                    erros.append(f"produto {bid}: {r_detalhe['error']}")
+                    break
+                if not detalhe:
+                    detalhe = p_resumo  # fallback: usa ao menos os campos do resumo
+
+                try:
+                    campos = _mapear_produto_bling(detalhe)
+                    sku = campos["sku"]
+                    id_to_sku[bid] = sku
+                    id_pai = detalhe.get("idProdutoPai") or p_resumo.get("idProdutoPai")
+                    if id_pai:
+                        filhos_pendentes.append({"sku": sku, "idPai": id_pai})
+
+                    await _upsert_produto_completo(db, campos)
+                    await db.execute("INSERT INTO fichas_tecnicas (sku, descricao) VALUES ($1, $2) ON CONFLICT (sku) DO NOTHING", sku, campos.get("descricao", ""))
+                    preco = float(detalhe.get("preco", 0) or 0)
+                    await db.execute("INSERT INTO anuncios (sku, marketplace, shop_id, preco, status) VALUES ($1, 'bling', '', $2, 'ativo') ON CONFLICT (sku, marketplace, shop_id) DO UPDATE SET preco = $2, status = 'ativo'", sku, preco)
+
+                    # Variacoes ja vem no proprio detalhe do produto pai
+                    for v in detalhe.get("variacoes", []):
+                        var_data = v.get("variacao", {}) if isinstance(v, dict) else {}
+                        nome_var = var_data.get("nome", "") if isinstance(var_data, dict) else ""
+                        var_prod = v.get("produto", {}) if isinstance(v, dict) else {}
+                        filho_sku = var_prod.get("codigo", "") if isinstance(var_prod, dict) else ""
+                        if filho_sku and nome_var:
+                            await db.execute("UPDATE catalogo_produtos SET atributo = $1 WHERE sku = $2", nome_var, filho_sku)
+
+                    total += 1
+                except Exception as e:
+                    log(AGENT, f"Erro produto {p_resumo.get('codigo')}: {e}")
+
+            # ── Passo 3: resolver hierarquia pai/filho ──
             pais_resolvidos = 0
             for f in filhos_pendentes:
                 pai_sku = id_to_sku.get(f["idPai"])
@@ -272,47 +381,7 @@ def sincronizar_produtos() -> dict:
                     await db.execute("UPDATE catalogo_produtos SET sku_pai = $1 WHERE sku = $2", pai_sku, f["sku"])
                     pais_resolvidos += 1
 
-            # ── Passo 3: buscar atributos de variacao (pais com formato V) ──
-            atributos_buscados = 0
-            pais_formato_v = await db.fetch("SELECT DISTINCT sku_pai, sku FROM catalogo_produtos WHERE sku_pai IS NOT NULL AND sku_pai IN (SELECT sku FROM catalogo_produtos)")
-            # Buscar pais unicos
-            pais_set = set()
-            for row in (pais_formato_v or []):
-                pais_set.add(row["sku_pai"])
-            
-            import requests as req
-            import time as t
-            for pai_sku in pais_set:
-                # Encontrar id_bling do pai
-                pai_row = await db.fetchrow("SELECT id_bling FROM catalogo_produtos WHERE sku = $1 AND id_bling IS NOT NULL", pai_sku)
-                if not pai_row: continue
-                bid = pai_row["id_bling"]
-                for attempt in range(3):
-                    try:
-                        detail = req.get(f"{BASE_URL}/produtos/{bid}", headers=_bling_headers(), timeout=20)
-                        if detail.status_code == 429:
-                            t.sleep(2 ** attempt)
-                            continue
-                        if detail.status_code != 200:
-                            break
-                        detail_data = detail.json().get("data", {})
-                        variacoes = detail_data.get("variacoes", [])
-                        for v in variacoes:
-                            var_data = v.get("variacao", {}) if isinstance(v, dict) else {}
-                            nome_var = var_data.get("nome", "") if isinstance(var_data, dict) else ""
-                            var_prod = v.get("produto", {}) if isinstance(v, dict) else {}
-                            filho_sku = var_prod.get("codigo", "") if isinstance(var_prod, dict) else ""
-                            if filho_sku and nome_var:
-                                await db.execute("UPDATE catalogo_produtos SET atributo = $1 WHERE sku = $2", nome_var, filho_sku)
-                                atributos_buscados += 1
-                        break
-                    except Exception:
-                        if attempt < 2:
-                            t.sleep(2 ** attempt)
-                        else:
-                            erros.append(f"Atributos falhou para pai {pai_sku} apos 3 tentativas")
-
-            return {"sincronizados": total, "pais_resolvidos": pais_resolvidos, "atributos_buscados": atributos_buscados, "erros": erros}
+            return {"sincronizados": total, "pais_resolvidos": pais_resolvidos, "erros": erros}
 
         return run_async(_go())
     except Exception as e:
