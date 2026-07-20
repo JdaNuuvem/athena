@@ -11,6 +11,7 @@ interface LojaShopee {
   shopee_shop_id: string;
   shopee_shop_name: string | null;
   shopee_token_expira_em: string | null;
+  tem_token: boolean;
 }
 
 interface LojaSimples {
@@ -122,21 +123,35 @@ function ShopeeIntegrationContent() {
           <p className="text-xs text-neutral-500">Nenhuma loja Shopee conectada ainda.</p>
         ) : (
           <div className="space-y-2">
-            {lojasShopee.map((l) => (
-              <div key={l.id} className="flex items-center justify-between bg-neutral-800/50 rounded-lg px-3 py-2">
-                <div>
-                  <p className="text-sm text-neutral-200">{l.nome}</p>
-                  <p className="text-[10px] text-neutral-500 font-mono">shop_id: {l.shopee_shop_id}</p>
+            {lojasShopee.map((l) => {
+              const expiraEm = l.shopee_token_expira_em ? new Date(l.shopee_token_expira_em) : null;
+              const tokenValido = l.tem_token && expiraEm !== null && expiraEm.getTime() > Date.now();
+              return (
+                <div key={l.id} className="flex items-center justify-between bg-neutral-800/50 rounded-lg px-3 py-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm text-neutral-200">{l.nome}</p>
+                      {l.tem_token ? (
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${tokenValido ? "bg-green-900/40 text-green-400" : "bg-amber-900/40 text-amber-400"}`}>
+                          {tokenValido ? "● Token ativo" : "⚠ Token expirado"}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-red-900/40 text-red-400">✗ Sem token</span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-neutral-500 font-mono">shop_id: {l.shopee_shop_id}</p>
+                    {expiraEm && <p className="text-[10px] text-neutral-600">expira em {expiraEm.toLocaleString("pt-BR")}</p>}
+                  </div>
+                  <button
+                    onClick={() => sincronizar(l.id)}
+                    disabled={syncingId === l.id}
+                    className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    {syncingId === l.id ? "Sincronizando..." : "Sincronizar"}
+                  </button>
                 </div>
-                <button
-                  onClick={() => sincronizar(l.id)}
-                  disabled={syncingId === l.id}
-                  className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"
-                >
-                  {syncingId === l.id ? "Sincronizando..." : "Sincronizar"}
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

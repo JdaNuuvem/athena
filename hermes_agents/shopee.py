@@ -463,6 +463,9 @@ def exchange_shopee_code(code: str, shop_id: str = "", loja_id: int = None) -> d
         access_token = data["access_token"]
         refresh_token = data.get("refresh_token", "")
         resolved_shop_id = str(body.get("shop_id") or data.get("shop_id") or "")
+        expire_in = data.get("expire_in", 0)
+        from datetime import datetime, timedelta
+        expira_em = datetime.now() + timedelta(seconds=expire_in) if expire_in else None
 
         # Legado: mantem a config global funcionando (compatibilidade com a loja unica ja configurada)
         set_config("shopee", "access_token", access_token)
@@ -475,15 +478,15 @@ def exchange_shopee_code(code: str, shop_id: str = "", loja_id: int = None) -> d
         if resolved_shop_id:
             from core.lojas import vincular_shopee, criar_loja_shopee, listar_lojas_shopee
             if loja_id:
-                loja_resultado = vincular_shopee(loja_id, resolved_shop_id, access_token, refresh_token)
+                loja_resultado = vincular_shopee(loja_id, resolved_shop_id, access_token, refresh_token, expira_em=expira_em)
             else:
                 existente = next((l for l in listar_lojas_shopee() if l.get("shopee_shop_id") == resolved_shop_id), None)
                 if existente:
-                    loja_resultado = vincular_shopee(existente["id"], resolved_shop_id, access_token, refresh_token)
+                    loja_resultado = vincular_shopee(existente["id"], resolved_shop_id, access_token, refresh_token, expira_em=expira_em)
                 else:
-                    loja_resultado = criar_loja_shopee(resolved_shop_id, access_token, refresh_token)
+                    loja_resultado = criar_loja_shopee(resolved_shop_id, access_token, refresh_token, expira_em=expira_em)
 
-        return {"success": True, "expire_in": data.get("expire_in", 0), "shop_id": resolved_shop_id, "loja": loja_resultado}
+        return {"success": True, "expire_in": expire_in, "shop_id": resolved_shop_id, "loja": loja_resultado}
     except Exception as e:
         return {"error": str(e)}
 
@@ -507,13 +510,16 @@ def refresh_shopee_token(loja_id: int = None) -> dict:
         }, timeout=30)
         data = r.json()
         if data.get("access_token"):
+            from datetime import datetime, timedelta
+            expire_in = data.get("expire_in", 0)
+            expira_em = datetime.now() + timedelta(seconds=expire_in) if expire_in else None
             if loja_id is not None:
                 from core.lojas import vincular_shopee
-                vincular_shopee(loja_id, cfg["shop_id"], data["access_token"], data.get("refresh_token", refresh))
-                return {"success": True}
+                vincular_shopee(loja_id, cfg["shop_id"], data["access_token"], data.get("refresh_token", refresh), expira_em=expira_em)
+                return {"success": True, "expire_in": expire_in}
             set_config("shopee", "access_token", data["access_token"])
             set_config("shopee", "refresh_token", data.get("refresh_token", ""))
-            return {"success": True}
+            return {"success": True, "expire_in": expire_in}
         return {"error": data.get("message", "unknown")}
     except Exception as e:
         return {"error": str(e)}

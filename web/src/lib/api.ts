@@ -150,7 +150,7 @@ export const api = {
       body: JSON.stringify(lojaId ? { loja_id: lojaId } : {}),
     }),
   shopeeLojas: () =>
-    request<{ lojas: Array<{ id: number; nome: string; shopee_shop_id: string; shopee_shop_name: string | null; shopee_token_expira_em: string | null }> }>("/api/shopee/lojas"),
+    request<{ lojas: Array<{ id: number; nome: string; shopee_shop_id: string; shopee_shop_name: string | null; shopee_token_expira_em: string | null; tem_token: boolean }> }>("/api/shopee/lojas"),
   shopeeConectarLoja: (lojaId: number) =>
     request<{ url: string }>(`/api/shopee/lojas/${lojaId}/conectar`, { method: "POST" }),
   shopeeAuthUrl: () => request<{ url: string }>("/api/shopee/auth-url"),

@@ -118,11 +118,15 @@ def _ensure_shopee_cols():
 _ensure_shopee_cols()
 
 def listar_lojas_shopee() -> list:
-    """Lojas que ja tem uma conta Shopee vinculada (shop_id + tokens)."""
+    """Lojas que ja tem uma conta Shopee vinculada (shop_id + tokens).
+    tem_token indica se o access_token foi realmente salvo (confirmacao visual na tela)."""
     async def _go():
         db = await get_db()
-        rows = await db.fetch("""SELECT id, nome, shopee_shop_id, shopee_shop_name, shopee_token_expira_em
-                                 FROM lojas WHERE shopee_shop_id IS NOT NULL ORDER BY id""")
+        rows = await db.fetch("""
+            SELECT id, nome, shopee_shop_id, shopee_shop_name, shopee_token_expira_em,
+                   (shopee_access_token IS NOT NULL AND shopee_access_token != '') AS tem_token
+            FROM lojas WHERE shopee_shop_id IS NOT NULL ORDER BY id
+        """)
         return [dict(r) for r in rows]
     try: return run_async(_go())
     except Exception as e: log(AGENT, f"Erro listar_lojas_shopee: {e}"); return []
@@ -150,15 +154,15 @@ def vincular_shopee(loja_id: int, shop_id: str, access_token: str, refresh_token
     try: return run_async(_go())
     except Exception as e: return {"error": str(e)}
 
-def criar_loja_shopee(shop_id: str, access_token: str, refresh_token: str = "", shop_name: str = "") -> dict:
+def criar_loja_shopee(shop_id: str, access_token: str, refresh_token: str = "", shop_name: str = "", expira_em=None) -> dict:
     """Cria uma nova loja ja vinculada a uma conta Shopee (usado quando nenhuma loja_id foi indicada no auth)."""
     async def _go():
         db = await get_db()
         nome = shop_name or f"Shopee {shop_id}"
         row = await db.fetchrow("""
-            INSERT INTO lojas (nome, shopee_shop_id, shopee_shop_name, shopee_access_token, shopee_refresh_token)
-            VALUES ($1, $2, $3, $4, $5) RETURNING id, nome, shopee_shop_id
-        """, nome, shop_id, shop_name, access_token, refresh_token)
+            INSERT INTO lojas (nome, shopee_shop_id, shopee_shop_name, shopee_access_token, shopee_refresh_token, shopee_token_expira_em)
+            VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, nome, shopee_shop_id
+        """, nome, shop_id, shop_name, access_token, refresh_token, expira_em)
         return dict(row) if row else {"error": "falha ao criar loja"}
     try: return run_async(_go())
     except Exception as e: return {"error": str(e)}
