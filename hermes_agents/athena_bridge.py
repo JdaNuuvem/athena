@@ -4,7 +4,7 @@ ATHENA OS tem 52 agentes, 40+ queries GraphQL, 30+ endpoints REST.
 """
 import os, sys, json, urllib.request
 from typing import Optional
-from flask import Flask, request, jsonify, send_from_directory, redirect
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from core import run_async, get_db, FactoryConfig
 from pathlib import Path
@@ -2951,230 +2951,26 @@ def health_real():
 
 @app.route('/api/shopee/callback', methods=['GET'])
 def shopee_oauth_callback():
-    """Recebe o redirect da Shopee apos autorizacao e manda o resultado pra tela de
-    Integracoes -> Shopee (nao devolve o access_token na URL, so' o status/shop_id)."""
-    from urllib.parse import urlencode
     code = request.args.get("code", "")
     shop_id = request.args.get("shop_id", "")
     loja_id = request.args.get("loja_id", type=int)
     if not code:
-        return redirect("/integracoes/shopee?" + urlencode({"shopee_auth": "erro", "shopee_msg": "Parametro code ausente"}))
+        return jsonify({"error": "Parametro code ausente"}), 400
     from shopee import exchange_shopee_code
     result = exchange_shopee_code(code, shop_id, loja_id=loja_id)
     if result.get("success"):
-        loja = result.get("loja") or {}
-        params = {
-            "shopee_auth": "ok",
-            "shopee_shop_id": result.get("shop_id", ""),
-            "shopee_loja_nome": loja.get("nome", ""),
-            "shopee_expire_in": result.get("expire_in", ""),
-        }
-        if loja.get("error"):
-            params["shopee_msg"] = f"Autorizado, mas nao foi possivel vincular a loja: {loja['error']}"
-        return redirect("/integracoes/shopee?" + urlencode(params))
-    return redirect("/integracoes/shopee?" + urlencode({"shopee_auth": "erro", "shopee_msg": result.get("error", "Falha na autenticacao")}))
+        return jsonify(result)
+    return jsonify({"error": result.get("error", "Falha na autenticacao"), "detail": result}), 400
 
 @app.route('/api/shopee/auth-url', methods=['GET'])
 def shopee_auth_url():
-    try:
-        from shopee import get_auth_url
-        sandbox = request.args.get("sandbox", "").lower() == "true"
-        loja_id = request.args.get("loja_id", type=int)
-        url = get_auth_url(sandbox=sandbox, loja_id=loja_id)
-        if not url:
-            return jsonify({"error": "Partner ID nao configurado"}), 400
-        return jsonify({"url": url})
-    except Exception as e:
-        import traceback
-        return jsonify({"error": str(e), "traceback": traceback.format_exc()[:500]}), 500
-
-@app.route('/api/shopee/lojas', methods=['GET'])
-def shopee_listar_lojas():
-    """Lojas Shopee ja conectadas (multiloja)."""
-    from core.lojas import listar_lojas_shopee
-    return jsonify({"lojas": listar_lojas_shopee()})
-
-@app.route('/api/shopee/lojas/<int:loja_id>/conectar', methods=['POST'])
-def shopee_conectar_loja(loja_id):
-    """Gera a URL de autorizacao Shopee vinculada a uma loja especifica."""
     from shopee import get_auth_url
-    sandbox = (request.json or {}).get("sandbox", False) if request.is_json else False
+    sandbox = request.args.get("sandbox", "").lower() == "true"
+    loja_id = request.args.get("loja_id", type=int)
     url = get_auth_url(sandbox=sandbox, loja_id=loja_id)
     if not url:
         return jsonify({"error": "Partner ID nao configurado"}), 400
     return jsonify({"url": url})
-
-@app.route('/api/shopee/produtos/<sku>/estoque', methods=['PUT'])
-def shopee_atualizar_estoque_produto(sku):
-    """Push de estoque local -> Shopee para uma loja especifica (estoque multiloja)."""
-    from shopee import sincronizar_estoque_shopee
-    data = request.json or {}
-    loja_id = data.get("loja_id")
-    quantidade = data.get("quantidade")
-    if loja_id is None or quantidade is None:
-        return jsonify({"error": "loja_id e quantidade sao obrigatorios"}), 400
-    try:
-        return jsonify(sincronizar_estoque_shopee(sku, int(quantidade), loja_id=int(loja_id)))
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/shopee/estoque/todas-lojas', methods=['POST'])
-def shopee_estoque_todas_lojas():
-    """Envia o estoque de um SKU para TODAS as lojas Shopee conectadas de uma vez."""
-    from shopee import sincronizar_estoque_todas_lojas
-    data = request.json or {}
-    sku = data.get("sku")
-    quantidade = data.get("quantidade")
-    if not sku or quantidade is None:
-        return jsonify({"error": "sku e quantidade sao obrigatorios"}), 400
-    try:
-        return jsonify(sincronizar_estoque_todas_lojas(sku, int(quantidade)))
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# ── Cadastro de produtos na Shopee: categorias, atributos, marcas, imagens ──
-# ponytail: os campos abaixo foram validados AO VIVO contra o sandbox real da Shopee
-# (partner_id 1237336) em 2026-07-17 — nao sao suposicao de documentacao.
-
-@app.route('/api/shopee/categorias', methods=['GET'])
-def shopee_categorias():
-    from shopee import listar_categorias_cache
-    busca = request.args.get("busca", "")
-    parent_id = request.args.get("parent_id", type=int)
-    apenas_folhas = request.args.get("apenas_folhas", "").lower() == "true"
-    return jsonify({"categorias": listar_categorias_cache(busca, parent_id, apenas_folhas)})
-
-@app.route('/api/shopee/categorias/sincronizar', methods=['POST'])
-def shopee_categorias_sincronizar():
-    from shopee import sincronizar_categorias
-    data = request.json or {}
-    return jsonify(sincronizar_categorias(data.get("loja_id")))
-
-@app.route('/api/shopee/categorias/<int:category_id>/atributos', methods=['GET'])
-def shopee_categoria_atributos(category_id):
-    from shopee import get_attribute_tree
-    loja_id = request.args.get("loja_id", type=int)
-    r = get_attribute_tree(category_id, loja_id=loja_id)
-    # ponytail: resposta real da Shopee usa response.list[0].attribute_tree com campos
-    # "mandatory"/"name" (nao "is_mandatory"/"original_attribute_name" como a doc antiga sugeria).
-    # Normalizamos aqui para o frontend nao depender do formato instavel da Shopee.
-    lista = r.get("response", {}).get("list", [])
-    brutos = lista[0].get("attribute_tree", []) if lista else []
-    atributos = [{
-        "attribute_id": a.get("attribute_id"),
-        "original_attribute_name": a.get("name", ""),
-        "is_mandatory": bool(a.get("mandatory", False)),
-        "attribute_value_list": [
-            {"value_id": v.get("value_id"), "original_value_name": v.get("name", "")}
-            for v in (a.get("attribute_value_list") or [])
-        ],
-    } for a in brutos]
-    return jsonify({"atributos": atributos, "erro": r.get("error") or None})
-
-@app.route('/api/shopee/categorias/<int:category_id>/marcas', methods=['GET'])
-def shopee_categoria_marcas(category_id):
-    from shopee import get_brand_list
-    loja_id = request.args.get("loja_id", type=int)
-    r = get_brand_list(category_id, loja_id=loja_id)
-    resp = r.get("response", {})
-    return jsonify({"marcas": resp.get("brand_list", []), "obrigatorio": resp.get("is_mandatory", False), "erro": r.get("error") or None})
-
-@app.route('/api/shopee/logistica/canais', methods=['GET'])
-def shopee_logistica_canais():
-    from shopee import get_logistics_channel_list
-    loja_id = request.args.get("loja_id", type=int)
-    r = get_logistics_channel_list(loja_id=loja_id)
-    # ponytail: campo real e' logistics_channel_id/logistics_channel_name (validado ao vivo),
-    # nao logistic_id/logistic_name — normalizamos para um contrato estavel.
-    canais_brutos = r.get("response", {}).get("logistics_channel_list", [])
-    canais = [{
-        "logistic_id": c.get("logistics_channel_id"),
-        "logistic_name": c.get("logistics_channel_name", ""),
-        "enabled": bool(c.get("enabled", False)),
-    } for c in canais_brutos]
-    return jsonify({"canais": canais, "erro": r.get("error") or None})
-
-def _url_publica_segura(url: str) -> bool:
-    """Bloqueia SSRF: recusa URLs cujo host resolve para IP privado/loopback/link-local
-    (evita usar o upload de imagem como proxy para sondar rede interna ou metadata de nuvem)."""
-    import socket, ipaddress
-    from urllib.parse import urlparse
-    try:
-        host = urlparse(url).hostname
-        if not host:
-            return False
-        for info in socket.getaddrinfo(host, None):
-            ip = ipaddress.ip_address(info[4][0])
-            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
-                return False
-        return True
-    except Exception:
-        return False
-
-@app.route('/api/shopee/upload-imagem', methods=['POST'])
-def shopee_upload_imagem():
-    """Envia uma imagem para a Shopee. Aceita um arquivo (multipart 'file') OU uma
-    image_url (ex: a imagem que ja esta no catalogo/Bling) — evita o usuario ter
-    que baixar e re-subir manualmente a mesma foto que ja tem cadastrada."""
-    from shopee import upload_image
-    import requests as req_lib
-    loja_id = request.form.get("loja_id", type=int)
-    if "file" in request.files:
-        file = request.files["file"]
-        image_bytes = file.read()
-        filename = file.filename or "imagem.jpg"
-    else:
-        image_url = request.form.get("image_url", "")
-        if not image_url.startswith(("http://", "https://")):
-            return jsonify({"error": "Envie um arquivo ou informe uma image_url http(s) valida"}), 400
-        if not _url_publica_segura(image_url):
-            return jsonify({"error": "image_url nao permitida"}), 400
-        try:
-            resp = req_lib.get(image_url, timeout=20, allow_redirects=False)
-            resp.raise_for_status()
-            image_bytes = resp.content
-            filename = image_url.rsplit("/", 1)[-1].split("?")[0] or "imagem.jpg"
-        except Exception as e:
-            from core import log
-            log("Shopee Upload", f"Falha ao baixar {image_url}: {e}")
-            return jsonify({"error": "Falha ao baixar imagem"}), 400
-    r = upload_image(image_bytes, filename, loja_id=loja_id)
-    resp = r.get("response", {})
-    image_info = resp.get("image_info", {})
-    return jsonify({"image_id": image_info.get("image_id"), "image_url": (image_info.get("image_url_list") or [{}])[0].get("image_url", ""), "erro": r.get("error") or None})
-
-@app.route('/api/shopee/produtos', methods=['POST'])
-def shopee_criar_produto():
-    """Cria um produto novo direto na Shopee."""
-    from shopee import add_item
-    data = request.json or {}
-    loja_id = data.pop("loja_id", None)
-    if loja_id is None:
-        return jsonify({"error": "loja_id e obrigatorio"}), 400
-    return jsonify(add_item(data, loja_id=int(loja_id)))
-
-@app.route('/api/shopee/produtos/<int:item_id>', methods=['PUT'])
-def shopee_editar_produto(item_id):
-    from shopee import update_item
-    data = request.json or {}
-    loja_id = data.pop("loja_id", None)
-    if loja_id is None:
-        return jsonify({"error": "loja_id e obrigatorio"}), 400
-    return jsonify(update_item(item_id, data, loja_id=int(loja_id)))
-
-@app.route('/api/shopee/produtos/<int:item_id>', methods=['DELETE'])
-def shopee_deletar_produto(item_id):
-    from shopee import delete_item_shopee
-    loja_id = request.args.get("loja_id", type=int)
-    return jsonify(delete_item_shopee(item_id, loja_id=loja_id))
-
-@app.route('/api/shopee/produtos/<int:item_id>/unlist', methods=['POST'])
-def shopee_unlist_produto(item_id):
-    from shopee import unlist_item
-    data = request.json or {}
-    loja_id = data.get("loja_id")
-    unlist = data.get("unlist", True)
-    return jsonify(unlist_item([item_id], unlist=unlist, loja_id=loja_id))
 
 @app.route('/<path:path>')
 def serve_frontend(path):
