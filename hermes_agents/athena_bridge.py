@@ -2972,6 +2972,7 @@ def shopee_auth_url():
         return jsonify({"error": "Partner ID nao configurado"}), 400
     return jsonify({"url": url})
 
+@app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve_frontend(path):
     static_dir = Path(__file__).parent / 'dashboard'
