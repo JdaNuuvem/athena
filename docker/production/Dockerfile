@@ -18,6 +18,9 @@ ENV PORT=3000
 ENV DB_PORT=5432
 ENV DB_NAME=hermes_factory
 
+# Force cache invalidate v2
+RUN echo "BUILD_OK"
+
 EXPOSE 3000
 
 CMD python athena_bridge.py
