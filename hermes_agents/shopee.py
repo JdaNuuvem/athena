@@ -47,9 +47,13 @@ def _is_sandbox() -> bool:
         return os.environ.get("SHOPEE_SANDBOX","false").lower()=="true"
 
 def _base_url() -> str:
+    """ponytail: a doc oficial (Authorization and Authentication.md, secoes GetAccessToken/
+    RefreshAccessToken) so documenta partner.shopeemobile.com para chamadas de API em producao,
+    para qualquer regiao — openplatform.shopee.com.br so aparece pra tela de login (browser),
+    nao para as chamadas assinadas de API. BASE_URL_BRAZIL fica so como fallback documentado."""
     if _is_sandbox():
         return BASE_URL_SANDBOX
-    return BASE_URL_BRAZIL if SHOPEE_REGION == "br" else BASE_URL_LIVE
+    return BASE_URL_LIVE
 
 def configurado(loja_id: int = None) -> bool:
     c = get_shopee_config(loja_id)
@@ -413,7 +417,9 @@ def get_auth_url(redirect_uri: str = "", sandbox: bool = None, loja_id: int = No
         return ""
     if sandbox is None:
         sandbox = _is_sandbox()
-    base = (BASE_URL_SANDBOX if sandbox else (BASE_URL_BRAZIL if SHOPEE_REGION=="br" else BASE_URL_LIVE)).replace("/api/v2", "") + "/api/v2/shop/auth_partner"
+    # ponytail: a doc oficial so documenta partner.shopeemobile.com pro endpoint assinado
+    # /api/v2/shop/auth_partner (BR so tem host proprio pra tela de login open.shopee.com.br/auth)
+    base = (BASE_URL_SANDBOX if sandbox else BASE_URL_LIVE).replace("/api/v2", "") + "/api/v2/shop/auth_partner"
     if not redirect_uri:
         domain = os.environ.get("SHOPEE_REDIRECT_URL", "https://athena.zoikom.site/api/shopee/callback")
         redirect_uri = domain
