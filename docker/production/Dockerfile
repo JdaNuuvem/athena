@@ -5,7 +5,7 @@ COPY hermes_agents/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY hermes_agents/ .
 
-ENV PORT=3000
+ENV API_PORT=3000
 
 EXPOSE 3000
 CMD ["python", "-u", "athena_bridge.py"]
