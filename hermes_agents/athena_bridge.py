@@ -153,9 +153,10 @@ import time, json
 app = Flask(__name__)
 CORS(app)
 
-from routes.integrations import bling_bp
+from routes.integrations import bling_bp, integrations_bp
 from routes.webhooks import webhook_bp
 app.register_blueprint(bling_bp)
+app.register_blueprint(integrations_bp)
 app.register_blueprint(webhook_bp)
 
 # ponytail: importar aqui garante que catalogo_produtos (SSOT) exista antes de
