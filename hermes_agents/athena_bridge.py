@@ -3211,8 +3211,16 @@ def _dicts(cur):
     cols = [d[0] for d in cur.description] if cur.description else []
     return [dict(zip(cols, row)) for row in cur.fetchall()]
 
+def _autenticado() -> bool:
+    auth = request.headers.get("Authorization", "")
+    cookie_token = request.cookies.get("auth_token", "")
+    token = auth.replace("Bearer ", "") or cookie_token
+    return token == API_TOKEN
+
 @app.route('/api/produtos', methods=['GET'])
 def listar_produtos():
+    if not _autenticado():
+        return jsonify({"error": "Unauthorized"}), 401
     busca = request.args.get("busca", "").strip()
     loja = request.args.get("loja", "")
     variacoes = request.args.get("variacoes", "0") == "1"
@@ -3318,6 +3326,8 @@ def listar_produtos():
 
 @app.route('/api/produtos/<sku>', methods=['PUT'])
 def editar_produto(sku):
+    if not _autenticado():
+        return jsonify({"error": "Unauthorized"}), 401
     try:
         data = request.json or {}
         conn = _db_sync(); cur = conn.cursor()
@@ -3354,6 +3364,8 @@ def editar_produto(sku):
 
 @app.route('/api/produtos/<sku>', methods=['GET'])
 def detalhe_produto(sku):
+    if not _autenticado():
+        return jsonify({"error": "Unauthorized"}), 401
     try:
         conn = _db_sync(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("""
@@ -3394,6 +3406,8 @@ def detalhe_produto(sku):
 def produtos_limites():
     """Estoque minimo/maximo, fornecedor e custo por SKU vindos do catalogo local.
     Usado pela tela de Estoque para enriquecer os dados ao vivo do Bling sem duplicar toda a busca do catalogo."""
+    if not _autenticado():
+        return jsonify({"error": "Unauthorized"}), 401
     try:
         conn = _db_sync(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("""SELECT sku, marca, fornecedor_nome, estoque_minimo, estoque_maximo, preco_custo
@@ -3415,6 +3429,8 @@ def produtos_limites():
 @app.route('/api/lojas', methods=['GET'])
 def listar_lojas():
     """Performance de todas as lojas (físicas + marketplaces)."""
+    if not _autenticado():
+        return jsonify({"error": "Unauthorized"}), 401
     try:
         conn = _db_sync(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         periodo = request.args.get("periodo", 30, type=int)
@@ -3451,6 +3467,8 @@ def listar_lojas():
 @app.route('/api/kpi/overview', methods=['GET'])
 def kpi_overview():
     """KPIs consolidados para página inicial."""
+    if not _autenticado():
+        return jsonify({"error": "Unauthorized"}), 401
     try:
         conn = _db_sync(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         periodo = request.args.get("periodo", 30, type=int)
