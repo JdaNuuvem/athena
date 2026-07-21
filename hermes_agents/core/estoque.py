@@ -223,9 +223,10 @@ def ratear(sku: str, total: float, modo: str = "igual", lojas: list = None,
                 pcts = {l: float(p) for l, p in percentuais.items() if l in lojas_validas}
             else:
                 rows = await db.fetch(
-                    f"SELECT loja, SUM(quantidade) AS qtd FROM vendas "
-                    f"WHERE sku = $1 AND data >= CURRENT_DATE - {periodo_dias} "
-                    f"GROUP BY loja ORDER BY qtd DESC", sku)
+                    f"SELECT COALESCE(l.nome, 'Venda direta') AS loja, SUM(v.quantidade) AS qtd "
+                    f"FROM vendas v LEFT JOIN lojas l ON l.id = v.loja_id "
+                    f"WHERE v.sku = $1 AND v.data >= CURRENT_DATE - {periodo_dias} "
+                    f"GROUP BY COALESCE(l.nome, 'Venda direta') ORDER BY qtd DESC", sku)
                 vendas_map = {r["loja"]: float(r["qtd"]) for r in rows}
                 total_vendido = sum(vendas_map.values())
                 if total_vendido > 0:
