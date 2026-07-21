@@ -49,6 +49,7 @@ function ShopeeIntegrationContent() {
   const [lojasDisponiveis, setLojasDisponiveis] = useState<LojaSimples[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncingId, setSyncingId] = useState<number | "novo" | null>(null);
+  const [renovandoId, setRenovandoId] = useState<number | null>(null);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [lojaParaConectar, setLojaParaConectar] = useState<string>("");
 
@@ -97,6 +98,24 @@ function ShopeeIntegrationContent() {
     }
   };
 
+  const renovarToken = async (lojaId: number) => {
+    setRenovandoId(lojaId);
+    setMsg(null);
+    try {
+      const r = await api.shopeeRenovarToken(lojaId);
+      if (r.error) {
+        setMsg({ text: `Falha ao renovar token: ${r.error}`, ok: false });
+      } else {
+        setMsg({ text: "Token renovado com sucesso.", ok: true });
+        carregar();
+      }
+    } catch (e) {
+      setMsg({ text: e instanceof Error ? e.message : "Erro ao renovar token", ok: false });
+    } finally {
+      setRenovandoId(null);
+    }
+  };
+
   const lojasSemShopee = lojasDisponiveis.filter(l => !lojasShopee.some(s => s.id === l.id));
 
   return (
@@ -142,13 +161,24 @@ function ShopeeIntegrationContent() {
                     <p className="text-[10px] text-neutral-500 font-mono">shop_id: {l.shopee_shop_id}</p>
                     {expiraEm && <p className="text-[10px] text-neutral-600">expira em {expiraEm.toLocaleString("pt-BR")}</p>}
                   </div>
-                  <button
-                    onClick={() => sincronizar(l.id)}
-                    disabled={syncingId === l.id}
-                    className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"
-                  >
-                    {syncingId === l.id ? "Sincronizando..." : "Sincronizar"}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {l.tem_token && !tokenValido && (
+                      <button
+                        onClick={() => renovarToken(l.id)}
+                        disabled={renovandoId === l.id}
+                        className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"
+                      >
+                        {renovandoId === l.id ? "Renovando..." : "Renovar"}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => sincronizar(l.id)}
+                      disabled={syncingId === l.id}
+                      className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"
+                    >
+                      {syncingId === l.id ? "Sincronizando..." : "Sincronizar"}
+                    </button>
+                  </div>
                 </div>
               );
             })}

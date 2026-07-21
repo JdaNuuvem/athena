@@ -4,6 +4,9 @@ import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 
 interface EstoquePorLoja { loja: string; quantidade: number; data_atualizacao?: string | null; }
+interface AnuncioShopee { marketplace: string; shop_id?: string; anuncio_id?: string; preco: number; status: string; }
+interface LojaShopee { id: number; nome: string; shopee_shop_id?: string; }
+interface Variacao { model_id: number; model_name: string; model_sku: string; price_info?: Array<{ current_price: number }>; stock_info_v2?: { summary_info?: { total_available_stock: number } }; }
 
 interface Props {
   produto: Record<string, unknown> | null;
@@ -38,13 +41,77 @@ export default function ControleTab({ produto }: Props) {
   const porLoja: EstoquePorLoja[] = Array.isArray(p?.estoque_por_loja) ? p.estoque_por_loja : [];
   const totalAtual = porLoja.reduce((s, l) => s + Number(l.quantidade || 0), 0);
 
-  const [lojasShopee, setLojasShopee] = useState<Array<{ id: number; nome: string }>>([]);
+  const [lojasShopee, setLojasShopee] = useState<LojaShopee[]>([]);
   const [enviando, setEnviando] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
+
+  const anunciosShopee: AnuncioShopee[] = Array.isArray(p?.estoque_lojas)
+    ? p.estoque_lojas.filter((a: AnuncioShopee) => a.marketplace === "shopee" && a.anuncio_id)
+    : [];
+
+  const [precos, setPrecos] = useState<Record<string, string>>({});
+  const [atualizandoPreco, setAtualizandoPreco] = useState<string | null>(null);
+  const [pausando, setPausando] = useState<string | null>(null);
+  const [variacoesAbertas, setVariacoesAbertas] = useState<string | null>(null);
+  const [variacoes, setVariacoes] = useState<Variacao[]>([]);
+  const [carregandoVariacoes, setCarregandoVariacoes] = useState<string | null>(null);
 
   useEffect(() => {
     api.shopeeLojas().then(r => setLojasShopee(r.lojas || [])).catch(() => {});
   }, []);
+
+  const lojaIdPorShopId = (shopId?: string) => lojasShopee.find(l => l.shopee_shop_id === shopId)?.id;
+
+  const atualizarPreco = async (anuncio: AnuncioShopee) => {
+    const itemId = Number(anuncio.anuncio_id);
+    const lojaId = lojaIdPorShopId(anuncio.shop_id);
+    const novoPreco = Number(precos[anuncio.anuncio_id || ""]);
+    if (!itemId || !lojaId || !novoPreco) { setMsg("Preço inválido ou loja não vinculada"); return; }
+    setAtualizandoPreco(anuncio.anuncio_id || null); setMsg("");
+    try {
+      const r = await api.shopeeAtualizarPreco(itemId, lojaId, novoPreco);
+      setMsg(r.error ? `Erro: ${r.error}` : "Preço atualizado na Shopee");
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Erro ao atualizar preço");
+    } finally {
+      setAtualizandoPreco(null);
+      setTimeout(() => setMsg(""), 4000);
+    }
+  };
+
+  const alternarPausa = async (anuncio: AnuncioShopee) => {
+    const itemId = Number(anuncio.anuncio_id);
+    const lojaId = lojaIdPorShopId(anuncio.shop_id);
+    if (!itemId || !lojaId) { setMsg("Loja não vinculada"); return; }
+    const pausar = anuncio.status !== "unlist" && anuncio.status !== "pausado";
+    setPausando(anuncio.anuncio_id || null); setMsg("");
+    try {
+      const r = await api.shopeeUnlistProduto(itemId, lojaId, pausar);
+      setMsg(r.error ? `Erro: ${r.error}` : pausar ? "Anúncio pausado na Shopee" : "Anúncio reativado na Shopee");
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Erro ao alterar status do anúncio");
+    } finally {
+      setPausando(null);
+      setTimeout(() => setMsg(""), 4000);
+    }
+  };
+
+  const verVariacoes = async (anuncio: AnuncioShopee) => {
+    const itemId = Number(anuncio.anuncio_id);
+    if (!itemId) return;
+    if (variacoesAbertas === anuncio.anuncio_id) { setVariacoesAbertas(null); return; }
+    const lojaId = lojaIdPorShopId(anuncio.shop_id);
+    setCarregandoVariacoes(anuncio.anuncio_id || null);
+    try {
+      const r = await api.shopeeVariacoes(itemId, lojaId);
+      setVariacoes((r.response?.model as Variacao[]) || []);
+      setVariacoesAbertas(anuncio.anuncio_id || null);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Erro ao buscar variações");
+    } finally {
+      setCarregandoVariacoes(null);
+    }
+  };
 
   const enviarParaShopee = async (loja: string, quantidade: number) => {
     const alvo = lojasShopee.find(l => l.nome === loja);
@@ -180,6 +247,86 @@ export default function ControleTab({ produto }: Props) {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {anunciosShopee.length > 0 && (
+        <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 space-y-3">
+          <h3 className="text-sm font-medium text-neutral-200">Anúncios na Shopee</h3>
+          <div className="space-y-3">
+            {anunciosShopee.map((a) => {
+              const anuncioId = a.anuncio_id || "";
+              const pausado = a.status === "unlist" || a.status === "pausado";
+              const lojaId = lojaIdPorShopId(a.shop_id);
+              return (
+                <div key={anuncioId} className="bg-neutral-800/50 rounded-lg p-3 space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-xs text-neutral-300">item_id: <span className="font-mono">{anuncioId}</span></p>
+                      <p className="text-[10px] text-neutral-500">Preço atual: R$ {Number(a.preco || 0).toFixed(2)} · Status: {a.status}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="Novo preço"
+                        value={precos[anuncioId] || ""}
+                        onChange={(e) => setPrecos({ ...precos, [anuncioId]: e.target.value })}
+                        className="w-24 bg-neutral-900 border border-neutral-700 rounded-lg px-2 py-1 text-xs text-neutral-200"
+                      />
+                      <button
+                        onClick={() => atualizarPreco(a)}
+                        disabled={atualizandoPreco === anuncioId || !lojaId}
+                        className="text-[10px] bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-2.5 py-1.5 rounded-lg"
+                      >
+                        {atualizandoPreco === anuncioId ? "Atualizando..." : "Atualizar preço"}
+                      </button>
+                      <button
+                        onClick={() => alternarPausa(a)}
+                        disabled={pausando === anuncioId || !lojaId}
+                        className={`text-[10px] disabled:opacity-50 text-white px-2.5 py-1.5 rounded-lg ${pausado ? "bg-emerald-700 hover:bg-emerald-600" : "bg-amber-700 hover:bg-amber-600"}`}
+                      >
+                        {pausando === anuncioId ? "Aguarde..." : pausado ? "Reativar" : "Pausar"}
+                      </button>
+                      <button
+                        onClick={() => verVariacoes(a)}
+                        disabled={carregandoVariacoes === anuncioId}
+                        className="text-[10px] bg-neutral-700 hover:bg-neutral-600 disabled:opacity-50 text-white px-2.5 py-1.5 rounded-lg"
+                      >
+                        {carregandoVariacoes === anuncioId ? "Carregando..." : variacoesAbertas === anuncioId ? "Ocultar variações" : "Ver variações"}
+                      </button>
+                    </div>
+                  </div>
+                  {variacoesAbertas === anuncioId && (
+                    variacoes.length === 0 ? (
+                      <p className="text-[10px] text-neutral-500">Este item não possui variações (produto simples).</p>
+                    ) : (
+                      <table className="w-full text-xs mt-2">
+                        <thead>
+                          <tr className="text-neutral-500 text-[10px] uppercase tracking-wider">
+                            <th className="text-left py-1">Variação</th>
+                            <th className="text-left py-1">SKU</th>
+                            <th className="text-right py-1">Preço</th>
+                            <th className="text-right py-1">Estoque</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {variacoes.map((v) => (
+                            <tr key={v.model_id} className="border-t border-neutral-700/50">
+                              <td className="py-1 text-neutral-300">{v.model_name}</td>
+                              <td className="py-1 text-neutral-500 font-mono">{v.model_sku}</td>
+                              <td className="py-1 text-right text-neutral-200 numeric">R$ {Number(v.price_info?.[0]?.current_price || 0).toFixed(2)}</td>
+                              <td className="py-1 text-right text-neutral-200 numeric">{v.stock_info_v2?.summary_info?.total_available_stock ?? "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

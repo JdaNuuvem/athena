@@ -169,6 +169,14 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ loja_id: lojaId, price }),
     }),
+  shopeeRenovarToken: (lojaId: number) =>
+    request<{ success?: boolean; expire_in?: number; error?: string }>(`/api/shopee/lojas/${lojaId}/renovar-token`, {
+      method: "POST",
+    }),
+  shopeeVariacoes: (itemId: number, lojaId?: number) =>
+    request<{ response?: { model?: Array<{ model_id: number; model_name: string; model_sku: string; price_info?: Array<{ current_price: number }>; stock_info_v2?: { summary_info?: { total_available_stock: number } } }>; tier_variation?: Array<{ name: string; option_list: Array<{ option: string }> }> }; error?: string }>(
+      `/api/shopee/produtos/${itemId}/variacoes${lojaId ? `?loja_id=${lojaId}` : ""}`
+    ),
 
   // Shopee — cadastro de produto (categorias, atributos, marcas, imagens)
   shopeeCategorias: (params?: { busca?: string; parentId?: number; apenasFolhas?: boolean }) => {

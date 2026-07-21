@@ -1887,6 +1887,12 @@ def atend_delete(tabela, id):
 
 # ── PDV Routes ──
 
+@app.route('/api/pdv/login', methods=['POST'])
+def pdv_login():
+    data = request.json or {}
+    from core.pdv import login_operador
+    return jsonify(login_operador(data.get("nome",""), data.get("senha","")))
+
 @app.route('/api/pdv/dashboard', methods=['GET'])
 def pdv_dashboard_api():
     from core.pdv import dashboard as pdv_dash
@@ -1911,7 +1917,8 @@ def pdv_buscar_produtos():
 @app.route('/api/pdv/venda/<int:id>/cancelar', methods=['POST'])
 def pdv_cancelar_venda(id):
     data = request.json or {}; from core.pdv import cancelar_venda
-    return jsonify(cancelar_venda(id, data.get("motivo",""), data.get("operador","")))
+    return jsonify(cancelar_venda(id, data.get("motivo",""), data.get("operador",""),
+        data.get("operador_id"), data.get("senha","")))
 
 @app.route('/api/pdv/historico', methods=['GET'])
 def pdv_historico():
@@ -1923,25 +1930,28 @@ def pdv_historico():
 def pdv_abrir_caixa():
     data = request.json or {}
     from core.pdv import abrir_caixa
-    return jsonify(abrir_caixa(data.get("operador","Admin"), float(data.get("saldo_inicial",0))))
+    return jsonify(abrir_caixa(data.get("operador","Admin"), float(data.get("saldo_inicial",0)),
+        data.get("operador_id"), data.get("senha","")))
 
 @app.route('/api/pdv/caixa/<int:id>/fechar', methods=['POST'])
 def pdv_fechar_caixa(id):
     data = request.json or {}
     from core.pdv import fechar_caixa
-    return jsonify(fechar_caixa(id, float(data.get("saldo_final",0))))
+    return jsonify(fechar_caixa(id, float(data.get("saldo_final",0)), data.get("operador_id"), data.get("senha","")))
 
 @app.route('/api/pdv/caixa/<int:id>/sangria', methods=['POST'])
 def pdv_sangria(id):
     data = request.json or {}
     from core.pdv import sangria
-    return jsonify(sangria(id, float(data.get("valor",0)), data.get("motivo",""), data.get("operador","")))
+    return jsonify(sangria(id, float(data.get("valor",0)), data.get("motivo",""), data.get("operador",""),
+        data.get("operador_id"), data.get("senha","")))
 
 @app.route('/api/pdv/caixa/<int:id>/suprimento', methods=['POST'])
 def pdv_suprimento(id):
     data = request.json or {}
     from core.pdv import suprimento
-    return jsonify(suprimento(id, float(data.get("valor",0)), data.get("motivo",""), data.get("operador","")))
+    return jsonify(suprimento(id, float(data.get("valor",0)), data.get("motivo",""), data.get("operador",""),
+        data.get("operador_id"), data.get("senha","")))
 
 @app.route('/api/pdv/venda', methods=['POST'])
 def pdv_venda():
@@ -1953,6 +1963,7 @@ def pdv_venda():
         pagamentos=data.get("pagamentos",[]),
         cliente=data.get("cliente",""),
         operador=data.get("operador",""),
+        operador_id=data.get("operador_id"),
         desconto=float(data.get("desconto",0))
     ))
 
@@ -3025,6 +3036,39 @@ def shopee_conectar_loja(loja_id):
         return jsonify({"error": "Partner ID nao configurado"}), 400
     return jsonify({"url": url})
 
+@app.route('/api/shopee/lojas/<int:loja_id>/renovar-token', methods=['POST'])
+def shopee_renovar_token(loja_id):
+    """Renova o access_token de uma loja Shopee usando o refresh_token salvo."""
+    from shopee import refresh_shopee_token
+    try:
+        return jsonify(refresh_shopee_token(loja_id=loja_id))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/shopee/produtos/<int:item_id>/preco', methods=['POST'])
+def shopee_atualizar_preco(item_id):
+    """Atualiza o preco de um item ja publicado na Shopee."""
+    from shopee import update_price
+    data = request.json or {}
+    loja_id = data.get("loja_id")
+    preco = data.get("price")
+    if preco is None:
+        return jsonify({"error": "price e obrigatorio"}), 400
+    try:
+        return jsonify(update_price(item_id, float(preco), loja_id=loja_id))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/shopee/produtos/<int:item_id>/variacoes', methods=['GET'])
+def shopee_variacoes_produto(item_id):
+    """Lista os modelos/variacoes (tier variation) de um item na Shopee."""
+    from shopee import get_model_list
+    loja_id = request.args.get("loja_id", type=int)
+    try:
+        return jsonify(get_model_list(item_id, loja_id=loja_id))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/shopee/produtos/<sku>/estoque', methods=['PUT'])
 def shopee_atualizar_estoque_produto(sku):
     """Push de estoque local -> Shopee para uma loja especifica (estoque multiloja)."""
@@ -3376,7 +3420,7 @@ def detalhe_produto(sku):
         if not p:
             return jsonify({"sku": sku, "erro": "não encontrado"}), 404
         p = dict(p)
-        cur.execute("SELECT marketplace,preco,posicao_busca,avaliacao_media,status FROM anuncios WHERE sku=%s", (sku,))
+        cur.execute("SELECT marketplace,shop_id,anuncio_id,preco,posicao_busca,avaliacao_media,status FROM anuncios WHERE sku=%s", (sku,))
         p["estoque_lojas"] = [dict(r) for r in cur.fetchall()]
 
         # Estoque real por loja/deposito (tabela estoque_lojas — quantidade fisica, nao confundir com o campo acima)
