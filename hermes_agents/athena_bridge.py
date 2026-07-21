@@ -1889,45 +1889,53 @@ def atend_delete(tabela, id):
 
 @app.route('/api/pdv/login', methods=['POST'])
 def pdv_login():
+    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
     data = request.json or {}
     from core.pdv import login_operador
     return jsonify(login_operador(data.get("nome",""), data.get("senha","")))
 
 @app.route('/api/pdv/dashboard', methods=['GET'])
 def pdv_dashboard_api():
+    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
     from core.pdv import dashboard as pdv_dash
     return jsonify(pdv_dash())
 
 
 @app.route('/api/pdv/turno/abrir', methods=['POST'])
 def pdv_abrir_turno():
+    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
     data = request.json or {}; from core.pdv import abrir_turno
     return jsonify(abrir_turno(data.get("caixa_id",0), data.get("operador_id"), data.get("operador",""), float(data.get("saldo_abertura",0))))
 
 @app.route('/api/pdv/turno/<int:id>/fechar', methods=['POST'])
 def pdv_fechar_turno(id):
+    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
     data = request.json or {}; from core.pdv import fechar_turno
     return jsonify(fechar_turno(id, float(data.get("saldo_fechamento",0)), data.get("observacoes","")))
 
 @app.route('/api/pdv/produtos/buscar', methods=['GET'])
 def pdv_buscar_produtos():
+    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
     from core.pdv import buscar_produtos
     return jsonify({"data": buscar_produtos(request.args.get("q",""))})
 
 @app.route('/api/pdv/venda/<int:id>/cancelar', methods=['POST'])
 def pdv_cancelar_venda(id):
+    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
     data = request.json or {}; from core.pdv import cancelar_venda
     return jsonify(cancelar_venda(id, data.get("motivo",""), data.get("operador",""),
         data.get("operador_id"), data.get("senha","")))
 
 @app.route('/api/pdv/historico', methods=['GET'])
 def pdv_historico():
+    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
     from core.pdv import historico_vendas
     caixa = request.args.get("caixa_id"); di = request.args.get("data_inicio"); df = request.args.get("data_fim")
     return jsonify({"data": historico_vendas(int(caixa) if caixa else None, di, df)})
 
 @app.route('/api/pdv/caixa/abrir', methods=['POST'])
 def pdv_abrir_caixa():
+    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
     data = request.json or {}
     from core.pdv import abrir_caixa
     return jsonify(abrir_caixa(data.get("operador","Admin"), float(data.get("saldo_inicial",0)),
@@ -1935,12 +1943,14 @@ def pdv_abrir_caixa():
 
 @app.route('/api/pdv/caixa/<int:id>/fechar', methods=['POST'])
 def pdv_fechar_caixa(id):
+    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
     data = request.json or {}
     from core.pdv import fechar_caixa
     return jsonify(fechar_caixa(id, float(data.get("saldo_final",0)), data.get("operador_id"), data.get("senha","")))
 
 @app.route('/api/pdv/caixa/<int:id>/sangria', methods=['POST'])
 def pdv_sangria(id):
+    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
     data = request.json or {}
     from core.pdv import sangria
     return jsonify(sangria(id, float(data.get("valor",0)), data.get("motivo",""), data.get("operador",""),
@@ -1948,6 +1958,7 @@ def pdv_sangria(id):
 
 @app.route('/api/pdv/caixa/<int:id>/suprimento', methods=['POST'])
 def pdv_suprimento(id):
+    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
     data = request.json or {}
     from core.pdv import suprimento
     return jsonify(suprimento(id, float(data.get("valor",0)), data.get("motivo",""), data.get("operador",""),
@@ -1955,6 +1966,7 @@ def pdv_suprimento(id):
 
 @app.route('/api/pdv/venda', methods=['POST'])
 def pdv_venda():
+    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
     data = request.json or {}
     from core.pdv import realizar_venda
     return jsonify(realizar_venda(
@@ -1969,30 +1981,35 @@ def pdv_venda():
 
 @app.route('/api/pdv/<tabela>', methods=['GET'])
 def pdv_list(tabela):
+    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
     from core.pdv import list as pl, TABLES
     if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
     return jsonify({"data": pl(tabela)})
 
 @app.route('/api/pdv/<tabela>', methods=['POST'])
 def pdv_create(tabela):
+    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
     from core.pdv import create as pc, TABLES
     if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
     return jsonify(pc(tabela, request.json or {}))
 
 @app.route('/api/pdv/<tabela>/<int:id>', methods=['GET'])
 def pdv_get(tabela, id):
+    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
     from core.pdv import get as pg, TABLES
     if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
     return jsonify(pg(tabela, id))
 
 @app.route('/api/pdv/<tabela>/<int:id>', methods=['PUT'])
 def pdv_update(tabela, id):
+    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
     from core.pdv import update as pu, TABLES
     if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
     return jsonify(pu(tabela, id, request.json or {}))
 
 @app.route('/api/pdv/<tabela>/<int:id>', methods=['DELETE'])
 def pdv_delete(tabela, id):
+    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
     from core.pdv import delete as pd, TABLES
     if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
     return jsonify(pd(tabela, id))
