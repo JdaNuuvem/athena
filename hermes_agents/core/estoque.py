@@ -211,7 +211,7 @@ def ratear(sku: str, total: float, modo: str = "igual", lojas: list = None,
         if lojas:
             lojas_validas = [l for l in lojas if l.strip()]
         else:
-            rows = await db.fetch("SELECT nome FROM lojas WHERE ativa = TRUE ORDER BY nome")
+            rows = await db.fetch("SELECT nome FROM lojas ORDER BY nome")
             lojas_validas = [r["nome"] for r in rows]
         if not lojas_validas:
             return {"erro": "Nenhuma loja ativa encontrada"}
