@@ -3197,6 +3197,292 @@ def shopee_unlist_produto(item_id):
     unlist = data.get("unlist", True)
     return jsonify(unlist_item([item_id], unlist=unlist, loja_id=loja_id))
 
+# ===========================================================================
+# Produtos, Lojas e KPIs — rotas restauradas (removidas por engano em 479b1b5)
+# ===========================================================================
+def _db_sync():
+    cfg = FactoryConfig.load()
+    conn = psycopg2.connect(host=cfg.db_host, port=cfg.db_port, dbname=cfg.db_name,
+                            user=cfg.db_user, password=cfg.db_password, connect_timeout=5)
+    conn.set_session(autocommit=True)
+    return conn
+
+def _dicts(cur):
+    cols = [d[0] for d in cur.description] if cur.description else []
+    return [dict(zip(cols, row)) for row in cur.fetchall()]
+
+@app.route('/api/produtos', methods=['GET'])
+def listar_produtos():
+    busca = request.args.get("busca", "").strip()
+    loja = request.args.get("loja", "")
+    variacoes = request.args.get("variacoes", "0") == "1"
+    pagina = request.args.get("pagina", 1, type=int)
+    por_pagina = request.args.get("por_pagina", 50, type=int)
+    try:
+        conn = _db_sync()
+        cur = conn.cursor()
+        where = ["1=1"]
+        if busca:
+            where.append(f"(c.sku ILIKE '%{busca}%' OR c.descricao ILIKE '%{busca}%')")
+        if loja:
+            if loja.isdigit():
+                # Loja física: filtra via estoque_lojas usando nome da tabela lojas
+                where.append(f"EXISTS(SELECT 1 FROM lojas l JOIN estoque_lojas e ON e.loja = l.nome WHERE e.sku = c.sku AND l.id = {int(loja)})")
+            else:
+                # Marketplace: filtra via anuncios
+                where.append("EXISTS(SELECT 1 FROM anuncios a WHERE a.sku=c.sku AND a.marketplace='%s')" % loja)
+        if not variacoes:
+            where.append("c.sku_pai IS NULL")
+        sql_where = " AND ".join(where)
+        offset = (pagina - 1) * por_pagina
+        cur.execute(f"SELECT COUNT(*) FROM catalogo_produtos c WHERE {sql_where}")
+        count = cur.fetchone()[0]
+        _estoque_sub = "COALESCE((SELECT SUM(e.quantidade) FROM estoque_lojas e WHERE e.sku = c.sku), 0)"
+        try:
+            cur.execute(f"""
+                SELECT c.id, c.sku, c.descricao AS nome,
+                       COALESCE(c.imagem_url,
+                           CASE WHEN c.id_bling IS NOT NULL
+                               THEN 'https://bling.com.br/Api/v3/produtos/' || c.id_bling || '/imagem'
+                           END
+                       ) AS imagem_url,
+                       COALESCE(c.categoria, '') AS categoria,
+                       COALESCE(c.marca, '') AS marca,
+                       COALESCE(c.codigo_barras, '') AS codigo_barras,
+                       c.estoque_minimo, c.estoque_maximo, c.preco_custo,
+                       COALESCE(a.preco, 0) AS valor,
+                       (SELECT COUNT(*) FROM catalogo_produtos f WHERE f.sku_pai = c.sku) AS total_variacoes,
+                       {_estoque_sub} AS estoque_atual,
+                       COALESCE(m.margem_pct, 0) AS margem_pct,
+                       COALESCE(m.receita_total, 0) AS receita_30d,
+                       COALESCE(m.quantidade_vendida, 0) AS vendidos_30d
+                FROM catalogo_produtos c
+                LEFT JOIN anuncios a ON a.sku = c.sku AND a.marketplace = 'bling'
+                LEFT JOIN margens_diarias m ON m.sku = c.sku AND m.data = CURRENT_DATE
+                WHERE {sql_where}
+                ORDER BY c.id DESC
+                LIMIT {por_pagina} OFFSET {offset}
+            """)
+        except Exception:
+            conn.rollback()
+            cur = conn.cursor()
+            cur.execute(f"""
+                SELECT c.id, c.sku, c.descricao AS nome,
+                       COALESCE(c.imagem_url,
+                           CASE WHEN c.id_bling IS NOT NULL
+                               THEN 'https://bling.com.br/Api/v3/produtos/' || c.id_bling || '/imagem'
+                           END
+                       ) AS imagem_url,
+                       COALESCE(c.categoria, '') AS categoria,
+                       COALESCE(c.marca, '') AS marca,
+                       COALESCE(c.codigo_barras, '') AS codigo_barras,
+                       c.estoque_minimo, c.estoque_maximo, c.preco_custo,
+                       COALESCE(a.preco, 0) AS valor,
+                       (SELECT COUNT(*) FROM catalogo_produtos f WHERE f.sku_pai = c.sku) AS total_variacoes,
+                       0 AS estoque_atual,
+                       COALESCE(m.margem_pct, 0) AS margem_pct,
+                       COALESCE(m.receita_total, 0) AS receita_30d,
+                       COALESCE(m.quantidade_vendida, 0) AS vendidos_30d
+                FROM catalogo_produtos c
+                LEFT JOIN anuncios a ON a.sku = c.sku AND a.marketplace = 'bling'
+                LEFT JOIN margens_diarias m ON m.sku = c.sku AND m.data = CURRENT_DATE
+                WHERE {sql_where}
+                ORDER BY c.id DESC
+                LIMIT {por_pagina} OFFSET {offset}
+            """)
+        rows = _dicts(cur)
+        for r in rows:
+            for k in ("estoque_minimo", "estoque_maximo", "preco_custo"):
+                if r.get(k) is not None:
+                    r[k] = float(r[k])
+        skus = [r["sku"] for r in rows]
+        if skus:
+            cur.execute("SELECT sku, marketplace, preco, status FROM anuncios WHERE sku = ANY(%s)", (skus,))
+            precos_por_sku = {}
+            for e in _dicts(cur):
+                precos_por_sku.setdefault(e["sku"], []).append({"loja": e["marketplace"], "preco": float(e["preco"]) if e["preco"] else 0, "status": e["status"]})
+            for r in rows:
+                r["estoque_lojas"] = precos_por_sku.get(r["sku"], [])
+                r["total_lojas"] = len(r["estoque_lojas"])
+                if not r.get("valor"):
+                    precos = precos_por_sku.get(r["sku"], [])
+                    r["valor"] = max((p["preco"] for p in precos), default=0)
+        cur.close(); conn.close()
+        return jsonify({"produtos": rows, "total": count, "pagina": pagina, "por_pagina": por_pagina})
+    except Exception as e:
+        return jsonify({"erro": str(e), "produtos": [], "total": 0})
+
+@app.route('/api/produtos/<sku>', methods=['PUT'])
+def editar_produto(sku):
+    try:
+        data = request.json or {}
+        conn = _db_sync(); cur = conn.cursor()
+        updates = []
+        values = []
+        campos = ["descricao","ncm","cest","categoria","marca","unidade_padrao","tipo",
+                  "peso_bruto","sku_pai","atributo",
+                  "codigo_barras","gtin_embalagem","descricao_curta","descricao_complementar",
+                  "peso_liquido","largura","altura","profundidade","unidade_medida_dimensao",
+                  "volumes","itens_por_caixa","cfop_padrao","observacoes","link_externo",
+                  "fornecedor_nome","fornecedor_codigo","preco_custo",
+                  "estoque_minimo","estoque_maximo","estoque_localizacao"]
+        for campo in campos:
+            if campo in data and data[campo] is not None:
+                updates.append(f"{campo} = %s")
+                values.append(data[campo])
+        if not updates:
+            return jsonify({"error": "Nenhum campo para atualizar"}), 400
+        updates.append("updated_at = NOW()")
+        values.append(sku)
+        sql = f"UPDATE catalogo_produtos SET {', '.join(updates)} WHERE sku = %s"
+        cur.execute(sql, values)
+        if "descricao" in data:
+            cur.execute("UPDATE fichas_tecnicas SET descricao = %s WHERE sku = %s", (data["descricao"], sku))
+        cur.close(); conn.close()
+        try:
+            from core.seguranca import auditar
+            auditar("editar", "produtos", "produto", dados_depois=data)
+        except Exception:
+            pass
+        return jsonify({"success": True, "sku": sku})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/produtos/<sku>', methods=['GET'])
+def detalhe_produto(sku):
+    try:
+        conn = _db_sync(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("""
+            SELECT c.*, COALESCE(a.preco,0) AS valor
+            FROM catalogo_produtos c LEFT JOIN anuncios a ON a.sku=c.sku AND a.marketplace='bling' WHERE c.sku=%s
+        """, (sku,))
+        p = cur.fetchone()
+        if not p:
+            return jsonify({"sku": sku, "erro": "não encontrado"}), 404
+        p = dict(p)
+        cur.execute("SELECT marketplace,preco,posicao_busca,avaliacao_media,status FROM anuncios WHERE sku=%s", (sku,))
+        p["estoque_lojas"] = [dict(r) for r in cur.fetchall()]
+
+        # Estoque real por loja/deposito (tabela estoque_lojas — quantidade fisica, nao confundir com o campo acima)
+        cur.execute("SELECT loja, quantidade, data_atualizacao FROM estoque_lojas WHERE sku=%s ORDER BY loja", (sku,))
+        p["estoque_por_loja"] = [dict(r, quantidade=float(r["quantidade"]) if r.get("quantidade") is not None else 0,
+                                      data_atualizacao=str(r["data_atualizacao"]) if r.get("data_atualizacao") else None)
+                                 for r in cur.fetchall()]
+
+        # Variacoes (filhos)
+        cur.execute("SELECT sku, descricao AS nome, atributo, (SELECT COALESCE(preco,0) FROM anuncios WHERE sku=catalogo_produtos.sku AND marketplace='bling' LIMIT 1) AS valor FROM catalogo_produtos WHERE sku_pai = %s ORDER BY sku", (sku,))
+        p["variacoes"] = [dict(r, valor=float(r["valor"]) if r.get("valor") else 0) for r in cur.fetchall()]
+        cur.execute("SELECT data,marketplace,quantidade,preco_venda,receita_bruta FROM vendas WHERE sku=%s ORDER BY data DESC LIMIT 90", (sku,))
+        p["vendas_30d"] = [dict(r, data=str(r["data"])) for r in cur.fetchall()]
+        cur.execute("SELECT data,preco_venda FROM vendas WHERE sku=%s ORDER BY data ASC", (sku,))
+        p["historico_precos"] = [{"data": str(r["data"]), "preco": float(r["preco_venda"])} for r in cur.fetchall()]
+        for k in ("peso_gramas","tempo_ciclo_segundos","valor",
+                  "peso_bruto","peso_liquido","largura","altura","profundidade",
+                  "percentual_tributos","valor_base_st_retencao","valor_st_retencao","valor_icms_st",
+                  "preco_custo","estoque_minimo","estoque_maximo"):
+            if k in p and p[k] is not None: p[k] = float(p[k])
+        cur.close(); conn.close()
+        return jsonify(p)
+    except Exception as e:
+        return jsonify({"sku": sku, "erro": str(e), "estoque_lojas": []})
+
+@app.route('/api/produtos/limites', methods=['GET'])
+def produtos_limites():
+    """Estoque minimo/maximo, fornecedor e custo por SKU vindos do catalogo local.
+    Usado pela tela de Estoque para enriquecer os dados ao vivo do Bling sem duplicar toda a busca do catalogo."""
+    try:
+        conn = _db_sync(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("""SELECT sku, marca, fornecedor_nome, estoque_minimo, estoque_maximo, preco_custo
+                       FROM catalogo_produtos""")
+        out = {}
+        for r in cur.fetchall():
+            out[r["sku"]] = {
+                "marca": r["marca"] or "",
+                "fornecedor_nome": r["fornecedor_nome"] or "",
+                "estoque_minimo": float(r["estoque_minimo"]) if r["estoque_minimo"] is not None else None,
+                "estoque_maximo": float(r["estoque_maximo"]) if r["estoque_maximo"] is not None else None,
+                "preco_custo": float(r["preco_custo"]) if r["preco_custo"] is not None else None,
+            }
+        cur.close(); conn.close()
+        return jsonify(out)
+    except Exception as e:
+        return jsonify({"erro": str(e)})
+
+@app.route('/api/lojas', methods=['GET'])
+def listar_lojas():
+    """Performance de todas as lojas (físicas + marketplaces)."""
+    try:
+        conn = _db_sync(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        periodo = request.args.get("periodo", 30, type=int)
+        cur.execute("SELECT id, nome FROM lojas ORDER BY id")
+        fisicas = [{"id":r["id"],"nome":r["nome"],"tipo":"fisica"} for r in cur.fetchall()]
+        if not fisicas:
+            fisicas = [{"id":1,"nome":"Loja Padrão","tipo":"fisica"}]
+        try:
+            cur.execute("SELECT DISTINCT marketplace FROM vendas WHERE marketplace IS NOT NULL")
+            mps = [{"id":10+i,"nome":r["marketplace"],"tipo":"digital"} for i,r in enumerate(cur.fetchall())]
+        except Exception:
+            mps = []
+        if not mps:
+            mps = [{"id":10,"nome":"shopee","tipo":"digital"},{"id":11,"nome":"mercado_livre","tipo":"digital"}]
+        resultado = []
+        for loja in fisicas + mps:
+            try:
+                if loja["tipo"]=="fisica":
+                    cur.execute("SELECT COALESCE(SUM(receita_bruta),0) AS r,COALESCE(SUM(quantidade),0) AS p FROM vendas WHERE loja_id=%s AND data>=CURRENT_DATE-%s", (loja["id"], periodo))
+                else:
+                    cur.execute("SELECT COALESCE(SUM(receita_bruta),0) AS r,COALESCE(SUM(quantidade),0) AS p FROM vendas WHERE marketplace=%s AND data>=CURRENT_DATE-%s", (loja["nome"], periodo))
+                v = cur.fetchone()
+                receita, pedidos = float(v["r"]), v["p"]
+            except Exception:
+                receita, pedidos = 0, 0
+            resultado.append({**loja,"receita":receita,"pedidos":pedidos,"ticket_medio":round(receita/max(pedidos,1),2)})
+        tr = sum(r["receita"] for r in resultado)
+        resultado.insert(0,{"id":0,"nome":"📊 Consolidado","tipo":"consolidado","receita":tr,"pedidos":sum(r["pedidos"] for r in resultado),"ticket_medio":round(tr/max(sum(r["pedidos"] for r in resultado),1),2)})
+        cur.close(); conn.close()
+        return jsonify(resultado)
+    except Exception as e:
+        return jsonify([{"id":0,"nome":"📊 Consolidado","tipo":"consolidado","receita":0,"pedidos":0,"ticket_medio":0,"erro":str(e)}])
+
+@app.route('/api/kpi/overview', methods=['GET'])
+def kpi_overview():
+    """KPIs consolidados para página inicial."""
+    try:
+        conn = _db_sync(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        periodo = request.args.get("periodo", 30, type=int)
+        def f(v,d=0): return float(v) if v is not None else d
+        try:
+            cur.execute("SELECT COALESCE(SUM(receita_bruta),0) FROM vendas WHERE data>=CURRENT_DATE-%s", (periodo,))
+            total_receita = f(cur.fetchone()[0])
+            cur.execute("SELECT COALESCE(SUM(quantidade),0) FROM vendas WHERE data>=CURRENT_DATE-%s", (periodo,))
+            total_pedidos = cur.fetchone()[0] or 0
+        except Exception:
+            total_receita,total_pedidos=0,0
+        try:
+            cur.execute("SELECT COUNT(*) FROM fichas_tecnicas"); total_produtos=cur.fetchone()[0] or 0
+        except Exception:
+            total_produtos=0
+        try:
+            cur.execute("SELECT COUNT(*) FROM anuncios WHERE status='ativo'"); total_anuncios=cur.fetchone()[0] or 0
+        except Exception:
+            total_anuncios=0
+        try:
+            cur.execute("SELECT COALESCE(SUM(receita_bruta),0) FROM vendas WHERE marketplace='shopee' AND data>=CURRENT_DATE-%s", (periodo,))
+            receita_shopee=f(cur.fetchone()[0])
+            cur.execute("SELECT COALESCE(SUM(receita_bruta),0) FROM vendas WHERE marketplace='mercado_livre' AND data>=CURRENT_DATE-%s", (periodo,))
+            receita_ml=f(cur.fetchone()[0])
+        except Exception:
+            receita_shopee,receita_ml=0,0
+        try:
+            cur.execute("SELECT v.sku,f.descricao AS nome,SUM(v.quantidade) AS qtd,SUM(v.receita_bruta) AS receita,COALESCE(m.margem_pct,0) AS margem FROM vendas v JOIN fichas_tecnicas f ON f.sku=v.sku LEFT JOIN margens_diarias m ON m.sku=v.sku AND m.data=CURRENT_DATE WHERE v.data>=CURRENT_DATE-%s GROUP BY v.sku,f.descricao,m.margem_pct ORDER BY SUM(v.receita_bruta) DESC LIMIT 10", (periodo,))
+            top_skus=[dict(r) for r in cur.fetchall()]
+        except Exception:
+            top_skus=[]
+        cur.close(); conn.close()
+        return jsonify({"receita_total":total_receita,"total_pedidos":total_pedidos,"total_produtos":total_produtos,"total_anuncios":total_anuncios,"ticket_medio":round(total_receita/max(total_pedidos,1),2),"receita_por_canal":{"shopee":receita_shopee,"mercado_livre":receita_ml},"top_skus":top_skus})
+    except Exception as e:
+        return jsonify({"erro":str(e),"receita_total":0,"total_pedidos":0,"total_produtos":0,"total_anuncios":0})
+
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve_frontend(path):
