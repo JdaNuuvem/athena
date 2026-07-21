@@ -421,7 +421,9 @@ def get_auth_url(redirect_uri: str = "", sandbox: bool = None, loja_id: int = No
     # /api/v2/shop/auth_partner (BR so tem host proprio pra tela de login open.shopee.com.br/auth)
     base = (BASE_URL_SANDBOX if sandbox else BASE_URL_LIVE).replace("/api/v2", "") + "/api/v2/shop/auth_partner"
     if not redirect_uri:
-        domain = os.environ.get("SHOPEE_REDIRECT_URL", "https://athena.zoikom.site/api/shopee/callback")
+        # ponytail: /api/shopee/callback fica sem explicacao caindo no fallback do frontend em
+        # producao (nao e' cache); /oauth2callback e' um alias novo que contorna isso.
+        domain = os.environ.get("SHOPEE_REDIRECT_URL", "https://athena.zoikom.site/api/shopee/oauth2callback")
         redirect_uri = domain
     if loja_id is not None:
         sep = "&" if "?" in redirect_uri else "?"

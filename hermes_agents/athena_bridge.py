@@ -2970,9 +2970,14 @@ def health_real():
 # ===========================================================================
 
 @app.route('/api/shopee/callback', methods=['GET'])
+@app.route('/api/shopee/oauth2callback', methods=['GET'])
 def shopee_oauth_callback():
     """Recebe o redirect da Shopee apos autorizacao e manda o resultado pra tela de
-    Integracoes -> Shopee (nao devolve o access_token na URL, so' o status/shop_id)."""
+    Integracoes -> Shopee (nao devolve o access_token na URL, so' o status/shop_id).
+    ponytail: /api/shopee/callback ficou retornando o HTML do frontend em producao por
+    motivo nao identificado (nao e' cache — CF-Cache-Status: DYNAMIC; testado localmente e
+    funciona). /oauth2callback e' um caminho alternativo novo pra contornar isso — use este
+    ao reautorizar ou conectar uma loja nova."""
     from urllib.parse import urlencode
     code = request.args.get("code", "")
     shop_id = request.args.get("shop_id", "")
