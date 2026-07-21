@@ -3222,20 +3222,24 @@ def listar_produtos():
         conn = _db_sync()
         cur = conn.cursor()
         where = ["1=1"]
+        params = []
         if busca:
-            where.append(f"(c.sku ILIKE '%{busca}%' OR c.descricao ILIKE '%{busca}%')")
+            where.append("(c.sku ILIKE %s OR c.descricao ILIKE %s)")
+            params.extend([f"%{busca}%", f"%{busca}%"])
         if loja:
             if loja.isdigit():
                 # Loja física: filtra via estoque_lojas usando nome da tabela lojas
-                where.append(f"EXISTS(SELECT 1 FROM lojas l JOIN estoque_lojas e ON e.loja = l.nome WHERE e.sku = c.sku AND l.id = {int(loja)})")
+                where.append("EXISTS(SELECT 1 FROM lojas l JOIN estoque_lojas e ON e.loja = l.nome WHERE e.sku = c.sku AND l.id = %s)")
+                params.append(int(loja))
             else:
                 # Marketplace: filtra via anuncios
-                where.append("EXISTS(SELECT 1 FROM anuncios a WHERE a.sku=c.sku AND a.marketplace='%s')" % loja)
+                where.append("EXISTS(SELECT 1 FROM anuncios a WHERE a.sku=c.sku AND a.marketplace=%s)")
+                params.append(loja)
         if not variacoes:
             where.append("c.sku_pai IS NULL")
         sql_where = " AND ".join(where)
         offset = (pagina - 1) * por_pagina
-        cur.execute(f"SELECT COUNT(*) FROM catalogo_produtos c WHERE {sql_where}")
+        cur.execute(f"SELECT COUNT(*) FROM catalogo_produtos c WHERE {sql_where}", params)
         count = cur.fetchone()[0]
         _estoque_sub = "COALESCE((SELECT SUM(e.quantidade) FROM estoque_lojas e WHERE e.sku = c.sku), 0)"
         try:
@@ -3261,8 +3265,8 @@ def listar_produtos():
                 LEFT JOIN margens_diarias m ON m.sku = c.sku AND m.data = CURRENT_DATE
                 WHERE {sql_where}
                 ORDER BY c.id DESC
-                LIMIT {por_pagina} OFFSET {offset}
-            """)
+                LIMIT %s OFFSET %s
+            """, params + [por_pagina, offset])
         except Exception:
             conn.rollback()
             cur = conn.cursor()
@@ -3288,8 +3292,8 @@ def listar_produtos():
                 LEFT JOIN margens_diarias m ON m.sku = c.sku AND m.data = CURRENT_DATE
                 WHERE {sql_where}
                 ORDER BY c.id DESC
-                LIMIT {por_pagina} OFFSET {offset}
-            """)
+                LIMIT %s OFFSET %s
+            """, params + [por_pagina, offset])
         rows = _dicts(cur)
         for r in rows:
             for k in ("estoque_minimo", "estoque_maximo", "preco_custo"):
