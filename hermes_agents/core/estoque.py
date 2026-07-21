@@ -220,7 +220,20 @@ def ratear(sku: str, total: float, modo: str = "igual", lojas: list = None,
             pcts = {l: round(100.0 / n, 4) for l in lojas_validas}
         elif modo == "proporcional":
             if percentuais:
-                pcts = {l: float(p) for l, p in percentuais.items() if l in lojas_validas}
+                pcts = {}
+                resto_pct = 100.0
+                for l in lojas_validas:
+                    p = percentuais.get(l)
+                    if p is not None:
+                        pcts[l] = float(p)
+                        resto_pct -= float(p)
+                    else:
+                        pcts[l] = None
+                na = [l for l in lojas_validas if pcts[l] is None]
+                if na:
+                    share = round(resto_pct / len(na), 4) if na else 0
+                    for l in na:
+                        pcts[l] = share
             else:
                 rows = await db.fetch(
                     f"SELECT COALESCE(l.nome, 'Venda direta') AS loja, SUM(v.quantidade) AS qtd "
