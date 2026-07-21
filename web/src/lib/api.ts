@@ -843,3 +843,32 @@ export const estoqueAtualizar = (sku: string, loja: string, quantidade: number) 
     body: JSON.stringify({ sku, loja, quantidade, sync_bling: "1" }),
     headers: { "Content-Type": "application/json" },
   });
+
+export interface RateioLoja {
+  loja: string;
+  quantidade: number;
+  percentual: number;
+}
+export interface RateioResult {
+  ok: boolean;
+  sku: string;
+  total: number;
+  modo: string;
+  lojas: RateioLoja[];
+  percentuais: Record<string, number>;
+  erro?: string;
+}
+
+export const estoqueRatear = (params: {
+  sku: string;
+  total: number;
+  modo?: "igual" | "proporcional";
+  lojas?: string[];
+  periodo_dias?: number;
+  percentuais?: Record<string, number>;
+}) =>
+  request<RateioResult>("/api/estoque/ratear", {
+    method: "POST",
+    body: JSON.stringify(params),
+    headers: { "Content-Type": "application/json" },
+  });

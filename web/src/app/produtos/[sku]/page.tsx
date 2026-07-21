@@ -12,6 +12,7 @@ import LotesSeriesTab from "./_components/LotesSeriesTab";
 import LocalizacaoTab from "./_components/LocalizacaoTab";
 import ControleTab from "./_components/ControleTab";
 import PublicarShopeeTab from "./_components/PublicarShopeeTab";
+import RateioModal from "@/app/estoque/rateio/_components/RateioModal";
 
 const TABS = [
   { id: "visao-geral", label: "Visão Geral" },
@@ -32,6 +33,7 @@ export default function ProdutoPage() {
   const [produto, setProduto] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<TabId>("visao-geral");
+  const [showRateio, setShowRateio] = useState(false);
 
   useEffect(() => {
     if (!sku) { setLoading(false); return; }
@@ -60,6 +62,9 @@ export default function ProdutoPage() {
           {String(produto.descricao || produto.nome || sku)}
         </h1>
         <p className="text-xs font-mono text-neutral-500 mt-1">{sku}</p>
+        <button onClick={() => setShowRateio(true)} className="mt-2 bg-amber-600 hover:bg-amber-500 text-white text-xs px-3 py-1.5 rounded-lg transition-colors">
+          Rateio Estoque
+        </button>
       </div>
 
       <div className="flex gap-2 overflow-x-auto">
@@ -86,6 +91,14 @@ export default function ProdutoPage() {
       {tab === "localizacao" && <LocalizacaoTab />}
       {tab === "controle" && <ControleTab produto={produto} />}
       {tab === "shopee" && <PublicarShopeeTab produto={produto} sku={sku} />}
+
+      {showRateio && (
+        <RateioModal
+          sku={sku}
+          produtoNome={String(produto.descricao || produto.nome || "")}
+          onClose={() => setShowRateio(false)}
+        />
+      )}
     </div>
   );
 }

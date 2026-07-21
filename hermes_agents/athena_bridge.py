@@ -994,6 +994,25 @@ def estoque_transferir():
         return jsonify({"erro": "quantidade inválida"}), 400
     return jsonify(est_transferir(sku, origem, destino, qtd, motivo))
 
+@app.route('/api/estoque/ratear', methods=['POST'])
+def estoque_ratear():
+    from core.estoque import ratear as est_ratear
+    dados = request.json or {}
+    sku = str(dados.get("sku", "")).strip()
+    total = dados.get("total")
+    modo = str(dados.get("modo", "igual")).strip()
+    lojas = dados.get("lojas")
+    periodo_dias = dados.get("periodo_dias", 30)
+    percentuais = dados.get("percentuais")
+    if not sku or total is None:
+        return jsonify({"erro": "sku e total obrigatórios"}), 400
+    if modo not in ("igual", "proporcional"):
+        return jsonify({"erro": "modo deve ser 'igual' ou 'proporcional'"}), 400
+    try:
+        return jsonify(est_ratear(sku, float(total), modo, lojas, int(periodo_dias), percentuais))
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
+
 @app.route('/api/estoque/movimentacoes', methods=['GET'])
 def estoque_movimentacoes():
     """Lista movimentações de estoque."""

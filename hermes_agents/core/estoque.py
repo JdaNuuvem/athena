@@ -202,6 +202,71 @@ def movimentacoes(sku: str = "", loja: str = "", limite: int = 50) -> list:
         return []
 
 
+def ratear(sku: str, total: float, modo: str = "igual", lojas: list = None,
+           periodo_dias: int = 30, percentuais: dict = None) -> dict:
+    _ensure()
+    percentuais = percentuais or {}
+    async def _go():
+        db = await get_db()
+        if lojas:
+            lojas_validas = [l for l in lojas if l.strip()]
+        else:
+            rows = await db.fetch("SELECT nome FROM lojas WHERE ativa = TRUE ORDER BY nome")
+            lojas_validas = [r["nome"] for r in rows]
+        if not lojas_validas:
+            return {"erro": "Nenhuma loja ativa encontrada"}
+        n = len(lojas_validas)
+        if modo == "igual":
+            pcts = {l: round(100.0 / n, 4) for l in lojas_validas}
+        elif modo == "proporcional":
+            if percentuais:
+                pcts = {l: float(p) for l, p in percentuais.items() if l in lojas_validas}
+            else:
+                rows = await db.fetch(
+                    f"SELECT loja, SUM(quantidade) AS qtd FROM vendas "
+                    f"WHERE sku = $1 AND data >= CURRENT_DATE - {periodo_dias} "
+                    f"GROUP BY loja ORDER BY qtd DESC", sku)
+                vendas_map = {r["loja"]: float(r["qtd"]) for r in rows}
+                total_vendido = sum(vendas_map.values())
+                if total_vendido > 0:
+                    pcts = {}
+                    for l in lojas_validas:
+                        v = vendas_map.get(l, 0)
+                        pcts[l] = round(v / total_vendido * 100, 4) if total_vendido else 0
+                    resto = 100 - sum(pcts.values())
+                    if lojas_validas and abs(resto) > 0.001:
+                        pcts[lojas_validas[0]] = round(pcts.get(lojas_validas[0], 0) + resto, 4)
+                else:
+                    pcts = {l: round(100.0 / n, 4) for l in lojas_validas}
+        else:
+            return {"erro": f"Modo desconhecido: {modo}"}
+        soma = sum(pcts.values())
+        if abs(soma - 100) > 0.01:
+            pcts[lojas_validas[0]] = round(pcts.get(lojas_validas[0], 0) + (100 - soma), 4)
+        resultados = []
+        distribuido = 0
+        for i, loja in enumerate(lojas_validas):
+            qtd = round(total * pcts[loja] / 100, 3)
+            if i == n - 1:
+                qtd = round(total - distribuido, 3)
+            distribuido += qtd
+            await db.execute("""
+                INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao)
+                VALUES ($1, $2, $3, NOW())
+                ON CONFLICT (sku, loja) DO UPDATE SET quantidade = $3, data_atualizacao = NOW()
+            """, sku, loja, qtd)
+            await db.execute("""
+                INSERT INTO estoque_movimentacoes (sku, loja, tipo, quantidade, motivo)
+                VALUES ($1, $2, 'rateio', $3, $4)
+            """, sku, loja, qtd, f"rateio {modo}: {pcts[loja]}%")
+            resultados.append({"loja": loja, "quantidade": qtd, "percentual": pcts[loja]})
+        return {"ok": True, "sku": sku, "total": total, "modo": modo,
+                "lojas": resultados, "percentuais": pcts}
+    try:
+        return run_async(_go())
+    except Exception as e:
+        return {"erro": str(e)}
+
 def sync_bling(sku: str, loja: str) -> dict:
     try:
         async def _go():
