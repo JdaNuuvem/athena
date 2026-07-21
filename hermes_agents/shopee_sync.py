@@ -125,12 +125,18 @@ async def sync_pedidos(dias: int = 30, loja_id: int = None) -> dict:
                 for item in items:
                     qtd = item.get("model_quantity_purchased", 1)
                     preco_item = float(item.get("model_original_price", 0) or 0)
+                    loja_param = loja_id if loja_id else None
+                    if loja_param is None:
+                        shop_id_cfg = get_shopee_config(loja_id).get("shop_id") or ""
+                        if shop_id_cfg:
+                            row = await db.fetchval("SELECT id FROM lojas WHERE shopee_shop_id = $1 LIMIT 1", shop_id_cfg)
+                            loja_param = row if row else None
                     await db.execute("""
-                        INSERT INTO vendas (data, sku, marketplace, quantidade, preco_venda, receita_bruta,
+                        INSERT INTO vendas (data, sku, marketplace, loja_id, quantidade, preco_venda, receita_bruta,
                             taxa_marketplace_pct, taxa_marketplace_valor, frete, impostos)
-                        VALUES ($1, $2, 'shopee', $3, $4, $5, 12.0, $6, 0, 0)
+                        VALUES ($1, $2, 'shopee', $3, $4, $5, $6, 12.0, $7, 0, 0)
                     """, data_criacao.date(), sku or str(o.get("order_sn", "")),
-                        qtd, preco_item, preco_item * qtd, preco_item * qtd * 0.12)
+                        loja_param, qtd, preco_item, preco_item * qtd, preco_item * qtd * 0.12)
                 total += 1
             except Exception as e:
                 erros.append(f"pedido {o.get('order_sn')}: {e}")

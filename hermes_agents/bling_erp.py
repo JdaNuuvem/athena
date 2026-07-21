@@ -389,7 +389,7 @@ def sincronizar_produtos() -> dict:
         log(AGENT, f"FATAL sincronizar_produtos: {e}\n{traceback.format_exc()}")
         return {"sincronizados": 0, "erro": str(e)}
 
-def sincronizar_pedidos() -> dict:
+def sincronizar_pedidos(loja_id: int = None) -> dict:
     try:
         async def _go():
             db = await get_db()
@@ -409,9 +409,9 @@ def sincronizar_pedidos() -> dict:
                         preco = float(item.get("valorUnitario", 0))
                         receita = float(item.get("valorTotal", 0))
                         await db.execute("""
-                            INSERT INTO vendas (data, sku, marketplace, quantidade, preco_venda, receita_bruta, taxa_marketplace_pct, taxa_marketplace_valor, frete, impostos)
-                            VALUES ($1, $2, 'bling', $3, $4, $5, 0, 0, 0, 0)
-                        """, data, sku, qtd, preco, receita)
+                            INSERT INTO vendas (data, sku, marketplace, loja_id, quantidade, preco_venda, receita_bruta, taxa_marketplace_pct, taxa_marketplace_valor, frete, impostos)
+                            VALUES ($1, $2, 'bling', $3, $4, $5, $6, 0, 0, 0, 0)
+                        """, data, sku, loja_id, qtd, preco, receita)
                         total += 1
                 except Exception as e:
                     log(AGENT, f"Erro pedido: {e}")
@@ -430,8 +430,7 @@ def status() -> dict:
         "auth_url": get_auth_url() if not token else "",
     }
 
-def webhook_bling_pedido(payload: dict) -> dict:
-    """Processa webhook de pedido recebido do Bling."""
+def webhook_bling_pedido(payload: dict, loja_id: int = None) -> dict:
     from datetime import date, timedelta
     async def _go():
         db = await get_db()
@@ -442,8 +441,8 @@ def webhook_bling_pedido(payload: dict) -> dict:
             qtd = int(item.get("quantidade", 1))
             preco = float(item.get("valorUnitario", 0))
             await db.execute(
-                "INSERT INTO vendas (data, sku, marketplace, quantidade, preco_venda, receita_bruta) VALUES ($1,$2,'bling',$3,$4,$5)",
-                date.today(), sku, qtd, preco, preco * qtd)
+                "INSERT INTO vendas (data, sku, marketplace, loja_id, quantidade, preco_venda, receita_bruta) VALUES ($1,$2,'bling',$3,$4,$5,$6)",
+                date.today(), sku, loja_id, qtd, preco, preco * qtd)
         try:
             from ag_04_planejador import adicionar_pedido_producao
             for item in itens:
