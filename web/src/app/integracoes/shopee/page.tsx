@@ -52,6 +52,9 @@ function ShopeeIntegrationContent() {
   const [renovandoId, setRenovandoId] = useState<number | null>(null);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [lojaParaConectar, setLojaParaConectar] = useState<string>("");
+  const [partnerId, setPartnerId] = useState("");
+  const [partnerKey, setPartnerKey] = useState("");
+  const [savingConfig, setSavingConfig] = useState(false);
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -68,6 +71,26 @@ function ShopeeIntegrationContent() {
   }, []);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  const salvarConfig = async () => {
+    setSavingConfig(true);
+    try {
+      const res = await fetch("/api/config/shopee", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ partnerId, shopId: "", apiKey: partnerKey }),
+      });
+      const r = await res.json().catch(() => ({}));
+      if (!res.ok || r.error) {
+        setMsg({ text: r.error || `Erro ao salvar configuração (HTTP ${res.status})`, ok: false });
+      } else {
+        setMsg({ text: "Configuração salva. Agora você pode conectar uma loja.", ok: true });
+      }
+    } catch (e) {
+      setMsg({ text: e instanceof Error ? e.message : "Erro ao salvar configuração", ok: false });
+    } finally {
+      setSavingConfig(false);
+    }
+  };
 
   const conectarNovaLoja = async () => {
     try {
@@ -133,6 +156,21 @@ function ShopeeIntegrationContent() {
           {msg.text}
         </div>
       )}
+
+      <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 space-y-3">
+        <h2 className="text-sm font-medium text-neutral-300">Configuracao</h2>
+        <p className="text-xs text-neutral-500">Preencha os dados do seu aplicativo Shopee (obtidos no Shopee Partner Center).</p>
+        <div className="flex gap-2">
+          <input type="text" value={partnerId} onChange={e => setPartnerId(e.target.value)}
+            placeholder="Partner ID" className="flex-1 bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-neutral-200 placeholder-neutral-500" />
+          <input type="password" value={partnerKey} onChange={e => setPartnerKey(e.target.value)}
+            placeholder="Partner Key" className="flex-1 bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-neutral-200 placeholder-neutral-500" />
+          <button onClick={salvarConfig} disabled={savingConfig || !partnerId || !partnerKey}
+            className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg transition-colors shrink-0">
+            {savingConfig ? "Salvando..." : "Salvar"}
+          </button>
+        </div>
+      </div>
 
       <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 space-y-3">
         <h2 className="text-sm font-medium text-neutral-300">Lojas Conectadas</h2>

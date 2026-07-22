@@ -1127,20 +1127,23 @@ def set_bling_config():
 
 @app.route('/api/config/shopee', methods=['POST'])
 def set_shopee_config():
-    """Configura Shopee."""
+    """Configura Shopee (partner_id/api_key do app). shop_id e' opcional aqui —
+    normalmente e' preenchido depois, por loja, via fluxo OAuth (conectar loja)."""
     from core.config import set_config
-    
-    partner_id = request.json.get('partnerId', '')
-    shop_id = request.json.get('shopId', '')
-    api_key = request.json.get('apiKey', '')
-    
-    if not all([partner_id, shop_id, api_key]):
-        return jsonify({"error": "Dados incompletos. Forneça partnerId, shopId e apiKey"}), 400
-    
+    data = request.json or {}
+
+    partner_id = data.get('partnerId', '')
+    shop_id = data.get('shopId', '')
+    api_key = data.get('apiKey', '')
+
+    if not partner_id or not api_key:
+        return jsonify({"error": "Forneça partnerId e apiKey"}), 400
+
     set_config("shopee", "partner_id", partner_id)
-    set_config("shopee", "shop_id", shop_id)
     set_config("shopee", "api_key", api_key)
-    
+    if shop_id:
+        set_config("shopee", "shop_id", shop_id)
+
     return jsonify({"success": True, "configurado": True})
 
 @app.route('/api/config/status', methods=['GET'])
@@ -1913,6 +1916,12 @@ def pdv_fechar_turno(id):
     data = request.json or {}; from core.pdv import fechar_turno
     return jsonify(fechar_turno(id, float(data.get("saldo_fechamento",0)), data.get("observacoes","")))
 
+@app.route('/api/pdv/clientes/buscar', methods=['GET'])
+def pdv_buscar_clientes():
+    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
+    from core.pdv import buscar_clientes
+    return jsonify({"data": buscar_clientes(request.args.get("q",""))})
+
 @app.route('/api/pdv/produtos/buscar', methods=['GET'])
 def pdv_buscar_produtos():
     if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
@@ -1925,6 +1934,13 @@ def pdv_cancelar_venda(id):
     data = request.json or {}; from core.pdv import cancelar_venda
     return jsonify(cancelar_venda(id, data.get("motivo",""), data.get("operador",""),
         data.get("operador_id"), data.get("senha","")))
+
+@app.route('/api/pdv/venda/<int:id>/devolver-item', methods=['POST'])
+def pdv_devolver_item(id):
+    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
+    data = request.json or {}; from core.pdv import devolver_item_venda
+    return jsonify(devolver_item_venda(id, float(data.get("quantidade",1)), data.get("motivo",""),
+        data.get("operador",""), data.get("operador_id"), data.get("senha","")))
 
 @app.route('/api/pdv/historico', methods=['GET'])
 def pdv_historico():
@@ -1947,6 +1963,12 @@ def pdv_fechar_caixa(id):
     data = request.json or {}
     from core.pdv import fechar_caixa
     return jsonify(fechar_caixa(id, float(data.get("saldo_final",0)), data.get("operador_id"), data.get("senha","")))
+
+@app.route('/api/pdv/caixa/<int:id>/resumo', methods=['GET'])
+def pdv_resumo_caixa(id):
+    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
+    from core.pdv import resumo_fechamento
+    return jsonify(resumo_fechamento(id))
 
 @app.route('/api/pdv/caixa/<int:id>/sangria', methods=['POST'])
 def pdv_sangria(id):
@@ -1974,16 +1996,56 @@ def pdv_venda():
         itens=data.get("itens",[]),
         pagamentos=data.get("pagamentos",[]),
         cliente=data.get("cliente",""),
+        cliente_id=data.get("cliente_id"),
         operador=data.get("operador",""),
         operador_id=data.get("operador_id"),
         desconto=float(data.get("desconto",0))
     ))
 
+@app.route('/api/pdv/orcamento', methods=['POST'])
+def pdv_criar_orcamento():
+    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
+    data = request.json or {}
+    from core.pdv import criar_orcamento
+    return jsonify(criar_orcamento(
+        cliente=data.get("cliente",""), cliente_id=data.get("cliente_id"),
+        itens=data.get("itens",[]), operador=data.get("operador",""),
+        operador_id=data.get("operador_id"), desconto=float(data.get("desconto",0))
+    ))
+
+@app.route('/api/pdv/orcamento/<int:id>/converter', methods=['POST'])
+def pdv_converter_orcamento(id):
+    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
+    data = request.json or {}
+    from core.pdv import converter_orcamento
+    return jsonify(converter_orcamento(id, data.get("caixa_id",0), data.get("pagamentos",[]),
+        data.get("operador",""), data.get("operador_id")))
+
+@app.route('/api/pdv/venda/<int:id>/cupom', methods=['GET'])
+def pdv_cupom(id):
+    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
+    async def _go():
+        from core import get_db, run_async
+        db = await get_db()
+        v = await db.fetchrow("SELECT * FROM pdv_vendas WHERE id = $1", id)
+        if not v: return {"error": "Venda nao encontrada"}
+        itens = await db.fetch("SELECT * FROM pdv_itens WHERE venda_id = $1 ORDER BY id", id)
+        pgts = await db.fetch("SELECT * FROM pdv_pagamentos WHERE venda_id = $1 ORDER BY id", id)
+        return {
+            "venda": dict(v),
+            "itens": [dict(i) for i in itens],
+            "pagamentos": [dict(p) for p in pgts],
+        }
+    try: return jsonify(run_async(_go()))
+    except Exception as e: return jsonify({"error": str(e)})
+
 @app.route('/api/pdv/<tabela>', methods=['GET'])
 def pdv_list(tabela):
     if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
-    from core.pdv import list as pl, TABLES
+    from core.pdv import list as pl, _list_filtro, TABLES
     if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
+    if tabela == "itens" and request.args.get("venda_id"):
+        return jsonify({"data": _list_filtro(tabela, f"venda_id = ${1}", [int(request.args.get("venda_id"))])})
     return jsonify({"data": pl(tabela)})
 
 @app.route('/api/pdv/<tabela>', methods=['POST'])
