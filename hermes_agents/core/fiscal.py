@@ -1,4 +1,5 @@
 """Fiscal Core — Tributos, Obrigacoes, Notas Fiscais, Integracao Bling"""
+import time
 from core import get_db, run_async, log, hoje
 
 AGENT = "Fiscal Core"
@@ -46,6 +47,8 @@ def _ensure_tables():
             bling_id BIGINT, sincronizado_em TIMESTAMP,
             created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW()
         )""")
+        try: await db.execute("ALTER TABLE fiscal_notas_fiscais ADD COLUMN IF NOT EXISTS dados_brutos_bling JSONB")
+        except: pass
         await db.execute("""CREATE TABLE IF NOT EXISTS fiscal_nfe_itens (
             id SERIAL PRIMARY KEY, nota_id INT REFERENCES fiscal_notas_fiscais(id),
             numero_item INT DEFAULT 1, codigo VARCHAR(50), descricao VARCHAR(200),
@@ -248,84 +251,178 @@ def dashboard() -> dict:
 
 # ── Bling Sync ──
 
+def _num(*candidatos) -> float:
+    """Retorna o primeiro valor numerico nao-None entre varios caminhos possiveis de chave —
+    usado para tolerar variacoes de nomenclatura da API do Bling sem quebrar a sincronizacao."""
+    for c in candidatos:
+        if c is not None:
+            try: return float(c)
+            except (TypeError, ValueError): continue
+    return 0.0
+
+def _mapear_nfe_detalhe(nf: dict) -> dict:
+    """Mapeia o payload de detalhe do Bling (GET /nfe/{id}) para as colunas de
+    fiscal_notas_fiscais. Os valores de tributos usam multiplas chaves candidatas
+    (tributos.totalX / valorX no nivel raiz) pois o formato exato do bloco de impostos
+    na resposta do Bling nao pode ser confirmado sem uma nota real ao vivo — o JSON
+    bruto e' preservado em dados_brutos_bling para correcao posterior se necessario."""
+    contato = nf.get("contato", {}) or {}
+    natureza = nf.get("naturezaOperacao", {}) or {}
+    loja = nf.get("loja", {}) or {}
+    transporte = nf.get("transporte", {}) or {}
+    volumes = transporte.get("volumes", []) or []
+    tributos = nf.get("tributos", {}) or {}
+
+    total_frete = _num(nf.get("valorFrete"), transporte.get("frete"),
+                        sum(_num(v.get("fretePorConta")) for v in volumes) or None)
+
+    return {
+        "numero": str(nf.get("numero", "")),
+        "chave_acesso": nf.get("chaveAcesso", ""),
+        "tipo": "saida" if nf.get("tipo", 0) == 0 else "entrada",
+        "data_emissao": (nf.get("dataEmissao") or "")[:10] or None,
+        "data_operacao": (nf.get("dataOperacao") or "")[:10] or None,
+        "natureza_operacao": natureza.get("descricao", ""),
+        "cfop": natureza.get("cfop", ""),
+        "contato_nome": contato.get("nome", ""),
+        "contato_documento": contato.get("numeroDocumento", ""),
+        "valor_nf": _num(nf.get("total")),
+        "valor_produtos": _num(nf.get("totalProdutos")),
+        "valor_frete": total_frete,
+        "valor_seguro": _num(nf.get("valorSeguro"), transporte.get("valorSeguro")),
+        "valor_desconto": _num(nf.get("desconto"), nf.get("valorDesconto")),
+        "valor_outros": _num(nf.get("outrasDespesas"), nf.get("valorOutros")),
+        "base_icms": _num(tributos.get("baseICMS"), nf.get("baseICMS")),
+        "valor_icms": _num(tributos.get("totalICMS"), tributos.get("valorICMS"), nf.get("valorICMS")),
+        "base_icms_st": _num(tributos.get("baseICMSST"), nf.get("baseICMSST")),
+        "valor_icms_st": _num(tributos.get("totalICMSST"), nf.get("valorICMSST")),
+        "valor_ipi": _num(tributos.get("totalIPI"), nf.get("valorIPI")),
+        "valor_pis": _num(tributos.get("totalPIS"), nf.get("valorPIS")),
+        "valor_cofins": _num(tributos.get("totalCOFINS"), nf.get("valorCOFINS")),
+        "valor_iss": _num(tributos.get("totalISS"), nf.get("valorISS")),
+        "valor_ii": _num(tributos.get("totalII"), nf.get("valorII")),
+        "valor_ir": _num(tributos.get("totalIR"), nf.get("valorIR")),
+        "valor_csll": _num(tributos.get("totalCSLL"), nf.get("valorCSLL")),
+        "valor_inss": _num(tributos.get("totalINSS"), nf.get("valorINSS")),
+        "valor_total_tributos": _num(tributos.get("totalTributos"), nf.get("valorTotalTributos")),
+        "status": {1: "emitida", 2: "cancelada", 3: "inutilizada", 4: "denegada"}.get(nf.get("situacao", 1), "emitida"),
+        "loja_id": loja.get("id"),
+        "xml_url": nf.get("xml") or nf.get("linkXml") or "",
+        "danfe_url": nf.get("danfe") or nf.get("linkDanfe") or "",
+        "modelo": str(nf.get("modelo", "55")),
+    }
+
 def sincronizar_notas_fiscais_bling(pagina: int = 1, limite: int = 100) -> dict:
-    from bling_erp import listar_notas_fiscais as bling_nfe, get_access_token, get_auth_url
+    """Sync completo: lista todas as paginas de notas fiscais e busca o DETALHE de
+    cada uma (GET /nfe/{id}) para importar itens e impostos reais — a listagem
+    (GET /nfe) traz apenas um resumo, sem itens nem tributos."""
+    from bling_erp import listar_notas_fiscais as bling_nfe, get_nfe_completa, get_access_token, get_auth_url
+    import json as _json
     token = get_access_token()
     if not token: return {"error": "Bling nao autenticado", "auth_url": get_auth_url()}
-    r = bling_nfe(pagina, limite)
-    if r.get("error"): return r
-    dados = r.get("data", [])
-    if not dados: return {"sync": 0, "message": "sem dados"}
+
+    notas_resumo = []
+    erros = []
+    pag = pagina
+    while True:
+        r = bling_nfe(pag, limite)
+        dados = r.get("data", [])
+        if not dados or r.get("error"):
+            if r.get("error"): erros.append(f"pag {pag}: {r['error']}")
+            break
+        notas_resumo.extend(dados)
+        if len(dados) < limite:
+            break
+        pag += 1
+    if not notas_resumo:
+        return {"sync": 0, "message": "sem dados", "erros": erros}
+
     async def _go():
         db = await get_db()
         total = 0
-        for nf in dados:
+        for nf_resumo in notas_resumo:
+            bling_id = nf_resumo.get("id")
+            if not bling_id:
+                continue
+            detalhe = None
+            for attempt in range(3):
+                r_detalhe = get_nfe_completa(bling_id)
+                if not r_detalhe.get("error"):
+                    detalhe = r_detalhe.get("data", {})
+                    break
+                if r_detalhe.get("status_code") == 429:
+                    time.sleep(2 ** attempt)
+                    continue
+                erros.append(f"nota {bling_id}: {r_detalhe['error']}")
+                break
+            if not detalhe:
+                detalhe = nf_resumo  # fallback: usa ao menos o resumo da listagem
+
             try:
-                bling_id = nf.get("id")
-                if not bling_id: continue
                 existing = await db.fetchval("SELECT id FROM fiscal_notas_fiscais WHERE bling_id = $1", bling_id)
-                numero = str(nf.get("numero", ""))
-                chave = nf.get("chaveAcesso", "")
-                contato = nf.get("contato", {}) or {}
-                natureza = nf.get("naturezaOperacao", {}) or {}
-                loja = nf.get("loja", {}) or {}
-                transporte = nf.get("transporte", {}) or {}
-                volumes = transporte.get("volumes", []) or []
-                total_frete = sum(float(v.get("fretePorConta", 0) or 0) for v in volumes)
-                data_emissao = (nf.get("dataEmissao") or "")[:10] or None
-                data_operacao = (nf.get("dataOperacao") or "")[:10] or None
-                valor_nf = float(nf.get("total", 0) or 0)
-                valor_produtos = float(nf.get("totalProdutos", 0) or 0)
+                campos = _mapear_nfe_detalhe(detalhe)
+                raw = _json.dumps(detalhe, ensure_ascii=False)
                 if existing:
                     await db.execute("""UPDATE fiscal_notas_fiscais SET
                         numero=$1, chave_acesso=$2, data_emissao=$3::date, data_operacao=$4::date,
                         contato_nome=$5, contato_documento=$6, natureza_operacao=$7,
                         valor_nf=$8, valor_produtos=$9, valor_frete=$10, status=$11,
-                        cfop=$12, loja_id=$13, sincronizado_em=NOW()
-                        WHERE bling_id=$14""",
-                        numero, chave, data_emissao, data_operacao,
-                        contato.get("nome",""), contato.get("numeroDocumento",""),
-                        natureza.get("descricao",""), valor_nf, valor_produtos, total_frete,
-                        {1:"emitida",2:"cancelada",3:"inutilizada",4:"denegada"}.get(nf.get("situacao",1),"emitida"),
-                        natureza.get("cfop",""), loja.get("id"), bling_id)
+                        cfop=$12, loja_id=$13, valor_seguro=$14, valor_desconto=$15, valor_outros=$16,
+                        base_icms=$17, valor_icms=$18, base_icms_st=$19, valor_icms_st=$20,
+                        valor_ipi=$21, valor_pis=$22, valor_cofins=$23, valor_iss=$24,
+                        valor_ii=$25, valor_ir=$26, valor_csll=$27, valor_inss=$28, valor_total_tributos=$29,
+                        xml_url=$30, danfe_url=$31, dados_brutos_bling=$32::jsonb, sincronizado_em=NOW()
+                        WHERE bling_id=$33""",
+                        campos["numero"], campos["chave_acesso"], campos["data_emissao"], campos["data_operacao"],
+                        campos["contato_nome"], campos["contato_documento"], campos["natureza_operacao"],
+                        campos["valor_nf"], campos["valor_produtos"], campos["valor_frete"], campos["status"],
+                        campos["cfop"], campos["loja_id"], campos["valor_seguro"], campos["valor_desconto"], campos["valor_outros"],
+                        campos["base_icms"], campos["valor_icms"], campos["base_icms_st"], campos["valor_icms_st"],
+                        campos["valor_ipi"], campos["valor_pis"], campos["valor_cofins"], campos["valor_iss"],
+                        campos["valor_ii"], campos["valor_ir"], campos["valor_csll"], campos["valor_inss"], campos["valor_total_tributos"],
+                        campos["xml_url"], campos["danfe_url"], raw, bling_id)
+                    nota_id = existing
+                    await db.execute("DELETE FROM fiscal_nfe_itens WHERE nota_id = $1", nota_id)
                 else:
-                    await db.execute("""INSERT INTO fiscal_notas_fiscais
+                    nota_id = await db.fetchval("""INSERT INTO fiscal_notas_fiscais
                         (numero, modelo, chave_acesso, tipo, data_emissao, data_operacao,
                          natureza_operacao, cfop, contato_nome, contato_documento,
-                         valor_nf, valor_produtos, valor_frete, status, loja_id, bling_id, sincronizado_em)
-                        VALUES ($1,$2,$3,$4,$5::date,$6::date,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW())""",
-                        numero, str(nf.get("modelo","55")), chave,
-                        "saida" if nf.get("tipo",0) == 0 else "entrada",
-                        data_emissao, data_operacao,
-                        natureza.get("descricao",""), natureza.get("cfop",""),
-                        contato.get("nome",""), contato.get("numeroDocumento",""),
-                        valor_nf, valor_produtos, total_frete,
-                        {1:"emitida",2:"cancelada",3:"inutilizada",4:"denegada"}.get(nf.get("situacao",1),"emitida"),
-                        loja.get("id"), bling_id)
-                # Sync itens
-                nota_id = await db.fetchval("SELECT id FROM fiscal_notas_fiscais WHERE bling_id = $1", bling_id)
-                if nota_id:
-                    itens = nf.get("itens", []) or []
-                    if itens and not existing:
-                        for idx, item in enumerate(itens, 1):
-                            await db.execute("""INSERT INTO fiscal_nfe_itens
-                                (nota_id, numero_item, codigo, descricao, ncm, cfop, unidade,
-                                 quantidade, valor_unitario, valor_total, base_icms, valor_icms, aliquota_icms)
-                                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)""",
-                                nota_id, idx,
-                                item.get("codigo",""), item.get("descricao",""),
-                                item.get("ncm",""), item.get("cfop",""),
-                                item.get("unidade","UN"),
-                                float(item.get("quantidade",0) or 0),
-                                float(item.get("valorUnitario",0) or 0),
-                                float(item.get("valorTotal",0) or 0),
-                                float(item.get("baseICMS",0) or 0),
-                                float(item.get("valorICMS",0) or 0),
-                                float(item.get("aliquotaICMS",0) or 0))
+                         valor_nf, valor_produtos, valor_frete, valor_seguro, valor_desconto, valor_outros,
+                         base_icms, valor_icms, base_icms_st, valor_icms_st, valor_ipi, valor_pis, valor_cofins,
+                         valor_iss, valor_ii, valor_ir, valor_csll, valor_inss, valor_total_tributos,
+                         status, loja_id, xml_url, danfe_url, dados_brutos_bling, bling_id, sincronizado_em)
+                        VALUES ($1,$2,$3,$4,$5::date,$6::date,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
+                                $20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34::jsonb,$35,NOW())
+                        RETURNING id""",
+                        campos["numero"], campos["modelo"], campos["chave_acesso"], campos["tipo"],
+                        campos["data_emissao"], campos["data_operacao"], campos["natureza_operacao"], campos["cfop"],
+                        campos["contato_nome"], campos["contato_documento"], campos["valor_nf"], campos["valor_produtos"],
+                        campos["valor_frete"], campos["valor_seguro"], campos["valor_desconto"], campos["valor_outros"],
+                        campos["base_icms"], campos["valor_icms"], campos["base_icms_st"], campos["valor_icms_st"],
+                        campos["valor_ipi"], campos["valor_pis"], campos["valor_cofins"], campos["valor_iss"],
+                        campos["valor_ii"], campos["valor_ir"], campos["valor_csll"], campos["valor_inss"],
+                        campos["valor_total_tributos"], campos["status"], campos["loja_id"],
+                        campos["xml_url"], campos["danfe_url"], raw, bling_id)
+
+                itens = detalhe.get("itens", []) or []
+                for idx, item in enumerate(itens, 1):
+                    await db.execute("""INSERT INTO fiscal_nfe_itens
+                        (nota_id, numero_item, codigo, descricao, ncm, cest, cfop, unidade,
+                         quantidade, valor_unitario, valor_total, valor_desconto, base_icms, valor_icms, aliquota_icms,
+                         base_icms_st, valor_icms_st, valor_ipi, valor_pis, valor_cofins)
+                        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)""",
+                        nota_id, idx,
+                        item.get("codigo", ""), item.get("descricao", ""),
+                        item.get("ncm", ""), item.get("cest", ""), item.get("cfop", ""),
+                        item.get("unidade", "UN"),
+                        _num(item.get("quantidade")), _num(item.get("valorUnitario")), _num(item.get("valor"), item.get("valorTotal")),
+                        _num(item.get("valorDesconto")), _num(item.get("baseICMS")), _num(item.get("valorICMS")), _num(item.get("aliquotaICMS")),
+                        _num(item.get("baseICMSST")), _num(item.get("valorICMSST")), _num(item.get("valorIPI")),
+                        _num(item.get("valorPIS")), _num(item.get("valorCOFINS")))
                 total += 1
             except Exception as e:
-                log(AGENT, f"Erro sync NF {nf.get('numero')}: {e}")
-        return {"sync": total}
+                log(AGENT, f"Erro sync NF {nf_resumo.get('numero')}: {e}")
+        return {"sync": total, "erros": erros}
     return run_async(_go())
 
 def sincronizar_contas_receber_bling(pagina: int = 1, limite: int = 100) -> dict:

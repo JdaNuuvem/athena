@@ -1,4 +1,5 @@
 """Vendas Core — Pedidos, Itens, Pagamentos, Dashboard, Integracao Bling"""
+import time
 from core import get_db, run_async, log, hoje
 
 AGENT = "Vendas Core"
@@ -18,6 +19,8 @@ def _ensure_tables():
             bling_id BIGINT, bling_numero VARCHAR(30), loja_id INT,
             observacoes TEXT, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW()
         )""")
+        try: await db.execute("ALTER TABLE vendas_pedidos ADD COLUMN IF NOT EXISTS transportadora_nome VARCHAR(200)")
+        except: pass
         await db.execute("""CREATE TABLE IF NOT EXISTS vendas_itens (
             id SERIAL PRIMARY KEY, pedido_id INT REFERENCES vendas_pedidos(id),
             numero_item INT DEFAULT 1, sku VARCHAR(50), descricao VARCHAR(200),
@@ -211,63 +214,129 @@ def dashboard(dias: int = 30) -> dict:
 
 # ── Bling Sync ──
 
+MAPA_STATUS_BLING = {1:"pendente", 2:"aberto", 6:"concluido", 9:"cancelado", 12:"em_andamento", 15:"faturado", 18:"enviado", 21:"entregue", 24:"devolvido"}
+
+def _mapear_pedido_detalhe(ped: dict) -> dict:
+    """Mapeia o payload de detalhe do Bling (GET /pedidos/vendas/{id}) para vendas_pedidos.
+    Traz frete, vendedor e transportadora que a listagem (GET /pedidos/vendas) nao inclui."""
+    contato = ped.get("contato", {}) or {}
+    situacao = ped.get("situacao", {}) or {}
+    sit_id = situacao.get("id") if isinstance(situacao, dict) else situacao
+    loja = ped.get("loja", {}) or {}
+    vendedor = ped.get("vendedor", {}) or {}
+    vendedor_contato = vendedor.get("contato", {}) if isinstance(vendedor, dict) else {}
+    transporte = ped.get("transporte", {}) or {}
+    transportadora = transporte.get("transportadora", {}) or transporte.get("contato", {}) or {}
+
+    return {
+        "cliente": contato.get("nome", ""),
+        "cliente_documento": contato.get("numeroDocumento", ""),
+        "total": float(ped.get("total", 0) or 0),
+        "desconto": float(ped.get("desconto", 0) or transporte.get("desconto", 0) or 0),
+        "acrescimo": float(ped.get("outrasDespesas", 0) or ped.get("acrescimo", 0) or 0),
+        "frete": float(transporte.get("frete", 0) or ped.get("valorFrete", 0) or 0),
+        "status": MAPA_STATUS_BLING.get(sit_id, "aberto"),
+        "data": (ped.get("data") or ped.get("dataEmissao") or "")[:10] or None,
+        "data_entrega": (ped.get("dataSaida") or ped.get("dataPrevistaEntrega") or "")[:10] or None,
+        "vendedor": vendedor_contato.get("nome", "") or vendedor.get("nome", ""),
+        "loja_id": loja.get("id"),
+        "observacoes": ped.get("observacoes", "") or ped.get("observacoesInternas", ""),
+        "transportadora_nome": transportadora.get("nome", ""),
+    }
+
 def sincronizar_pedidos_bling(pagina: int = 1, limite: int = 100) -> dict:
-    from bling_erp import listar_pedidos as bling_pedidos, get_access_token, get_auth_url
+    """Sync completo: lista todas as paginas de pedidos e busca o DETALHE de cada um
+    (GET /pedidos/vendas/{id}) para importar frete, vendedor, transportadora e parcelas —
+    dados que a listagem (GET /pedidos/vendas) nao traz."""
+    from bling_erp import listar_pedidos as bling_pedidos, get_pedido_detalhe, get_access_token, get_auth_url
     token = get_access_token()
     if not token: return {"error": "Bling nao autenticado", "auth_url": get_auth_url()}
-    r = bling_pedidos(pagina, limite)
-    if r.get("error"): return r
-    dados = r.get("data", [])
-    if not dados: return {"sync": 0, "message": "sem dados"}
+
+    pedidos_resumo = []
+    erros = []
+    pag = pagina
+    while True:
+        r = bling_pedidos(pag, limite)
+        dados = r.get("data", [])
+        if not dados or r.get("error"):
+            if r.get("error"): erros.append(f"pag {pag}: {r['error']}")
+            break
+        pedidos_resumo.extend(dados)
+        if len(dados) < limite:
+            break
+        pag += 1
+    if not pedidos_resumo:
+        return {"sync": 0, "message": "sem dados", "erros": erros}
+
     async def _go():
         db = await get_db()
         total = 0
-        mapa_status = {1:"pendente", 2:"aberto", 6:"concluido", 9:"cancelado", 12:"em_andamento", 15:"faturado", 18:"enviado", 21:"entregue", 24:"devolvido"}
-        for ped in dados:
+        for ped_resumo in pedidos_resumo:
+            bling_id = ped_resumo.get("id")
+            if not bling_id:
+                continue
+            detalhe = None
+            for attempt in range(3):
+                r_detalhe = get_pedido_detalhe(bling_id)
+                if not r_detalhe.get("error"):
+                    detalhe = r_detalhe.get("data", {})
+                    break
+                if r_detalhe.get("status_code") == 429:
+                    time.sleep(2 ** attempt)
+                    continue
+                erros.append(f"pedido {bling_id}: {r_detalhe['error']}")
+                break
+            if not detalhe:
+                detalhe = ped_resumo  # fallback: usa ao menos o resumo da listagem
+
             try:
-                bling_id = ped.get("id")
-                if not bling_id: continue
                 existing = await db.fetchval("SELECT id FROM vendas_pedidos WHERE bling_id = $1", bling_id)
-                contato = ped.get("contato", {}) or {}
-                data_str = (ped.get("data") or ped.get("dataEmissao") or "")[:10] or None
-                data_saida = (ped.get("dataSaida") or "")[:10] or None
-                total_val = float(ped.get("total", 0) or 0)
-                situacao = ped.get("situacao", {}) or {}
-                sit_id = situacao.get("id") if isinstance(situacao, dict) else situacao
-                status = mapa_status.get(sit_id, "aberto")
-                loja = ped.get("loja", {}) or {}
+                campos = _mapear_pedido_detalhe(detalhe)
                 if existing:
                     await db.execute("""UPDATE vendas_pedidos SET
-                        cliente=$1, total=$2, status=$3, data=$4::date, data_entrega=$5::date,
-                        marketplace='bling', loja_id=$6, observacoes=$7, updated_at=NOW()
-                        WHERE bling_id=$8""",
-                        contato.get("nome",""), total_val, status, data_str, data_saida,
-                        loja.get("id"), ped.get("observacoes",""), bling_id)
+                        cliente=$1, cliente_documento=$2, total=$3, desconto=$4, acrescimo=$5, frete=$6,
+                        status=$7, data=$8::date, data_entrega=$9::date, vendedor=$10, transportadora_nome=$11,
+                        marketplace='bling', loja_id=$12, observacoes=$13, updated_at=NOW()
+                        WHERE bling_id=$14""",
+                        campos["cliente"], campos["cliente_documento"], campos["total"], campos["desconto"],
+                        campos["acrescimo"], campos["frete"], campos["status"], campos["data"], campos["data_entrega"],
+                        campos["vendedor"], campos["transportadora_nome"], campos["loja_id"], campos["observacoes"], bling_id)
+                    pid = existing
+                    await db.execute("DELETE FROM vendas_itens WHERE pedido_id = $1", pid)
+                    await db.execute("DELETE FROM vendas_pagamentos WHERE pedido_id = $1", pid)
                 else:
-                    await db.execute("""INSERT INTO vendas_pedidos
-                        (cliente, cliente_documento, total, status, data, data_entrega,
-                         marketplace, origem, bling_id, bling_numero, loja_id, observacoes)
-                        VALUES ($1,$2,$3,$4,$5::date,$6::date,'bling','bling',$7,$8,$9,$10)""",
-                        contato.get("nome",""), contato.get("numeroDocumento",""),
-                        total_val, status, data_str, data_saida,
-                        bling_id, str(ped.get("numero","")), loja.get("id"),
-                        ped.get("observacoes",""))
-                # Sync itens
-                pid = await db.fetchval("SELECT id FROM vendas_pedidos WHERE bling_id = $1", bling_id)
-                if pid and not existing:
-                    itens = ped.get("itens", []) or []
-                    for idx, item in enumerate(itens, 1):
-                        qtd = float(item.get("quantidade", 0) or 0)
-                        vu = float(item.get("valorUnitario", 0) or 0)
-                        vt = float(item.get("valor", 0) or 0) or (qtd * vu)
-                        await db.execute("""INSERT INTO vendas_itens
-                            (pedido_id, numero_item, sku, descricao, quantidade, valor_unitario, valor_total)
-                            VALUES ($1,$2,$3,$4,$5,$6,$7)""",
-                            pid, idx, item.get("codigo",""), item.get("descricao",""), qtd, vu, vt)
+                    pid = await db.fetchval("""INSERT INTO vendas_pedidos
+                        (cliente, cliente_documento, total, desconto, acrescimo, frete, status, data, data_entrega,
+                         vendedor, transportadora_nome, marketplace, origem, bling_id, bling_numero, loja_id, observacoes)
+                        VALUES ($1,$2,$3,$4,$5,$6,$7,$8::date,$9::date,$10,$11,'bling','bling',$12,$13,$14,$15)
+                        RETURNING id""",
+                        campos["cliente"], campos["cliente_documento"], campos["total"], campos["desconto"],
+                        campos["acrescimo"], campos["frete"], campos["status"], campos["data"], campos["data_entrega"],
+                        campos["vendedor"], campos["transportadora_nome"], bling_id, str(detalhe.get("numero", "")), campos["loja_id"], campos["observacoes"])
+
+                itens = detalhe.get("itens", []) or []
+                for idx, item in enumerate(itens, 1):
+                    qtd = float(item.get("quantidade", 0) or 0)
+                    vu = float(item.get("valorUnitario", 0) or 0)
+                    vt = float(item.get("valor", 0) or 0) or (qtd * vu)
+                    await db.execute("""INSERT INTO vendas_itens
+                        (pedido_id, numero_item, sku, descricao, quantidade, valor_unitario, valor_total)
+                        VALUES ($1,$2,$3,$4,$5,$6,$7)""",
+                        pid, idx, item.get("codigo",""), item.get("descricao",""), qtd, vu, vt)
+
+                parcelas = detalhe.get("parcelas", []) or []
+                for parcela in parcelas:
+                    forma_pg = parcela.get("formaPagamento", {}) or {}
+                    await db.execute("""INSERT INTO vendas_pagamentos
+                        (pedido_id, forma, valor, parcelas, data)
+                        VALUES ($1,$2,$3,$4,$5::date)""",
+                        pid, forma_pg.get("descricao", "") or "nao_informado",
+                        float(parcela.get("valor", 0) or 0), 1,
+                        (parcela.get("data") or "")[:10] or None)
                 total += 1
             except Exception as e:
-                log(AGENT, f"Erro sync pedido {ped.get('numero')}: {e}")
-        return {"sync": total}
+                log(AGENT, f"Erro sync pedido {ped_resumo.get('numero')}: {e}")
+        return {"sync": total, "erros": erros}
     return run_async(_go())
 
 # ── Seed ──
