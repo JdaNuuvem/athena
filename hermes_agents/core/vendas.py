@@ -252,10 +252,12 @@ def sincronizar_pedidos_bling(pagina: int = 1, limite: int = 100) -> dict:
     token = get_access_token()
     if not token: return {"error": "Bling nao autenticado", "auth_url": get_auth_url()}
 
+    MAX_PAGINAS = 50  # limite de seguranca: evita loop/chamadas ilimitadas em contas com muitos pedidos
     pedidos_resumo = []
     erros = []
     pag = pagina
-    while True:
+    mais_paginas = False
+    for _ in range(MAX_PAGINAS):
         r = bling_pedidos(pag, limite)
         dados = r.get("data", [])
         if not dados or r.get("error"):
@@ -265,6 +267,8 @@ def sincronizar_pedidos_bling(pagina: int = 1, limite: int = 100) -> dict:
         if len(dados) < limite:
             break
         pag += 1
+    else:
+        mais_paginas = True  # atingiu MAX_PAGINAS sem esgotar a listagem — rode de novo para continuar
     if not pedidos_resumo:
         return {"sync": 0, "message": "sem dados", "erros": erros}
 
@@ -336,7 +340,7 @@ def sincronizar_pedidos_bling(pagina: int = 1, limite: int = 100) -> dict:
                 total += 1
             except Exception as e:
                 log(AGENT, f"Erro sync pedido {ped_resumo.get('numero')}: {e}")
-        return {"sync": total, "erros": erros}
+        return {"sync": total, "erros": erros, "mais_paginas": mais_paginas}
     return run_async(_go())
 
 # ── Seed ──
