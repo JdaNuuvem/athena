@@ -145,16 +145,15 @@ def _ensure_tables():
             motivo TEXT, valor DECIMAL(12,2) DEFAULT 0,
             operador VARCHAR(100), data TIMESTAMP DEFAULT NOW()
         )""")
-        # Seed operador padrao — senha aleatoria (nao um default fraco tipo "admin"),
-        # exibida uma unica vez no log para o primeiro acesso.
+        # Seed operador padrao SEM senha — nao ha default (fraco ou gerado) para logar
+        # ou vazar. Como login_operador()/verificar_operador() exigem senha cadastrada,
+        # este operador fica inerte ate alguem com sessao autenticada definir uma senha
+        # via Cadastros > Operadores (PUT /api/pdv/operadores/<id>).
         op_count = await db.fetchval("SELECT COUNT(*) FROM pdv_operadores")
         if op_count == 0:
-            import secrets
-            senha_inicial = secrets.token_urlsafe(12)
-            salt, pw_hash = _hash_senha(senha_inicial)
             await db.execute("INSERT INTO pdv_operadores (nome, senha, role, desconto_maximo_percent) VALUES ($1,$2,$3,$4)",
-                "Admin", f"{salt}:{pw_hash}", "admin", 100)
-            log(AGENT, f"Operador PDV padrao criado: nome=Admin senha={senha_inicial} (troque apos o primeiro acesso)")
+                "Admin", None, "admin", 100)
+            log(AGENT, "Operador PDV padrao 'Admin' criado sem senha — defina uma senha em Cadastros > Operadores antes de usar o PDV")
 
         await db.execute("""CREATE TABLE IF NOT EXISTS pdv_nfce (
             id SERIAL PRIMARY KEY, venda_id INT REFERENCES pdv_vendas(id),
