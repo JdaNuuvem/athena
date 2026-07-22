@@ -37,9 +37,9 @@ def login_operador(nome: str, senha: str) -> dict:
             return {"error": "Operador nao encontrado ou inativo"}
         stored = row["senha"] or ""
         if not stored:
-            # operador sem senha: permite acesso (legado)
-            return {"id": row["id"], "nome": row["nome"], "role": row["role"],
-                    "desconto_maximo_percent": float(row.get("desconto_maximo_percent") or 0), "autenticado": True}
+            return {"error": "Operador sem senha cadastrada — defina uma senha antes de logar"}
+        if not senha:
+            return {"error": "Senha obrigatoria"}
         parts = stored.split(":", 1)
         if len(parts) != 2:
             return {"error": "Senha invalida no cadastro"}
@@ -56,9 +56,8 @@ def login_operador(nome: str, senha: str) -> dict:
     except Exception as e: return {"error": str(e)}
 
 def verificar_operador(operador_id: int, senha: str = "") -> dict:
-    """Valida operador ativo. Se o operador tiver senha cadastrada, a senha e' obrigatoria
-    e verificada — a checagem depende de o OPERADOR ter senha, nunca de o chamador ter
-    ou nao enviado uma (uma senha vazia nao pode pular a verificacao)."""
+    """Valida operador ativo + senha (sempre obrigatoria — nenhum operador pode operar
+    sem senha cadastrada, e uma senha vazia enviada pelo chamador nunca pula a checagem)."""
     if not operador_id:
         return {"error": "operador_id obrigatorio"}
     async def _go():
@@ -67,19 +66,20 @@ def verificar_operador(operador_id: int, senha: str = "") -> dict:
         if not row:
             return {"error": "Operador nao encontrado ou inativo"}
         stored = row["senha"] or ""
-        if stored:
-            if not senha:
-                return {"error": "Senha obrigatoria"}
-            parts = stored.split(":", 1)
-            if len(parts) != 2:
-                return {"error": "Hash de senha invalido"}
-            salt, hs = parts
-            valido, precisa_migrar = _verificar_senha(senha, salt, hs)
-            if not valido:
-                return {"error": "Senha incorreta"}
-            if precisa_migrar:
-                novo_salt, novo_hash = _hash_senha(senha)
-                await db.execute("UPDATE pdv_operadores SET senha = $1 WHERE id = $2", f"{novo_salt}:{novo_hash}", row["id"])
+        if not stored:
+            return {"error": "Operador sem senha cadastrada — defina uma senha antes de autorizar operacoes"}
+        if not senha:
+            return {"error": "Senha obrigatoria"}
+        parts = stored.split(":", 1)
+        if len(parts) != 2:
+            return {"error": "Hash de senha invalido"}
+        salt, hs = parts
+        valido, precisa_migrar = _verificar_senha(senha, salt, hs)
+        if not valido:
+            return {"error": "Senha incorreta"}
+        if precisa_migrar:
+            novo_salt, novo_hash = _hash_senha(senha)
+            await db.execute("UPDATE pdv_operadores SET senha = $1 WHERE id = $2", f"{novo_salt}:{novo_hash}", row["id"])
         return {"ok": True, "id": row["id"], "nome": row["nome"], "role": row["role"]}
     try: return run_async(_go())
     except Exception as e: return {"error": str(e)}
@@ -145,12 +145,16 @@ def _ensure_tables():
             motivo TEXT, valor DECIMAL(12,2) DEFAULT 0,
             operador VARCHAR(100), data TIMESTAMP DEFAULT NOW()
         )""")
-        # Seed operador padrao
+        # Seed operador padrao — senha aleatoria (nao um default fraco tipo "admin"),
+        # exibida uma unica vez no log para o primeiro acesso.
         op_count = await db.fetchval("SELECT COUNT(*) FROM pdv_operadores")
         if op_count == 0:
-            salt, pw_hash = _hash_senha("admin")
+            import secrets
+            senha_inicial = secrets.token_urlsafe(12)
+            salt, pw_hash = _hash_senha(senha_inicial)
             await db.execute("INSERT INTO pdv_operadores (nome, senha, role, desconto_maximo_percent) VALUES ($1,$2,$3,$4)",
                 "Admin", f"{salt}:{pw_hash}", "admin", 100)
+            log(AGENT, f"Operador PDV padrao criado: nome=Admin senha={senha_inicial} (troque apos o primeiro acesso)")
 
         await db.execute("""CREATE TABLE IF NOT EXISTS pdv_nfce (
             id SERIAL PRIMARY KEY, venda_id INT REFERENCES pdv_vendas(id),
@@ -236,14 +240,19 @@ def delete(t: str, i: int):
 
 # ── Operacoes ──
 
-def _exigir_operador(operador_id, senha: str = ""):
+_ROLES_GERENCIAIS = {"admin", "gerente"}
+
+def _exigir_operador(operador_id, senha: str = "", roles_permitidas: set = None):
     """Exige identificacao de operador valida (operador_id sempre obrigatorio — nao pode
-    ser omitido para pular a verificacao). Retorna dict de erro, ou None se autorizado."""
+    ser omitido para pular a verificacao). Se roles_permitidas for informado, tambem exige
+    que o operador tenha uma dessas roles. Retorna dict de erro, ou None se autorizado."""
     if not operador_id:
         return {"error": "operador_id obrigatorio"}
     v = verificar_operador(operador_id, senha)
     if v.get("error"):
         return v
+    if roles_permitidas and v.get("role") not in roles_permitidas:
+        return {"error": f"Operacao restrita a: {', '.join(sorted(roles_permitidas))}"}
     return None
 
 def abrir_caixa(operador: str, saldo_inicial: float = 0, operador_id: int = None, senha: str = "") -> dict:
@@ -252,7 +261,7 @@ def abrir_caixa(operador: str, saldo_inicial: float = 0, operador_id: int = None
     return create("caixas", {"operador": operador, "saldo_inicial": saldo_inicial, "status": "aberto", "data_abertura": hoje()})
 
 def fechar_caixa(caixa_id: int, saldo_final: float, operador_id: int = None, senha: str = "") -> dict:
-    erro = _exigir_operador(operador_id, senha)
+    erro = _exigir_operador(operador_id, senha, _ROLES_GERENCIAIS)
     if erro: return erro
     async def _go():
         db = await get_db()
@@ -344,12 +353,12 @@ def historico_vendas(caixa_id: int = None, data_inicio: str = None, data_fim: st
     except: return []
 
 def sangria(caixa_id: int, valor: float, motivo: str, operador: str, operador_id: int = None, senha: str = "") -> dict:
-    erro = _exigir_operador(operador_id, senha)
+    erro = _exigir_operador(operador_id, senha, _ROLES_GERENCIAIS)
     if erro: return erro
     return create("sangrias", {"caixa_id": caixa_id, "valor": valor, "motivo": motivo, "operador": operador})
 
 def suprimento(caixa_id: int, valor: float, motivo: str, operador: str, operador_id: int = None, senha: str = "") -> dict:
-    erro = _exigir_operador(operador_id, senha)
+    erro = _exigir_operador(operador_id, senha, _ROLES_GERENCIAIS)
     if erro: return erro
     return create("suprimentos", {"caixa_id": caixa_id, "valor": valor, "motivo": motivo, "operador": operador})
 
