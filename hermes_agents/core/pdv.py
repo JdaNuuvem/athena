@@ -95,17 +95,23 @@ def _ensure_tables():
         )""")
         await db.execute("""CREATE TABLE IF NOT EXISTS pdv_vendas (
             id SERIAL PRIMARY KEY, caixa_id INT REFERENCES pdv_caixas(id),
-            numero VARCHAR(30), cliente VARCHAR(100), total DECIMAL(12,2) DEFAULT 0,
+            numero VARCHAR(30), cliente VARCHAR(100), cliente_id INT,
+            total DECIMAL(12,2) DEFAULT 0,
             desconto DECIMAL(12,2) DEFAULT 0, status VARCHAR(20) DEFAULT 'finalizada',
             tipo VARCHAR(20) DEFAULT 'venda', data TIMESTAMP DEFAULT NOW(),
             operador VARCHAR(100), observacoes TEXT
         )""")
+        try: await db.execute("ALTER TABLE pdv_vendas ADD COLUMN IF NOT EXISTS cliente_id INT")
+        except: pass
         await db.execute("""CREATE TABLE IF NOT EXISTS pdv_itens (
             id SERIAL PRIMARY KEY, venda_id INT REFERENCES pdv_vendas(id),
             produto_codigo VARCHAR(50), descricao VARCHAR(200),
             quantidade DECIMAL(12,3) DEFAULT 1, unidade VARCHAR(10) DEFAULT 'UN',
-            valor_unitario DECIMAL(12,2) DEFAULT 0, valor_total DECIMAL(12,2) DEFAULT 0
+            valor_unitario DECIMAL(12,2) DEFAULT 0, desconto DECIMAL(12,2) DEFAULT 0,
+            valor_total DECIMAL(12,2) DEFAULT 0
         )""")
+        try: await db.execute("ALTER TABLE pdv_itens ADD COLUMN IF NOT EXISTS desconto DECIMAL(12,2) DEFAULT 0")
+        except: pass
         await db.execute("""CREATE TABLE IF NOT EXISTS pdv_pagamentos (
             id SERIAL PRIMARY KEY, venda_id INT REFERENCES pdv_vendas(id),
             forma VARCHAR(30) NOT NULL, valor DECIMAL(12,2) DEFAULT 0,
@@ -168,10 +174,12 @@ _ensure_tables()
 
 # ── CRUD ──
 
-def _list(t: str, cols="*", order="id DESC", limit=100) -> list:
+def _list(t: str, where: str = "", params: list = None, cols="*", order="id DESC", limit=500) -> list:
     async def _go():
         db = await get_db()
-        rows = await db.fetch(f"SELECT {cols} FROM {t} ORDER BY {order} LIMIT {limit}")
+        clause = f"WHERE {where}" if where else ""
+        q = f"SELECT {cols} FROM {t} {clause} ORDER BY {order} LIMIT {limit}"
+        rows = await db.fetch(q, *(params or []))
         result = []
         for r in rows:
             d = dict(r)
@@ -181,6 +189,10 @@ def _list(t: str, cols="*", order="id DESC", limit=100) -> list:
         return result
     try: return run_async(_go())
     except Exception as e: log(AGENT, f"list {t}: {e}"); return []
+
+def _list_filtro(t: str, where: str = "", params: list = None) -> list:
+    extra = {"operadores":"pdv_operadores","turnos":"pdv_turnos","devolucoes":"pdv_devolucoes"}
+    return _list(extra.get(t, f"pdv_{t}"), where=where, params=params)
 
 def _get(t: str, id: int) -> dict:
     async def _go():
@@ -267,15 +279,24 @@ def fechar_caixa(caixa_id: int, saldo_final: float, operador_id: int = None, sen
         total_vendas = await db.fetchval("SELECT COALESCE(SUM(total),0) FROM pdv_vendas WHERE caixa_id = $1 AND status = 'finalizada'", caixa_id)
         sangrias = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM pdv_sangrias WHERE caixa_id = $1", caixa_id)
         suprimentos = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM pdv_suprimentos WHERE caixa_id = $1", caixa_id)
+        # vendas em dinheiro (unica forma com troco fisico)
+        vendas_dinheiro = await db.fetchval("""
+            SELECT COALESCE(SUM(p.valor),0) FROM pdv_pagamentos p
+            JOIN pdv_vendas v ON v.id = p.venda_id
+            WHERE v.caixa_id = $1 AND v.status = 'finalizada' AND p.forma = 'dinheiro'
+        """, caixa_id)
         row = await db.fetchrow("""UPDATE pdv_caixas SET status='fechado', saldo_final=$1, data_fechamento=NOW()
             WHERE id=$2 RETURNING *""", saldo_final, caixa_id)
+        saldo_inicial = float(row["saldo_inicial"] if row else 0)
+        saldo_esperado_cash = saldo_inicial + float(vendas_dinheiro or 0) - float(sangrias or 0) + float(suprimentos or 0)
         return {
             "caixa": dict(row) if row else {},
             "total_vendas": float(total_vendas or 0),
+            "vendas_dinheiro": float(vendas_dinheiro or 0),
             "sangrias": float(sangrias or 0),
             "suprimentos": float(suprimentos or 0),
-            "saldo_esperado": float(saldo_final),
-            "diferenca": float(saldo_final) - float((row["saldo_inicial"] if row else 0) + (total_vendas or 0) - (sangrias or 0) + (suprimentos or 0)),
+            "saldo_esperado_cash": round(saldo_esperado_cash, 2),
+            "diferenca": round(float(saldo_final) - saldo_esperado_cash, 2),
         }
     try:
         result = run_async(_go())
@@ -284,6 +305,38 @@ def fechar_caixa(caixa_id: int, saldo_final: float, operador_id: int = None, sen
             ao_fechar_caixa_pdv(caixa_id)
         except: pass
         return result
+    except Exception as e: return {"error": str(e)}
+
+def resumo_fechamento(caixa_id: int) -> dict:
+    """Retorna quebra do caixa: saldo inicial, vendas por forma, sangrias, suprimentos, saldo esperado."""
+    async def _go():
+        db = await get_db()
+        caixa = await db.fetchrow("SELECT * FROM pdv_caixas WHERE id = $1", caixa_id)
+        if not caixa: return {"error": "Caixa nao encontrado"}
+        inicial = float(caixa["saldo_inicial"] or 0)
+        sangrias = float((await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM pdv_sangrias WHERE caixa_id = $1", caixa_id)) or 0)
+        suprimentos = float((await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM pdv_suprimentos WHERE caixa_id = $1", caixa_id)) or 0)
+        # Totais por forma de pagamento
+        pgto_rows = await db.fetch("""
+            SELECT p.forma, COALESCE(SUM(p.valor),0) AS total
+            FROM pdv_pagamentos p
+            JOIN pdv_vendas v ON v.id = p.venda_id
+            WHERE v.caixa_id = $1 AND v.status = 'finalizada'
+            GROUP BY p.forma ORDER BY total DESC
+        """, caixa_id)
+        vendas_por_forma = {r["forma"]: float(r["total"]) for r in pgto_rows}
+        total_vendas = sum(vendas_por_forma.values())
+        dinheiro_esperado = inicial + vendas_por_forma.get("dinheiro", 0) - sangrias + suprimentos
+        return {
+            "caixa_id": caixa_id,
+            "saldo_inicial": inicial,
+            "vendas_por_forma": vendas_por_forma,
+            "total_vendas": total_vendas,
+            "sangrias": sangrias,
+            "suprimentos": suprimentos,
+            "saldo_esperado_dinheiro": round(dinheiro_esperado, 2),
+        }
+    try: return run_async(_go())
     except Exception as e: return {"error": str(e)}
 
 
@@ -318,6 +371,22 @@ def buscar_produtos(q: str, limit: int = 15) -> list:
     try: return run_async(_go())
     except: return []
 
+def buscar_clientes(q: str, limit: int = 10) -> list:
+    """Autocomplete de clientes: busca por nome, documento, telefone"""
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch("""
+            SELECT id, nome, tipo, documento, telefone, email
+            FROM cad_clientes
+            WHERE status = 'ativo' AND (
+                nome ILIKE $1 OR documento ILIKE $2 OR telefone ILIKE $2
+            )
+            ORDER BY nome LIMIT $3
+        """, f"%{q}%", f"%{q.replace('.','').replace('-','').replace('/','')}%", limit)
+        return [dict(r) for r in rows]
+    try: return run_async(_go())
+    except: return []
+
 def cancelar_venda(venda_id: int, motivo: str = "", operador: str = "", operador_id: int = None, senha: str = "") -> dict:
     erro = _exigir_operador(operador_id, senha)
     if erro: return erro
@@ -331,6 +400,32 @@ def cancelar_venda(venda_id: int, motivo: str = "", operador: str = "", operador
         await db.execute("INSERT INTO pdv_devolucoes (venda_id, motivo, valor, operador) VALUES ($1,$2,$3,$4)",
             venda_id, motivo, float(venda["total"] or 0), operador)
         return {"success": True, "venda_id": venda_id}
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
+
+def devolver_item_venda(item_id: int, quantidade: float, motivo: str = "", operador: str = "", operador_id: int = None, senha: str = "") -> dict:
+    """Devolucao parcial: remove qtd de um item da venda, ajusta total, registra devolucao"""
+    erro = _exigir_operador(operador_id, senha)
+    if erro: return erro
+    async def _go():
+        db = await get_db()
+        item = await db.fetchrow("SELECT i.*, v.total AS venda_total, v.status AS venda_status FROM pdv_itens i JOIN pdv_vendas v ON v.id = i.venda_id WHERE i.id = $1", item_id)
+        if not item: return {"error": "Item nao encontrado"}
+        if item["venda_status"] == "cancelada": return {"error": "Venda ja cancelada"}
+        if item["quantidade"] < quantidade: return {"error": f"Quantidade insuficiente (max: {item['quantidade']})"}
+        valor_devolvido = round(quantidade * float(item["valor_unitario"] or 0), 2)
+        nova_qtd = float(item["quantidade"]) - quantidade
+        if nova_qtd <= 0:
+            await db.execute("DELETE FROM pdv_itens WHERE id = $1", item_id)
+        else:
+            await db.execute("UPDATE pdv_itens SET quantidade = $1, valor_total = $2 WHERE id = $3",
+                nova_qtd, round(nova_qtd * float(item["valor_unitario"] or 0), 2), item_id)
+        novo_total = round(float(item["venda_total"] or 0) - valor_devolvido, 2)
+        await db.execute("UPDATE pdv_vendas SET total = $1 WHERE id = $2", max(0, novo_total), item["venda_id"])
+        await db.execute("INSERT INTO pdv_devolucoes (venda_id, motivo, valor, operador) VALUES ($1,$2,$3,$4)",
+            item["venda_id"], f"Item #{item_id}: {motivo}" if motivo else f"Devolucao parcial item #{item_id}",
+            valor_devolvido, operador)
+        return {"success": True, "item_id": item_id, "quantidade_devolvida": quantidade, "valor_devolvido": valor_devolvido}
     try: return run_async(_go())
     except Exception as e: return {"error": str(e)}
 
@@ -361,11 +456,11 @@ def suprimento(caixa_id: int, valor: float, motivo: str, operador: str, operador
     if erro: return erro
     return create("suprimentos", {"caixa_id": caixa_id, "valor": valor, "motivo": motivo, "operador": operador})
 
-def realizar_venda(caixa_id: int, itens: list, pagamentos: list, cliente="", operador="", operador_id=None, desconto=0.0) -> dict:
-    total_itens = sum((i.get("quantidade",1) or 1) * (i.get("valor_unitario",0) or 0) for i in itens)
+def realizar_venda(caixa_id: int, itens: list, pagamentos: list, cliente="", cliente_id=None, operador="", operador_id=None, desconto=0.0) -> dict:
+    total_itens = sum((i.get("quantidade",1) or 1) * (i.get("valor_unitario",0) or 0) - (i.get("desconto",0) or 0) for i in itens)
     total = round(total_itens - desconto, 2)
 
-    # validar desconto maximo do operador
+    # validar desconto maximo do operador (total)
     if operador_id and desconto > 0 and total_itens > 0:
         op = _get("pdv_operadores", operador_id)
         if op and not op.get("error"):
@@ -375,19 +470,28 @@ def realizar_venda(caixa_id: int, itens: list, pagamentos: list, cliente="", ope
                 if pct_desconto > max_pct:
                     return {"error": f"Desconto maximo permitido: {max_pct:.1f}% (tentativa: {pct_desconto:.1f}%)"}
 
-    venda = create("vendas", {"caixa_id": caixa_id, "cliente": cliente, "total": total,
-        "desconto": desconto, "operador": operador, "data": hoje()})
-    if venda.get("error"): return venda
-    vid = venda["id"]
-    for item in itens:
-        create("itens", {"venda_id": vid, "produto_codigo": item.get("codigo",""),
-            "descricao": item.get("descricao",""), "quantidade": item.get("quantidade",1),
-            "valor_unitario": item.get("valor_unitario",0),
-            "valor_total": (item.get("quantidade",1) or 1) * (item.get("valor_unitario",0) or 0)})
-    for pg in pagamentos:
-        create("pagamentos", {"venda_id": vid, "forma": pg.get("forma","dinheiro"),
-            "valor": pg.get("valor",total), "parcelas": pg.get("parcelas",1)})
-    return {"venda": venda, "total": total}
+    # ponytail: transacao atomica — se item/pgto falhar, venda inteira rollback
+    async def _go():
+        db = await get_db()
+        async with db.acquire() as conn:
+            async with conn.transaction():
+                row = await conn.fetchrow("""INSERT INTO pdv_vendas (caixa_id, cliente, cliente_id, total, desconto, operador, data)
+                    VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *""",
+                    caixa_id, cliente, cliente_id, total, desconto, operador, hoje())
+                vid = row["id"]
+                for item in itens:
+                    item_desconto = item.get("desconto",0) or 0
+                    item_total = round((item.get("quantidade",1) or 1) * (item.get("valor_unitario",0) or 0) - item_desconto, 2)
+                    await conn.execute("INSERT INTO pdv_itens (venda_id, produto_codigo, descricao, quantidade, valor_unitario, desconto, valor_total) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+                        vid, item.get("codigo",""), item.get("descricao",""),
+                        item.get("quantidade",1), item.get("valor_unitario",0),
+                        item_desconto, item_total)
+                for pg in pagamentos:
+                    await conn.execute("INSERT INTO pdv_pagamentos (venda_id, forma, valor, parcelas) VALUES ($1,$2,$3,$4)",
+                        vid, pg.get("forma","dinheiro"), pg.get("valor",total), pg.get("parcelas",1))
+                return {"venda": dict(row), "total": total}
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
 
 def dashboard() -> dict:
     async def _go():
@@ -402,3 +506,46 @@ def dashboard() -> dict:
         }
     try: return run_async(_go())
     except: return {"caixa_aberto": None, "vendas_hoje": 0, "qtd_hoje": 0}
+
+# ── Orcamento / Pre-venda ──
+
+def criar_orcamento(cliente: str = "", cliente_id=None, itens: list = None, operador: str = "", operador_id=None, desconto: float = 0) -> dict:
+    """Cria venda com status 'orcamento' — igual a venda normal, mas sem caixa_id"""
+    total_itens = sum((i.get("quantidade",1) or 1) * (i.get("valor_unitario",0) or 0) - (i.get("desconto",0) or 0) for i in (itens or []))
+    total = round(total_itens - desconto, 2)
+    async def _go():
+        db = await get_db()
+        async with db.acquire() as conn:
+            async with conn.transaction():
+                row = await conn.fetchrow("""INSERT INTO pdv_vendas (cliente, cliente_id, total, desconto, operador, status, tipo, data)
+                    VALUES ($1,$2,$3,$4,$5,'orcamento','orcamento',$6) RETURNING *""",
+                    cliente, cliente_id, total, desconto, operador, hoje())
+                vid = row["id"]
+                for item in (itens or []):
+                    item_desconto = item.get("desconto",0) or 0
+                    item_total = round((item.get("quantidade",1) or 1) * (item.get("valor_unitario",0) or 0) - item_desconto, 2)
+                    await conn.execute("INSERT INTO pdv_itens (venda_id, produto_codigo, descricao, quantidade, valor_unitario, desconto, valor_total) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+                        vid, item.get("codigo",""), item.get("descricao",""),
+                        item.get("quantidade",1), item.get("valor_unitario",0), item_desconto, item_total)
+                return {"orcamento": dict(row), "total": total}
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
+
+def converter_orcamento(venda_id: int, caixa_id: int, pagamentos: list, operador: str = "", operador_id=None) -> dict:
+    """Converte orcamento em venda finalizada, vinculando ao caixa e registrando pagamentos"""
+    async def _go():
+        db = await get_db()
+        venda = await db.fetchrow("SELECT * FROM pdv_vendas WHERE id = $1", venda_id)
+        if not venda: return {"error": "Orcamento nao encontrado"}
+        if venda["status"] != "orcamento": return {"error": "Venda nao e um orcamento"}
+        total = float(venda["total"] or 0)
+        async with db.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute("UPDATE pdv_vendas SET caixa_id=$1, status='finalizada', tipo='venda', data=NOW() WHERE id=$2",
+                    caixa_id, venda_id)
+                for pg in pagamentos:
+                    await conn.execute("INSERT INTO pdv_pagamentos (venda_id, forma, valor, parcelas) VALUES ($1,$2,$3,$4)",
+                        venda_id, pg.get("forma","dinheiro"), pg.get("valor",total), pg.get("parcelas",1))
+                return {"venda_id": venda_id, "total": total, "convertido": True}
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
