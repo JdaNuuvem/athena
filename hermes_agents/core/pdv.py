@@ -102,7 +102,7 @@ def _ensure_tables():
             operador VARCHAR(100), observacoes TEXT
         )""")
         try: await db.execute("ALTER TABLE pdv_vendas ADD COLUMN IF NOT EXISTS cliente_id INT")
-        except: pass
+        except Exception as e: pass
         await db.execute("""CREATE TABLE IF NOT EXISTS pdv_itens (
             id SERIAL PRIMARY KEY, venda_id INT REFERENCES pdv_vendas(id),
             produto_codigo VARCHAR(50), descricao VARCHAR(200),
@@ -111,7 +111,7 @@ def _ensure_tables():
             valor_total DECIMAL(12,2) DEFAULT 0
         )""")
         try: await db.execute("ALTER TABLE pdv_itens ADD COLUMN IF NOT EXISTS desconto DECIMAL(12,2) DEFAULT 0")
-        except: pass
+        except Exception as e: pass
         await db.execute("""CREATE TABLE IF NOT EXISTS pdv_pagamentos (
             id SERIAL PRIMARY KEY, venda_id INT REFERENCES pdv_vendas(id),
             forma VARCHAR(30) NOT NULL, valor DECIMAL(12,2) DEFAULT 0,
@@ -136,9 +136,9 @@ def _ensure_tables():
             created_at TIMESTAMP DEFAULT NOW()
         )""")
         try: await db.execute("ALTER TABLE pdv_operadores ADD COLUMN IF NOT EXISTS desconto_maximo_percent DECIMAL(5,2) DEFAULT 0")
-        except: pass
+        except Exception as e: pass
         try: await db.execute("ALTER TABLE pdv_operadores ALTER COLUMN senha TYPE VARCHAR(200)")
-        except: pass
+        except Exception as e: pass
         await db.execute("""CREATE TABLE IF NOT EXISTS pdv_turnos (
             id SERIAL PRIMARY KEY, caixa_id INT REFERENCES pdv_caixas(id),
             operador_id INT REFERENCES pdv_operadores(id),
@@ -303,7 +303,7 @@ def fechar_caixa(caixa_id: int, saldo_final: float, operador_id: int = None, sen
         try:
             from core.entidades import ao_fechar_caixa_pdv
             ao_fechar_caixa_pdv(caixa_id)
-        except: pass
+        except Exception as e: pass
         return result
     except Exception as e: return {"error": str(e)}
 
@@ -369,7 +369,7 @@ def buscar_produtos(q: str, limit: int = 15) -> list:
         """, f"%{q}%", q, q, limit)
         return [dict(r) for r in rows]
     try: return run_async(_go())
-    except: return []
+    except Exception as e: return []
 
 def buscar_clientes(q: str, limit: int = 10) -> list:
     """Autocomplete de clientes: busca por nome, documento, telefone"""
@@ -385,7 +385,7 @@ def buscar_clientes(q: str, limit: int = 10) -> list:
         """, f"%{q}%", f"%{q.replace('.','').replace('-','').replace('/','')}%", limit)
         return [dict(r) for r in rows]
     try: return run_async(_go())
-    except: return []
+    except Exception as e: return []
 
 def cancelar_venda(venda_id: int, motivo: str = "", operador: str = "", operador_id: int = None, senha: str = "") -> dict:
     erro = _exigir_operador(operador_id, senha)
@@ -404,24 +404,32 @@ def cancelar_venda(venda_id: int, motivo: str = "", operador: str = "", operador
     except Exception as e: return {"error": str(e)}
 
 def devolver_item_venda(item_id: int, quantidade: float, motivo: str = "", operador: str = "", operador_id: int = None, senha: str = "") -> dict:
-    """Devolucao parcial: remove qtd de um item da venda, ajusta total, registra devolucao"""
+    """Devolucao parcial: remove qtd de um item da venda, ajusta total, registra devolucao."""
     erro = _exigir_operador(operador_id, senha)
     if erro: return erro
+    if quantidade is None or quantidade <= 0:
+        return {"error": "Quantidade a devolver deve ser maior que zero"}
     async def _go():
         db = await get_db()
-        item = await db.fetchrow("SELECT i.*, v.total AS venda_total, v.status AS venda_status FROM pdv_itens i JOIN pdv_vendas v ON v.id = i.venda_id WHERE i.id = $1", item_id)
+        item = await db.fetchrow("SELECT i.*, v.status AS venda_status FROM pdv_itens i JOIN pdv_vendas v ON v.id = i.venda_id WHERE i.id = $1", item_id)
         if not item: return {"error": "Item nao encontrado"}
         if item["venda_status"] == "cancelada": return {"error": "Venda ja cancelada"}
-        if item["quantidade"] < quantidade: return {"error": f"Quantidade insuficiente (max: {item['quantidade']})"}
-        valor_devolvido = round(quantidade * float(item["valor_unitario"] or 0), 2)
-        nova_qtd = float(item["quantidade"]) - quantidade
-        if nova_qtd <= 0:
+        valor_unitario = float(item["valor_unitario"] or 0)
+        valor_devolvido = round(quantidade * valor_unitario, 2)
+        # UPDATE atomico: a condicao "quantidade >= $1" no WHERE garante que a checagem de
+        # estoque disponivel e' feita no mesmo statement que o decremento, evitando que duas
+        # devolucoes concorrentes do mesmo item leiam a mesma quantidade e se sobrescrevam.
+        atualizado = await db.fetchrow("""
+            UPDATE pdv_itens SET quantidade = quantidade - $1,
+                valor_total = ROUND((quantidade - $1) * valor_unitario, 2)
+            WHERE id = $2 AND quantidade >= $1
+            RETURNING quantidade
+        """, quantidade, item_id)
+        if not atualizado:
+            return {"error": f"Quantidade insuficiente (max: {item['quantidade']})"}
+        if float(atualizado["quantidade"]) <= 0:
             await db.execute("DELETE FROM pdv_itens WHERE id = $1", item_id)
-        else:
-            await db.execute("UPDATE pdv_itens SET quantidade = $1, valor_total = $2 WHERE id = $3",
-                nova_qtd, round(nova_qtd * float(item["valor_unitario"] or 0), 2), item_id)
-        novo_total = round(float(item["venda_total"] or 0) - valor_devolvido, 2)
-        await db.execute("UPDATE pdv_vendas SET total = $1 WHERE id = $2", max(0, novo_total), item["venda_id"])
+        await db.execute("UPDATE pdv_vendas SET total = GREATEST(0, total - $1) WHERE id = $2", valor_devolvido, item["venda_id"])
         await db.execute("INSERT INTO pdv_devolucoes (venda_id, motivo, valor, operador) VALUES ($1,$2,$3,$4)",
             item["venda_id"], f"Item #{item_id}: {motivo}" if motivo else f"Devolucao parcial item #{item_id}",
             valor_devolvido, operador)
@@ -444,7 +452,7 @@ def historico_vendas(caixa_id: int = None, data_inicio: str = None, data_fim: st
         rows = await db.fetch(f"SELECT * FROM pdv_vendas WHERE {clause} ORDER BY data DESC LIMIT ${p}", *params, limit)
         return [dict(r) for r in rows]
     try: return run_async(_go())
-    except: return []
+    except Exception as e: return []
 
 def sangria(caixa_id: int, valor: float, motivo: str, operador: str, operador_id: int = None, senha: str = "") -> dict:
     erro = _exigir_operador(operador_id, senha, _ROLES_GERENCIAIS)
@@ -490,8 +498,20 @@ def realizar_venda(caixa_id: int, itens: list, pagamentos: list, cliente="", cli
                     await conn.execute("INSERT INTO pdv_pagamentos (venda_id, forma, valor, parcelas) VALUES ($1,$2,$3,$4)",
                         vid, pg.get("forma","dinheiro"), pg.get("valor",total), pg.get("parcelas",1))
                 return {"venda": dict(row), "total": total}
-    try: return run_async(_go())
-    except Exception as e: return {"error": str(e)}
+    result = run_async(_go())
+    if result and not result.get("error"):
+        try:
+            from core.automacoes import disparar_webhooks
+            from threading import Thread
+            v = result.get("venda", {})
+            Thread(target=lambda: disparar_webhooks("venda.criada", {
+                "venda_id": str(v.get("id", "")),
+                "total": str(result.get("total", "")),
+                "cliente": str(cliente),
+                "operador": str(operador),
+            }), daemon=True).start()
+        except Exception: pass
+    return result
 
 def dashboard() -> dict:
     async def _go():
@@ -505,7 +525,7 @@ def dashboard() -> dict:
             "qtd_hoje": hoje_qtd or 0,
         }
     try: return run_async(_go())
-    except: return {"caixa_aberto": None, "vendas_hoje": 0, "qtd_hoje": 0}
+    except Exception as e: return {"caixa_aberto": None, "vendas_hoje": 0, "qtd_hoje": 0}
 
 # ── Orcamento / Pre-venda ──
 
