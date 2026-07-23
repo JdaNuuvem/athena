@@ -310,12 +310,44 @@ def fiscal_resumo(dias=30):
 # ── 21. DRE por Loja (Lucro Real por Canal) ──
 
 def dre_por_loja(dias: int = 30) -> list:
-    """Retorna DRE (receita, comissao, frete, lucro) por loja Shopee + PDV."""
+    """Retorna DRE (receita, comissao, frete, lucro) por loja Shopee + PDV.
+    SOLID: DIP via FinanceiroRepository — injetavel via set_financeiro_repo()."""
+    comissao_pct = float(os.environ.get("SHOPEE_COMISSAO_PCT", "")) if os.environ.get("SHOPEE_COMISSAO_PCT") else 14.0
+    try:
+        from core.repositories_postgres import get_financeiro_repo
+        return _dre_via_repo(get_financeiro_repo(), dias, comissao_pct)
+    except Exception:
+        return _dre_via_query(dias, comissao_pct)
+
+
+def _dre_via_repo(repo, dias: int, comissao_pct: float) -> list:
+    async def _go():
+        rows = await repo.listar_receita_por_loja(dias)
+        resultado = []
+        for r in rows:
+            receita = r.receita_online + r.receita_pdv
+            comissao_valor = round(receita * comissao_pct / 100, 2)
+            lucro = round(receita - comissao_valor - r.frete - r.custos_producao, 2)
+            margem_pct = round((lucro / receita * 100) if receita > 0 else 0, 1)
+            resultado.append({
+                "loja_id": r.loja_id, "loja_nome": r.loja_nome,
+                "receita": receita, "qtd_vendas": r.qtd_vendas,
+                "comissao_pct": comissao_pct, "comissao_valor": comissao_valor,
+                "frete": r.frete, "custos_producao": r.custos_producao,
+                "lucro": lucro, "margem_pct": margem_pct,
+                "periodo_dias": dias,
+            })
+        resultado.sort(key=lambda x: x["lucro"], reverse=True)
+        return resultado
+    try: return run_async(_go())
+    except Exception as e: return []
+
+
+def _dre_via_query(dias: int, comissao_pct: float) -> list:
+    """Fallback: query direta se repositorio nao disponivel."""
     async def _go():
         db = await get_db()
-        # buscar lojas com dados
         lojas = await db.fetch("SELECT id, nome FROM lojas WHERE ativa = TRUE ORDER BY nome")
-        comissao_pct = float(os.environ.get("SHOPEE_COMISSAO_PCT", "")) if os.environ.get("SHOPEE_COMISSAO_PCT") else 14.0
 
         resultado = []
         for loja in lojas:

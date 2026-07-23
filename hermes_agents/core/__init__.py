@@ -55,6 +55,7 @@ class FactoryConfig:
     # Alerta
     margem_minima_pct: float = 15.0
     ruptura_estoque_dias: int = 7
+    frete_medio_shopee: float = 15.0
 
     @classmethod
     def load(cls) -> "FactoryConfig":

@@ -67,7 +67,8 @@ def upload(file_data: bytes, nome_original: str, entidade_tipo: str = "", entida
         return {"error": str(e)}
 
 def download(doc_id: int) -> tuple:
-    """Retorna (file_data, nome_original, mime_type) ou (None,None,None)."""
+    """Retorna (filepath, nome_original, mime_type) ou (None,None,None).
+    SOLID: retorna path, nao bytes — o Flask route faz streaming com send_file."""
     async def _go():
         db = await get_db()
         row = await db.fetchrow("SELECT nome_original, nome_armazenado, mime_type FROM documentos WHERE id = $1", doc_id)
@@ -76,8 +77,7 @@ def download(doc_id: int) -> tuple:
         filepath = _os.path.join(STORAGE_DIR, row["nome_armazenado"])
         if not _os.path.exists(filepath):
             return None, None, None
-        with open(filepath, "rb") as f:
-            return f.read(), row["nome_original"], row["mime_type"]
+        return filepath, row["nome_original"], row["mime_type"]
     try: return run_async(_go())
     except Exception as e: return None, None, None
 

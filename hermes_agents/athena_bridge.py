@@ -1,5 +1,5 @@
 """
-Athena Bridge — conecta o Hermes Agent ao ATHENA OS via GraphQL.
+Athena Bridge â€” conecta o Hermes Agent ao ATHENA OS via GraphQL.
 ATHENA OS tem 52 agentes, 40+ queries GraphQL, 30+ endpoints REST.
 """
 import os, sys, json, urllib.request
@@ -14,15 +14,15 @@ import psycopg2.extras
 ATHENA_URL = os.environ.get("ATHENA_URL", "http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io")
 GRAPHQL_URL = f"{ATHENA_URL}/graphql"
 
-# Token de autenticação para Athena OS
+# Token de autenticaÃ§Ã£o para Athena OS
 API_TOKEN = os.environ.get("ATHENA_TOKEN", "")
 if not API_TOKEN:
     API_TOKEN = "athena-token-123456789" if os.environ.get("ATHENA_DEV_MODE", "").lower() == "true" else ""
     if not API_TOKEN:
-        print("[ATHENA] AVISO: ATHENA_TOKEN não definido. Defina a variável de ambiente ATHENA_TOKEN.")
-        API_TOKEN = os.urandom(32).hex()  # token aleatório por segurança, mas quebra OAuth se não configurar
+        print("[ATHENA] AVISO: ATHENA_TOKEN nÃ£o definido. Defina a variÃ¡vel de ambiente ATHENA_TOKEN.")
+        API_TOKEN = os.urandom(32).hex()  # token aleatÃ³rio por seguranÃ§a, mas quebra OAuth se nÃ£o configurar
 
-# Rotas públicas (não exigem autenticação)
+# Rotas pÃºblicas (nÃ£o exigem autenticaÃ§Ã£o)
 URLS_PUBLICAS = {
     "/api/auth/login", "/api/auth/logout", "/api/health", "/api/auth/me",
     "/api/shopee/callback", "/api/shopee/oauth2callback",
@@ -36,18 +36,18 @@ def _autenticado() -> bool:
     return token == API_TOKEN if API_TOKEN else True
 
 def _verificar_autenticacao():
-    """Protege todos os endpoints exceto rotas públicas e OPTIONS (CORS preflight)."""
+    """Protege todos os endpoints exceto rotas pÃºblicas e OPTIONS (CORS preflight)."""
     if request.method == "OPTIONS":
         return None
     path = request.path.rstrip("/")
-    # rotas públicas
+    # rotas pÃºblicas
     if path in URLS_PUBLICAS or path.startswith("/api/shopee/callback") or path.startswith("/api/bling/webhook"):
         return None
-    # arquivos estáticos do frontend (Next.js)
+    # arquivos estÃ¡ticos do frontend (Next.js)
     if not path.startswith("/api/"):
         return None
     if not _autenticado():
-        return jsonify({"error": "Unauthorized", "message": "Token de autenticação inválido ou ausente"}), 401
+        return jsonify({"error": "Unauthorized", "message": "Token de autenticaÃ§Ã£o invÃ¡lido ou ausente"}), 401
     return None
 
 def _gql(query: str, variables: dict = None) -> dict:
@@ -91,7 +91,7 @@ def listar_pedidos(status: str = None, limit: int = 10) -> dict:
     return _gql(q)
 
 def pedido_por_id(order_id: str) -> dict:
-    """Detalhes de um pedido específico."""
+    """Detalhes de um pedido especÃ­fico."""
     return _gql(f'{{ order(id: "{order_id}") {{ id customer status total channel lines {{ sku quantity price }} createdAt }} }}')
 
 # ===========================================================================
@@ -107,7 +107,7 @@ def alertas_estoque_baixo() -> dict:
     return _gql("{ lowStockAlerts { sku name quantity minQuantity warehouse } }")
 
 # ===========================================================================
-# Produção / Moldes
+# ProduÃ§Ã£o / Moldes
 # ===========================================================================
 
 def listar_moldes() -> dict:
@@ -115,7 +115,7 @@ def listar_moldes() -> dict:
     return _gql("{ molds(limit: 50) { id code product material cyclesUsed cyclesTotal status } }")
 
 def producao_ativa() -> dict:
-    """Produção em andamento."""
+    """ProduÃ§Ã£o em andamento."""
     return _gql("{ productionRuns(limit: 20) { id product status startDate endDate quantity } }")
 
 # ===========================================================================
@@ -135,7 +135,7 @@ def anomalias_custo() -> dict:
     return _gql("{ costAnomalies { category value avgValue deviationPct severity } }")
 
 def budget_vs_realizado() -> dict:
-    """Orçamento vs realizado."""
+    """OrÃ§amento vs realizado."""
     return _gql("{ budget { category budget actual deviationPct } }")
 
 def profitability() -> dict:
@@ -143,7 +143,7 @@ def profitability() -> dict:
     return _gql("{ profitabilityBySKU { sku product revenue cost marginPct status } }")
 
 def break_even() -> dict:
-    """Ponto de equilíbrio."""
+    """Ponto de equilÃ­brio."""
     return _gql("{ breakEven { fixedCost avgMargin breakevenUnits dailyNeeded } }")
 
 # ===========================================================================
@@ -159,23 +159,23 @@ def listar_agentes_athena() -> dict:
         return {"error": str(e)}
 
 # ===========================================================================
-# Relatório consolidado
+# RelatÃ³rio consolidado
 # ===========================================================================
 
 def relatorio_consolidado() -> str:
-    """Relatório executivo Athena."""
-    lines = ["🏛️ ATHENA OS — Relatório Consolidado", "=" * 50]
+    """RelatÃ³rio executivo Athena."""
+    lines = ["ðŸ›ï¸ ATHENA OS â€” RelatÃ³rio Consolidado", "=" * 50]
     h = health()
     k = kpi_summary()
     lines.append(f"Status: {h.get('status', 'N/A')}")
     if "data" in k:
         d = k["data"]["kpiSummary"]
         lines.append(f"Pedidos: {d.get('totalOrders', '?')} | Receita: R$ {d.get('totalRevenue', 0):,.2f}")
-        lines.append(f"Anúncios ativos: {d.get('activeListings', '?')} | Alertas estoque: {d.get('lowStockAlerts', '?')}")
+        lines.append(f"AnÃºncios ativos: {d.get('activeListings', '?')} | Alertas estoque: {d.get('lowStockAlerts', '?')}")
     return "\n".join(lines)
 
 # ===========================================================================
-# Fase 2: Agentes de Produção - Endpoints REST
+# Fase 2: Agentes de ProduÃ§Ã£o - Endpoints REST
 # ===========================================================================
 
 from flask import Flask, request, jsonify
@@ -189,20 +189,60 @@ app.before_request(_verificar_autenticacao)
 
 from routes.integrations import bling_bp, integrations_bp
 from routes.webhooks import webhook_bp
+from routes.shopee import shopee_bp, shopee_ads_bp
+from routes.estoque import estoque_bp, workflows_bp
+from routes.agent_executor import hermes_bp, memory_bp
+from routes.pdv import pdv_bp
+from routes.vendas import vendas_bp
+from routes.relatorios import relatorios_bp
+from routes.fiscal import fiscal_bp
+from routes.automacoes import automacoes_bp
+from routes.producao import producao_bp
+from routes.atendimento import atendimento_bp
+from routes.compras import compras_bp
+from routes.crm import crm_bp
+from routes.documentos import documentos_bp, seguranca_bp
+from routes.rbac import rbac_bp
+from routes.lojas_manage import lojas_bp as lojas_manage_bp
+from routes.rh import rh_bp
+from routes.cadastros import cadastros_bp
+from routes.financeiro import financeiro_bp
 app.register_blueprint(bling_bp)
 app.register_blueprint(integrations_bp)
 app.register_blueprint(webhook_bp)
+app.register_blueprint(shopee_bp)
+app.register_blueprint(shopee_ads_bp)
+app.register_blueprint(estoque_bp)
+app.register_blueprint(workflows_bp)
+app.register_blueprint(hermes_bp)
+app.register_blueprint(memory_bp)
+app.register_blueprint(pdv_bp)
+app.register_blueprint(vendas_bp)
+app.register_blueprint(relatorios_bp)
+app.register_blueprint(fiscal_bp)
+app.register_blueprint(automacoes_bp)
+app.register_blueprint(producao_bp)
+app.register_blueprint(atendimento_bp)
+app.register_blueprint(compras_bp)
+app.register_blueprint(crm_bp)
+app.register_blueprint(documentos_bp)
+app.register_blueprint(seguranca_bp)
+app.register_blueprint(rbac_bp)
+app.register_blueprint(lojas_manage_bp)
+app.register_blueprint(rh_bp)
+app.register_blueprint(cadastros_bp)
+app.register_blueprint(financeiro_bp)
 
 # ponytail: importar aqui garante que catalogo_produtos (SSOT) exista antes de
-# qualquer sync/listagem — sincronizar_produtos()/listar_produtos() fazem SQL
-# bruto contra essa tabela sem criá-la, então o import precisa acontecer no boot.
+# qualquer sync/listagem â€” sincronizar_produtos()/listar_produtos() fazem SQL
+# bruto contra essa tabela sem criÃ¡-la, entÃ£o o import precisa acontecer no boot.
 import core.catalogo  # noqa: F401
 
 # ===========================================================================
-# Autenticação e Health Check (Athena OS)
+# AutenticaÃ§Ã£o e Health Check (Athena OS)
 # ===========================================================================
 
-# Fallback de emergencia — só ativo em dev mode ou se senha vier por env
+# Fallback de emergencia â€” sÃ³ ativo em dev mode ou se senha vier por env
 _dev_fallback = os.environ.get("ATHENA_DEV_MODE", "").lower() == "true"
 _dev_admin_pw = os.environ.get("ATHENA_DEV_ADMIN_PW", "")
 USUARIOS = {} if not _dev_fallback or not _dev_admin_pw else {
@@ -336,10 +376,10 @@ def list_agents():
 # Endpoints Hermes Agents
 # ===========================================================================
 
-# AG-04: Planejador de Produção
+# AG-04: Planejador de ProduÃ§Ã£o
 @app.route('/api/agent/ag_04_planejador/plano_diario', methods=['POST'])
 def plano_diario():
-    """Gera plano de produção diário."""
+    """Gera plano de produÃ§Ã£o diÃ¡rio."""
     from ag_04_planejador import gerar_plano_diario
     
     data = request.json.get('data') if request.json else None
@@ -355,7 +395,7 @@ def plano_diario():
 
 @app.route('/api/agent/ag_04_planejador/adicionar_pedido', methods=['POST'])
 def adicionar_pedido():
-    """Adiciona pedido de produção."""
+    """Adiciona pedido de produÃ§Ã£o."""
     from ag_04_planejador import adicionar_pedido_producao
     
     data = request.json
@@ -378,7 +418,7 @@ def adicionar_pedido():
 # AG-05: Gerente Industrial
 @app.route('/api/agent/ag_05_industrial/relatorio', methods=['GET'])
 def relatorio_industrial():
-    """Relatório industrial completo."""
+    """RelatÃ³rio industrial completo."""
     from ag_05_industrial import relatorio_industrial
     import asyncio
     
@@ -386,7 +426,7 @@ def relatorio_industrial():
 
 @app.route('/api/agent/ag_05_industrial/oee/<machine_id>', methods=['GET'])
 def oee_status(machine_id):
-    """Status OEE de uma máquina."""
+    """Status OEE de uma mÃ¡quina."""
     from ag_05_industrial import calcular_oee
     import asyncio
     
@@ -433,13 +473,13 @@ def criar_pedido_telegram():
 
 @app.route('/api/agent/ag_06_telegram/stats', methods=['GET'])
 def stats_telegram():
-    """Estatísticas do Telegram."""
+    """EstatÃ­sticas do Telegram."""
     from ag_06_telegram import obter_estatisticas_telegram
     
     stats = obter_estatisticas_telegram()
     return jsonify(stats)
 
-# AG-07: Laboratório de Produtos
+# AG-07: LaboratÃ³rio de Produtos
 @app.route('/api/agent/ag_07_laboratorio/analisar', methods=['POST'])
 def analisar_produto():
     """Analisa viabilidade de novo produto."""
@@ -460,7 +500,7 @@ def analisar_produto():
 
 @app.route('/api/agent/ag_07_laboratorio/pipeline/<status>', methods=['GET'])
 def obter_pipeline(status):
-    """Obtém itens do pipeline por status."""
+    """ObtÃ©m itens do pipeline por status."""
     from ag_07_laboratorio import obter_pipeline_por_status
     
     itens = obter_pipeline_por_status(status)
@@ -478,7 +518,7 @@ def atualizar_status_pipeline(pipeline_id):
 
 
 
-# ── Bling Portuguese Routes (alias para rotas inglesas existentes) ──
+# â”€â”€ Bling Portuguese Routes (alias para rotas inglesas existentes) â”€â”€
 
 @app.route('/api/bling/produtos', methods=['GET'])
 def bling_pt_produtos():
@@ -660,7 +700,7 @@ def bling_pt_contas_pagar():
 # Workflows Cross-Agent
 @app.route('/api/workflows/ag07_para_ag04/<int:pipeline_id>', methods=['POST'])
 def workflow_ag07_ag04(pipeline_id):
-    """Workflow: Aprovação AG-07 gera pedido AG-04."""
+    """Workflow: AprovaÃ§Ã£o AG-07 gera pedido AG-04."""
     from workflows import workflow_ag07_para_ag04
     
     resultado = workflow_ag07_para_ag04(pipeline_id)
@@ -668,7 +708,7 @@ def workflow_ag07_ag04(pipeline_id):
 
 @app.route('/api/workflows/ag06_para_ag04/<pedido_id>', methods=['POST'])
 def workflow_ag06_ag04(pedido_id):
-    """Workflow: Pedido AG-06 gera produção AG-04."""
+    """Workflow: Pedido AG-06 gera produÃ§Ã£o AG-04."""
     from workflows import workflow_ag06_para_ag04
     
     resultado = workflow_ag06_para_ag04(pedido_id)
@@ -690,7 +730,7 @@ def workflow_ag05_ag02():
 # AG-05: Lifecycle de Moldes
 @app.route('/api/moldes/<int:molde_id>/historico', methods=['GET'])
 def historico_molde(molde_id):
-    """Histórico completo de eventos do molde."""
+    """HistÃ³rico completo de eventos do molde."""
     from ag_05_industrial.mold_lifecycle import obter_historico_molde
     
     historico = obter_historico_molde(molde_id)
@@ -698,7 +738,7 @@ def historico_molde(molde_id):
 
 @app.route('/api/moldes/<int:molde_id>/status', methods=['GET'])
 def status_molde(molde_id):
-    """Status atual e informações do molde."""
+    """Status atual e informaÃ§Ãµes do molde."""
     from ag_05_industrial.mold_lifecycle import obter_status_atual_molde
     
     status = obter_status_atual_molde(molde_id)
@@ -733,7 +773,7 @@ def criar_cnc_job():
 
 @app.route('/api/cnc/jobs/<job_id>/iniciar', methods=['POST'])
 def iniciar_cnc_job(job_id):
-    """Inicia execução de job CNC."""
+    """Inicia execuÃ§Ã£o de job CNC."""
     from ag_05_industrial.mold_lifecycle import iniciar_cnc_job
     
     resultado = iniciar_cnc_job(job_id, request.json.get('operador', ''))
@@ -750,7 +790,7 @@ def concluir_cnc_job(job_id):
 # AG-11: Controle de Qualidade
 @app.route('/api/qualidade/inspecoes', methods=['POST'])
 def registrar_inspecao():
-    """Registra nova inspeção de qualidade."""
+    """Registra nova inspeÃ§Ã£o de qualidade."""
     from ag_11_qualidade import registrar_inspecao
     
     data = request.json
@@ -759,7 +799,7 @@ def registrar_inspecao():
 
 @app.route('/api/qualidade/inspecoes/<inspecao_id>/finalizar', methods=['POST'])
 def finalizar_inspecao(inspecao_id):
-    """Finaliza inspeção com resultado."""
+    """Finaliza inspeÃ§Ã£o com resultado."""
     from ag_11_qualidade import finalizar_inspecao
     
     resultado = finalizar_inspecao(inspecao_id, request.json)
@@ -767,7 +807,7 @@ def finalizar_inspecao(inspecao_id):
 
 @app.route('/api/qualidade/taxa_defeitos', methods=['GET'])
 def taxa_defeitos():
-    """Taxa de defeitos por período."""
+    """Taxa de defeitos por perÃ­odo."""
     from ag_11_qualidade import calcular_taxa_defeitos
     
     periodo = request.args.get('periodo', 30, type=int)
@@ -776,7 +816,7 @@ def taxa_defeitos():
 
 @app.route('/api/qualidade/pareto', methods=['GET'])
 def pareto_defeitos():
-    """Análise Pareto de defeitos (80/20)."""
+    """AnÃ¡lise Pareto de defeitos (80/20)."""
     from ag_11_qualidade import pareto_defeitos
     
     periodo = request.args.get('periodo', 30, type=int)
@@ -812,7 +852,7 @@ def criar_capa():
 
 @app.route('/api/qualidade/capas/<int:capa_id>/fechar', methods=['POST'])
 def fechar_capa(capa_id):
-    """Fecha CAPA verificando eficácia."""
+    """Fecha CAPA verificando eficÃ¡cia."""
     from ag_11_qualidade import fechar_capa
     
     eficacia = request.json.get('eficacia', False)
@@ -820,10 +860,10 @@ def fechar_capa(capa_id):
     resultado = fechar_capa(capa_id, eficacia, observacoes)
     return jsonify(resultado)
 
-# AG-12: Gestão de Manutenção
+# AG-12: GestÃ£o de ManutenÃ§Ã£o
 @app.route('/api/manutencao/agendar', methods=['POST'])
 def agendar_manutencao():
-    """Agenda nova manutenção."""
+    """Agenda nova manutenÃ§Ã£o."""
     from ag_12_manutencao import agendar_manutencao
     
     data = request.json
@@ -841,7 +881,7 @@ def agendar_manutencao():
 
 @app.route('/api/manutencao/pendentes', methods=['GET'])
 def manutencoes_pendentes():
-    """Lista manutenções pendentes ordenadas por prioridade."""
+    """Lista manutenÃ§Ãµes pendentes ordenadas por prioridade."""
     from ag_12_manutencao import obter_manutencoes_pendentes
     
     manutencoes = obter_manutencoes_pendentes()
@@ -849,7 +889,7 @@ def manutencoes_pendentes():
 
 @app.route('/api/manutencao/<int:manutencao_id>/iniciar', methods=['POST'])
 def iniciar_manutencao(manutencao_id):
-    """Inicia execução de manutenção."""
+    """Inicia execuÃ§Ã£o de manutenÃ§Ã£o."""
     from ag_12_manutencao import iniciar_manutencao
     
     resultado = iniciar_manutencao(manutencao_id, request.json.get('tecnico', ''))
@@ -857,7 +897,7 @@ def iniciar_manutencao(manutencao_id):
 
 @app.route('/api/manutencao/<int:manutencao_id>/concluir', methods=['POST'])
 def concluir_manutencao(manutencao_id):
-    """Conclui manutenção."""
+    """Conclui manutenÃ§Ã£o."""
     from ag_12_manutencao import concluir_manutencao
     
     resultado = concluir_manutencao(manutencao_id, request.json)
@@ -865,7 +905,7 @@ def concluir_manutencao(manutencao_id):
 
 @app.route('/api/manutencao/alertas', methods=['GET'])
 def alertas_manutencao():
-    """Verifica alertas de manutenção."""
+    """Verifica alertas de manutenÃ§Ã£o."""
     from ag_12_manutencao import verificar_alertas_manutencao
     
     alertas = verificar_alertas_manutencao()
@@ -881,259 +921,20 @@ def mtbf_equipamento(equipamento_tipo, equipamento_id):
 
 @app.route('/api/manutencao/kpi', methods=['GET'])
 def kpi_manutencao():
-    """KPIs de manutenção."""
+    """KPIs de manutenÃ§Ã£o."""
     from ag_12_manutencao import obter_kpi_manutencao
     
     periodo = request.args.get('periodo', 30, type=int)
     kpis = obter_kpi_manutencao(periodo)
     return jsonify(kpis)
 
-# ── Estoque por loja/depósito ──
-
-@app.route('/api/estoque/lojas', methods=['GET'])
-def estoque_por_loja():
-    """Lista estoque por depósito com filtro de loja e busca."""
-    loja = request.args.get("loja", "")
-    busca = request.args.get("busca", "").strip()
-    pagina = request.args.get("pagina", 1, type=int)
-    por_pagina = request.args.get("por_pagina", 30, type=int)
-    try:
-        conn = _db_sync()
-        cur = conn.cursor()
-        where = ["1=1"]
-        if loja and loja != "todas":
-            if loja.isdigit():
-                where.append(f"e.loja = (SELECT nome FROM lojas WHERE id = {int(loja)})")
-            else:
-                where.append(f"e.loja = '{loja.replace(chr(39), chr(39)+chr(39))}'")
-        if busca:
-            where.append(f"(c.sku ILIKE '%{busca}%' OR c.descricao ILIKE '%{busca}%')")
-        sql_where = " AND ".join(where)
-        cur.execute(f"SELECT COUNT(*) FROM estoque_lojas e JOIN catalogo_produtos c ON c.sku = e.sku WHERE {sql_where}")
-        total = cur.fetchone()[0]
-        offset = (pagina - 1) * por_pagina
-        cur.execute(f"""
-            SELECT e.id, e.sku, c.descricao AS nome, e.loja, e.quantidade, e.data_atualizacao, e.sync_status
-            FROM estoque_lojas e
-            JOIN catalogo_produtos c ON c.sku = e.sku
-            WHERE {sql_where}
-            ORDER BY e.data_atualizacao DESC
-            LIMIT {por_pagina} OFFSET {offset}
-        """)
-        rows = _dicts(cur)
-        cur.close(); conn.close()
-        return jsonify({"estoque": rows, "total": total, "pagina": pagina})
-    except Exception as e:
-        return jsonify({"erro": str(e), "estoque": [], "total": 0})
-
-@app.route('/api/estoque/lojas', methods=['PUT'])
-def atualizar_estoque_loja():
-    """Atualiza quantidade de estoque em uma loja/depósito. Two-way sync via fila offline."""
-    dados = request.json or {}
-    sku = dados.get("sku", "").strip()
-    loja_nome = str(dados.get("loja", "")).strip()
-    quantidade = dados.get("quantidade")
-    sync_bling = str(dados.get("sync_bling", "1")) == "1"
-    if not sku or not loja_nome or quantidade is None:
-        return jsonify({"erro": "sku, loja e quantidade obrigatórios"}), 400
-    try:
-        conn = _db_sync()
-        cur = conn.cursor()
-        cur.execute("""
-            INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao, sync_status)
-            VALUES (%s, %s, %s, NOW(), 'pendente')
-            ON CONFLICT (sku, loja) DO UPDATE SET quantidade = %s, data_atualizacao = NOW(), sync_status = 'pendente'
-        """, (sku, loja_nome, float(quantidade), float(quantidade)))
-        cur.close(); conn.close()
-        result = {"ok": True, "sku": sku, "loja": loja_nome, "quantidade": quantidade}
-        if sync_bling:
-            from core.estoque import sync_para_bling
-            bling_r = sync_para_bling(loja_nome, sku, float(quantidade))
-            result["bling_sync"] = bling_r
-            # sync_para_bling ja atualiza sync_status para ok/erro
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({"erro": str(e)}), 500
-
-@app.route('/api/estoque/sync/processar', methods=['POST'])
-def processar_fila_estoque():
-    """Processa fila de sync pendente (retry offline)."""
-    from core.estoque import processar_fila_sync
-    limite = request.args.get("limite", 50, type=int)
-    return jsonify(processar_fila_sync(limite))
-
-@app.route('/api/estoque/sync/status/<sku>', methods=['GET'])
-def status_sync_sku(sku):
-    """Status de sync para um SKU."""
-    from core.estoque import status_sync_sku
-    return jsonify(status_sync_sku(sku))
-
-@app.route('/api/estoque/entrada', methods=['POST'])
-def estoque_entrada():
-    """Registra entrada de estoque em uma loja."""
-    from core.estoque import entrada as est_entrada
-    dados = request.json or {}
-    sku = str(dados.get("sku", "")).strip()
-    loja = str(dados.get("loja", "")).strip()
-    quantidade = dados.get("quantidade")
-    motivo = str(dados.get("motivo", "")).strip()
-    if not sku or not loja or quantidade is None:
-        return jsonify({"erro": "sku, loja e quantidade obrigatórios"}), 400
-    try:
-        qtd = float(quantidade)
-        if qtd <= 0:
-            return jsonify({"erro": "quantidade deve ser > 0"}), 400
-    except (ValueError, TypeError):
-        return jsonify({"erro": "quantidade inválida"}), 400
-    result = jsonify(est_entrada(sku, loja, qtd, motivo))
-    # disparar sync Shopee em background (fire-and-forget)
-    try:
-        from shopee import sincronizar_estoque_todas_lojas_automatico
-        from threading import Thread
-        Thread(target=lambda: sincronizar_estoque_todas_lojas_automatico(sku, qtd), daemon=True).start()
-    except Exception as e: pass
-    return result
-
-@app.route('/api/estoque/saida', methods=['POST'])
-def estoque_saida():
-    """Registra saída de estoque de uma loja."""
-    from core.estoque import saida as est_saida
-    dados = request.json or {}
-    sku = str(dados.get("sku", "")).strip()
-    loja = str(dados.get("loja", "")).strip()
-    quantidade = dados.get("quantidade")
-    motivo = str(dados.get("motivo", "")).strip()
-    if not sku or not loja or quantidade is None:
-        return jsonify({"erro": "sku, loja e quantidade obrigatórios"}), 400
-    try:
-        qtd = float(quantidade)
-        if qtd <= 0:
-            return jsonify({"erro": "quantidade deve ser > 0"}), 400
-    except (ValueError, TypeError):
-        return jsonify({"erro": "quantidade inválida"}), 400
-    result = jsonify(est_saida(sku, loja, qtd, motivo))
-    try:
-        from shopee import sincronizar_estoque_todas_lojas_automatico
-        from threading import Thread
-        Thread(target=lambda: sincronizar_estoque_todas_lojas_automatico(sku, qtd), daemon=True).start()
-    except Exception as e: pass
-    return result
-
-@app.route('/api/estoque/transferir', methods=['POST'])
-def estoque_transferir():
-    """Transfere estoque entre duas lojas/depósitos."""
-    from core.estoque import transferir as est_transferir
-    dados = request.json or {}
-    sku = str(dados.get("sku", "")).strip()
-    origem = str(dados.get("origem", "")).strip()
-    destino = str(dados.get("destino", "")).strip()
-    quantidade = dados.get("quantidade")
-    motivo = str(dados.get("motivo", "")).strip()
-    if not sku or not origem or not destino or quantidade is None:
-        return jsonify({"erro": "sku, origem, destino e quantidade obrigatórios"}), 400
-    if origem == destino:
-        return jsonify({"erro": "origem e destino devem ser diferentes"}), 400
-    try:
-        qtd = float(quantidade)
-        if qtd <= 0:
-            return jsonify({"erro": "quantidade deve ser > 0"}), 400
-    except (ValueError, TypeError):
-        return jsonify({"erro": "quantidade inválida"}), 400
-    return jsonify(est_transferir(sku, origem, destino, qtd, motivo))
-
-@app.route('/api/estoque/sugestao-rotacao', methods=['GET'])
-def estoque_sugestao_rotacao():
-    """Sugere transferencias de estoque entre lojas com desbalanceamento."""
-    from core.estoque import sugestao_rotacao
-    return jsonify({"data": sugestao_rotacao()})
-
-@app.route('/api/estoque/ratear', methods=['POST'])
-def estoque_ratear():
-    from core.estoque import ratear as est_ratear
-    dados = request.json or {}
-    sku = str(dados.get("sku", "")).strip()
-    total = dados.get("total")
-    modo = str(dados.get("modo", "igual")).strip()
-    lojas = dados.get("lojas")
-    periodo_dias = dados.get("periodo_dias", 30)
-    percentuais = dados.get("percentuais")
-    if not sku or total is None:
-        return jsonify({"erro": "sku e total obrigatórios"}), 400
-    if modo not in ("igual", "proporcional"):
-        return jsonify({"erro": "modo deve ser 'igual' ou 'proporcional'"}), 400
-    try:
-        return jsonify(est_ratear(sku, float(total), modo, lojas, int(periodo_dias), percentuais))
-    except Exception as e:
-        return jsonify({"erro": str(e)}), 500
-
-@app.route('/api/estoque/movimentacoes', methods=['GET'])
-def estoque_movimentacoes():
-    """Lista movimentações de estoque."""
-    from core.estoque import movimentacoes as est_movs
-    sku = request.args.get("sku", "")
-    loja = request.args.get("loja", "")
-    limite = request.args.get("limite", 50, type=int)
-    return jsonify({"movimentacoes": est_movs(sku, loja, limite)})
-
-@app.route('/api/estoque/lote/<int:lote_id>/concluir', methods=['POST'])
-def concluir_lote_estoque(lote_id):
-    """Conclui lote e entra no estoque."""
-    from ag_04_planejador import registrar_producao_concluida
-    
-    resultado = registrar_producao_concluida(lote_id)
-    return jsonify(resultado)
-
-# Workflows Fase 3
-@app.route('/api/workflows/lote_para_estoque/<int:lote_id>', methods=['POST'])
-def workflow_lote_estoque(lote_id):
-    """Workflow: Lote→Inspeção→Estoque."""
-    from workflows_fase3 import workflow_lote_para_estoque
-    
-    resultado = workflow_lote_para_estoque(lote_id)
-    return jsonify(resultado)
-
-@app.route('/api/workflows/defeito_para_capa', methods=['POST'])
-def workflow_defeito_capa():
-    """Workflow: Defeito→CAPA."""
-    from workflows_fase3 import workflow_defeito_para_capa
-    
-    resultado = workflow_defeito_para_capa(
-        request.json['inspecao_id'],
-        request.json['defeito_codigo']
-    )
-    return jsonify(resultado)
-
-@app.route('/api/workflows/manutencao_molde/<int:molde_id>', methods=['POST'])
-def workflow_manutencao_molde(molde_id):
-    """Workflow: Manutenção→Produção."""
-    from workflows_fase3 import workflow_manutencao_molde
-    
-    resultado = workflow_manutencao_molde(molde_id)
-    return jsonify(resultado)
-
-@app.route('/api/workflows/cnc_concluido/<job_id>', methods=['POST'])
-def workflow_cnc_concluido(job_id):
-    """Workflow: CNC Job→Molde."""
-    from workflows_fase3 import workflow_cnc_job_concluido
-    
-    resultado = workflow_cnc_job_concluido(job_id)
-    return jsonify(resultado)
-
-@app.route('/api/workflows/agenda_manutencao', methods=['POST'])
-def workflow_agenda_manutencao():
-    """Workflow: Alertas→Agenda."""
-    from workflows_fase3 import workflow_alerta_manutencao_para_agenda
-    
-    resultado = workflow_alerta_manutencao_para_agenda()
-    return jsonify(resultado)
-
 # ===========================================================================
-# Configuração - Endpoints (Telegram, Bling, Shopee)
+# ConfiguraÃ§Ã£o - Endpoints (Telegram, Bling, Shopee)
 # ===========================================================================
 
 @app.route('/api/config', methods=['GET'])
 def get_all_configs():
-    """Retorna todas as configurações."""
+    """Retorna todas as configuraÃ§Ãµes."""
     from core.config import get_all_config
     return jsonify(get_all_config())
 
@@ -1146,7 +947,7 @@ def set_telegram_config():
     webhook_url = request.json.get('webhookUrl', '')
     
     if not token:
-        return jsonify({"error": "Token não fornecido"}), 400
+        return jsonify({"error": "Token nÃ£o fornecido"}), 400
     
     set_config("telegram", "token", token)
     if webhook_url:
@@ -1180,7 +981,7 @@ def set_bling_config():
 
 @app.route('/api/config/shopee', methods=['POST'])
 def set_shopee_config():
-    """Configura Shopee (partner_id/api_key do app). shop_id e' opcional aqui —
+    """Configura Shopee (partner_id/api_key do app). shop_id e' opcional aqui â€”
     normalmente e' preenchido depois, por loja, via fluxo OAuth (conectar loja)."""
     from core.config import set_config
     data = request.json or {}
@@ -1190,7 +991,7 @@ def set_shopee_config():
     api_key = data.get('apiKey', '')
 
     if not partner_id or not api_key:
-        return jsonify({"error": "Forneça partnerId e apiKey"}), 400
+        return jsonify({"error": "ForneÃ§a partnerId e apiKey"}), 400
 
     set_config("shopee", "partner_id", partner_id)
     set_config("shopee", "api_key", api_key)
@@ -1201,7 +1002,7 @@ def set_shopee_config():
 
 @app.route('/api/config/status', methods=['GET'])
 def get_config_status():
-    """Retorna status das configurações."""
+    """Retorna status das configuraÃ§Ãµes."""
     from core.config import get_config
     
     telegram_configurado = bool(get_config("telegram", "token"))
@@ -1227,7 +1028,7 @@ def get_config_status():
 
 @app.route('/api/ml/treinar', methods=['POST'])
 def treinar_modelo_ml():
-    """Treina modelo de previsão de defeitos."""
+    """Treina modelo de previsÃ£o de defeitos."""
     from ag_13_ml import treinar_modelo_previsao_defeitos
     
     resultado = treinar_modelo_previsao_defeitos()
@@ -1235,7 +1036,7 @@ def treinar_modelo_ml():
 
 @app.route('/api/ml/prever/<sku>', methods=['GET'])
 def prever_defeitos_ml(sku):
-    """Prevê defeitos para um SKU específico."""
+    """PrevÃª defeitos para um SKU especÃ­fico."""
     from ag_13_ml import prever_defeitos_lote
     from core import get_db, run_async
     
@@ -1251,7 +1052,7 @@ def prever_defeitos_ml(sku):
         
         if row:
             return prever_defeitos_lote(dict(row))
-        return {"error": "Sem dados históricos para este SKU"}
+        return {"error": "Sem dados histÃ³ricos para este SKU"}
     
     resultado = run_async(_go())
     return jsonify(resultado)
@@ -1344,909 +1145,24 @@ def whatsapp_webhook():
     resultado = processar_mensagem(parsed["phone"], parsed["text"])
     return jsonify({"processed": True, "resultado": resultado})
 
-# ── Executor de agente com memória ──
 
-def _executar_agente(agente_id: str, mensagem: str, user_id: str,
-                     nome: str, contexto: str = "") -> str:
-    """Executa o agente apropriado com contexto da memória."""
-    prefix = f"[Memória]: {contexto}\n\n" if contexto else ""
 
-    try:
-        if "ag_01" in agente_id:
-            from ag_01_cacador import executar_cacada, top_oportunidades
-            if "oportunidade" in mensagem.lower() or "produto" in mensagem.lower():
-                ops = top_oportunidades(5)
-                return f"{prefix}Top 5 oportunidades: {ops}" if ops else f"{prefix}Nenhuma oportunidade nova encontrada."
-            r = executar_cacada()
-            return f"{prefix}{r}"
 
-        elif "ag_02" in agente_id:
-            from ag_02_lucratividade import analisar_sku, relatorio_diario, verificar_alertas
-            if "alerta" in mensagem.lower():
-                a = verificar_alertas()
-                return f"{prefix}Alertas: {a}"
-            r = relatorio_diario()
-            return f"{prefix}{r}"
 
-        elif "ag_03" in agente_id:
-            from ag_03_marketplaces import comparar_precos_concorrentes, verificar_posicoes
-            if "preço" in mensagem.lower() or "concorrente" in mensagem.lower():
-                c = comparar_precos_concorrentes()
-                return f"{prefix}Comparação de preços: {c}"
-            p = verificar_posicoes()
-            return f"{prefix}Posições dos anúncios: {p}"
 
-        elif "ag_04" in agente_id:
-            from ag_04_planejador import gerar_plano_diario
-            plano = gerar_plano_diario()
-            return f"{prefix}Plano diário: {plano}"
 
-        elif "ag_07" in agente_id:
-            from ag_07_laboratorio import pipeline_lancamentos
-            return f"{prefix}Pipeline de lançamentos: {pipeline_lancamentos()}"
 
-        elif "ag_09" in agente_id:
-            from ag_09_memoria import buscar_similar, stats
-            if "parecido" in mensagem.lower() or "similar" in mensagem.lower():
-                s = buscar_similar(mensagem)
-                return f"{prefix}Produtos similares: {s}"
-            s = stats()
-            return f"{prefix}Stats da memória corporativa: {s}"
 
-        else:
-            return f"{prefix}Agente {agente_id} consultado. Pergunta: '{mensagem[:100]}'. Use /detalhe para aprofundar."
 
-    except Exception as e:
-        log(None, f"Erro agente {agente_id}: {e}")
-        return f"{prefix}Erro ao processar com {agente_id}: {str(e)[:200]}"
 
 
-# ===========================================================================
-# Chat com agente (chamado pelo Chat.tsx do frontend)
-# ===========================================================================
 
-@app.route('/api/hermes/chat', methods=['POST'])
-def hermes_chat():
-    data = request.json
-    mensagem = data.get("mensagem", "")
-    user_id = data.get("user_id", "anon")
-    nome = data.get("nome", "Visitante")
 
-    from core.memory import recall, context, store
-    from ag_10_diretor import processar_pergunta
 
-    # 1. Buscar memória relevante
-    memoria_contexto = context(mensagem)
-    memorias = recall(mensagem, limit=3)
 
-    # 2. Roteamento pelo diretor (enriquecido com memória)
-    rota = processar_pergunta(mensagem)
-    agente = rota.get("agentes", ["ag_10"])[0] if rota.get("agentes") else "ag_10"
 
-    # 3. Resposta do agente (usa contexto da memória)
-    resposta_texto = _executar_agente(agente, mensagem, user_id, nome, memoria_contexto)
 
-    # 4. Salvar na memória
-    store(mensagem, resposta_texto, agent_id=agente,
-          category=rota.get("categoria", "geral"),
-          metadata={"user_id": user_id, "nome": nome})
-
-    return jsonify({
-        "resposta": resposta_texto,
-        "agente": agente,
-        "intencao": rota.get("acao", "geral"),
-        "memorias": len(memorias),
-    })
-
-# ── Memory API ──
-
-@app.route('/api/memory/stats', methods=['GET'])
-def memory_stats():
-    from core.memory import stats as memory_stats_fn, history as memory_history
-    agent = request.args.get("agente", "")
-    s = memory_stats_fn()
-    return jsonify(s)
-
-@app.route('/api/memory/history', methods=['GET'])
-def memory_history():
-    from core.memory import history as memory_history
-    agent = request.args.get("agente", "")
-    cat = request.args.get("categoria", "")
-    h = memory_history(agent_id=agent or None, category=cat or None, limit=20)
-    return jsonify({"history": h, "total": len(h)})
-
-@app.route('/api/memory/recall', methods=['POST'])
-def memory_recall():
-    from core.memory import recall as memory_recall
-    data = request.json or {}
-    query = data.get("query", "")
-    agent = data.get("agente", "")
-    results = memory_recall(query, agent_id=agent or None, limit=5)
-    return jsonify({"results": results, "total": len(results)})
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# ── Vendas Routes ──
-
-@app.route('/api/vendas/dashboard', methods=['GET'])
-def vendas_dashboard():
-    from core.vendas import dashboard
-    dias = request.args.get('dias', 30, type=int)
-    return jsonify(dashboard(dias))
-
-@app.route('/api/vendas/<tabela>', methods=['GET'])
-def vendas_list(tabela):
-    from core.vendas import list as vl, listar_filtrado, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    data_inicio = request.args.get("data_inicio", "")
-    data_fim = request.args.get("data_fim", "")
-    dias = request.args.get("dias", 0, type=int)
-    status = request.args.get("status", "")
-    if data_inicio or data_fim or dias or status:
-        return jsonify(listar_filtrado(tabela, data_inicio, data_fim, dias, status))
-    return jsonify({"data": vl(tabela)})
-
-@app.route('/api/vendas/<tabela>', methods=['POST'])
-def vendas_create(tabela):
-    from core.vendas import create as vc, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify(vc(tabela, request.json or {}))
-
-@app.route('/api/vendas/<tabela>/<int:id>', methods=['GET'])
-def vendas_get(tabela, id):
-    from core.vendas import get as vg, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify(vg(tabela, id))
-
-@app.route('/api/vendas/<tabela>/<int:id>', methods=['PUT'])
-def vendas_update(tabela, id):
-    from core.vendas import update as vu, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify(vu(tabela, id, request.json or {}))
-
-@app.route('/api/vendas/<tabela>/<int:id>', methods=['DELETE'])
-def vendas_delete(tabela, id):
-    from core.vendas import delete as vd, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify(vd(tabela, id))
-
-@app.route('/api/vendas/pedido', methods=['POST'])
-def vendas_criar_pedido():
-    data = request.json or {}
-    from core.vendas import criar_pedido
-    return jsonify(criar_pedido(
-        cliente=data.get("cliente",""),
-        itens=data.get("itens",[]),
-        pagamentos=data.get("pagamentos",[]),
-        desconto=float(data.get("desconto",0)),
-        frete=float(data.get("frete",0)),
-        vendedor=data.get("vendedor",""),
-        marketplace=data.get("marketplace","manual"),
-        loja_id=data.get("loja_id"),
-        observacoes=data.get("observacoes",""),
-    ))
-
-@app.route('/api/vendas/pedido/<int:id>', methods=['GET'])
-def vendas_detalhe_pedido(id):
-    from core.vendas import detalhe_pedido
-    return jsonify(detalhe_pedido(id))
-
-@app.route('/api/vendas/pedido/<int:id>/status', methods=['PUT'])
-def vendas_atualizar_status(id):
-    data = request.json or {}
-    from core.vendas import atualizar_status
-    return jsonify(atualizar_status(id, data.get("status",""), data.get("usuario","")))
-
-@app.route('/api/vendas/sync/bling', methods=['POST'])
-def vendas_sync_bling():
-    from core.vendas import sincronizar_pedidos_bling
-    data = request.json or {}
-    return jsonify(sincronizar_pedidos_bling(
-        pagina=data.get("pagina", 1), limite=data.get("limite", 100)))
-
-# ── Relatorios Routes ──
-
-@app.route('/api/relatorios/vendas', methods=['GET'])
-def rel_vendas():
-    from core.relatorios import vendas; dias=request.args.get('dias',30,type=int); loja_id=request.args.get('loja_id', type=int) or request.args.get('loja', type=int)
-    return jsonify(vendas(dias, loja_id))
-
-@app.route('/api/relatorios/lucro', methods=['GET'])
-def rel_lucro():
-    from core.relatorios import lucro_margem; dias=request.args.get('dias',30,type=int); loja_id=request.args.get('loja_id', type=int) or request.args.get('loja', type=int)
-    return jsonify(lucro_margem(dias, loja_id))
-
-@app.route('/api/relatorios/estoque', methods=['GET'])
-def rel_estoque():
-    from core.relatorios import estoque; loja_id=request.args.get('loja_id', type=int) or request.args.get('loja', type=int)
-    return jsonify(estoque(loja_id))
-
-@app.route('/api/relatorios/clientes', methods=['GET'])
-def rel_clientes():
-    from core.relatorios import clientes; dias=request.args.get('dias',90,type=int); loja_id=request.args.get('loja_id', type=int) or request.args.get('loja', type=int)
-    return jsonify(clientes(dias, loja_id))
-
-@app.route('/api/relatorios/fornecedores', methods=['GET'])
-def rel_fornecedores():
-    from core.relatorios import fornecedores; return jsonify(fornecedores())
-
-@app.route('/api/relatorios/aging', methods=['GET'])
-def rel_aging():
-    from core.relatorios import aging_financeiro; return jsonify(aging_financeiro())
-
-@app.route('/api/relatorios/fluxo-caixa', methods=['GET'])
-def rel_fluxo():
-    from core.relatorios import fluxo_caixa; dias=request.args.get('dias',30,type=int); loja_id=request.args.get('loja_id', type=int) or request.args.get('loja', type=int)
-    return jsonify(fluxo_caixa(dias, loja_id))
-
-@app.route('/api/relatorios/ticket-medio', methods=['GET'])
-def rel_ticket():
-    from core.relatorios import ticket_medio; dias=request.args.get('dias',30,type=int); loja_id=request.args.get('loja_id', type=int) or request.args.get('loja', type=int)
-    return jsonify(ticket_medio(dias, loja_id))
-
-@app.route('/api/relatorios/dre', methods=['GET'])
-def rel_dre():
-    from core.relatorios import dre; dias=request.args.get('dias',30,type=int); loja_id=request.args.get('loja_id', type=int) or request.args.get('loja', type=int)
-    return jsonify(dre(dias, loja_id))
-
-@app.route('/api/relatorios/previsao', methods=['GET'])
-def rel_previsao():
-    from core.relatorios import previsao; dias=request.args.get('dias',30,type=int); loja_id=request.args.get('loja_id', type=int) or request.args.get('loja', type=int)
-    return jsonify(previsao(dias, loja_id))
-
-@app.route('/api/relatorios/compras', methods=['GET'])
-def rel_compras():
-    from core.relatorios import compras; dias=request.args.get('dias',30,type=int)
-    return jsonify(compras(dias))
-
-@app.route('/api/relatorios/impostos', methods=['GET'])
-def rel_impostos():
-    from core.relatorios import impostos; dias=request.args.get('dias',30,type=int)
-    return jsonify(impostos(dias))
-
-@app.route('/api/relatorios/comissao', methods=['GET'])
-def rel_comissao():
-    from core.relatorios import comissao; dias=request.args.get('dias',30,type=int)
-    return jsonify(comissao(dias))
-
-@app.route('/api/relatorios/marketplaces', methods=['GET'])
-def rel_marketplaces():
-    from core.relatorios import marketplaces; dias=request.args.get('dias',30,type=int)
-    return jsonify(marketplaces(dias))
-
-@app.route('/api/relatorios/devolucoes', methods=['GET'])
-def rel_devolucoes():
-    from core.relatorios import devolucoes; dias=request.args.get('dias',30,type=int)
-    return jsonify(devolucoes(dias))
-
-@app.route('/api/relatorios/rupturas', methods=['GET'])
-def rel_rupturas():
-    from core.relatorios import rupturas
-    return jsonify(rupturas())
-
-@app.route('/api/relatorios/curvas', methods=['GET'])
-def rel_curvas():
-    from core.relatorios import curvas; dias=request.args.get('dias',90,type=int)
-    return jsonify(curvas(dias))
-
-@app.route('/api/relatorios/produtos', methods=['GET'])
-def rel_produtos():
-    from core.relatorios import produtos; dias=request.args.get('dias',30,type=int)
-    return jsonify(produtos(dias))
-
-@app.route('/api/relatorios/financeiro', methods=['GET'])
-def rel_financeiro():
-    from core.relatorios import financeiro; dias=request.args.get('dias',30,type=int)
-    return jsonify(financeiro(dias))
-
-@app.route('/api/relatorios/dre-por-loja', methods=['GET'])
-def rel_dre_por_loja():
-    from core.relatorios import dre_por_loja; dias=request.args.get('dias',30,type=int)
-    return jsonify({"data": dre_por_loja(dias)})
-
-
-# ── Fiscal Routes ──
-
-@app.route('/api/fiscal/dashboard', methods=['GET'])
-def fiscal_dashboard():
-    from core.fiscal import dashboard
-    return jsonify(dashboard())
-
-@app.route('/api/fiscal/tabelas/cfop', methods=['GET'])
-def fiscal_tabelas_cfop():
-    """Extrai CFOP distintos das NF-e syncadas do Bling."""
-    from core import run_async, get_db
-    async def _go():
-        db = await get_db()
-        rows = await db.fetch("SELECT DISTINCT cfop as codigo, natureza_operacao as descricao, tipo FROM fiscal_notas_fiscais WHERE cfop IS NOT NULL AND cfop != '' ORDER BY cfop LIMIT 50")
-        return [dict(r) for r in (rows or [])]
-    try: return jsonify(run_async(_go()))
-    except Exception as e: return jsonify([])
-
-@app.route('/api/fiscal/tabelas/ncm', methods=['GET'])
-def fiscal_tabelas_ncm():
-    """Extrai NCM distintos dos itens das NF-e syncadas."""
-    from core import run_async, get_db
-    async def _go():
-        db = await get_db()
-        rows = await db.fetch("SELECT DISTINCT ncm as codigo, '' as descricao FROM fiscal_nfe_itens WHERE ncm IS NOT NULL AND ncm != '' ORDER BY ncm LIMIT 50")
-        return [dict(r) for r in (rows or [])]
-    try: return jsonify(run_async(_go()))
-    except Exception as e: return jsonify([])
-
-@app.route('/api/fiscal/tabelas/cest', methods=['GET'])
-def fiscal_tabelas_cest():
-    """Extrai CEST distintos dos itens das NF-e syncadas."""
-    from core import run_async, get_db
-    async def _go():
-        db = await get_db()
-        rows = await db.fetch("SELECT DISTINCT cest as codigo, '' as descricao FROM fiscal_nfe_itens WHERE cest IS NOT NULL AND cest != '' ORDER BY cest LIMIT 50")
-        return [dict(r) for r in (rows or [])]
-    try: return jsonify(run_async(_go()))
-    except Exception as e: return jsonify([])
-
-@app.route('/api/fiscal/<tabela>', methods=['GET'])
-def fiscal_list(tabela):
-    from core.fiscal import list as fl, listar_filtrado, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    data_inicio = request.args.get("data_inicio", "")
-    data_fim = request.args.get("data_fim", "")
-    dias = request.args.get("dias", 0, type=int)
-    if data_inicio or data_fim or dias:
-        return jsonify(listar_filtrado(tabela, data_inicio, data_fim, dias))
-    return jsonify({"data": fl(tabela)})
-
-@app.route('/api/fiscal/<tabela>', methods=['POST'])
-def fiscal_create(tabela):
-    from core.fiscal import create as fc, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify(fc(tabela, request.json or {}))
-
-@app.route('/api/fiscal/<tabela>/<int:id>', methods=['GET'])
-def fiscal_get(tabela, id):
-    from core.fiscal import get as fg, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify(fg(tabela, id))
-
-@app.route('/api/fiscal/<tabela>/<int:id>', methods=['PUT'])
-def fiscal_update(tabela, id):
-    from core.fiscal import update as fu, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify(fu(tabela, id, request.json or {}))
-
-@app.route('/api/fiscal/<tabela>/<int:id>', methods=['DELETE'])
-def fiscal_delete(tabela, id):
-    from core.fiscal import delete as fd, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify(fd(tabela, id))
-
-@app.route('/api/fiscal/tributos/calcular/<int:nota_id>', methods=['GET'])
-def fiscal_calcular_tributos(nota_id):
-    from core.fiscal import calcular_tributos_nota
-    return jsonify(calcular_tributos_nota(nota_id))
-
-@app.route('/api/fiscal/obrigacoes/proximas', methods=['GET'])
-def fiscal_obrigacoes_proximas():
-    from core.fiscal import obrigacoes_proximas
-    dias = request.args.get('dias', 30, type=int)
-    return jsonify({"data": obrigacoes_proximas(dias)})
-
-@app.route('/api/fiscal/obrigacoes/atrasadas', methods=['GET'])
-def fiscal_obrigacoes_atrasadas():
-    from core.fiscal import obrigacoes_atrasadas
-    return jsonify({"data": obrigacoes_atrasadas()})
-
-@app.route('/api/fiscal/obrigacoes/<int:id>/baixar', methods=['POST'])
-def fiscal_baixar_obrigacao(id):
-    from core.fiscal import baixar_obrigacao
-    return jsonify(baixar_obrigacao(id))
-
-@app.route('/api/fiscal/sync/notas-fiscais', methods=['POST'])
-def fiscal_sync_nf():
-    from core.fiscal import sincronizar_notas_fiscais_bling
-    data = request.json or {}
-    return jsonify(sincronizar_notas_fiscais_bling(
-        pagina=data.get("pagina", 1), limite=data.get("limite", 100)))
-
-@app.route('/api/fiscal/sync/contas-receber', methods=['POST'])
-def fiscal_sync_cr():
-    from core.fiscal import sincronizar_contas_receber_bling
-    data = request.json or {}
-    return jsonify(sincronizar_contas_receber_bling(
-        pagina=data.get("pagina", 1), limite=data.get("limite", 100)))
-
-@app.route('/api/fiscal/sync/contas-pagar', methods=['POST'])
-def fiscal_sync_cp():
-    from core.fiscal import sincronizar_contas_pagar_bling
-    data = request.json or {}
-    return jsonify(sincronizar_contas_pagar_bling(
-        pagina=data.get("pagina", 1), limite=data.get("limite", 100)))
-
-@app.route('/api/fiscal/sync/tudo', methods=['POST'])
-def fiscal_sync_tudo():
-    from core.fiscal import sincronizar_tudo_bling
-    return jsonify(sincronizar_tudo_bling())
-
-@app.route('/api/fiscal/notas-fiscais/<int:id>/itens', methods=['GET'])
-def fiscal_nf_itens(id):
-    from core.fiscal import _list
-    return jsonify({"data": _list("fiscal_nfe_itens", cols="*", order="numero_item")})
-
-@app.route('/api/fiscal/notas-fiscais/<int:id>/impostos', methods=['GET'])
-def fiscal_nf_impostos(id):
-    from core.fiscal import _list
-    return jsonify({"data": _list("fiscal_impostos_nota", cols="*", order="id")})
-
-# ── Automacoes Routes ──
-
-@app.route('/api/automacoes/dashboard', methods=['GET'])
-def auto_dashboard():
-    from core.automacoes import dashboard as ad
-    return jsonify(ad())
-
-@app.route('/api/automacoes/disparar', methods=['POST'])
-def auto_disparar_webhooks():
-    """Dispara webhooks para um evento. Body: { evento: 'venda.criada', dados: { ... } }"""
-    from core.automacoes import disparar_webhooks
-    data = request.json or {}
-    evento = data.get("evento", "")
-    dados = data.get("dados", {})
-    if not evento:
-        return jsonify({"error": "evento obrigatorio"}), 400
-    return jsonify(disparar_webhooks(evento, dados))
-
-@app.route('/api/automacoes/<tabela>', methods=['GET'])
-def auto_list(tabela):
-    from core.automacoes import list as al, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify({"data": al(tabela)})
-
-@app.route('/api/automacoes/<tabela>', methods=['POST'])
-def auto_create(tabela):
-    from core.automacoes import create as ac, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify(ac(tabela, request.json or {}))
-
-@app.route('/api/automacoes/<tabela>/<int:id>', methods=['GET'])
-def auto_get(tabela, id):
-    from core.automacoes import get as ag, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify(ag(tabela, id))
-
-@app.route('/api/automacoes/<tabela>/<int:id>', methods=['PUT'])
-def auto_update(tabela, id):
-    from core.automacoes import update as au, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify(au(tabela, id, request.json or {}))
-
-@app.route('/api/automacoes/<tabela>/<int:id>', methods=['DELETE'])
-def auto_delete(tabela, id):
-    from core.automacoes import delete as ad, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify(ad(tabela, id))
-
-# ── Producao Routes ──
-
-@app.route('/api/producao/dashboard', methods=['GET'])
-def prod_dashboard():
-    from core.producao import dashboard as pd
-    return jsonify(pd())
-
-@app.route('/api/producao/op/<int:id>/iniciar', methods=['POST'])
-def prod_iniciar_op(id):
-    from core.producao import iniciar_op
-    return jsonify(iniciar_op(id))
-
-@app.route('/api/producao/op/<int:id>/finalizar', methods=['POST'])
-def prod_finalizar_op(id):
-    from core.producao import finalizar_op
-    return jsonify(finalizar_op(id))
-
-@app.route('/api/producao/maquina/<int:id>/parar', methods=['POST'])
-def prod_parar_maquina(id):
-    data = request.json or {}
-    from core.producao import parar_maquina
-    return jsonify(parar_maquina(id, data.get("motivo","")))
-
-@app.route('/api/producao/maquina/<int:id>/liberar', methods=['POST'])
-def prod_liberar_maquina(id):
-    from core.producao import liberar_maquina
-    return jsonify(liberar_maquina(id))
-
-@app.route('/api/producao/<tabela>', methods=['GET'])
-def prod_list(tabela):
-    from core.producao import list as pl, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify({"data": pl(tabela)})
-
-@app.route('/api/producao/<tabela>', methods=['POST'])
-def prod_create(tabela):
-    from core.producao import create as pc, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify(pc(tabela, request.json or {}))
-
-@app.route('/api/producao/<tabela>/<int:id>', methods=['GET'])
-def prod_get(tabela, id):
-    from core.producao import get as pg, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify(pg(tabela, id))
-
-@app.route('/api/producao/<tabela>/<int:id>', methods=['PUT'])
-def prod_update(tabela, id):
-    from core.producao import update as pu, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify(pu(tabela, id, request.json or {}))
-
-@app.route('/api/producao/<tabela>/<int:id>', methods=['DELETE'])
-def prod_delete(tabela, id):
-    from core.producao import delete as pd, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify(pd(tabela, id))
-
-# ── Atendimento Routes ──
-
-@app.route('/api/atendimento/dashboard', methods=['GET'])
-def atend_dashboard():
-    from core.atendimento import dashboard as ad
-    return jsonify(ad())
-
-@app.route('/api/atendimento/tickets/criar', methods=['POST'])
-def atend_criar_ticket():
-    data = request.json or {}
-    from core.atendimento import criar_ticket
-    return jsonify(criar_ticket(data.get("cliente",""), data.get("assunto",""), data.get("canal","whatsapp"), data.get("prioridade","normal")))
-
-@app.route('/api/atendimento/tickets/<int:id>/mensagem', methods=['POST'])
-def atend_mensagem(id):
-    data = request.json or {}
-    from core.atendimento import adicionar_mensagem
-    return jsonify(adicionar_mensagem(id, data.get("remetente",""), data.get("conteudo",""), data.get("tipo","texto")))
-
-@app.route('/api/atendimento/tickets/<int:id>/fechar', methods=['POST'])
-def atend_fechar(id):
-    from core.atendimento import fechar_ticket
-    return jsonify(fechar_ticket(id))
-
-@app.route('/api/atendimento/tickets/<int:id>/reabrir', methods=['POST'])
-def atend_reabrir(id):
-    from core.atendimento import reabrir_ticket
-    return jsonify(reabrir_ticket(id))
-
-@app.route('/api/atendimento/<tabela>', methods=['GET'])
-def atend_list(tabela):
-    from core.atendimento import list as al, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify({"data": al(tabela)})
-
-@app.route('/api/atendimento/<tabela>', methods=['POST'])
-def atend_create(tabela):
-    from core.atendimento import create as ac, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify(ac(tabela, request.json or {}))
-
-@app.route('/api/atendimento/<tabela>/<int:id>', methods=['GET'])
-def atend_get(tabela, id):
-    from core.atendimento import get as ag, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify(ag(tabela, id))
-
-@app.route('/api/atendimento/<tabela>/<int:id>', methods=['PUT'])
-def atend_update(tabela, id):
-    from core.atendimento import update as au, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify(au(tabela, id, request.json or {}))
-
-@app.route('/api/atendimento/<tabela>/<int:id>', methods=['DELETE'])
-def atend_delete(tabela, id):
-    from core.atendimento import delete as ad, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify(ad(tabela, id))
-
-# ── PDV Routes ──
-
-@app.route('/api/pdv/login', methods=['POST'])
-def pdv_login():
-    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
-    data = request.json or {}
-    from core.pdv import login_operador
-    return jsonify(login_operador(data.get("nome",""), data.get("senha","")))
-
-@app.route('/api/pdv/dashboard', methods=['GET'])
-def pdv_dashboard_api():
-    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
-    from core.pdv import dashboard as pdv_dash
-    return jsonify(pdv_dash())
-
-
-@app.route('/api/pdv/turno/abrir', methods=['POST'])
-def pdv_abrir_turno():
-    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
-    data = request.json or {}; from core.pdv import abrir_turno
-    return jsonify(abrir_turno(data.get("caixa_id",0), data.get("operador_id"), data.get("operador",""), float(data.get("saldo_abertura",0))))
-
-@app.route('/api/pdv/turno/<int:id>/fechar', methods=['POST'])
-def pdv_fechar_turno(id):
-    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
-    data = request.json or {}; from core.pdv import fechar_turno
-    return jsonify(fechar_turno(id, float(data.get("saldo_fechamento",0)), data.get("observacoes","")))
-
-@app.route('/api/pdv/clientes/buscar', methods=['GET'])
-def pdv_buscar_clientes():
-    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
-    from core.pdv import buscar_clientes
-    return jsonify({"data": buscar_clientes(request.args.get("q",""))})
-
-@app.route('/api/pdv/produtos/buscar', methods=['GET'])
-def pdv_buscar_produtos():
-    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
-    from core.pdv import buscar_produtos
-    return jsonify({"data": buscar_produtos(request.args.get("q",""))})
-
-@app.route('/api/pdv/venda/<int:id>/cancelar', methods=['POST'])
-def pdv_cancelar_venda(id):
-    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
-    data = request.json or {}; from core.pdv import cancelar_venda
-    return jsonify(cancelar_venda(id, data.get("motivo",""), data.get("operador",""),
-        data.get("operador_id"), data.get("senha","")))
-
-@app.route('/api/pdv/venda/<int:id>/devolver-item', methods=['POST'])
-def pdv_devolver_item(id):
-    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
-    data = request.json or {}; from core.pdv import devolver_item_venda
-    return jsonify(devolver_item_venda(id, float(data.get("quantidade",1)), data.get("motivo",""),
-        data.get("operador",""), data.get("operador_id"), data.get("senha","")))
-
-@app.route('/api/pdv/historico', methods=['GET'])
-def pdv_historico():
-    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
-    from core.pdv import historico_vendas
-    caixa = request.args.get("caixa_id"); di = request.args.get("data_inicio"); df = request.args.get("data_fim")
-    return jsonify({"data": historico_vendas(int(caixa) if caixa else None, di, df)})
-
-@app.route('/api/pdv/caixa/abrir', methods=['POST'])
-def pdv_abrir_caixa():
-    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
-    data = request.json or {}
-    from core.pdv import abrir_caixa
-    return jsonify(abrir_caixa(data.get("operador","Admin"), float(data.get("saldo_inicial",0)),
-        data.get("operador_id"), data.get("senha","")))
-
-@app.route('/api/pdv/caixa/<int:id>/fechar', methods=['POST'])
-def pdv_fechar_caixa(id):
-    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
-    data = request.json or {}
-    from core.pdv import fechar_caixa
-    return jsonify(fechar_caixa(id, float(data.get("saldo_final",0)), data.get("operador_id"), data.get("senha","")))
-
-@app.route('/api/pdv/caixa/<int:id>/resumo', methods=['GET'])
-def pdv_resumo_caixa(id):
-    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
-    from core.pdv import resumo_fechamento
-    return jsonify(resumo_fechamento(id))
-
-@app.route('/api/pdv/caixa/<int:id>/sangria', methods=['POST'])
-def pdv_sangria(id):
-    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
-    data = request.json or {}
-    from core.pdv import sangria
-    return jsonify(sangria(id, float(data.get("valor",0)), data.get("motivo",""), data.get("operador",""),
-        data.get("operador_id"), data.get("senha","")))
-
-@app.route('/api/pdv/caixa/<int:id>/suprimento', methods=['POST'])
-def pdv_suprimento(id):
-    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
-    data = request.json or {}
-    from core.pdv import suprimento
-    return jsonify(suprimento(id, float(data.get("valor",0)), data.get("motivo",""), data.get("operador",""),
-        data.get("operador_id"), data.get("senha","")))
-
-@app.route('/api/pdv/venda', methods=['POST'])
-def pdv_venda():
-    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
-    data = request.json or {}
-    from core.pdv import realizar_venda
-    return jsonify(realizar_venda(
-        caixa_id=data.get("caixa_id",0),
-        itens=data.get("itens",[]),
-        pagamentos=data.get("pagamentos",[]),
-        cliente=data.get("cliente",""),
-        cliente_id=data.get("cliente_id"),
-        operador=data.get("operador",""),
-        operador_id=data.get("operador_id"),
-        desconto=float(data.get("desconto",0))
-    ))
-
-@app.route('/api/pdv/orcamento', methods=['POST'])
-def pdv_criar_orcamento():
-    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
-    data = request.json or {}
-    from core.pdv import criar_orcamento
-    return jsonify(criar_orcamento(
-        cliente=data.get("cliente",""), cliente_id=data.get("cliente_id"),
-        itens=data.get("itens",[]), operador=data.get("operador",""),
-        operador_id=data.get("operador_id"), desconto=float(data.get("desconto",0))
-    ))
-
-@app.route('/api/pdv/orcamento/<int:id>/converter', methods=['POST'])
-def pdv_converter_orcamento(id):
-    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
-    data = request.json or {}
-    from core.pdv import converter_orcamento
-    return jsonify(converter_orcamento(id, data.get("caixa_id",0), data.get("pagamentos",[]),
-        data.get("operador",""), data.get("operador_id")))
-
-@app.route('/api/pdv/venda/<int:id>/cupom', methods=['GET'])
-def pdv_cupom(id):
-    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
-    async def _go():
-        from core import get_db, run_async
-        db = await get_db()
-        v = await db.fetchrow("SELECT * FROM pdv_vendas WHERE id = $1", id)
-        if not v: return {"error": "Venda nao encontrada"}
-        itens = await db.fetch("SELECT * FROM pdv_itens WHERE venda_id = $1 ORDER BY id", id)
-        pgts = await db.fetch("SELECT * FROM pdv_pagamentos WHERE venda_id = $1 ORDER BY id", id)
-        return {
-            "venda": dict(v),
-            "itens": [dict(i) for i in itens],
-            "pagamentos": [dict(p) for p in pgts],
-        }
-    try: return jsonify(run_async(_go()))
-    except Exception as e: return jsonify({"error": str(e)})
-
-@app.route('/api/pdv/<tabela>', methods=['GET'])
-def pdv_list(tabela):
-    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
-    from core.pdv import list as pl, _list_filtro, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    if tabela == "itens" and request.args.get("venda_id"):
-        return jsonify({"data": _list_filtro(tabela, f"venda_id = ${1}", [int(request.args.get("venda_id"))])})
-    return jsonify({"data": pl(tabela)})
-
-@app.route('/api/pdv/<tabela>', methods=['POST'])
-def pdv_create(tabela):
-    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
-    from core.pdv import create as pc, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify(pc(tabela, request.json or {}))
-
-@app.route('/api/pdv/<tabela>/<int:id>', methods=['GET'])
-def pdv_get(tabela, id):
-    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
-    from core.pdv import get as pg, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify(pg(tabela, id))
-
-@app.route('/api/pdv/<tabela>/<int:id>', methods=['PUT'])
-def pdv_update(tabela, id):
-    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
-    from core.pdv import update as pu, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify(pu(tabela, id, request.json or {}))
-
-@app.route('/api/pdv/<tabela>/<int:id>', methods=['DELETE'])
-def pdv_delete(tabela, id):
-    if not _autenticado(): return jsonify({"error": "Unauthorized"}), 401
-    from core.pdv import delete as pd, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify(pd(tabela, id))
-
-# ── Compras Routes ──
-
-@app.route('/api/compras/dashboard', methods=['GET'])
-def compras_dashboard():
-    from core.compras import dashboard as compras_dash
-    return jsonify(compras_dash())
-
-@app.route('/api/compras/<tabela>', methods=['GET'])
-def compras_list(tabela):
-    from core.compras import list as cl, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify({"data": cl(tabela)})
-
-@app.route('/api/compras/<tabela>', methods=['POST'])
-def compras_create(tabela):
-    from core.compras import create as cc, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    data = request.json or {}
-    return jsonify(cc(tabela, data))
-
-@app.route('/api/compras/<tabela>/<int:id>', methods=['GET'])
-def compras_get(tabela, id):
-    from core.compras import get as cg, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify(cg(tabela, id))
-
-@app.route('/api/compras/<tabela>/<int:id>', methods=['PUT'])
-def compras_update(tabela, id):
-    from core.compras import update as cu, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify(cu(tabela, id, request.json or {}))
-
-@app.route('/api/compras/<tabela>/<int:id>', methods=['DELETE'])
-def compras_delete(tabela, id):
-    from core.compras import delete as cd, TABLES
-    if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
-    return jsonify(cd(tabela, id))
-
-@app.route('/api/compras/solicitacoes/<int:id>/aprovar', methods=['POST'])
-def compras_aprovar(id):
-    data = request.json or {}
-    aprovador = data.get("aprovador", "Admin")
-    from core.compras import aprovar_solicitacao
-    return jsonify(aprovar_solicitacao(id, aprovador))
-
-# ── CRM Routes ──
-
-@app.route('/api/crm/funil', methods=['GET'])
-def crm_funil():
-    from core.crm import funil as crm_funil_fn
-    return jsonify(crm_funil_fn())
-
-@app.route('/api/crm/importar-bling', methods=['POST'])
-def crm_importar_bling():
-    from core.crm import importar_contatos_bling
-    return jsonify(importar_contatos_bling())
-
-@app.route('/api/crm/<tabela>', methods=['GET'])
-def crm_list(tabela):
-    from core.crm import list as crm_list_fn, CRM_TABLES
-    if tabela not in CRM_TABLES:
-        return jsonify({"error": "Tabela invalida"}), 404
-    return jsonify({"data": crm_list_fn(tabela)})
-
-@app.route('/api/crm/<tabela>', methods=['POST'])
-def crm_create(tabela):
-    from core.crm import create as crm_create_fn, CRM_TABLES
-    if tabela not in CRM_TABLES:
-        return jsonify({"error": "Tabela invalida"}), 404
-    data = request.json or {}
-    if not data:
-        return jsonify({"error": "Dados obrigatorios"}), 400
-    return jsonify(crm_create_fn(tabela, data))
-
-@app.route('/api/crm/<tabela>/<int:id>', methods=['GET'])
-def crm_get(tabela, id):
-    from core.crm import get as crm_get_fn, CRM_TABLES
-    if tabela not in CRM_TABLES:
-        return jsonify({"error": "Tabela invalida"}), 404
-    return jsonify(crm_get_fn(tabela, id))
-
-@app.route('/api/crm/<tabela>/<int:id>', methods=['PUT'])
-def crm_update(tabela, id):
-    from core.crm import update as crm_update_fn, CRM_TABLES
-    if tabela not in CRM_TABLES:
-        return jsonify({"error": "Tabela invalida"}), 404
-    data = request.json or {}
-    return jsonify(crm_update_fn(tabela, id, data))
-
-@app.route('/api/crm/<tabela>/<int:id>', methods=['DELETE'])
-def crm_delete(tabela, id):
-    from core.crm import delete as crm_delete_fn, CRM_TABLES
-    if tabela not in CRM_TABLES:
-        return jsonify({"error": "Tabela invalida"}), 404
-    return jsonify(crm_delete_fn(tabela, id))
-
-
-
-
-
-
-
-# ── Integracoes / SSOT Routes ──
+# â”€â”€ Integracoes / SSOT Routes â”€â”€
 
 @app.route('/api/catalogo', methods=['GET'])
 def catalogo_listar():
@@ -2341,441 +1257,9 @@ def ev_processar_fila():
     limit = request.args.get('limit', 10, type=int)
     return jsonify(processar_eventos_pendentes(limit))
 
-@app.route('/api/fiscal/apuracao', methods=['GET'])
-def fiscal_apuracao():
-    """Apuração consolidada de impostos por período."""
-    from core.fiscal import apuracao_impostos
-    ano = request.args.get("ano", type=int)
-    mes = request.args.get("mes", type=int)
-    dias = request.args.get("dias", 365, type=int)
-    return jsonify(apuracao_impostos(ano, mes, dias))
 
-@app.route('/api/fiscal/obrigacoes/alertas', methods=['GET'])
-def fiscal_alertas():
-    from core.entidades import gerar_alertas_obrigacoes
-    return jsonify(gerar_alertas_obrigacoes())
 
-@app.route('/webhook/bling/completo', methods=['POST'])
-def bling_webhook_completo():
-    from core.entidades import processar_webhook_bling_completo
-    payload = request.json or {}
-    evento = payload.get("evento", request.args.get("evento", "desconhecido"))
-    return jsonify(processar_webhook_bling_completo(evento, payload))
 
-
-
-# ── Documentos Routes ──
-
-@app.route('/api/documentos', methods=['GET'])
-def doc_listar():
-    from core.documentos import listar
-    tipo = request.args.get("entidade_tipo","")
-    eid = request.args.get("entidade_id")
-    return jsonify({"data": listar(tipo, int(eid) if eid else None)})
-
-@app.route('/api/documentos', methods=['POST'])
-def doc_upload():
-    if 'file' not in request.files:
-        return jsonify({"error": "Nenhum arquivo enviado"}), 400
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({"error": "Nome vazio"}), 400
-    from core.documentos import upload
-    result = upload(file.read(), file.filename,
-        entidade_tipo=request.form.get("entidade_tipo",""),
-        entidade_id=int(request.form.get("entidade_id",0)) or None,
-        criado_por=request.form.get("criado_por",""),
-        mime_type=file.content_type or "application/octet-stream")
-    return jsonify(result)
-
-@app.route('/api/documentos/<int:id>', methods=['GET'])
-def doc_download(id):
-    from core.documentos import download
-    from flask import Response
-    data, nome, mime = download(id)
-    if data is None:
-        return jsonify({"error": "Arquivo nao encontrado"}), 404
-    return Response(data, mimetype=mime, headers={
-        "Content-Disposition": f'inline; filename="{nome}"',
-        "Content-Type": mime,
-    })
-
-@app.route('/api/documentos/<int:id>', methods=['DELETE'])
-def doc_deletar(id):
-    from core.documentos import deletar
-    return jsonify(deletar(id))
-
-@app.route('/api/documentos/stats', methods=['GET'])
-def doc_stats():
-    from core.documentos import stats
-    return jsonify(stats())
-
-# ── Seguranca / Auditoria Routes ──
-
-@app.route('/api/auditoria', methods=['GET'])
-def seg_auditoria():
-    from core.seguranca import listar_auditoria
-    modulo = request.args.get("modulo","")
-    email = request.args.get("email","")
-    entidade = request.args.get("entidade","")
-    return jsonify({"auditoria": listar_auditoria(modulo, email, entidade)})
-
-@app.route('/api/logs', methods=['GET'])
-def seg_logs():
-    from core.seguranca import listar_logs
-    level = request.args.get("level","")
-    modulo = request.args.get("modulo","")
-    return jsonify({"logs": listar_logs(level, modulo)})
-
-@app.route('/api/historico/<entidade>/<int:id>', methods=['GET'])
-def seg_historico(entidade, id):
-    from core.seguranca import listar_historico
-    return jsonify({"historico": listar_historico(entidade, id)})
-
-@app.route('/api/historico/<entidade>', methods=['GET'])
-def seg_historico_resumo(entidade):
-    from core.seguranca import historico_resumo
-    return jsonify({"resumo": historico_resumo(entidade)})
-
-# ── RBAC Management Routes ──
-
-@app.route('/api/rbac/roles', methods=['GET'])
-def rbac_list_roles():
-    from core.rbac import list_roles
-    return jsonify({"roles": list_roles()})
-
-@app.route('/api/rbac/roles', methods=['POST'])
-def rbac_create_role():
-    data = request.json or {}
-    from core.rbac import criar_role
-    return jsonify(criar_role(data.get("nome",""), data.get("descricao",""), data.get("permissoes")))
-
-@app.route('/api/rbac/roles/<int:id>', methods=['PUT'])
-def rbac_update_role(id):
-    data = request.json or {}
-    from core.rbac import atualizar_role
-    return jsonify(atualizar_role(id, data.get("nome"), data.get("descricao"), data.get("permissoes")))
-
-@app.route('/api/rbac/roles/<int:id>', methods=['DELETE'])
-def rbac_delete_role(id):
-    from core.rbac import deletar_role
-    return jsonify(deletar_role(id))
-
-@app.route('/api/rbac/permissoes', methods=['GET'])
-def rbac_list_permissoes():
-    from core.rbac import list_permissoes
-    return jsonify({"permissoes": list_permissoes()})
-
-@app.route('/api/rbac/usuarios', methods=['GET'])
-def rbac_list_usuarios():
-    from core.rbac import list_usuarios
-    return jsonify({"usuarios": list_usuarios()})
-
-@app.route('/api/rbac/usuarios', methods=['POST'])
-def rbac_create_usuario():
-    data = request.json or {}
-    from core.rbac import criar_usuario
-    return jsonify(criar_usuario(data.get("nome",""), data.get("email",""), data.get("senha",""), data.get("role","")))
-
-@app.route('/api/rbac/usuarios/<int:id>', methods=['PUT'])
-def rbac_update_usuario(id):
-    data = request.json or {}
-    from core.rbac import atualizar_usuario
-    return jsonify(atualizar_usuario(id, data.get("nome"), data.get("role"), data.get("ativo")))
-
-# ── Lojas CRUD ──
-
-@app.route('/api/lojas/manage', methods=['GET'])
-def listar_lojas_manage():
-    from core.lojas import listar as listar_lojas_fn
-    return jsonify({"lojas": listar_lojas_fn()})
-
-@app.route('/api/lojas/manage', methods=['POST'])
-def criar_loja_manage():
-    data = request.json or {}
-    nome = (data.get("nome") or "").strip()
-    if not nome:
-        return jsonify({"error": "Nome é obrigatório"}), 400
-    result = None
-    from core.lojas import criar as criar_loja_fn
-    result = criar_loja_fn(nome)
-    return jsonify({"loja": result}) if result else jsonify({"error": "Erro ao criar"}), 500
-
-@app.route('/api/lojas/manage/<int:id>', methods=['PUT'])
-def atualizar_loja_manage(id):
-    data = request.json or {}
-    nome = (data.get("nome") or "").strip()
-    markup = data.get("shopee_markup_pct")
-    grupos = data.get("grupos_publicacao")
-    if not nome:
-        return jsonify({"error": "Nome é obrigatório"}), 400
-    from core.lojas import atualizar as atualizar_loja_fn
-    ok = atualizar_loja_fn(id, nome, shopee_markup_pct=markup, grupos_publicacao=grupos)
-    return jsonify({"success": ok}) if ok else jsonify({"error": "Loja não encontrada"}), 404
-
-@app.route('/api/lojas/manage/<int:id>', methods=['DELETE'])
-def deletar_loja_manage(id):
-    from core.lojas import deletar as deletar_loja_fn
-    ok = deletar_loja_fn(id)
-    return jsonify({"success": ok}) if ok else jsonify({"error": "Loja não encontrada"}), 404
-
-@app.route('/api/lojas/sync/bling', methods=['POST'])
-def lojas_sync_bling():
-    from core.lojas import sincronizar_bling
-    return jsonify(sincronizar_bling())
-
-@app.route('/api/lojas/deposito-map', methods=['GET'])
-def lojas_deposito_map():
-    from core import get_db, run_async
-    async def _go():
-        db = await get_db()
-        rows = await db.fetch("SELECT id, nome, bling_id FROM lojas WHERE bling_id IS NOT NULL AND ativa = TRUE ORDER BY id")
-        return [{"loja_id": r["id"], "nome": r["nome"], "deposito_id": r["bling_id"]} for r in rows]
-    try:
-        return jsonify({"map": run_async(_go())})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# ── RH CRUD ──
-
-
-
-# ── RH — Vale / Adiantamento ──
-
-@app.route('/api/rh/vale', methods=['GET'])
-def rh_vale_list():
-    from core.rh import list_vale as lv
-    return jsonify({"data": lv()})
-
-@app.route('/api/rh/vale', methods=['POST'])
-def rh_vale_create():
-    data = request.json or {}
-    from core.rh import criar_vale
-    return jsonify(criar_vale(
-        int(data.get("funcionario_id", 0)),
-        data.get("nome", ""),
-        float(data.get("valor", 0)),
-        data.get("motivo", "")
-    ))
-
-@app.route('/api/rh/vale/<int:id>', methods=['PUT'])
-def rh_vale_update(id):
-    data = request.json or {}
-    from core.rh import atualizar_vale
-    return jsonify(atualizar_vale(id, data.get("status", "")))
-
-# ── RH — Comissoes ──
-
-@app.route('/api/rh/comissoes', methods=['GET'])
-def rh_comissoes_list():
-    from core.rh import list_comissoes
-    return jsonify({"data": list_comissoes()})
-
-@app.route('/api/rh/comissoes', methods=['POST'])
-def rh_comissoes_create():
-    data = request.json or {}
-    from core.rh import criar_comissao
-    return jsonify(criar_comissao(
-        int(data.get("vendedor_id", 0)),
-        data.get("nome", ""),
-        data.get("mes", ""),
-        float(data.get("total_vendas", 0)),
-        float(data.get("comissao_pct", 0)),
-        float(data.get("total_comissoes", 0))
-    ))
-
-@app.route('/api/rh/comissoes/<int:id>', methods=['PUT'])
-def rh_comissoes_update(id):
-    data = request.json or {}
-    from core.rh import atualizar_comissao
-    return jsonify(atualizar_comissao(id, data.get("status", "")))
-
-@app.route('/api/rh/dashboard', methods=['GET'])
-def rh_dashboard():
-    from core.rh import dashboard
-    return jsonify(dashboard())
-
-@app.route('/api/rh/<tabela>', methods=['GET'])
-def rh_list(tabela):
-    from core.rh import list as rh_list_fn, listar_filtrado, RH_TABLES
-    if tabela not in RH_TABLES:
-        return jsonify({"error": "Tabela invalida"}), 404
-    data_inicio = request.args.get("data_inicio", "")
-    data_fim = request.args.get("data_fim", "")
-    status = request.args.get("status", "")
-    if data_inicio or data_fim or status:
-        return jsonify(listar_filtrado(tabela, data_inicio, data_fim, status))
-    return jsonify({"data": rh_list_fn(tabela)})
-
-@app.route('/api/rh/<tabela>', methods=['POST'])
-def rh_create(tabela):
-    from core.rh import create as rh_create_fn, RH_TABLES
-    if tabela not in RH_TABLES:
-        return jsonify({"error": "Tabela invalida"}), 404
-    data = request.json or {}
-    if not data:
-        return jsonify({"error": "Dados obrigatorios"}), 400
-    return jsonify(rh_create_fn(tabela, data))
-
-@app.route('/api/rh/<tabela>/<int:id>', methods=['GET'])
-def rh_get(tabela, id):
-    from core.rh import get as rh_get_fn, RH_TABLES
-    if tabela not in RH_TABLES:
-        return jsonify({"error": "Tabela invalida"}), 404
-    return jsonify(rh_get_fn(tabela, id))
-
-@app.route('/api/rh/<tabela>/<int:id>', methods=['PUT'])
-def rh_update(tabela, id):
-    from core.rh import update as rh_update_fn, RH_TABLES
-    if tabela not in RH_TABLES:
-        return jsonify({"error": "Tabela invalida"}), 404
-    data = request.json or {}
-    return jsonify(rh_update_fn(tabela, id, data))
-
-@app.route('/api/rh/<tabela>/<int:id>', methods=['DELETE'])
-def rh_delete(tabela, id):
-    from core.rh import delete as rh_delete_fn, RH_TABLES
-    if tabela not in RH_TABLES:
-        return jsonify({"error": "Tabela invalida"}), 404
-    return jsonify(rh_delete_fn(tabela, id))
-
-@app.route('/api/rh/ponto/data/<data>', methods=['GET'])
-def rh_ponto_data(data):
-    from core.rh import ponto_por_data
-    return jsonify({"data": ponto_por_data(data)})
-
-@app.route('/api/rh/folha/resumo/<mes>', methods=['GET'])
-def rh_folha_resumo(mes):
-    from core.rh import folha_resumo
-    return jsonify(folha_resumo(mes))
-
-@app.route('/api/rh/beneficios/resumo', methods=['GET'])
-def rh_beneficios_resumo():
-    from core.rh import beneficios_resumo
-    return jsonify(beneficios_resumo())
-
-@app.route('/api/rh/funcionario/<int:id>', methods=['GET'])
-def rh_funcionario_detalhe(id):
-    from core.rh import funcionario_detalhe
-    return jsonify(funcionario_detalhe(id))
-
-# ── Cadastros CRUD ──
-
-@app.route('/api/cadastros/<tabela>', methods=['GET'])
-def cad_list(tabela):
-    from core.cadastros import list as cad_list_fn, ALL_TABLES
-    if tabela not in ALL_TABLES:
-        return jsonify({"error": "Tabela invalida"}), 404
-    return jsonify({"data": cad_list_fn(tabela)})
-
-@app.route('/api/cadastros/<tabela>', methods=['POST'])
-def cad_create(tabela):
-    from core.cadastros import create as cad_create_fn, ALL_TABLES
-    if tabela not in ALL_TABLES:
-        return jsonify({"error": "Tabela invalida"}), 404
-    data = request.json or {}
-    if not data:
-        return jsonify({"error": "Dados obrigatorios"}), 400
-    return jsonify(cad_create_fn(tabela, data))
-
-@app.route('/api/cadastros/<tabela>/<int:id>', methods=['GET'])
-def cad_get(tabela, id):
-    from core.cadastros import get as cad_get_fn, ALL_TABLES
-    if tabela not in ALL_TABLES:
-        return jsonify({"error": "Tabela invalida"}), 404
-    return jsonify(cad_get_fn(tabela, id))
-
-@app.route('/api/cadastros/<tabela>/<int:id>', methods=['PUT'])
-def cad_update(tabela, id):
-    from core.cadastros import update as cad_update_fn, ALL_TABLES
-    if tabela not in ALL_TABLES:
-        return jsonify({"error": "Tabela invalida"}), 404
-    data = request.json or {}
-    return jsonify(cad_update_fn(tabela, id, data))
-
-@app.route('/api/cadastros/<tabela>/<int:id>', methods=['DELETE'])
-def cad_delete(tabela, id):
-    from core.cadastros import delete as cad_delete_fn, ALL_TABLES
-    if tabela not in ALL_TABLES:
-        return jsonify({"error": "Tabela invalida"}), 404
-    return jsonify(cad_delete_fn(tabela, id))
-
-@app.route('/api/cadastros/permissoes/perfil', methods=['GET'])
-def cad_permissoes_perfil():
-    from core.cadastros import permissoes_por_perfil
-    return jsonify({"data": permissoes_por_perfil()})
-
-@app.route('/api/cadastros/vendedores/comissao', methods=['GET'])
-def cad_vendedor_comissao():
-    from core.cadastros import vendedor_comissao_resumo
-    return jsonify(vendedor_comissao_resumo())
-
-@app.route('/api/cadastros/vendedores/metas', methods=['GET'])
-@app.route('/api/cadastros/vendedores/metas/<mes>', methods=['GET'])
-def cad_vendedor_metas(mes=None):
-    from core.cadastros import vendedor_metas
-    return jsonify({"data": vendedor_metas(mes)})
-
-@app.route('/api/cadastros/fornecedores/resumo', methods=['GET'])
-def cad_fornecedor_resumo():
-    from core.cadastros import fornecedor_resumo
-    return jsonify({"data": fornecedor_resumo()})
-
-# ── Financeiro CRUD ──
-
-@app.route('/api/financeiro/<tabela>', methods=['GET'])
-def fin_list(tabela):
-    from core.financeiro import list as fin_list_fn, FIN_TABLES
-    if tabela not in FIN_TABLES:
-        return jsonify({"error": "Tabela invalida"}), 404
-    return jsonify({"data": fin_list_fn(tabela)})
-
-@app.route('/api/financeiro/<tabela>', methods=['POST'])
-def fin_create(tabela):
-    from core.financeiro import create as fin_create_fn, FIN_TABLES
-    if tabela not in FIN_TABLES:
-        return jsonify({"error": "Tabela invalida"}), 404
-    data = request.json or {}
-    if not data:
-        return jsonify({"error": "Dados obrigatorios"}), 400
-    return jsonify(fin_create_fn(tabela, data))
-
-@app.route('/api/financeiro/<tabela>/<int:id>', methods=['GET'])
-def fin_get(tabela, id):
-    from core.financeiro import get as fin_get_fn, FIN_TABLES
-    if tabela not in FIN_TABLES:
-        return jsonify({"error": "Tabela invalida"}), 404
-    return jsonify(fin_get_fn(tabela, id))
-
-@app.route('/api/financeiro/<tabela>/<int:id>', methods=['PUT'])
-def fin_update(tabela, id):
-    from core.financeiro import update as fin_update_fn, FIN_TABLES
-    if tabela not in FIN_TABLES:
-        return jsonify({"error": "Tabela invalida"}), 404
-    data = request.json or {}
-    return jsonify(fin_update_fn(tabela, id, data))
-
-@app.route('/api/financeiro/<tabela>/<int:id>', methods=['DELETE'])
-def fin_delete(tabela, id):
-    from core.financeiro import delete as fin_delete_fn, FIN_TABLES
-    if tabela not in FIN_TABLES:
-        return jsonify({"error": "Tabela invalida"}), 404
-    return jsonify(fin_delete_fn(tabela, id))
-
-@app.route('/api/financeiro/fluxo_caixa/resumo', methods=['GET'])
-def fin_fluxo_caixa_resumo():
-    from core.financeiro import fluxo_caixa_resumo
-    dias = request.args.get("dias", 30, type=int)
-    return jsonify(fluxo_caixa_resumo(dias))
-
-@app.route('/api/financeiro/dre/resumo', methods=['GET'])
-@app.route('/api/financeiro/dre/resumo/<mes>', methods=['GET'])
-def fin_dre_resumo(mes=None):
-    from core.financeiro import dre_resumo
-    mes = mes or request.args.get("mes")
-    return jsonify(dre_resumo(mes))
-
-# ===========================================================================
 # Business operations (chamado pelo Business.tsx)
 # ===========================================================================
 
@@ -2796,29 +1280,29 @@ def business_quality():
     resultado = {
         "cycleId": data.get("cycleId", ""),
         "machineId": data.get("machineId", ""),
-        "analise": "ciclo dentro dos parâmetros",
+        "analise": "ciclo dentro dos parÃ¢metros",
         "defeitos_estimados": 0,
-        "recomendacao": "manter parâmetros atuais",
+        "recomendacao": "manter parÃ¢metros atuais",
         "agente": "ag-011",
         "status": "ok"
     }
-    # Se os parâmetros estão fora da faixa ideal, sugere ajuste
+    # Se os parÃ¢metros estÃ£o fora da faixa ideal, sugere ajuste
     temp = data.get("temp", 0)
     pressure = data.get("pressure", 0)
     problemas = []
     if temp and (temp < 200 or temp > 250):
-        problemas.append(f"temperatura {temp}°C fora da faixa (200-250)")
+        problemas.append(f"temperatura {temp}Â°C fora da faixa (200-250)")
     if pressure and (pressure < 800 or pressure > 900):
-        problemas.append(f"pressão {pressure} fora da faixa (800-900)")
+        problemas.append(f"pressÃ£o {pressure} fora da faixa (800-900)")
     if problemas:
         resultado["defeitos_estimados"] = len(problemas)
         resultado["analise"] = "; ".join(problemas)
-        resultado["recomendacao"] = "ajustar parâmetros"
+        resultado["recomendacao"] = "ajustar parÃ¢metros"
     return jsonify(resultado)
 
 @app.route('/api/business/orders', methods=['POST'])
 def business_create_order():
-    """Create order routing (AG-035 → AG-036 → AG-042)."""
+    """Create order routing (AG-035 â†’ AG-036 â†’ AG-042)."""
     data = request.json or {}
     order_id = data.get("orderId", f"ORD-{__import__('time').time()}")
     from ag_04_planejador import adicionar_pedido_producao
@@ -2828,7 +1312,7 @@ def business_create_order():
             prioridade=5, cliente_id=data.get("customerId"))
     return jsonify({
         "orderId": order_id, "status": "criado",
-        "roteamento": "ag-035→ag-036→ag-042",
+        "roteamento": "ag-035â†’ag-036â†’ag-042",
         "fraud_score": 0.02, "transportadora": "Correios",
         "frete_estimado": 25.90, "agentes": ["ag-035", "ag-036", "ag-042"]
     })
@@ -2852,14 +1336,14 @@ def hermes_agents_list():
         except Exception:
             pass
         return [
-            {"id": 1, "agente_id": "ag-01", "nome": "Caçador", "descricao": "Hunter de oportunidades", "categoria": "cacador", "status": "ativo", "intervalo_minutos": 60},
-            {"id": 2, "agente_id": "ag-02", "nome": "Lucratividade", "descricao": "Análise de margens", "categoria": "lucratividade", "status": "ativo", "intervalo_minutos": 1440},
-            {"id": 3, "agente_id": "ag-03", "nome": "Marketplaces", "descricao": "Gestão de marketplaces", "categoria": "marketplaces", "status": "ativo", "intervalo_minutos": 60},
-            {"id": 4, "agente_id": "ag-04", "nome": "Planejador", "descricao": "Planejamento produção", "categoria": "planejador", "status": "ativo", "intervalo_minutos": 1440},
+            {"id": 1, "agente_id": "ag-01", "nome": "CaÃ§ador", "descricao": "Hunter de oportunidades", "categoria": "cacador", "status": "ativo", "intervalo_minutos": 60},
+            {"id": 2, "agente_id": "ag-02", "nome": "Lucratividade", "descricao": "AnÃ¡lise de margens", "categoria": "lucratividade", "status": "ativo", "intervalo_minutos": 1440},
+            {"id": 3, "agente_id": "ag-03", "nome": "Marketplaces", "descricao": "GestÃ£o de marketplaces", "categoria": "marketplaces", "status": "ativo", "intervalo_minutos": 60},
+            {"id": 4, "agente_id": "ag-04", "nome": "Planejador", "descricao": "Planejamento produÃ§Ã£o", "categoria": "planejador", "status": "ativo", "intervalo_minutos": 1440},
             {"id": 6, "agente_id": "ag-06", "nome": "Telegram", "descricao": "Vendas Telegram", "categoria": "telegram", "status": "ativo", "intervalo_minutos": 0},
-            {"id": 7, "agente_id": "ag-07", "nome": "Laboratório", "descricao": "Análise viabilidade", "categoria": "laboratorio", "status": "ativo", "intervalo_minutos": 0},
-            {"id": 9, "agente_id": "ag-09", "nome": "Memória", "descricao": "Memória corporativa", "categoria": "memoria", "status": "ativo", "intervalo_minutos": 0},
-            {"id": 10, "agente_id": "ag-10", "nome": "Diretor", "descricao": "Inteligência central", "categoria": "diretor", "status": "ativo", "intervalo_minutos": 0},
+            {"id": 7, "agente_id": "ag-07", "nome": "LaboratÃ³rio", "descricao": "AnÃ¡lise viabilidade", "categoria": "laboratorio", "status": "ativo", "intervalo_minutos": 0},
+            {"id": 9, "agente_id": "ag-09", "nome": "MemÃ³ria", "descricao": "MemÃ³ria corporativa", "categoria": "memoria", "status": "ativo", "intervalo_minutos": 0},
+            {"id": 10, "agente_id": "ag-10", "nome": "Diretor", "descricao": "InteligÃªncia central", "categoria": "diretor", "status": "ativo", "intervalo_minutos": 0},
             {"id": 14, "agente_id": "ag-14", "nome": "WhatsApp", "descricao": "Vendas WhatsApp", "categoria": "telegram", "status": "ativo", "intervalo_minutos": 0},
         ]
     return jsonify(run_async(_go()))
@@ -2873,7 +1357,7 @@ def hermes_opportunities():
             rows = await db.fetch("""SELECT * FROM produtos_descobertos ORDER BY score_final DESC LIMIT 50""")
             return [dict(r) for r in rows]
         except Exception:
-            return {"erro": "tabela produtos_descobertos não existe ainda", "itens": []}
+            return {"erro": "tabela produtos_descobertos nÃ£o existe ainda", "itens": []}
     return jsonify(run_async(_go()))
 
 @app.route('/api/hermes/alerts', methods=['GET'])
@@ -2902,7 +1386,7 @@ def hermes_alerts_resolve(alert_id):
 
 @app.route('/api/hermes/executions', methods=['GET'])
 def hermes_executions():
-    """Histórico de execuções."""
+    """HistÃ³rico de execuÃ§Ãµes."""
     async def _go():
         try:
             db = await get_db()
@@ -2914,7 +1398,7 @@ def hermes_executions():
 
 @app.route('/api/hermes/execute', methods=['POST'])
 def hermes_execute():
-    """Executa ação de um agente Hermes."""
+    """Executa aÃ§Ã£o de um agente Hermes."""
     data = request.json or {}
     agent_id = data.get("agent_id", "")
     action = data.get("action", "")
@@ -2945,116 +1429,21 @@ def hermes_execute():
             run_async(_log("sucesso", resultado))
             return jsonify({"success": True, "data": resultado})
         else:
-            run_async(_log("erro", erro=f"Agente {agent_id} não encontrado"))
-            return jsonify({"success": False, "error": f"Agente {agent_id} não encontrado"}), 404
+            run_async(_log("erro", erro=f"Agente {agent_id} nÃ£o encontrado"))
+            return jsonify({"success": False, "error": f"Agente {agent_id} nÃ£o encontrado"}), 404
     except Exception as e:
         run_async(_log("erro", erro=str(e)))
         return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/hermes/sync-all', methods=['POST'])
 def hermes_sync_all():
-    """Sincroniza todos os dados (Shopee → Hermes DB)."""
+    """Sincroniza todos os dados (Shopee â†’ Hermes DB)."""
     from shopee_sync import sync_all
     resultado = sync_all(dias=30)
     return jsonify({"synced": resultado["produtos"]["total"] + resultado["pedidos"]["total"], "errors": []})
 
 # ===========================================================================
-# Shopee Ads (chamado pelo ShopeeAdsIntegration.tsx)
-# ===========================================================================
-
-@app.route('/api/shopee-ads/campaigns', methods=['GET'])
-def shopee_ads_campaigns():
-    async def _go():
-        db = await get_db()
-        rows = await db.fetch("SELECT * FROM shopee_ads_campaigns ORDER BY id DESC")
-        return [dict(r) for r in rows]
-    return jsonify(run_async(_go()))
-
-@app.route('/api/shopee-ads/campaigns', methods=['POST'])
-def shopee_ads_create_campaign():
-    data = request.json or {}
-    async def _go():
-        db = await get_db()
-        row = await db.fetchrow("""
-            INSERT INTO shopee_ads_campaigns (campaign_id, shop_id, nome, tipo, status, daily_budget, start_date)
-            VALUES ($1, $2, $3, $4, 'active', $5, $6::date) RETURNING *
-        """, f"camp_{int(time.time())}", data.get("shopId", ""),
-            data.get("name", "Campanha"), "search",
-            data.get("dailyBudget", 100), data.get("startDate", hoje()))
-        return dict(row)
-    return jsonify(run_async(_go()))
-
-@app.route('/api/shopee-ads/performance', methods=['GET'])
-def shopee_ads_performance():
-    async def _go():
-        db = await get_db()
-        rows = await db.fetch("SELECT * FROM shopee_ads_performance ORDER BY data DESC LIMIT 90")
-        return [dict(r) for r in rows]
-    return jsonify(run_async(_go()))
-
-@app.route('/api/shopee-ads/insights', methods=['GET'])
-def shopee_ads_insights():
-    async def _go():
-        db = await get_db()
-        rows = await db.fetch("SELECT * FROM shopee_ads_insights ORDER BY created_at DESC LIMIT 50")
-        return [dict(r) for r in rows]
-    return jsonify(run_async(_go()))
-
-@app.route('/api/shopee-ads/insights/<int:insight_id>/resolve', methods=['POST'])
-def shopee_ads_resolve_insight(insight_id):
-    async def _go():
-        db = await get_db()
-        await db.execute("UPDATE shopee_ads_insights SET action_taken = true WHERE id = $1", insight_id)
-    run_async(_go())
-    return jsonify({"success": True})
-
-@app.route('/api/shopee-ads/abtests', methods=['GET'])
-def shopee_ads_abtests():
-    return jsonify([])
-
-@app.route('/api/shopee-ads/campaigns/<campaign_id>/analyze', methods=['GET'])
-def shopee_ads_analyze(campaign_id):
-    days = request.args.get("days", 30, type=int)
-    return jsonify({
-        "campaign_id": campaign_id, "periodo_dias": days,
-        "impressions": 0, "clicks": 0, "cost": 0, "orders": 0, "revenue": 0,
-        "roas": 0, "ctr": 0, "cpc": 0, "conversion_rate": 0,
-        "recomendacao": "Sincronize campanhas primeiro via sync Shopee",
-    })
-
-@app.route('/api/shopee-ads/campaigns/<campaign_id>/adjust-bids', methods=['POST'])
-def shopee_ads_adjust_bids(campaign_id):
-    data = request.json or {}
-    target_roas = data.get("targetRoas", 3.0)
-    return jsonify({
-        "campaign_id": campaign_id, "target_roas": target_roas,
-        "ajustes": [], "status": "ok",
-        "mensagem": f"Bids ajustados para ROAS {target_roas} (simulado)",
-    })
-
-@app.route('/api/shopee-ads/campaigns/<campaign_id>/predict', methods=['GET'])
-def shopee_ads_predict(campaign_id):
-    days = request.args.get("days", 30, type=int)
-    return jsonify({
-        "campaign_id": campaign_id, "previsao_dias": days,
-        "impressions_estimado": 0, "clicks_estimado": 0,
-        "cost_estimado": 0, "revenue_estimado": 0,
-        "roas_estimado": 0,
-        "confianca": "baixa — precisa de dados históricos",
-    })
-
-@app.route('/api/shopee-ads/campaigns/<campaign_id>/suggest-budget', methods=['GET'])
-def shopee_ads_suggest_budget(campaign_id):
-    target_roas = request.args.get("targetRoas", 3.0, type=float)
-    return jsonify({
-        "campaign_id": campaign_id, "target_roas": target_roas,
-        "budget_atual": 0,
-        "budget_sugerido": 100.00,
-        "motivo": "Orçamento sugerido baseado em média de mercado",
-    })
-
-# ===========================================================================
-# Integrações (chamado pelo Integrations.tsx)
+# IntegraÃ§Ãµes (chamado pelo Integrations.tsx)
 # ===========================================================================
 
 @app.route('/api/integrations', methods=['GET'])
@@ -3083,16 +1472,16 @@ def list_integrations():
 @app.route('/api/integrations/<integ_id>/connect', methods=['POST'])
 def connect_integration(integ_id):
     if integ_id == 'shopee':
-        return jsonify({"success": True, "authUrl": "/shopee", "message": "Configure as chaves da Shopee na página de integração"})
+        return jsonify({"success": True, "authUrl": "/shopee", "message": "Configure as chaves da Shopee na pÃ¡gina de integraÃ§Ã£o"})
     if integ_id == 'bling':
-        return jsonify({"success": True, "authUrl": "/bling", "message": "Configure a API key do Bling na página de integração"})
+        return jsonify({"success": True, "authUrl": "/bling", "message": "Configure a API key do Bling na pÃ¡gina de integraÃ§Ã£o"})
     if integ_id == 'whatsapp':
-        return jsonify({"success": True, "authUrl": "/integrations", "message": "Configure a Evolution API key nas variáveis de ambiente"})
-    return jsonify({"success": True, "message": f"Integração {integ_id} conectada (simulado)"})
+        return jsonify({"success": True, "authUrl": "/integrations", "message": "Configure a Evolution API key nas variÃ¡veis de ambiente"})
+    return jsonify({"success": True, "message": f"IntegraÃ§Ã£o {integ_id} conectada (simulado)"})
 
 @app.route('/api/integrations/<integ_id>/disconnect', methods=['POST'])
 def disconnect_integration(integ_id):
-    return jsonify({"success": True, "message": f"Integração {integ_id} desconectada"})
+    return jsonify({"success": True, "message": f"IntegraÃ§Ã£o {integ_id} desconectada"})
 
 # ===========================================================================
 # Health real (consulta banco de verdade)
@@ -3125,413 +1514,9 @@ def health_real():
             return {"status": "error", "error": str(e)}
     return jsonify(run_async(_go()))
 
-# ===========================================================================
-# Shopee endpoints estendidos (port do ATHENA shopee-adapter.ts)
-# ===========================================================================
-
-@app.route('/api/shopee/callback', methods=['GET'])
-@app.route('/api/shopee/oauth2callback', methods=['GET'])
-def shopee_oauth_callback():
-    """Recebe o redirect da Shopee apos autorizacao e manda o resultado pra tela de
-    Integracoes -> Shopee (nao devolve o access_token na URL, so' o status/shop_id).
-    ponytail: /api/shopee/callback ficou retornando o HTML do frontend em producao por
-    motivo nao identificado (nao e' cache — CF-Cache-Status: DYNAMIC; testado localmente e
-    funciona). /oauth2callback e' um caminho alternativo novo pra contornar isso — use este
-    ao reautorizar ou conectar uma loja nova."""
-    from urllib.parse import urlencode
-    code = request.args.get("code", "")
-    shop_id = request.args.get("shop_id", "")
-    loja_id = request.args.get("loja_id", type=int)
-    if not code:
-        return redirect("/integracoes/shopee?" + urlencode({"shopee_auth": "erro", "shopee_msg": "Parametro code ausente"}))
-    from shopee import exchange_shopee_code
-    result = exchange_shopee_code(code, shop_id, loja_id=loja_id)
-    if result.get("success"):
-        loja = result.get("loja") or {}
-        params = {
-            "shopee_auth": "ok",
-            "shopee_shop_id": result.get("shop_id", ""),
-            "shopee_loja_nome": loja.get("nome", ""),
-            "shopee_expire_in": result.get("expire_in", ""),
-        }
-        if loja.get("error"):
-            params["shopee_msg"] = f"Autorizado, mas nao foi possivel vincular a loja: {loja['error']}"
-        return redirect("/integracoes/shopee?" + urlencode(params))
-    return redirect("/integracoes/shopee?" + urlencode({"shopee_auth": "erro", "shopee_msg": result.get("error", "Falha na autenticacao")}))
-
-@app.route('/api/shopee/auth-url', methods=['GET'])
-def shopee_auth_url():
-    from shopee import get_auth_url
-    sandbox = request.args.get("sandbox", "").lower() == "true"
-    loja_id = request.args.get("loja_id", type=int)
-    url = get_auth_url(sandbox=sandbox, loja_id=loja_id)
-    if not url:
-        return jsonify({"error": "Partner ID nao configurado"}), 400
-    return jsonify({"url": url})
-
-@app.route('/api/shopee/lojas', methods=['GET'])
-def shopee_listar_lojas():
-    """Lojas Shopee ja conectadas (multiloja)."""
-    from core.lojas import listar_lojas_shopee
-    return jsonify({"lojas": listar_lojas_shopee()})
-
-@app.route('/api/shopee/lojas/<int:loja_id>/conectar', methods=['POST'])
-def shopee_conectar_loja(loja_id):
-    """Gera a URL de autorizacao Shopee vinculada a uma loja especifica."""
-    from shopee import get_auth_url
-    sandbox = (request.json or {}).get("sandbox", False) if request.is_json else False
-    url = get_auth_url(sandbox=sandbox, loja_id=loja_id)
-    if not url:
-        return jsonify({"error": "Partner ID nao configurado"}), 400
-    return jsonify({"url": url})
-
-@app.route('/api/shopee/lojas/<int:loja_id>/renovar-token', methods=['POST'])
-def shopee_renovar_token(loja_id):
-    """Renova o access_token de uma loja Shopee usando o refresh_token salvo."""
-    from shopee import refresh_shopee_token
-    try:
-        return jsonify(refresh_shopee_token(loja_id=loja_id))
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/shopee/lojas/<int:loja_id>', methods=['DELETE'])
-def shopee_desconectar_loja(loja_id):
-    """Remove a vinculacao Shopee de uma loja (nao apaga a loja, so' os tokens/shop_id)."""
-    from core.lojas import desconectar_shopee
-    return jsonify(desconectar_shopee(loja_id))
-
-@app.route('/api/shopee/sync-log', methods=['GET'])
-def shopee_sync_log():
-    """Historico das ultimas sincronizacoes (produtos/pedidos) da Shopee."""
-    from shopee_sync import status_ultimo_sync
-    return jsonify({"log": status_ultimo_sync()})
-
-@app.route('/api/shopee/pedidos', methods=['GET'])
-def shopee_listar_pedidos():
-    """Pedidos Shopee com detalhe (cliente, itens, valor) de uma loja especifica."""
-    from shopee import listar_pedidos_shopee_detalhado
-    loja_id = request.args.get("loja_id", type=int)
-    dias = request.args.get("dias", 7, type=int)
-    status = request.args.get("status") or None
-    try:
-        return jsonify(listar_pedidos_shopee_detalhado(dias, loja_id=loja_id, status=status))
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/shopee/dashboard', methods=['GET'])
-def shopee_dashboard_consolidado():
-    """Painel comparativo entre todas as lojas Shopee conectadas: vendas, anuncios, estoque baixo."""
-    from core.lojas import listar_lojas_shopee
-    dias = request.args.get("dias", 30, type=int)
-    lojas = listar_lojas_shopee()
-    try:
-        conn = _db_sync(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        resultado = []
-        for l in lojas:
-            shop_id = l.get("shopee_shop_id") or ""
-            cur.execute("""
-                SELECT COALESCE(SUM(receita_bruta),0) AS receita, COALESCE(SUM(quantidade),0) AS unidades,
-                       COUNT(DISTINCT sku) AS skus_vendidos
-                FROM vendas WHERE marketplace = 'shopee' AND loja_id = %s AND data >= CURRENT_DATE - %s
-            """, (l["id"], dias))
-            vendas_row = cur.fetchone() or {}
-            cur.execute("""
-                SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE status = 'ativo') AS ativos
-                FROM anuncios WHERE marketplace = 'shopee' AND shop_id = %s
-            """, (shop_id,))
-            anuncios_row = cur.fetchone() or {}
-            cur.execute("""
-                SELECT COUNT(DISTINCT a.sku) AS total FROM anuncios a
-                JOIN catalogo_produtos c ON c.sku = a.sku
-                LEFT JOIN estoque_lojas e ON e.sku = a.sku
-                WHERE a.marketplace = 'shopee' AND a.shop_id = %s
-                  AND c.estoque_minimo IS NOT NULL
-                GROUP BY a.sku HAVING COALESCE(SUM(e.quantidade), 0) <= MAX(c.estoque_minimo)
-            """, (shop_id,))
-            estoque_baixo = len(cur.fetchall() or [])
-            resultado.append({
-                "loja_id": l["id"], "nome": l["nome"], "shop_id": shop_id,
-                "tem_token": l.get("tem_token", False),
-                "receita": float(vendas_row.get("receita") or 0),
-                "unidades_vendidas": int(vendas_row.get("unidades") or 0),
-                "skus_vendidos": int(vendas_row.get("skus_vendidos") or 0),
-                "anuncios_total": int(anuncios_row.get("total") or 0),
-                "anuncios_ativos": int(anuncios_row.get("ativos") or 0),
-                "produtos_estoque_baixo": estoque_baixo,
-            })
-        cur.close(); conn.close()
-        return jsonify({"lojas": resultado, "dias": dias})
-    except Exception as e:
-        return jsonify({"error": str(e), "lojas": []})
-
-@app.route('/api/shopee/lojas/<int:destino_id>/replicar-de/<int:origem_id>', methods=['POST'])
-def shopee_replicar_produtos(destino_id, origem_id):
-    """Replica todos os produtos de uma loja Shopee origem para uma loja destino."""
-    from shopee import transferir_produtos_para_loja
-    max_produtos = (request.json or {}).get("max_produtos")
-    try:
-        return jsonify(transferir_produtos_para_loja(origem_id, destino_id, max_produtos=max_produtos))
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/shopee/estoque/sincronizar-todas', methods=['POST'])
-def shopee_sincronizar_estoque_todas():
-    """Sincroniza estoque de um SKU para todas as lojas Shopee conectadas."""
-    from shopee import sincronizar_estoque_todas_lojas_automatico
-    data = request.json or {}
-    sku = data.get("sku", "")
-    qtd = int(data.get("quantidade", 0))
-    if not sku:
-        return jsonify({"error": "SKU obrigatorio"}), 400
-    try:
-        return jsonify(sincronizar_estoque_todas_lojas_automatico(sku, qtd))
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/shopee/margem', methods=['GET'])
-def shopee_verificar_margem():
-    """Verifica a margem de um produto antes de publicar na Shopee."""
-    from shopee import calcular_margem_produto
-    sku = request.args.get("sku", "")
-    preco = float(request.args.get("preco", 0))
-    loja_id = request.args.get("loja_id", type=int)
-    if not sku or not preco:
-        return jsonify({"error": "SKU e preco obrigatorios"}), 400
-    try:
-        return jsonify(calcular_margem_produto(sku, preco, loja_id=loja_id))
-    except Exception as e:
-        return jsonify({"error": str(e)})
-
-@app.route('/api/shopee/concorrencia', methods=['GET'])
-def shopee_concorrencia():
-    """Analisa concorrencia de preco para um SKU."""
-    from shopee import analisar_concorrencia
-    sku = request.args.get("sku", "")
-    preco = float(request.args.get("preco", 0))
-    if not sku:
-        return jsonify({"error": "SKU obrigatorio"}), 400
-    return jsonify(analisar_concorrencia(sku, preco))
-
-@app.route('/api/shopee/sugestao-kits', methods=['GET'])
-def shopee_sugestao_kits():
-    """Sugere kits com base em produtos comprados juntos."""
-    from shopee import sugerir_kits
-    dias = request.args.get("dias", 90, type=int)
-    min_oc = request.args.get("min", 3, type=int)
-    return jsonify({"data": sugerir_kits(dias, min_oc)})
-
-@app.route('/api/shopee/produtos/<int:item_id>/preco', methods=['POST'])
-def shopee_atualizar_preco(item_id):
-    """Atualiza o preco de um item ja publicado na Shopee."""
-    from shopee import update_price
-    data = request.json or {}
-    loja_id = data.get("loja_id")
-    preco = data.get("price")
-    if preco is None:
-        return jsonify({"error": "price e obrigatorio"}), 400
-    try:
-        return jsonify(update_price(item_id, float(preco), loja_id=loja_id))
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/shopee/produtos/<int:item_id>/variacoes', methods=['GET'])
-def shopee_variacoes_produto(item_id):
-    """Lista os modelos/variacoes (tier variation) de um item na Shopee."""
-    from shopee import get_model_list
-    loja_id = request.args.get("loja_id", type=int)
-    try:
-        return jsonify(get_model_list(item_id, loja_id=loja_id))
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/shopee/produtos/<sku>/estoque', methods=['PUT'])
-def shopee_atualizar_estoque_produto(sku):
-    """Push de estoque local -> Shopee para uma loja especifica (estoque multiloja)."""
-    from shopee import sincronizar_estoque_shopee
-    data = request.json or {}
-    loja_id = data.get("loja_id")
-    quantidade = data.get("quantidade")
-    if loja_id is None or quantidade is None:
-        return jsonify({"error": "loja_id e quantidade sao obrigatorios"}), 400
-    try:
-        return jsonify(sincronizar_estoque_shopee(sku, int(quantidade), loja_id=int(loja_id)))
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/shopee/estoque/todas-lojas', methods=['POST'])
-def shopee_estoque_todas_lojas():
-    """Envia o estoque de um SKU para TODAS as lojas Shopee conectadas de uma vez."""
-    from shopee import sincronizar_estoque_todas_lojas
-    data = request.json or {}
-    sku = data.get("sku")
-    quantidade = data.get("quantidade")
-    if not sku or quantidade is None:
-        return jsonify({"error": "sku e quantidade sao obrigatorios"}), 400
-    try:
-        return jsonify(sincronizar_estoque_todas_lojas(sku, int(quantidade)))
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# ── Cadastro de produtos na Shopee: categorias, atributos, marcas, imagens ──
-# ponytail: os campos abaixo foram validados AO VIVO contra o sandbox real da Shopee
-# (partner_id 1237336) em 2026-07-17 — nao sao suposicao de documentacao.
-
-@app.route('/api/shopee/categorias', methods=['GET'])
-def shopee_categorias():
-    from shopee import listar_categorias_cache
-    busca = request.args.get("busca", "")
-    parent_id = request.args.get("parent_id", type=int)
-    apenas_folhas = request.args.get("apenas_folhas", "").lower() == "true"
-    return jsonify({"categorias": listar_categorias_cache(busca, parent_id, apenas_folhas)})
-
-@app.route('/api/shopee/categorias/sincronizar', methods=['POST'])
-def shopee_categorias_sincronizar():
-    from shopee import sincronizar_categorias
-    data = request.json or {}
-    return jsonify(sincronizar_categorias(data.get("loja_id")))
-
-@app.route('/api/shopee/categorias/<int:category_id>/atributos', methods=['GET'])
-def shopee_categoria_atributos(category_id):
-    from shopee import get_attribute_tree
-    loja_id = request.args.get("loja_id", type=int)
-    r = get_attribute_tree(category_id, loja_id=loja_id)
-    # ponytail: resposta real da Shopee usa response.list[0].attribute_tree com campos
-    # "mandatory"/"name" (nao "is_mandatory"/"original_attribute_name" como a doc antiga sugeria).
-    # Normalizamos aqui para o frontend nao depender do formato instavel da Shopee.
-    lista = r.get("response", {}).get("list", [])
-    brutos = lista[0].get("attribute_tree", []) if lista else []
-    atributos = [{
-        "attribute_id": a.get("attribute_id"),
-        "original_attribute_name": a.get("name", ""),
-        "is_mandatory": bool(a.get("mandatory", False)),
-        "attribute_value_list": [
-            {"value_id": v.get("value_id"), "original_value_name": v.get("name", "")}
-            for v in (a.get("attribute_value_list") or [])
-        ],
-    } for a in brutos]
-    return jsonify({"atributos": atributos, "erro": r.get("error") or None})
-
-@app.route('/api/shopee/categorias/<int:category_id>/marcas', methods=['GET'])
-def shopee_categoria_marcas(category_id):
-    from shopee import get_brand_list
-    loja_id = request.args.get("loja_id", type=int)
-    r = get_brand_list(category_id, loja_id=loja_id)
-    resp = r.get("response", {})
-    return jsonify({"marcas": resp.get("brand_list", []), "obrigatorio": resp.get("is_mandatory", False), "erro": r.get("error") or None})
-
-@app.route('/api/shopee/logistica/canais', methods=['GET'])
-def shopee_logistica_canais():
-    from shopee import get_logistics_channel_list
-    loja_id = request.args.get("loja_id", type=int)
-    r = get_logistics_channel_list(loja_id=loja_id)
-    # ponytail: campo real e' logistics_channel_id/logistics_channel_name (validado ao vivo),
-    # nao logistic_id/logistic_name — normalizamos para um contrato estavel.
-    canais_brutos = r.get("response", {}).get("logistics_channel_list", [])
-    canais = [{
-        "logistic_id": c.get("logistics_channel_id"),
-        "logistic_name": c.get("logistics_channel_name", ""),
-        "enabled": bool(c.get("enabled", False)),
-    } for c in canais_brutos]
-    return jsonify({"canais": canais, "erro": r.get("error") or None})
-
-def _url_publica_segura(url: str) -> bool:
-    """Bloqueia SSRF: recusa URLs cujo host resolve para IP privado/loopback/link-local
-    (evita usar o upload de imagem como proxy para sondar rede interna ou metadata de nuvem)."""
-    import socket, ipaddress
-    from urllib.parse import urlparse
-    try:
-        host = urlparse(url).hostname
-        if not host:
-            return False
-        for info in socket.getaddrinfo(host, None):
-            ip = ipaddress.ip_address(info[4][0])
-            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
-                return False
-        return True
-    except Exception:
-        return False
-
-@app.route('/api/shopee/upload-imagem', methods=['POST'])
-def shopee_upload_imagem():
-    """Envia uma imagem para a Shopee. Aceita um arquivo (multipart 'file') OU uma
-    image_url (ex: a imagem que ja esta no catalogo/Bling) — evita o usuario ter
-    que baixar e re-subir manualmente a mesma foto que ja tem cadastrada."""
-    from shopee import upload_image
-    import requests as req_lib
-    loja_id = request.form.get("loja_id", type=int)
-    if "file" in request.files:
-        file = request.files["file"]
-        image_bytes = file.read()
-        filename = file.filename or "imagem.jpg"
-    else:
-        image_url = request.form.get("image_url", "")
-        if not image_url.startswith(("http://", "https://")):
-            return jsonify({"error": "Envie um arquivo ou informe uma image_url http(s) valida"}), 400
-        if not _url_publica_segura(image_url):
-            return jsonify({"error": "image_url nao permitida"}), 400
-        try:
-            resp = req_lib.get(image_url, timeout=20, allow_redirects=False)
-            resp.raise_for_status()
-            image_bytes = resp.content
-            filename = image_url.rsplit("/", 1)[-1].split("?")[0] or "imagem.jpg"
-        except Exception as e:
-            from core import log
-            log("Shopee Upload", f"Falha ao baixar {image_url}: {e}")
-            return jsonify({"error": "Falha ao baixar imagem"}), 400
-    r = upload_image(image_bytes, filename, loja_id=loja_id)
-    resp = r.get("response", {})
-    image_info = resp.get("image_info", {})
-    return jsonify({"image_id": image_info.get("image_id"), "image_url": (image_info.get("image_url_list") or [{}])[0].get("image_url", ""), "erro": r.get("error") or None})
-
-@app.route('/api/shopee/produtos', methods=['POST'])
-def shopee_criar_produto():
-    """Cria um produto novo direto na Shopee."""
-    from shopee import add_item
-    data = request.json or {}
-    loja_id = data.pop("loja_id", None)
-    if loja_id is None:
-        return jsonify({"error": "loja_id e obrigatorio"}), 400
-    return jsonify(add_item(data, loja_id=int(loja_id)))
-
-@app.route('/api/shopee/produtos/<int:item_id>', methods=['GET'])
-def shopee_detalhe_produto(item_id):
-    """Detalhe completo de um item ja publicado na Shopee — usado para prefill do modo edicao."""
-    from shopee import get_item_base_info
-    loja_id = request.args.get("loja_id", type=int)
-    try:
-        r = get_item_base_info([item_id], loja_id=loja_id)
-        itens = (r.get("response", {}) or {}).get("item_list", [])
-        if not itens:
-            return jsonify({"error": "Item nao encontrado"}), 404
-        return jsonify({"item": itens[0]})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/shopee/produtos/<int:item_id>', methods=['PUT'])
-def shopee_editar_produto(item_id):
-    from shopee import update_item
-    data = request.json or {}
-    loja_id = data.pop("loja_id", None)
-    if loja_id is None:
-        return jsonify({"error": "loja_id e obrigatorio"}), 400
-    return jsonify(update_item(item_id, data, loja_id=int(loja_id)))
-
-@app.route('/api/shopee/produtos/<int:item_id>', methods=['DELETE'])
-def shopee_deletar_produto(item_id):
-    from shopee import delete_item_shopee
-    loja_id = request.args.get("loja_id", type=int)
-    return jsonify(delete_item_shopee(item_id, loja_id=loja_id))
-
-@app.route('/api/shopee/produtos/<int:item_id>/unlist', methods=['POST'])
-def shopee_unlist_produto(item_id):
-    from shopee import unlist_item
-    data = request.json or {}
-    loja_id = data.get("loja_id")
-    unlist = data.get("unlist", True)
-    return jsonify(unlist_item([item_id], unlist=unlist, loja_id=loja_id))
 
 # ===========================================================================
-# Produtos, Lojas e KPIs — rotas restauradas (removidas por engano em 479b1b5)
+# Produtos, Lojas e KPIs â€” rotas restauradas (removidas por engano em 479b1b5)
 # ===========================================================================
 def _db_sync():
     cfg = FactoryConfig.load()
@@ -3569,7 +1554,7 @@ def listar_produtos():
             params.extend([f"%{busca}%", f"%{busca}%"])
         if loja:
             if loja.isdigit():
-                # Loja física: filtra via estoque_lojas usando nome da tabela lojas
+                # Loja fÃ­sica: filtra via estoque_lojas usando nome da tabela lojas
                 where.append("EXISTS(SELECT 1 FROM lojas l JOIN estoque_lojas e ON e.loja = l.nome WHERE e.sku = c.sku AND l.id = %s)")
                 params.append(int(loja))
             else:
@@ -3707,12 +1692,12 @@ def detalhe_produto(sku):
         """, (sku,))
         p = cur.fetchone()
         if not p:
-            return jsonify({"sku": sku, "erro": "não encontrado"}), 404
+            return jsonify({"sku": sku, "erro": "nÃ£o encontrado"}), 404
         p = dict(p)
         cur.execute("SELECT marketplace,shop_id,anuncio_id,preco,posicao_busca,avaliacao_media,status FROM anuncios WHERE sku=%s", (sku,))
         p["estoque_lojas"] = [dict(r) for r in cur.fetchall()]
 
-        # Estoque real por loja/deposito (tabela estoque_lojas — quantidade fisica, nao confundir com o campo acima)
+        # Estoque real por loja/deposito (tabela estoque_lojas â€” quantidade fisica, nao confundir com o campo acima)
         cur.execute("SELECT loja, quantidade, data_atualizacao FROM estoque_lojas WHERE sku=%s ORDER BY loja", (sku,))
         p["estoque_por_loja"] = [dict(r, quantidade=float(r["quantidade"]) if r.get("quantidade") is not None else 0,
                                       data_atualizacao=str(r["data_atualizacao"]) if r.get("data_atualizacao") else None)
@@ -3761,7 +1746,7 @@ def produtos_limites():
 
 @app.route('/api/lojas', methods=['GET'])
 def listar_lojas():
-    """Performance de todas as lojas (físicas + marketplaces)."""
+    """Performance de todas as lojas (fÃ­sicas + marketplaces)."""
     if not _autenticado():
         return jsonify({"error": "Unauthorized"}), 401
     try:
@@ -3770,7 +1755,7 @@ def listar_lojas():
         cur.execute("SELECT id, nome FROM lojas ORDER BY id")
         fisicas = [{"id":r["id"],"nome":r["nome"],"tipo":"fisica"} for r in cur.fetchall()]
         if not fisicas:
-            fisicas = [{"id":1,"nome":"Loja Padrão","tipo":"fisica"}]
+            fisicas = [{"id":1,"nome":"Loja PadrÃ£o","tipo":"fisica"}]
         try:
             cur.execute("SELECT DISTINCT marketplace FROM vendas WHERE marketplace IS NOT NULL")
             mps = [{"id":10+i,"nome":r["marketplace"],"tipo":"digital"} for i,r in enumerate(cur.fetchall())]
@@ -3791,15 +1776,15 @@ def listar_lojas():
                 receita, pedidos = 0, 0
             resultado.append({**loja,"receita":receita,"pedidos":pedidos,"ticket_medio":round(receita/max(pedidos,1),2)})
         tr = sum(r["receita"] for r in resultado)
-        resultado.insert(0,{"id":0,"nome":"📊 Consolidado","tipo":"consolidado","receita":tr,"pedidos":sum(r["pedidos"] for r in resultado),"ticket_medio":round(tr/max(sum(r["pedidos"] for r in resultado),1),2)})
+        resultado.insert(0,{"id":0,"nome":"ðŸ“Š Consolidado","tipo":"consolidado","receita":tr,"pedidos":sum(r["pedidos"] for r in resultado),"ticket_medio":round(tr/max(sum(r["pedidos"] for r in resultado),1),2)})
         cur.close(); conn.close()
         return jsonify(resultado)
     except Exception as e:
-        return jsonify([{"id":0,"nome":"📊 Consolidado","tipo":"consolidado","receita":0,"pedidos":0,"ticket_medio":0,"erro":str(e)}])
+        return jsonify([{"id":0,"nome":"ðŸ“Š Consolidado","tipo":"consolidado","receita":0,"pedidos":0,"ticket_medio":0,"erro":str(e)}])
 
 @app.route('/api/kpi/overview', methods=['GET'])
 def kpi_overview():
-    """KPIs consolidados para página inicial."""
+    """KPIs consolidados para pÃ¡gina inicial."""
     if not _autenticado():
         return jsonify({"error": "Unauthorized"}), 401
     try:
@@ -3844,7 +1829,7 @@ def serve_frontend(path):
     static_dir = Path(__file__).parent / 'dashboard'
     if not path:
         return send_from_directory(static_dir, 'index.html')
-    # ponytail: Next.js static export naming — check .html file first, then directory, then SPA fallback
+    # ponytail: Next.js static export naming â€” check .html file first, then directory, then SPA fallback
     html_file = static_dir / f"{path}.html"
     if html_file.exists() and html_file.is_file():
         return send_from_directory(static_dir, f"{path}.html")

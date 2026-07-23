@@ -29,33 +29,38 @@ def _ensure():
         log(AGENT, f"Erro tabela: {e}")
 
 
-def _where_loja(loja: str) -> str:
+def _where_loja_param(loja: str) -> tuple:
+    """Retorna (sql, params) com placeholder parametrizado — sem SQL injection."""
     if loja.isdigit():
-        return f"e.loja = (SELECT nome FROM lojas WHERE id = {int(loja)})"
-    return f"e.loja = '{loja.replace(chr(39), chr(39) + chr(39))}'"
-
+        return "e.loja = (SELECT nome FROM lojas WHERE id = $1)", [int(loja)]
+    return "e.loja = $1", [loja]
 
 def listar(loja: str = "", busca: str = "", pagina: int = 1, por_pagina: int = 30) -> dict:
     async def _go():
         db = await get_db()
         where = ["1=1"]
+        params = []
         if loja and loja != "todas":
-            where.append(_where_loja(loja))
+            w, p = _where_loja_param(loja)
+            where.append(w); params.extend(p)
         if busca:
-            where.append(f"(c.sku ILIKE '%{busca}%' OR c.descricao ILIKE '%{busca}%')")
+            n = len(params) + 1
+            where.append(f"(c.sku ILIKE ${n} OR c.descricao ILIKE ${n + 1})")
+            params.extend([f"%{busca}%", f"%{busca}%"])
         sql_where = " AND ".join(where)
         total = await db.fetchval(
-            f"SELECT COUNT(*) FROM estoque_lojas e JOIN catalogo_produtos c ON c.sku = e.sku WHERE {sql_where}")
+            f"SELECT COUNT(*) FROM estoque_lojas e JOIN catalogo_produtos c ON c.sku = e.sku WHERE {sql_where}", *params)
         offset = (pagina - 1) * por_pagina
+        n = len(params) + 1
         rows = await db.fetch(f"""
             SELECT e.id, e.sku, c.descricao AS nome, e.loja, e.quantidade, e.data_atualizacao,
                    COALESCE(c.imagem_url, '') AS imagem_url, c.situacao
             FROM estoque_lojas e
             JOIN catalogo_produtos c ON c.sku = e.sku
             WHERE {sql_where}
-            ORDER BY e.data_atualizacao DESC
-            LIMIT {por_pagina} OFFSET {offset}
-        """)
+            ORDER BY c.descricao ASC, e.loja ASC
+            LIMIT ${n} OFFSET ${n + 1}
+        """, *params, por_pagina, offset)
         return {"estoque": [dict(r) for r in rows], "total": total, "pagina": pagina}
     try:
         return run_async(_go())
@@ -295,24 +300,16 @@ def sync_bling(sku: str, loja: str) -> dict:
 
 # ── Rotacao / Sugestao de Transferencia ──
 
-def sugestao_rotacao() -> list:
-    """Produtos com estoque desbalanceado entre lojas. Sugere transferencia da loja com excesso para a com escassez."""
+def _sugestao_rotacao_via_repo(repo) -> list:
+    """Implementacao usando Repository Pattern — isolada do banco."""
     async def _go():
-        db = await get_db()
-        rows = await db.fetch("""
-            SELECT e.sku, e.loja, e.quantidade,
-                   COALESCE(c.descricao, e.sku) AS nome
-            FROM estoque_lojas e
-            LEFT JOIN catalogo_produtos c ON c.sku = e.sku
-            WHERE e.quantidade > 0
-            ORDER BY e.sku, e.quantidade DESC
-        """)
+        rows = await repo.listar_estoque_por_loja()
         por_sku = {}
         for r in rows:
-            sku = r["sku"]
+            sku = r.sku
             if sku not in por_sku:
-                por_sku[sku] = {"sku": sku, "nome": r["nome"], "lojas": []}
-            por_sku[sku]["lojas"].append({"loja": r["loja"], "quantidade": int(r["quantidade"])})
+                por_sku[sku] = {"sku": sku, "nome": r.nome_produto, "lojas": []}
+            por_sku[sku]["lojas"].append({"loja": r.loja, "quantidade": r.quantidade})
         sugestoes = []
         for sku, data in por_sku.items():
             lojas_data = data["lojas"]
@@ -328,5 +325,54 @@ def sugestao_rotacao() -> list:
                 })
         sugestoes.sort(key=lambda x: x["qtd_excesso"], reverse=True)
         return sugestoes[:30]
+    try: return run_async(_go())
+    except Exception as e: return []
+
+
+# fallback legacy: query direta se repo falhar
+async def _legacy_sugestao_rotacao(db) -> list:
+    rows = await db.fetch("""
+        SELECT e.sku, e.loja, e.quantidade,
+               COALESCE(c.descricao, e.sku) AS nome
+        FROM estoque_lojas e
+        LEFT JOIN catalogo_produtos c ON c.sku = e.sku
+        WHERE e.quantidade > 0
+        ORDER BY e.sku, e.quantidade DESC
+    """)
+    por_sku = {}
+    for r in rows:
+        sku = r["sku"]
+        if sku not in por_sku:
+            por_sku[sku] = {"sku": sku, "nome": r["nome"], "lojas": []}
+        por_sku[sku]["lojas"].append({"loja": r["loja"], "quantidade": int(r["quantidade"])})
+    sugestoes = []
+    for sku, data in por_sku.items():
+        lojas_data = data["lojas"]
+        if len(lojas_data) < 2: continue
+        lojas_data.sort(key=lambda x: x["quantidade"], reverse=True)
+        excesso = lojas_data[0]; escassez = lojas_data[-1]
+        if excesso["quantidade"] >= 5 and escassez["quantidade"] <= 2 and excesso["loja"] != escassez["loja"]:
+            sugestoes.append({
+                "sku": sku, "nome": data["nome"],
+                "loja_excesso": excesso["loja"], "qtd_excesso": excesso["quantidade"],
+                "loja_escassez": escassez["loja"], "qtd_escassez": escassez["quantidade"],
+                "sugerir_transferir": max(1, min(excesso["quantidade"] // 2, excesso["quantidade"] - 5)),
+            })
+    sugestoes.sort(key=lambda x: x["qtd_excesso"], reverse=True)
+    return sugestoes[:30]
+
+
+def sugestao_rotacao() -> list:
+    """Produtos com estoque desbalanceado entre lojas. Sugere transferencia.
+    SOLID: DIP via EstoqueRepository — trocar Postgres por mock em testes."""
+    try:
+        from core.repositories_postgres import get_estoque_repo
+        return _sugestao_rotacao_via_repo(get_estoque_repo())
+    except Exception:
+        pass
+    # fallback: query direta
+    async def _go():
+        db = await get_db()
+        return await _legacy_sugestao_rotacao(db)
     try: return run_async(_go())
     except Exception as e: return []

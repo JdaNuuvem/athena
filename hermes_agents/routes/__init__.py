@@ -14,6 +14,8 @@ def register_blueprints(app: Flask):
     from .catalog import catalog_bp
     from .webhooks import webhooks_bp, webhook_bp
     from .integrations import bling_bp
+    from .estoque import estoque_bp, workflows_bp
+    from .agent_executor import hermes_bp as agent_hermes_bp, memory_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(health_bp)
@@ -28,3 +30,7 @@ def register_blueprints(app: Flask):
     app.register_blueprint(webhooks_bp)
     app.register_blueprint(webhook_bp)
     app.register_blueprint(bling_bp)
+    app.register_blueprint(estoque_bp)
+    app.register_blueprint(workflows_bp)
+    app.register_blueprint(agent_hermes_bp)
+    app.register_blueprint(memory_bp)

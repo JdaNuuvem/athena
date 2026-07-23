@@ -37,26 +37,29 @@ def _stub_run_async(ret):
 class TestMargemProduto(unittest.TestCase):
     """Fase 1 — Alerta de margem negativa."""
 
-    @patch("shopee.run_async")
+    @patch("shopee.pricing.get_config", return_value=None)
+    @patch("shopee.pricing.run_async")
     @patch.dict("os.environ", {"SHOPEE_COMISSAO_PCT": "15"})
-    def test_margem_com_custo_e_comissao(self, mock_run):
-        mock_run.side_effect = [10.0, 10.0]  # first call: custo, second: margem via run_async
-        r = s.calcular_margem_produto("SKU1", 25.0)
+    def test_margem_com_custo_comissao_e_frete(self, mock_run, mock_cfg):
+        mock_run.return_value = 10.0  # custo
+        r = s.calcular_margem_produto("SKU1", 45.0)
         self.assertEqual(r["custo"], 10.0)
-        self.assertEqual(r["comissao_valor"], 3.75)
-        self.assertEqual(r["margem_valor"], 11.25)
+        self.assertEqual(r["comissao_valor"], 6.75)
+        self.assertEqual(r["frete"], 15.0)  # default FactoryConfig.frete_medio_shopee
+        self.assertEqual(r["margem_valor"], 13.25)  # 45 - 6.75 - 15 - 10
 
+    @patch("shopee.pricing.get_config", return_value=None)
     @patch.dict("os.environ", {"SHOPEE_COMISSAO_PCT": "12"})
-    def test_margem_negativa_bloqueia(self):
-        """Preco = R$18, custo = R$20, comissao = 12% → prejuizo."""
-        with patch("shopee.run_async", return_value=20.0):
+    def test_margem_negativa_bloqueia(self, mock_cfg):
+        """Preco = R$18, custo = R$20, comissao = 12%, frete R$15 → prejuizo."""
+        with patch("shopee.pricing.run_async", return_value=20.0):
             r = s.calcular_margem_produto("SKU2", 18.0)
         self.assertFalse(r["ok"])
         self.assertIn("PREJUIZO", r["mensagem"])
 
     def test_margem_sem_custo_avisa(self):
         """Custo = 0 -> avisa mas nao bloqueia."""
-        with patch("shopee.run_async", return_value=0):
+        with patch("shopee.pricing.run_async", return_value=0):
             r = s.calcular_margem_produto("SKU3", 50.0)
         self.assertTrue(r["ok"])
         self.assertIn("Custo nao cadastrado", r["mensagem"])
@@ -66,7 +69,7 @@ class TestAnalisarConcorrencia(unittest.TestCase):
     """Fase 5 — Reprecificacao por concorrencia."""
 
     def test_concorrencia_com_anuncios(self):
-        with patch("shopee.run_async", return_value={
+        with patch("shopee.concorrencia.run_async", return_value={
             "sku": "SKU1", "preco_nosso": 35.0, "marketplace": "shopee",
             "total_anuncios": 5, "preco_medio": 20.8, "preco_mediano": 20.0,
             "preco_min": 18.0, "preco_max": 24.0, "preco_acima_pct": 68.3,
@@ -78,7 +81,7 @@ class TestAnalisarConcorrencia(unittest.TestCase):
         self.assertEqual(r["alerta"], "critico")
 
     def test_concorrencia_sem_anuncios(self):
-        with patch("shopee.run_async", return_value=None):
+        with patch("shopee.concorrencia.run_async", return_value=None):
             r = s.analisar_concorrencia("SKU_NOVO", 50.0)
         self.assertEqual(r["total_anuncios"], 0)
         self.assertIn("Nenhum concorrente", r["mensagem"])
@@ -88,7 +91,7 @@ class TestSugerirKits(unittest.TestCase):
     """Fase 5 — Sugestao de kits."""
 
     def test_kits_sem_dados(self):
-        with patch("shopee.run_async", return_value=[]):
+        with patch("shopee.kits.run_async", return_value=[]):
             r = s.sugerir_kits(dias=30, min_ocorrencias=2)
         self.assertEqual(r, [])
 
@@ -98,7 +101,7 @@ class TestSugerirKits(unittest.TestCase):
             "sku_b": "SKU2", "nome_b": "Produto B",
             "qtd_juntos": 5, "confianca_pct": 50.0,
         }]
-        with patch("shopee.run_async", return_value=kit):
+        with patch("shopee.kits.run_async", return_value=kit):
             r = s.sugerir_kits(dias=90, min_ocorrencias=2)
         self.assertEqual(len(r), 1)
         self.assertEqual(r[0]["sku_a"], "SKU1")
@@ -112,7 +115,7 @@ class TestListarLojasShopee(unittest.TestCase):
         lojas = [{"id": 1, "nome": "Loja A", "shopee_shop_id": "111",
                    "shopee_access_token": "t1", "shopee_shop_name": "Loja A Shopee",
                    "ativa": True, "shopee_markup_pct": 110}]
-        with patch("shopee.run_async", return_value=lojas):
+        with patch("shopee.stores.run_async", return_value=lojas):
             r = s.listar_todas_lojas_shopee()
         self.assertEqual(len(r), 1)
         self.assertEqual(r[0]["shopee_markup_pct"], 110)
@@ -122,24 +125,24 @@ class TestTransferirProdutos(unittest.TestCase):
     """Fase 1+3 — Replicacao."""
 
     def test_transferir_sem_produtos(self):
-        with patch.object(s, "configurado", return_value=True):
-            with patch.object(s, "get_items", return_value={"response": {"item_list": []}}):
+        with patch("shopee.replication.configurado", return_value=True):
+            with patch("shopee.products.get_items", return_value={"response": {"item_list": []}}):
                 r = s.transferir_produtos_para_loja(1, 2)
         self.assertIn("Nenhum produto", r.get("mensagem", ""))
 
     def test_transferir_com_erro_api(self):
-        with patch.object(s, "configurado", return_value=True):
-            with patch.object(s, "get_items", return_value={"response": {"item_list": [{"item_id": 1}]}}):
-                with patch.object(s, "get_item_base_info", return_value={"response": {"item_list": [{
+        with patch("shopee.replication.configurado", return_value=True):
+            with patch("shopee.replication.get_items", return_value={"response": {"item_list": [{"item_id": 1}]}}):
+                with patch("shopee.replication.get_item_base_info", return_value={"response": {"item_list": [{
                     "item_id": 1, "item_name": "Teste", "item_sku": "SKU1",
                     "category_id": 100, "price_info": [{"current_price": 50}],
                     "weight": 0.5, "attribute_list": [], "logistic_info": [{"logistic_id": 1}],
                     "image": {"image_id_list": ["https://img.com/1.jpg"]},
                     "dimension": {"package_length": 10, "package_width": 10, "package_height": 10},
                 }]}}):
-                    with patch("shopee.run_async", return_value=100):  # markup
-                        with patch.object(s, "upload_image", return_value={"response": {"image_id": "img_123"}}):
-                            with patch.object(s, "add_item", return_value={"error": "API Error"}):
+                    with patch("shopee.replication.run_async", return_value=100):
+                        with patch("shopee.replication.upload_image", return_value={"response": {"image_id": "img_123"}}):
+                            with patch("shopee.replication.add_item", return_value={"error": "API Error"}):
                                 r = s.transferir_produtos_para_loja(1, 2)
         self.assertEqual(r["total"], 1)
         self.assertEqual(r["sucesso"], 0)

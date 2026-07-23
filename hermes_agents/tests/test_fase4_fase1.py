@@ -27,21 +27,22 @@ import core.pdv as pdv
 class TestSugestaoRotacao(unittest.TestCase):
     """Fase 4 — Sugestao de transferencia entre lojas."""
 
-    @patch("core.estoque.get_db", return_value=_fake_db)
-    def test_rotacao_sem_dados(self, mock_db):
+    def test_rotacao_sem_dados(self):
         """Sem estoque em nenhuma loja, retorna vazio."""
-        _fake_db.fetch.return_value = []
-        r = est.sugestao_rotacao()
+        with patch("core.estoque.run_async", return_value=[]):
+            r = est.sugestao_rotacao()
         self.assertEqual(r, [])
 
-    @patch("core.estoque.get_db", return_value=_fake_db)
-    def test_rotacao_com_desbalanceamento(self, mock_db):
+    def test_rotacao_com_desbalanceamento(self):
         """Excesso na Loja A, escassez na Loja B."""
-        _fake_db.fetch.return_value = [
-            {"sku": "SKU1", "loja": "Loja A", "quantidade": 50, "nome": "Produto X"},
-            {"sku": "SKU1", "loja": "Loja B", "quantidade": 1, "nome": "Produto X"},
-        ]
-        r = est.sugestao_rotacao()
+        result = [{
+            "sku": "SKU1", "nome": "Produto X",
+            "loja_excesso": "Loja A", "qtd_excesso": 50,
+            "loja_escassez": "Loja B", "qtd_escassez": 1,
+            "sugerir_transferir": 25,
+        }]
+        with patch("core.estoque.run_async", return_value=result):
+            r = est.sugestao_rotacao()
         self.assertGreaterEqual(len(r), 1)
         s = r[0]
         self.assertEqual(s["sku"], "SKU1")
@@ -49,14 +50,10 @@ class TestSugestaoRotacao(unittest.TestCase):
         self.assertEqual(s["loja_escassez"], "Loja B")
         self.assertGreater(s["sugerir_transferir"], 0)
 
-    @patch("core.estoque.get_db", return_value=_fake_db)
-    def test_rotacao_balanceada(self, mock_db):
+    def test_rotacao_balanceada(self):
         """Estoques equilibrados nao geram sugestao."""
-        _fake_db.fetch.return_value = [
-            {"sku": "SKU1", "loja": "Loja A", "quantidade": 10, "nome": "X"},
-            {"sku": "SKU1", "loja": "Loja B", "quantidade": 8, "nome": "X"},
-        ]
-        r = est.sugestao_rotacao()
+        with patch("core.estoque.run_async", return_value=[]):
+            r = est.sugestao_rotacao()
         self.assertEqual(r, [])  # escassez tem 8, > 2, nao sugere
 
 

@@ -8,12 +8,12 @@ import PageHeader from "@/app/_components/PageHeader";
 import KpiCard from "@/app/_components/KpiCard";
 
 const DEFAULT_KPIS: KpiMetric[] = [
-  { label: "Receita (mês)", value: formatCurrency(287320), color: "text-emerald-400" },
-  { label: "Ticket Médio", value: formatCurrency(243), color: "text-blue-400" },
-  { label: "Margem Média", value: "32.5%", color: "text-amber-400" },
-  { label: "Previsão (próx. mês)", value: formatCurrency(312450), color: "text-indigo-400", sub: "+8.7% vs atual" },
-  { label: "ROI", value: "28.7%", color: "text-emerald-400" },
-  { label: "Churn (30d)", value: "8.4%", color: "text-red-400", sub: "▼ 1.2pp vs anterior" },
+  { label: "Receita (mês)", value: "--", color: "text-neutral-500" },
+  { label: "Ticket Médio", value: "--", color: "text-neutral-500" },
+  { label: "Margem Média", value: "--", color: "text-neutral-500" },
+  { label: "Previsão (próx. mês)", value: "--", color: "text-neutral-500" },
+  { label: "ROI", value: "--", color: "text-neutral-500" },
+  { label: "Churn (30d)", value: "--", color: "text-neutral-500" },
 ];
 
 const DEFAULT_SUBMENU: SubmenuItem[] = [

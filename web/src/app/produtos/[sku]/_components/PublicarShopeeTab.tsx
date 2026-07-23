@@ -52,6 +52,7 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
 
   const [publicando, setPublicando] = useState(false);
   const [resultado, setResultado] = useState<{ ok: boolean; texto: string } | null>(null);
+  const [bloqueioMargem, setBloqueioMargem] = useState<{ margem_valor: number; margem_pct: number; custo: number; frete: number; comissao_valor: number } | null>(null);
 
   // ── Modo edicao (produto ja publicado nesta loja) ──
   const [lojasComShopId, setLojasComShopId] = useState<Record<number, string>>({});
@@ -229,10 +230,11 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
 
   const prontoParaPublicar = !!(lojaId && categoriaSelecionada && imagemId && form.nome && form.preco);
 
-  const publicar = async () => {
+  const publicar = async (forcarPublicacao = false) => {
     if (!lojaId || !categoriaSelecionada) return;
     setPublicando(true);
     setResultado(null);
+    if (!forcarPublicacao) setBloqueioMargem(null);
     try {
       const canaisR = await api.shopeeCanaisLogistica(lojaId);
       const canaisHabilitados = (canaisR.canais || []).filter(c => c.enabled);
@@ -264,11 +266,16 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
         attribute_list: attributeList,
         logistic_info: canaisHabilitados.map(c => ({ logistic_id: c.logistic_id, enabled: true })),
         seller_stock: [{ stock: Number(form.estoque) || 0 }],
+        forcar_publicacao: forcarPublicacao,
       };
 
       const r = await api.shopeeCriarProduto(lojaId, payload);
       if (r.response?.item_id) {
         setResultado({ ok: true, texto: `Produto publicado na Shopee! item_id: ${r.response.item_id}` });
+        setBloqueioMargem(null);
+      } else if (r.bloqueado_por_margem && r.margem) {
+        setBloqueioMargem(r.margem);
+        setResultado({ ok: false, texto: r.error || "Publicação bloqueada: produto sairia com prejuízo." });
       } else {
         setResultado({ ok: false, texto: r.error || r.message || "A Shopee recusou o produto — confira categoria/atributos/imagem." });
       }
@@ -457,8 +464,27 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
             </div>
           </Section>
 
+          {bloqueioMargem && (
+            <div className="bg-red-950/40 border border-red-900/50 rounded-lg p-3 space-y-2 text-xs">
+              <p className="text-red-400 font-medium">❌ Este produto sairia com prejuízo nesta loja:</p>
+              <ul className="text-neutral-400 space-y-0.5">
+                <li>Preço: R$ {Number(form.preco).toFixed(2)}</li>
+                <li>Comissão: R$ {bloqueioMargem.comissao_valor.toFixed(2)}</li>
+                <li>Frete médio: R$ {bloqueioMargem.frete.toFixed(2)}</li>
+                <li>Custo do produto: R$ {bloqueioMargem.custo.toFixed(2)}</li>
+                <li className="text-red-400 font-medium">Resultado: prejuízo de R$ {Math.abs(bloqueioMargem.margem_valor).toFixed(2)}</li>
+              </ul>
+              <button
+                onClick={() => publicar(true)}
+                disabled={publicando}
+                className="text-[10px] bg-red-900/60 hover:bg-red-900 disabled:opacity-50 text-red-200 px-2.5 py-1.5 rounded-lg"
+              >
+                Publicar mesmo assim (não recomendado)
+              </button>
+            </div>
+          )}
           <button
-            onClick={publicar}
+            onClick={() => publicar(false)}
             disabled={!prontoParaPublicar || publicando}
             className="w-full py-3 bg-orange-600 hover:bg-orange-500 disabled:opacity-40 text-white text-sm font-medium rounded-lg transition-colors"
           >

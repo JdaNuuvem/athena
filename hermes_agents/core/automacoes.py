@@ -134,8 +134,10 @@ def dashboard():
 
 def aplicar_regras_preco(sku: str = "", preco_base: float = 0, loja_id: int = None) -> dict:
     """Aplica regras de preco ativas (desconto/markup) ao preco base de um produto.
+    SOLID: OCP via Strategy Pattern — cada tipo de regra e uma classe independente.
     Retorna { preco_final, regras_aplicadas: [nome, ajuste_pct, tipo] }"""
     from datetime import date
+    from shopee.regras import criar_estrategia
     hoje = date.today()
     async def _go():
         db = await get_db()
@@ -147,39 +149,15 @@ def aplicar_regras_preco(sku: str = "", preco_base: float = 0, loja_id: int = No
         preco = preco_base
         aplicadas = []
         for r in regras:
-            aplicar = False
-            tipo = r["tipo"]
-            # loja_nova: aplica se loja tem menos de N dias
-            if tipo == "loja_nova" and r["dias_ativo"]:
-                loja_criada = await db.fetchval("SELECT created_at FROM lojas WHERE id = $1", loja_id)
-                if loja_criada and (hoje - loja_criada.date()).days <= r["dias_ativo"]:
-                    aplicar = True
-            # produto_parado: aplica se produto sem venda nos ultimos N dias
-            elif tipo == "produto_parado" and r["condicao_estoque_dias"] and sku:
-                ultima = await db.fetchval("""SELECT MAX(data) FROM vendas_pedidos v
-                    JOIN vendas_itens i ON i.pedido_id = v.id
-                    WHERE i.sku = $1 AND v.status != 'cancelado'""", sku)
-                if ultima and (hoje - ultima).days >= r["condicao_estoque_dias"]:
-                    aplicar = True
-            # estoque_alto: aplica se produto tem estoque parado ha N dias
-            elif tipo == "estoque_alto" and r["condicao_estoque_dias"] and sku:
-                qtd = await db.fetchval("SELECT SUM(quantidade) FROM estoque_lojas WHERE sku = $1", sku)
-                if qtd and float(qtd) > 0:
-                    # verifica se estoque esta parado (sem movimento recente)
-                    ult_mov = await db.fetchval("SELECT MAX(data) FROM estoque_movimentacoes WHERE sku = $1", sku)
-                    if ult_mov and (hoje - ult_mov).days >= r["condicao_estoque_dias"]:
-                        aplicar = True
-            # manual / sazonal: sempre aplica se datas batem
-            elif tipo in ("manual", "sazonal"):
-                aplicar = True
-
-            if aplicar:
-                if r["markup_ajuste_pct"]:
-                    preco = round(preco * (1 + float(r["markup_ajuste_pct"]) / 100), 2)
-                    aplicadas.append({"nome": r["nome"], "ajuste_pct": float(r["markup_ajuste_pct"]), "tipo": "markup"})
-                if r["desconto_pct"]:
-                    preco = round(preco * (1 - float(r["desconto_pct"]) / 100), 2)
-                    aplicadas.append({"nome": r["nome"], "ajuste_pct": -float(r["desconto_pct"]), "tipo": "desconto"})
+            strategy = criar_estrategia(r["tipo"], dict(r))
+            resultado = await strategy.aplicar(sku, loja_id, db)
+            if resultado:
+                if resultado["tipo"] == "markup":
+                    preco = round(preco * (1 + resultado["ajuste_pct"] / 100), 2)
+                    aplicadas.append(resultado)
+                elif resultado["tipo"] == "desconto":
+                    preco = round(preco * (1 + resultado["ajuste_pct"] / 100), 2)
+                    aplicadas.append(resultado)
         return {"preco_original": preco_base, "preco_final": max(preco, 0.01), "regras_aplicadas": aplicadas}
     try: return run_async(_go())
     except Exception as e: return {"preco_original": preco_base, "preco_final": preco_base, "regras_aplicadas": [], "erro": str(e)}

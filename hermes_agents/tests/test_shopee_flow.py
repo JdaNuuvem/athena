@@ -79,7 +79,7 @@ class TestRequestsMockados(unittest.TestCase):
     def setUp(self):
         _configurar_loja_fake()
 
-    @patch("shopee.requests.get")
+    @patch("shopee.auth.requests.get")
     def test_get_category(self, mock_get):
         mock_get.return_value.status_code = 200
         mock_get.return_value.json.return_value = {
@@ -98,7 +98,7 @@ class TestRequestsMockados(unittest.TestCase):
         self.assertIn("sign", params)
         self.assertIn("shop_id", params)
 
-    @patch("shopee.requests.get")
+    @patch("shopee.auth.requests.get")
     def test_get_attribute_tree(self, mock_get):
         mock_get.return_value.status_code = 200
         mock_get.return_value.raise_for_status = MagicMock()
@@ -117,7 +117,7 @@ class TestRequestsMockados(unittest.TestCase):
         self.assertEqual(len(atributos), 2)
         self.assertTrue(atributos[0]["is_mandatory"])
 
-    @patch("shopee.requests.get")
+    @patch("shopee.auth.requests.get")
     def test_get_brand_list(self, mock_get):
         mock_get.return_value.status_code = 200
         mock_get.return_value.raise_for_status = MagicMock()
@@ -127,7 +127,7 @@ class TestRequestsMockados(unittest.TestCase):
         r = shopee.get_brand_list(100183)
         self.assertEqual(r["response"]["brand_list"][0]["original_brand_name"], "Samsung")
 
-    @patch("shopee.requests.post")
+    @patch("shopee.auth.requests.post")
     def test_upload_image_envia_multipart(self, mock_post):
         mock_post.return_value.status_code = 200
         mock_post.return_value.raise_for_status = MagicMock()
@@ -139,7 +139,7 @@ class TestRequestsMockados(unittest.TestCase):
         image_info = r["response"]["image_info"]
         self.assertEqual(image_info["image_id"], "abc123")
 
-    @patch("shopee.requests.post")
+    @patch("shopee.auth.requests.post")
     def test_add_item_encaminha_payload(self, mock_post):
         mock_post.return_value.status_code = 200
         mock_post.return_value.raise_for_status = MagicMock()
@@ -160,7 +160,7 @@ class TestRequestsMockados(unittest.TestCase):
         self.assertEqual(body_enviado["item_name"], "Produto Teste")
         self.assertEqual(body_enviado["category_id"], 100183)
 
-    @patch("shopee.requests.get")
+    @patch("shopee.auth.requests.get")
     def test_get_logistics_channel_list(self, mock_get):
         mock_get.return_value.status_code = 200
         mock_get.return_value.raise_for_status = MagicMock()
@@ -177,8 +177,8 @@ class TestCacheCategorias(unittest.TestCase):
     def setUp(self):
         _configurar_loja_fake()
 
-    @patch("shopee.get_db")
-    @patch("shopee.get_category")
+    @patch("shopee.categories.get_db")
+    @patch("shopee.categories.get_category")
     def test_sincronizar_categorias_grava_no_banco(self, mock_get_category, mock_get_db):
         mock_get_category.return_value = {"response": {"category_list": [
             {"category_id": 1, "parent_category_id": 0, "original_category_name": "Casa", "has_children": False},
@@ -192,7 +192,7 @@ class TestCacheCategorias(unittest.TestCase):
         self.assertIn("INSERT INTO shopee_categorias", args[0])
         self.assertEqual(args[1], 1)  # category_id
 
-    @patch("shopee.get_db")
+    @patch("shopee.categories.get_db")
     def test_listar_categorias_cache_com_dados(self, mock_get_db):
         fake_db = AsyncMock()
         fake_db.fetchval.return_value = 2
@@ -206,7 +206,7 @@ class TestCacheCategorias(unittest.TestCase):
 
 
 class TestEstoqueMultiLoja(unittest.TestCase):
-    @patch("shopee.sincronizar_estoque_shopee")
+    @patch("shopee.stock.sincronizar_estoque_shopee")
     @patch("core.lojas.listar_lojas_shopee")
     def test_sincronizar_estoque_todas_lojas(self, mock_listar, mock_sync):
         mock_listar.return_value = [

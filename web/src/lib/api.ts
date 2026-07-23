@@ -205,11 +205,22 @@ export const api = {
     const res = await fetch("/api/shopee/upload-imagem", { method: "POST", body: formData });
     return res.json() as Promise<{ image_id?: string; image_url?: string; erro?: string }>;
   },
-  shopeeCriarProduto: (lojaId: number, dados: Record<string, unknown>) =>
-    request<{ response?: { item_id: number }; error?: string; message?: string }>("/api/shopee/produtos", {
-      method: "POST",
+  shopeeCriarProduto: async (lojaId: number, dados: Record<string, unknown>) => {
+    // ponytail: fetch cru (nao usa request()) porque o backend pode responder 400
+    // com bloqueado_por_margem — precisamos ler o corpo do erro, nao so' lancar excecao.
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const res = await fetch("/api/shopee/produtos", {
+      method: "POST", headers, credentials: "include",
       body: JSON.stringify({ ...dados, loja_id: lojaId }),
-    }),
+    });
+    return res.json() as Promise<{
+      response?: { item_id: number }; error?: string; message?: string;
+      bloqueado_por_margem?: boolean;
+      margem?: { margem_valor: number; margem_pct: number; custo: number; frete: number; comissao_valor: number };
+    }>;
+  },
   shopeeEditarProdutoShopee: (itemId: number, lojaId: number, dados: Record<string, unknown>) =>
     request<{ response?: unknown; error?: string }>(`/api/shopee/produtos/${itemId}`, {
       method: "PUT",
