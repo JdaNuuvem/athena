@@ -3,13 +3,13 @@
 import { useState, useEffect } from "react";
 
 interface KitSugestao { sku_a: string; nome_a: string; sku_b: string; nome_b: string; qtd_juntos: number; confianca_pct: number; }
-interface Concorrencia { sku: string; preco_nosso: number; total_anuncios: number; preco_medio: number; preco_acima_pct: number; alerta?: string; mensagem: string; }
+interface ConsistenciaPreco { sku: string; preco_nosso: number; total_anuncios: number; preco_medio: number; preco_acima_pct: number; alerta?: string; mensagem: string; }
 
-export default function KitsConcorrenciaPage() {
+export default function KitsConsistenciaPage() {
   const [kits, setKits] = useState<KitSugestao[]>([]);
-  const [concorrencia, setConcorrencia] = useState<Concorrencia | null>(null);
-  const [concorrenciaSku, setConcorrenciaSku] = useState("");
-  const [concorrenciaPreco, setConcorrenciaPreco] = useState("");
+  const [consistencia, setConsistencia] = useState<ConsistenciaPreco | null>(null);
+  const [consistenciaSku, setConsistenciaSku] = useState("");
+  const [consistenciaPreco, setConsistenciaPreco] = useState("");
   const [dias, setDias] = useState(90);
   const [loading, setLoading] = useState(true);
 
@@ -20,34 +20,38 @@ export default function KitsConcorrenciaPage() {
   useEffect(() => { carregarKits(dias); }, [dias]);
 
   const analisar = async () => {
-    if (!concorrenciaSku) return;
-    const r = await fetch(`/api/shopee/concorrencia?sku=${encodeURIComponent(concorrenciaSku)}&preco=${concorrenciaPreco || "0"}`);
-    setConcorrencia(await r.json());
+    if (!consistenciaSku) return;
+    const r = await fetch(`/api/shopee/consistencia-precos?sku=${encodeURIComponent(consistenciaSku)}&preco=${consistenciaPreco || "0"}`);
+    setConsistencia(await r.json());
   };
 
   return (
     <div className="p-6 space-y-8">
       <div>
-        <h1 className="text-lg font-bold text-neutral-100">Sugestões de Kits & Concorrência</h1>
-        <p className="text-xs text-neutral-500 mt-1">Produtos comprados juntos e análise de preço vs mercado</p>
+        <h1 className="text-lg font-bold text-neutral-100">Sugestões de Kits & Consistência de Preço</h1>
+        <p className="text-xs text-neutral-500 mt-1">Produtos comprados juntos e comparação de preço do mesmo SKU entre suas lojas</p>
       </div>
 
-      {/* Concorrencia */}
+      {/* Consistencia de preco entre lojas proprias */}
       <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 space-y-3">
-        <h2 className="text-sm font-semibold text-neutral-300">Análise de Concorrência</h2>
+        <h2 className="text-sm font-semibold text-neutral-300">Consistência de Preço entre suas Lojas</h2>
+        <p className="text-[11px] text-neutral-500">
+          Compara o preço deste SKU com o mesmo produto anunciado em outras lojas Shopee da sua conta —
+          não é comparação com concorrentes (a API da Shopee não dá acesso a preços de outros vendedores).
+        </p>
         <div className="flex gap-2">
-          <input type="text" value={concorrenciaSku} onChange={e => setConcorrenciaSku(e.target.value)}
+          <input type="text" value={consistenciaSku} onChange={e => setConsistenciaSku(e.target.value)}
             placeholder="SKU do produto" className="flex-1 bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-neutral-200" />
-          <input type="number" step="0.01" value={concorrenciaPreco} onChange={e => setConcorrenciaPreco(e.target.value)}
+          <input type="number" step="0.01" value={consistenciaPreco} onChange={e => setConsistenciaPreco(e.target.value)}
             placeholder="Preço" className="w-28 bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-neutral-200" />
           <button onClick={analisar} className="bg-indigo-600 hover:bg-indigo-500 text-white text-sm px-4 py-2 rounded-lg">Analisar</button>
         </div>
-        {concorrencia && (
-          <div className={`text-xs px-3 py-2 rounded-lg border ${concorrencia.alerta === "critico" ? "bg-red-900/30 border-red-800 text-red-400" : concorrencia.alerta === "alerta" ? "bg-amber-900/30 border-amber-800 text-amber-400" : "bg-emerald-900/30 border-emerald-800 text-emerald-400"}`}>
-            {concorrencia.mensagem}
-            {concorrencia.total_anuncios > 0 && (
+        {consistencia && (
+          <div className={`text-xs px-3 py-2 rounded-lg border ${consistencia.alerta === "critico" ? "bg-red-900/30 border-red-800 text-red-400" : consistencia.alerta === "alerta" ? "bg-amber-900/30 border-amber-800 text-amber-400" : "bg-emerald-900/30 border-emerald-800 text-emerald-400"}`}>
+            {consistencia.mensagem}
+            {consistencia.total_anuncios > 0 && (
               <div className="mt-1 text-neutral-500">
-                Média: R$ {concorrencia.preco_medio?.toFixed(2)} · {concorrencia.total_anuncios} anúncios · {concorrencia.preco_acima_pct}% {concorrencia.preco_acima_pct >= 0 ? "acima" : "abaixo"} da média
+                Média: R$ {consistencia.preco_medio?.toFixed(2)} · {consistencia.total_anuncios} anúncios seus · {consistencia.preco_acima_pct}% {consistencia.preco_acima_pct >= 0 ? "acima" : "abaixo"} da média
               </div>
             )}
           </div>

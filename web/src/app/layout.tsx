@@ -61,7 +61,7 @@ const NAV_ITEMS = [
     children: [
       { href: "/integracoes/shopee", label: "Config & Lojas" },
       { href: "/shopee/regras", label: "Regras de Preco" },
-      { href: "/shopee/kits", label: "Kits & Concorrencia" },
+      { href: "/shopee/kits", label: "Kits & Consistência de Preço" },
       { href: "/relatorios/dre-lojas", label: "DRE por Loja" },
     ],
   },

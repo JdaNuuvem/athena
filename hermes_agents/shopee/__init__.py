@@ -34,7 +34,7 @@ from .stock import (
 )
 from .stores import listar_todas_lojas_shopee
 from .kits import sugerir_kits
-from .concorrencia import analisar_concorrencia
+from .concorrencia import analisar_consistencia_precos
 
 MENSAGENS_SHOPEE = {
     "produtos": "📦 Produtos sincronizados com Shopee.",

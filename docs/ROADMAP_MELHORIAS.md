@@ -110,11 +110,18 @@ Se um produto está encalhado na Loja A mas vendendo bem na Loja B, o Athena sug
 
 ## 🟣 Fase 5 — Otimizar margem
 
-### 9. Reprecificação por concorrência
-**Complexidade:** 🔴 Difícil (8-12 horas)  
-**O que vai ser feito:**  
-Ao publicar um produto, o sistema consulta o preço médio dos concorrentes na Shopee. Se seu preço estiver muito acima, ele avisa.
-**Resultado:** Seus produtos não morrem na estreia porque o preço estava fora da realidade.
+### 9. Consistência de preço entre suas lojas ~~Reprecificação por concorrência~~
+
+**Complexidade:** 🔴 Difícil (8-12 horas) — **⚠️ replanejado, ver nota abaixo**  
+**O que foi descoberto:** a API da Shopee que o vendedor usa (Open Platform v2) é escopada à própria
+conta — ela não tem endpoint para consultar preços de **outros** vendedores. Não é possível implementar
+"reprecificação por concorrência real" sem uma fonte de dados externa (scraping, que viola os Termos de
+Uso da Shopee, ou um serviço pago de price intelligence de terceiros).  
+**O que foi feito em vez disso:** o sistema compara o preço de um SKU com o mesmo SKU anunciado em
+**outras lojas Shopee da sua própria conta** — útil para pegar inconsistência de preço entre suas lojas,
+mas não é comparação com concorrentes de mercado.
+**Resultado:** evita você mesmo vender o mesmo produto por preços muito diferentes em lojas diferentes.
+Se no futuro quiser concorrência real, precisa de uma integração paga de terceiros.
 
 ### 10. Sugestão de kits / combo
 **Complexidade:** 🟡 Médio (4-6 horas)  

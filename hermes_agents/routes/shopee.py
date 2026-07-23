@@ -293,14 +293,16 @@ def shopee_verificar_margem():
     except Exception as e:
         return jsonify({"error": str(e)})
 
-@shopee_bp.route('/concorrencia', methods=['GET'])
-def shopee_concorrencia():
-    from shopee import analisar_concorrencia
+@shopee_bp.route('/consistencia-precos', methods=['GET'])
+def shopee_consistencia_precos():
+    """Compara o preco de um SKU com o mesmo SKU em OUTRAS lojas Shopee da propria conta
+    (nao com concorrentes externos — a API da Shopee nao expoe isso)."""
+    from shopee import analisar_consistencia_precos
     sku = request.args.get("sku", "")
     preco = float(request.args.get("preco", 0))
     if not sku:
         return jsonify({"error": "SKU obrigatorio"}), 400
-    return jsonify(analisar_concorrencia(sku, preco))
+    return jsonify(analisar_consistencia_precos(sku, preco))
 
 @shopee_bp.route('/sugestao-kits', methods=['GET'])
 def shopee_sugestao_kits():

@@ -10,7 +10,7 @@ from .auth import configurado
 from .products import add_item, get_items, get_item_base_info
 from .images import upload_image
 from .pricing import calcular_margem_produto
-from .concorrencia import analisar_concorrencia
+from .concorrencia import analisar_consistencia_precos
 
 AGENT = "AG-03 | Shopee Replication"
 
@@ -166,11 +166,11 @@ def transferir_produtos_para_loja(origem_loja_id: int, destino_loja_id: int, max
                     resultados["sucesso"] += 1
                     if margem.get("alerta"):
                         resultados["erros"].append(f"Item #{item_id} ({sku}): publicado, mas {margem['mensagem']}")
-                    # verificar concorrencia apos publicacao (background)
+                    # verificar consistencia de preco com outras lojas proprias (nao e' concorrencia real)
                     try:
-                        conc = analisar_concorrencia(sku, preco)
-                        if conc.get("alerta"):
-                            resultados["erros"].append(f"Item #{item_id} ({sku}): {conc['mensagem']}")
+                        consist = analisar_consistencia_precos(sku, preco)
+                        if consist.get("alerta"):
+                            resultados["erros"].append(f"Item #{item_id} ({sku}): {consist['mensagem']}")
                     except Exception: pass
             except Exception as e:
                 resultados["erros"].append(f"Item #{item_id} ({item.get('item_sku','?')}): {e}")

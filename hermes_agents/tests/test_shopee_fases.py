@@ -65,26 +65,27 @@ class TestMargemProduto(unittest.TestCase):
         self.assertIn("Custo nao cadastrado", r["mensagem"])
 
 
-class TestAnalisarConcorrencia(unittest.TestCase):
-    """Fase 5 — Reprecificacao por concorrencia."""
+class TestAnalisarConsistenciaPrecos(unittest.TestCase):
+    """Fase 5 — Consistencia de preco do mesmo SKU entre lojas proprias
+    (nao e' comparacao com concorrentes reais — a API da Shopee nao expoe isso)."""
 
-    def test_concorrencia_com_anuncios(self):
+    def test_consistencia_com_anuncios(self):
         with patch("shopee.concorrencia.run_async", return_value={
             "sku": "SKU1", "preco_nosso": 35.0, "marketplace": "shopee",
             "total_anuncios": 5, "preco_medio": 20.8, "preco_mediano": 20.0,
             "preco_min": 18.0, "preco_max": 24.0, "preco_acima_pct": 68.3,
             "alerta": "critico",
-            "mensagem": "Seu preco esta 68.3% acima da media (R$ 20.80). 5 anuncios analisados.",
+            "mensagem": "Este SKU esta 68.3% acima da media das suas outras lojas (R$ 20.80). 5 anuncios proprios analisados.",
         }):
-            r = s.analisar_concorrencia("SKU1", 35.0)
+            r = s.analisar_consistencia_precos("SKU1", 35.0)
         self.assertEqual(r["total_anuncios"], 5)
         self.assertEqual(r["alerta"], "critico")
 
-    def test_concorrencia_sem_anuncios(self):
+    def test_consistencia_sem_anuncios(self):
         with patch("shopee.concorrencia.run_async", return_value=None):
-            r = s.analisar_concorrencia("SKU_NOVO", 50.0)
+            r = s.analisar_consistencia_precos("SKU_NOVO", 50.0)
         self.assertEqual(r["total_anuncios"], 0)
-        self.assertIn("Nenhum concorrente", r["mensagem"])
+        self.assertIn("nao esta anunciado em nenhuma outra loja", r["mensagem"])
 
 
 class TestSugerirKits(unittest.TestCase):
