@@ -48,7 +48,7 @@ def _ensure_tables():
             created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW()
         )""")
         try: await db.execute("ALTER TABLE fiscal_notas_fiscais ADD COLUMN IF NOT EXISTS dados_brutos_bling JSONB")
-        except: pass
+        except Exception as e: pass
         await db.execute("""CREATE TABLE IF NOT EXISTS fiscal_nfe_itens (
             id SERIAL PRIMARY KEY, nota_id INT REFERENCES fiscal_notas_fiscais(id),
             numero_item INT DEFAULT 1, codigo VARCHAR(50), descricao VARCHAR(200),
@@ -247,7 +247,7 @@ def dashboard() -> dict:
             "contas_pagar_pendentes": float(pagar_total or 0),
         }
     try: return run_async(_go())
-    except: return {"nfs_mes":0,"nfs_total":0,"valor_mes":0,"obrigacoes_pendentes":0,"obrigacoes_atrasadas":0,"tributos_ativos":0,"contas_receber_pendentes":0,"contas_pagar_pendentes":0}
+    except Exception as e: return {"nfs_mes":0,"nfs_total":0,"valor_mes":0,"obrigacoes_pendentes":0,"obrigacoes_atrasadas":0,"tributos_ativos":0,"contas_receber_pendentes":0,"contas_pagar_pendentes":0}
 
 # ── Bling Sync ──
 
@@ -445,7 +445,7 @@ def sincronizar_contas_receber_bling(pagina: int = 1, limite: int = 100) -> dict
             try:
                 exists = await db.fetchval("SELECT column_name FROM information_schema.columns WHERE table_name='fin_contas_receber' AND column_name=$1", col)
                 if not exists: await db.execute(f"ALTER TABLE fin_contas_receber ADD COLUMN {col} {ct}")
-            except: pass
+            except Exception as e: pass
         total = 0
         for cr in dados:
             try:
@@ -491,7 +491,7 @@ def sincronizar_contas_pagar_bling(pagina: int = 1, limite: int = 100) -> dict:
             try:
                 exists = await db.fetchval("SELECT column_name FROM information_schema.columns WHERE table_name='fin_contas_pagar' AND column_name=$1", col)
                 if not exists: await db.execute(f"ALTER TABLE fin_contas_pagar ADD COLUMN {col} {ct}")
-            except: pass
+            except Exception as e: pass
         total = 0
         for cp in dados:
             try:

@@ -31,11 +31,13 @@ const NAV_PERMS: Record<string, string> = {
   "/integracoes/bling": "integrations:view",
   "/hermes": "agents:view",
   "/roles": "roles:view",
+  "/lojas": "cadastros:view",
 };
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
   { href: "/cadastros", label: "Cadastros", icon: "cadastros" },
+  { href: "/lojas", label: "Lojas", icon: "pdv" },
   { href: "/produtos", label: "Produtos", icon: "produtos" },
   { href: "/estoque", label: "Estoque", icon: "estoque" },
   { href: "/compras", label: "Compras", icon: "compras" },
@@ -52,15 +54,26 @@ const NAV_ITEMS = [
   { href: "/automacoes", label: "Automações", icon: "automacoes" },
   { href: "/relatorios", label: "Relatórios", icon: "relatorios" },
   { href: "/agents", label: "Agentes", icon: "agents" },
+  {
+    href: "/integracoes", label: "Shopee", icon: "bling",
+    children: [
+      { href: "/integracoes/shopee", label: "Config & Lojas" },
+      { href: "/shopee/regras", label: "Regras de Preco" },
+      { href: "/shopee/kits", label: "Kits & Concorrencia" },
+      { href: "/relatorios/dre-lojas", label: "DRE por Loja" },
+    ],
+  },
   { href: "/integracoes/bling", label: "Bling", icon: "bling" },
   { href: "/hermes", label: "Hermes", icon: "agents" },
   { href: "/roles", label: "Cargos", icon: "cadastros" },
+  { href: "/config", label: "Configurações", icon: "cadastros" },
 ];
 
 function Sidebar() {
   const { user, hasPermission, logout } = useAuth();
   const { lojaId, lojas, setLojaId } = useStore();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
   const pathname = usePathname();
 
   return (
@@ -85,9 +98,55 @@ function Sidebar() {
         </button>
       </div>
 
-      <nav className="flex-1 p-2 space-y-1" role="navigation">
+      <nav className="flex-1 p-2 space-y-1 overflow-y-auto" role="navigation">
         {NAV_ITEMS.map((item) => {
           const active = pathname?.startsWith(item.href);
+          const hasChildren = item.children && item.children.length > 0;
+          const isExpanded = expandedMenu === item.href;
+
+          if (hasChildren) {
+            return (
+              <div key={item.href}>
+                <button
+                  onClick={() => setExpandedMenu(isExpanded ? null : item.href)}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors w-full text-left ${
+                    active || isExpanded
+                      ? "bg-indigo-600/20 text-indigo-300"
+                      : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800"
+                  }`}
+                >
+                  <Icon name={item.icon} size={18} className="shrink-0" />
+                  {sidebarOpen && (
+                    <>
+                      <span className="flex-1">{item.label}</span>
+                      <span className="text-[10px]">{isExpanded ? "▾" : "▸"}</span>
+                    </>
+                  )}
+                </button>
+                {sidebarOpen && isExpanded && item.children && (
+                  <div className="ml-5 mt-0.5 space-y-0.5 border-l border-neutral-800 pl-2">
+                    {item.children.map((child) => {
+                      const childActive = pathname === child.href;
+                      return (
+                        <Link
+                          key={child.href}
+                          href={child.href}
+                          className={`block px-3 py-1.5 rounded-lg text-xs transition-colors ${
+                            childActive
+                              ? "bg-indigo-600/30 text-indigo-200"
+                              : "text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800"
+                          }`}
+                        >
+                          {child.label}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
           return (
             <Link
               key={item.href}

@@ -35,21 +35,21 @@ def _sync_pedidos():
         from core.vendas import sincronizar_pedidos_bling
         r = sincronizar_pedidos_bling()
         if r.get("sync", 0) > 0: log(AGENT, f"Pedidos sync: {r['sync']}")
-    except: pass
+    except Exception as e: pass
 
 def _sync_contatos():
     try:
         from core.entidades import sincronizar_contatos_bling
         r = sincronizar_contatos_bling()
         if r.get("sync", 0) > 0: log(AGENT, f"Contatos sync: {r['sync']}")
-    except: pass
+    except Exception as e: pass
 
 def _sync_nf():
     try:
         from core.fiscal import sincronizar_notas_fiscais_bling
         r = sincronizar_notas_fiscais_bling()
         if r.get("sync", 0) > 0: log(AGENT, f"NF sync: {r['sync']}")
-    except: pass
+    except Exception as e: pass
 
 def _sync_cr_cp():
     try:
@@ -57,7 +57,7 @@ def _sync_cr_cp():
         r1 = sincronizar_contas_receber_bling()
         r2 = sincronizar_contas_pagar_bling()
         log(AGENT, f"CR/CP sync: CR={r1.get('sync',0)} CP={r2.get('sync',0)}")
-    except: pass
+    except Exception as e: pass
 
 def _sync_categorias():
     try:
@@ -75,11 +75,11 @@ def _sync_categorias():
                         cid = cat.get("id"); nome = cat.get("descricao","")
                         if cid and nome:
                             await db.execute("INSERT INTO bling_categorias (bling_id, nome) VALUES ($1,$2) ON CONFLICT (bling_id) DO UPDATE SET nome=$2", cid, nome)
-                    except: pass
+                    except Exception as e: pass
                 return len(dados)
             c = run_async(_go())
             log(AGENT, f"Categorias sync: {c}")
-    except: pass
+    except Exception as e: pass
 
 # ponytail: jobs run every N seconds. Adjust intervals based on volume.
 add_job(_sync_pedidos, "bling-pedidos", 300)          # 5 min

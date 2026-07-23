@@ -135,7 +135,7 @@ def dashboard() -> dict:
             "total_perdas": float(total_perdas or 0), "rendimento_pct": rendimento,
         }
     try: return run_async(_go())
-    except: return {"ops_ativas":0,"ops_hoje":0,"maquinas_ativas":0,"maquinas_paradas":0,"total_perdas":0,"rendimento_pct":0}
+    except Exception as e: return {"ops_ativas":0,"ops_hoje":0,"maquinas_ativas":0,"maquinas_paradas":0,"total_perdas":0,"rendimento_pct":0}
 
 def iniciar_op(op_id: int) -> dict:
     return update("ops", op_id, {"status":"em_andamento","data_inicio":hoje()})
@@ -145,7 +145,7 @@ def finalizar_op(op_id: int) -> dict:
     try:
         from core.entidades import ao_finalizar_producao
         ao_finalizar_producao(op_id)
-    except: pass
+    except Exception as e: pass
     return r
 
 def parar_maquina(maquina_id: int, motivo: str) -> dict:

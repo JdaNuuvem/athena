@@ -222,6 +222,21 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ loja_id: lojaId, unlist }),
     }),
+  shopeeDetalheProduto: (itemId: number, lojaId?: number) =>
+    request<{ item?: Record<string, unknown>; error?: string }>(`/api/shopee/produtos/${itemId}${lojaId ? `?loja_id=${lojaId}` : ""}`),
+  shopeeDesconectarLoja: (lojaId: number) =>
+    request<{ id?: number; nome?: string; error?: string }>(`/api/shopee/lojas/${lojaId}`, { method: "DELETE" }),
+  shopeeSyncLog: () =>
+    request<{ log: ShopeeSyncLogEntry[] }>("/api/shopee/sync-log"),
+  shopeePedidos: (lojaId?: number, dias?: number, status?: string) => {
+    const q = new URLSearchParams();
+    if (lojaId) q.set("loja_id", String(lojaId));
+    if (dias) q.set("dias", String(dias));
+    if (status) q.set("status", status);
+    return request<{ pedidos: ShopeePedido[]; error?: string }>(`/api/shopee/pedidos?${q}`);
+  },
+  shopeeDashboard: (dias?: number) =>
+    request<{ lojas: ShopeeDashboardLoja[]; dias: number; error?: string }>(`/api/shopee/dashboard${dias ? `?dias=${dias}` : ""}`),
 
   // Hermes
   hermesAgents: () => request<unknown[]>("/api/hermes/agents"),
@@ -252,7 +267,7 @@ export const api = {
     request<unknown[]>(`/api/lojas${periodo ? `?periodo=${periodo}` : ""}`),
   lojasManage: () => request<{ lojas: Array<{ id: number; nome: string; ativa: boolean }> }>("/api/lojas/manage"),
   lojasCriar: (nome: string) => request<{ loja: { id: number; nome: string } }>("/api/lojas/manage", { method: "POST", body: JSON.stringify({ nome }) }),
-  lojasAtualizar: (id: number, nome: string) => request<{ success: boolean }>(`/api/lojas/manage/${id}`, { method: "PUT", body: JSON.stringify({ nome }) }),
+  lojasAtualizar: (id: number, nome: string, shopee_markup_pct?: number, grupos_publicacao?: string) => request<{ success: boolean }>(`/api/lojas/manage/${id}`, { method: "PUT", body: JSON.stringify({ nome, shopee_markup_pct, grupos_publicacao }) }),
   lojasDeletar: (id: number) => request<{ success: boolean }>(`/api/lojas/manage/${id}`, { method: "DELETE" }),
   lojasSyncBling: () => request<{ sync: number; lojas: Array<{ acao: string; id: number; nome: string }> }>("/api/lojas/sync/bling", { method: "POST" }),
   lojasDepositoMap: () => request<{ map: Array<{ loja_id: number; nome: string; deposito_id: number }> }>("/api/lojas/deposito-map"),
@@ -347,6 +362,40 @@ export interface ShopeeAtributo {
 export interface ShopeeMarca {
   brand_id: number;
   original_brand_name: string;
+}
+
+export interface ShopeeSyncLogEntry {
+  id: number;
+  tipo: string;
+  status: string;
+  itens_processados: number;
+  erro: string | null;
+  iniciado_em: string;
+  concluido_em: string | null;
+}
+
+export interface ShopeePedido {
+  order_sn: string;
+  status: string;
+  create_time: number;
+  update_time: number;
+  total_amount: number | string;
+  buyer_username: string;
+  recipient_nome: string;
+  itens: Array<{ sku: string; nome: string; quantidade: number; preco: number | string }>;
+}
+
+export interface ShopeeDashboardLoja {
+  loja_id: number;
+  nome: string;
+  shop_id: string;
+  tem_token: boolean;
+  receita: number;
+  unidades_vendidas: number;
+  skus_vendidos: number;
+  anuncios_total: number;
+  anuncios_ativos: number;
+  produtos_estoque_baixo: number;
 }
 
 export interface BlingProduto {

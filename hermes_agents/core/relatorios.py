@@ -1,4 +1,5 @@
 """Relatorios Core — 20 reports unificando Bling + PDV + Compras + Produção."""
+import os
 from core import get_db, run_async, log, hoje
 
 AGENT = "Relatorios Core"
@@ -38,7 +39,7 @@ def _union_vendas(dias: int, loja_id=None):
             "diarias_pdv": [dict(r) for r in (diarias_pdv or [])],
         }
     try: return run_async(_go())
-    except: return {"total":0,"quantidade":0,"diarias_bling":[],"diarias_pdv":[]}
+    except Exception as e: return {"total":0,"quantidade":0,"diarias_bling":[],"diarias_pdv":[]}
 
 # ── 1. Vendas ──
 
@@ -64,7 +65,7 @@ def lucro_margem(dias=30, loja_id=None):
         margem = round((lucro / max(receita_total, 1)) * 100, 1)
         return {"receita": receita_total, "custos": custos, "lucro": round(lucro,2), "margem_pct": margem, "periodo_dias": dias}
     try: return run_async(_go())
-    except: return {"receita":0,"custos":0,"lucro":0,"margem_pct":0,"periodo_dias":dias}
+    except Exception as e: return {"receita":0,"custos":0,"lucro":0,"margem_pct":0,"periodo_dias":dias}
 
 # ── 3. Estoque ──
 
@@ -77,7 +78,7 @@ def estoque(loja_id=None):
         ruptura = await db.fetchval(f"SELECT COUNT(*) FROM estoque_lojas e WHERE e.quantidade <= 0{loja_sql}")
         return {"total_itens": total or 0, "baixo_estoque": baixo or 0, "ruptura": ruptura or 0}
     try: return run_async(_go())
-    except: return {"total_itens":0,"baixo_estoque":0,"ruptura":0}
+    except Exception as e: return {"total_itens":0,"baixo_estoque":0,"ruptura":0}
 
 # ── 4. Clientes ──
 
@@ -90,7 +91,7 @@ def clientes(dias=90, loja_id=None):
         top = await db.fetch("SELECT c.nome as cliente, COUNT(v.id) as compras, COALESCE(SUM(v.total),0) as valor FROM cad_clientes c LEFT JOIN vendas_pedidos v ON v.cliente_id = c.id AND v.status != 'cancelado' GROUP BY c.id, c.nome ORDER BY valor DESC LIMIT 10")
         return {"total": total or 0, "novos": novos or 0, "top": [dict(r) for r in (top or [])], "periodo_dias": dias}
     try: return run_async(_go())
-    except: return {"total":0,"novos":0,"top":[],"periodo_dias":dias}
+    except Exception as e: return {"total":0,"novos":0,"top":[],"periodo_dias":dias}
 
 # ── 5. Fornecedores ──
 
@@ -102,7 +103,7 @@ def fornecedores():
         top = await db.fetch("SELECT f.nome, COUNT(p.id) as pedidos, COALESCE(SUM(p.valor_total),0) as valor FROM cad_fornecedores f LEFT JOIN compras_pedidos p ON p.fornecedor_id=f.id GROUP BY f.id, f.nome ORDER BY valor DESC LIMIT 10")
         return {"total": total or 0, "ativos": ativos or 0, "top": [dict(r) for r in (top or [])]}
     try: return run_async(_go())
-    except: return {"total":0,"ativos":0,"top":[]}
+    except Exception as e: return {"total":0,"ativos":0,"top":[]}
 
 # ── 6. Ticket Médio ──
 
@@ -127,7 +128,7 @@ def dre(dias=30, loja_id=None):
         despesas = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_dre WHERE mes >= to_char(CURRENT_DATE - $1, 'YYYY-MM') AND tipo='despesa'", dias)
         return {"receita_bruta": receita_total, "cmv": cmv, "lucro_bruto": round(lb, 2), "despesas": float(despesas or 0), "margem_bruta_pct": round(lb/max(receita_total,1)*100,1), "periodo_dias": dias}
     try: return run_async(_go())
-    except: return {"receita_bruta":0,"cmv":0,"lucro_bruto":0,"despesas":0,"margem_bruta_pct":0,"periodo_dias":dias}
+    except Exception as e: return {"receita_bruta":0,"cmv":0,"lucro_bruto":0,"despesas":0,"margem_bruta_pct":0,"periodo_dias":dias}
 
 # ── 8. Fluxo de Caixa ──
 
@@ -145,7 +146,7 @@ def fluxo_caixa(dias=30, loja_id=None):
         saidas = float((saidas_cp or 0) + (saidas_comp or 0))
         return {"entradas": entradas, "saidas": saidas, "saldo": round(entradas - saidas, 2), "periodo_dias": dias}
     try: return run_async(_go())
-    except: return {"entradas":0,"saidas":0,"saldo":0,"periodo_dias":dias}
+    except Exception as e: return {"entradas":0,"saidas":0,"saldo":0,"periodo_dias":dias}
 
 # ── 9. Aging Financeiro ──
 
@@ -163,7 +164,7 @@ def aging_financeiro():
             {"faixa":"31+ dias","qtd":max((avencer or 0) - (faixa1 or 0) - (faixa2 or 0), 0)},
         ]}
     try: return run_async(_go())
-    except: return {"a_vencer":0,"vencidas":0,"faixas":[{"faixa":"Sem dados","qtd":0}]}
+    except Exception as e: return {"a_vencer":0,"vencidas":0,"faixas":[{"faixa":"Sem dados","qtd":0}]}
 
 # ── 10. Previsão ──
 
@@ -177,7 +178,7 @@ def previsao(dias=30, loja_id=None):
         media_total = float((media or 0) + (media_pdv or 0))
         return {"media_diaria": round(media_total, 2), "previsao_30d": round(media_total * 30, 2)}
     try: return run_async(_go())
-    except: return {"media_diaria":0,"previsao_30d":0}
+    except Exception as e: return {"media_diaria":0,"previsao_30d":0}
 
 # ── 11. Compras ──
 
@@ -189,7 +190,7 @@ def compras(dias=30):
         forn = await db.fetchval("SELECT COUNT(DISTINCT fornecedor_id) FROM compras_pedidos WHERE data_emissao >= CURRENT_DATE - $1", dias)
         return {"pedidos": pedidos or 0, "valor_total": float(total_val or 0), "fornecedores_unicos": forn or 0, "periodo_dias": dias}
     try: return run_async(_go())
-    except: return {"pedidos":0,"valor_total":0,"fornecedores_unicos":0,"periodo_dias":dias}
+    except Exception as e: return {"pedidos":0,"valor_total":0,"fornecedores_unicos":0,"periodo_dias":dias}
 
 # ── 12. Impostos (via NF-e) ──
 
@@ -200,7 +201,7 @@ def impostos(dias=30):
         nf_saida = await db.fetchval("SELECT COALESCE(SUM(valor_icms + valor_ipi + valor_pis + valor_cofins),0) FROM fiscal_notas_fiscais WHERE tipo='saida' AND data_emissao >= CURRENT_DATE - $1", dias)
         return {"impostos_entrada": float(nf_entrada or 0), "impostos_saida": float(nf_saida or 0), "total": float((nf_entrada or 0) + (nf_saida or 0)), "periodo_dias": dias}
     try: return run_async(_go())
-    except: return {"impostos_entrada":0,"impostos_saida":0,"total":0,"periodo_dias":dias}
+    except Exception as e: return {"impostos_entrada":0,"impostos_saida":0,"total":0,"periodo_dias":dias}
 
 # ── 13. Comissão ──
 
@@ -212,7 +213,7 @@ def comissao(dias=30):
             GROUP BY vendedor ORDER BY valor DESC LIMIT 10""", dias)
         return [dict(r) for r in (rows or [])]
     try: return run_async(_go())
-    except: return []
+    except Exception as e: return []
 
 # ── 14. Marketplaces ──
 
@@ -224,7 +225,7 @@ def marketplaces(dias=30):
             GROUP BY marketplace ORDER BY valor DESC""", dias)
         return [dict(r) for r in (rows or [])]
     try: return run_async(_go())
-    except: return []
+    except Exception as e: return []
 
 # ── 15. Devoluções ──
 
@@ -235,7 +236,7 @@ def devolucoes(dias=30):
         taxa = await db.fetchval("SELECT ROUND(COUNT(*) FILTER(WHERE status='cancelado')::numeric / NULLIF(COUNT(*),0) * 100, 1) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1", dias)
         return {"total_devolucoes": total or 0, "taxa_pct": float(taxa or 0), "periodo_dias": dias}
     try: return run_async(_go())
-    except: return {"total_devolucoes":0,"taxa_pct":0,"periodo_dias":dias}
+    except Exception as e: return {"total_devolucoes":0,"taxa_pct":0,"periodo_dias":dias}
 
 # ── 16. Rupturas ──
 
@@ -246,7 +247,7 @@ def rupturas():
         rows = await db.fetch("SELECT sku, quantidade FROM estoque_lojas WHERE quantidade <= 0 ORDER BY sku LIMIT 20")
         return {"total_rupturas": total or 0, "produtos": [dict(r) for r in (rows or [])]}
     try: return run_async(_go())
-    except: return {"total_rupturas":0,"produtos":[]}
+    except Exception as e: return {"total_rupturas":0,"produtos":[]}
 
 # ── 17. Curva ABC ──
 
@@ -267,7 +268,7 @@ def curvas(dias=90):
             it["classe"] = "A" if it["pct_acum"] <= 80 else "B" if it["pct_acum"] <= 95 else "C"
         return {"total_valor": round(total, 2), "total_itens": len(items), "itens": items}
     try: return run_async(_go())
-    except: return {"total_valor":0,"total_itens":0,"itens":[]}
+    except Exception as e: return {"total_valor":0,"total_itens":0,"itens":[]}
 
 # ── 18. Produtos ──
 
@@ -280,7 +281,7 @@ def produtos(dias=30):
             GROUP BY vi.sku, vi.descricao ORDER BY valor DESC LIMIT 20""", dias)
         return [dict(r) for r in (rows or [])]
     try: return run_async(_go())
-    except: return []
+    except Exception as e: return []
 
 # ── 19. Financeiro ──
 
@@ -293,7 +294,7 @@ def financeiro(dias=30):
         cp_qtd = await db.fetchval("SELECT COUNT(*) FROM fin_contas_pagar WHERE status='pendente'")
         return {"contas_receber_total": float(cr_total or 0), "contas_pagar_total": float(cp_total or 0), "contas_receber_qtd": cr_qtd or 0, "contas_pagar_qtd": cp_qtd or 0, "periodo_dias": dias}
     try: return run_async(_go())
-    except: return {"contas_receber_total":0,"contas_pagar_total":0,"contas_receber_qtd":0,"contas_pagar_qtd":0,"periodo_dias":dias}
+    except Exception as e: return {"contas_receber_total":0,"contas_pagar_total":0,"contas_receber_qtd":0,"contas_pagar_qtd":0,"periodo_dias":dias}
 
 # ── 20. Fiscal Dashboard resumo ──
 
@@ -304,4 +305,53 @@ def fiscal_resumo(dias=30):
         nf_valor = await db.fetchval("SELECT COALESCE(SUM(valor_nf),0) FROM fiscal_notas_fiscais WHERE data_emissao >= CURRENT_DATE - $1", dias)
         return {"nfs_periodo": nf_total or 0, "valor_periodo": float(nf_valor or 0), "periodo_dias": dias}
     try: return run_async(_go())
-    except: return {"nfs_periodo":0,"valor_periodo":0,"periodo_dias":dias}
+    except Exception as e: return {"nfs_periodo":0,"valor_periodo":0,"periodo_dias":dias}
+
+# ── 21. DRE por Loja (Lucro Real por Canal) ──
+
+def dre_por_loja(dias: int = 30) -> list:
+    """Retorna DRE (receita, comissao, frete, lucro) por loja Shopee + PDV."""
+    async def _go():
+        db = await get_db()
+        # buscar lojas com dados
+        lojas = await db.fetch("SELECT id, nome FROM lojas WHERE ativa = TRUE ORDER BY nome")
+        comissao_pct = float(os.environ.get("SHOPEE_COMISSAO_PCT", "")) if os.environ.get("SHOPEE_COMISSAO_PCT") else 14.0
+
+        resultado = []
+        for loja in lojas:
+            lid = loja["id"]
+            # receita Shopee/Bling (vendas_pedidos)
+            rec_online = await db.fetchval("""
+                SELECT COALESCE(SUM(total),0) FROM vendas_pedidos
+                WHERE loja_id = $1 AND data >= CURRENT_DATE - $2 AND status != 'cancelado'
+            """, lid, dias)
+            # receita PDV (pdv_vendas via pdv_caixas.loja_id)
+            rec_pdv = await db.fetchval("""
+                SELECT COALESCE(SUM(v.total),0) FROM pdv_vendas v
+                JOIN pdv_caixas c ON c.id = v.caixa_id
+                WHERE c.loja_id = $1 AND DATE(v.data) >= CURRENT_DATE - $2 AND v.status = 'finalizada'
+            """, lid, dias)
+            receita = float(rec_online or 0) + float(rec_pdv or 0)
+
+            frete = float((await db.fetchval("SELECT COALESCE(SUM(frete),0) FROM vendas_pedidos WHERE loja_id = $1 AND data >= CURRENT_DATE - $2 AND status != 'cancelado'", lid, dias)) or 0)
+            custos = float((await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM producao_custos WHERE loja_id = $1 AND data >= CURRENT_DATE - $2", lid, dias)) or 0)
+            qtd_vendas = int((await db.fetchval("SELECT COUNT(*) FROM vendas_pedidos WHERE loja_id = $1 AND data >= CURRENT_DATE - $2 AND status != 'cancelado'", lid, dias)) or 0)
+
+            comissao_valor = round(receita * comissao_pct / 100, 2)
+            lucro = round(receita - comissao_valor - frete - custos, 2)
+            margem_pct = round((lucro / receita * 100) if receita > 0 else 0, 1)
+
+            resultado.append({
+                "loja_id": lid, "loja_nome": loja["nome"],
+                "receita": receita, "qtd_vendas": qtd_vendas,
+                "comissao_pct": comissao_pct, "comissao_valor": comissao_valor,
+                "frete": frete, "custos_producao": custos,
+                "lucro": lucro, "margem_pct": margem_pct,
+                "periodo_dias": dias,
+            })
+
+        # ordenar por lucro descendente
+        resultado.sort(key=lambda x: x["lucro"], reverse=True)
+        return resultado
+    try: return run_async(_go())
+    except Exception as e: return []

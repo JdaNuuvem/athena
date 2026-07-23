@@ -229,9 +229,14 @@ class TestRotasFlask(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        os.environ["ATHENA_TOKEN"] = "test-token-123"
         from athena_bridge import app
         app.config["TESTING"] = True
         cls.client = app.test_client()
+
+    def _h(self):
+        """Headers com token de autenticacao."""
+        return {"Authorization": "Bearer test-token-123"}
 
     def test_callback_sem_code_redireciona_com_erro(self):
         resp = self.client.get("/api/shopee/callback", follow_redirects=False)
@@ -256,7 +261,7 @@ class TestRotasFlask(unittest.TestCase):
     @patch("shopee.listar_categorias_cache")
     def test_rota_categorias(self, mock_listar):
         mock_listar.return_value = [{"category_id": 1, "parent_category_id": 0, "nome": "Casa", "tem_filhos": False}]
-        resp = self.client.get("/api/shopee/categorias?busca=casa")
+        resp = self.client.get("/api/shopee/categorias?busca=casa", headers=self._h())
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.get_json()["categorias"][0]["nome"], "Casa")
 
@@ -267,7 +272,7 @@ class TestRotasFlask(unittest.TestCase):
         mock_attr.return_value = {"response": {"list": [{"category_id": 100183, "attribute_tree": [
             {"attribute_id": 1, "name": "Cor", "mandatory": True, "attribute_value_list": [{"value_id": 9, "name": "Azul"}]},
         ]}]}}
-        resp = self.client.get("/api/shopee/categorias/100183/atributos")
+        resp = self.client.get("/api/shopee/categorias/100183/atributos", headers=self._h())
         self.assertEqual(resp.status_code, 200)
         body = resp.get_json()
         self.assertEqual(body["atributos"][0]["original_attribute_name"], "Cor")
@@ -277,7 +282,7 @@ class TestRotasFlask(unittest.TestCase):
     @patch("shopee.get_brand_list")
     def test_rota_marcas(self, mock_brand):
         mock_brand.return_value = {"response": {"brand_list": [{"brand_id": 5, "original_brand_name": "Samsung"}], "is_mandatory": False}}
-        resp = self.client.get("/api/shopee/categorias/100183/marcas")
+        resp = self.client.get("/api/shopee/categorias/100183/marcas", headers=self._h())
         self.assertEqual(resp.status_code, 200)
         self.assertFalse(resp.get_json()["obrigatorio"])
 
@@ -287,23 +292,23 @@ class TestRotasFlask(unittest.TestCase):
         with patch("requests.get") as mock_get:
             mock_get.return_value.content = b"fakejpegbytes"
             mock_get.return_value.raise_for_status = MagicMock()
-            resp = self.client.post("/api/shopee/upload-imagem", data={"loja_id": "1", "image_url": "https://cdn.exemplo.com/produto.jpg"})
+            resp = self.client.post("/api/shopee/upload-imagem", data={"loja_id": "1", "image_url": "https://cdn.exemplo.com/produto.jpg"}, headers=self._h())
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.get_json()["image_id"], "img1")
 
     def test_rota_upload_imagem_rejeita_url_invalida(self):
-        resp = self.client.post("/api/shopee/upload-imagem", data={"loja_id": "1", "image_url": "file:///etc/passwd"})
+        resp = self.client.post("/api/shopee/upload-imagem", data={"loja_id": "1", "image_url": "file:///etc/passwd"}, headers=self._h())
         self.assertEqual(resp.status_code, 400)
 
     def test_rota_upload_imagem_rejeita_ip_privado_ssrf(self):
         # ponytail: protecao contra SSRF — nao pode usar o upload de imagem pra sondar rede interna
         for url in ["http://127.0.0.1/imagem.jpg", "http://169.254.169.254/latest/meta-data/", "http://10.0.0.5/x.jpg"]:
-            resp = self.client.post("/api/shopee/upload-imagem", data={"loja_id": "1", "image_url": url})
+            resp = self.client.post("/api/shopee/upload-imagem", data={"loja_id": "1", "image_url": url}, headers=self._h())
             self.assertEqual(resp.status_code, 400, f"deveria bloquear {url}")
 
     @patch("requests.get", side_effect=Exception("connection refused to internal-db.corp.local:5432"))
     def test_rota_upload_imagem_nao_vaza_detalhe_de_erro(self, mock_get):
-        resp = self.client.post("/api/shopee/upload-imagem", data={"loja_id": "1", "image_url": "https://www.google.com/x.jpg"})
+        resp = self.client.post("/api/shopee/upload-imagem", data={"loja_id": "1", "image_url": "https://www.google.com/x.jpg"}, headers=self._h())
         self.assertEqual(resp.status_code, 400)
         self.assertNotIn("internal-db.corp.local", resp.get_json().get("error", ""))
 
@@ -312,7 +317,7 @@ class TestRotasFlask(unittest.TestCase):
         mock_add.return_value = {"response": {"item_id": 42}}
         resp = self.client.post("/api/shopee/produtos", json={
             "loja_id": 1, "item_name": "Produto X", "category_id": 100183, "original_price": 10.0,
-        })
+        }, headers=self._h())
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.get_json()["response"]["item_id"], 42)
         # loja_id nao deve vazar para dentro do payload da Shopee
@@ -320,13 +325,13 @@ class TestRotasFlask(unittest.TestCase):
         self.assertNotIn("loja_id", payload_enviado)
 
     def test_rota_criar_produto_sem_loja_id(self):
-        resp = self.client.post("/api/shopee/produtos", json={"item_name": "X"})
+        resp = self.client.post("/api/shopee/produtos", json={"item_name": "X"}, headers=self._h())
         self.assertEqual(resp.status_code, 400)
 
     @patch("shopee.sincronizar_estoque_todas_lojas")
     def test_rota_estoque_todas_lojas(self, mock_sync):
         mock_sync.return_value = {"total": 2, "sucesso": 2, "resultados": []}
-        resp = self.client.post("/api/shopee/estoque/todas-lojas", json={"sku": "SKU-001", "quantidade": 15})
+        resp = self.client.post("/api/shopee/estoque/todas-lojas", json={"sku": "SKU-001", "quantidade": 15}, headers=self._h())
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.get_json()["sucesso"], 2)
 

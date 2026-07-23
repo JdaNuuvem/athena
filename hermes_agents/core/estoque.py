@@ -198,7 +198,7 @@ def movimentacoes(sku: str = "", loja: str = "", limite: int = 50) -> list:
         return [dict(r) for r in rows]
     try:
         return run_async(_go())
-    except:
+    except Exception as e:
         return []
 
 
@@ -292,3 +292,41 @@ def sync_bling(sku: str, loja: str) -> dict:
         return sincronizar_estoque_para_bling(sku, loja, qtd)
     except Exception as e:
         return {"erro": str(e)}
+
+# ── Rotacao / Sugestao de Transferencia ──
+
+def sugestao_rotacao() -> list:
+    """Produtos com estoque desbalanceado entre lojas. Sugere transferencia da loja com excesso para a com escassez."""
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch("""
+            SELECT e.sku, e.loja, e.quantidade,
+                   COALESCE(c.descricao, e.sku) AS nome
+            FROM estoque_lojas e
+            LEFT JOIN catalogo_produtos c ON c.sku = e.sku
+            WHERE e.quantidade > 0
+            ORDER BY e.sku, e.quantidade DESC
+        """)
+        por_sku = {}
+        for r in rows:
+            sku = r["sku"]
+            if sku not in por_sku:
+                por_sku[sku] = {"sku": sku, "nome": r["nome"], "lojas": []}
+            por_sku[sku]["lojas"].append({"loja": r["loja"], "quantidade": int(r["quantidade"])})
+        sugestoes = []
+        for sku, data in por_sku.items():
+            lojas_data = data["lojas"]
+            if len(lojas_data) < 2: continue
+            lojas_data.sort(key=lambda x: x["quantidade"], reverse=True)
+            excesso = lojas_data[0]; escassez = lojas_data[-1]
+            if excesso["quantidade"] >= 5 and escassez["quantidade"] <= 2 and excesso["loja"] != escassez["loja"]:
+                sugestoes.append({
+                    "sku": sku, "nome": data["nome"],
+                    "loja_excesso": excesso["loja"], "qtd_excesso": excesso["quantidade"],
+                    "loja_escassez": escassez["loja"], "qtd_escassez": escassez["quantidade"],
+                    "sugerir_transferir": max(1, min(excesso["quantidade"] // 2, excesso["quantidade"] - 5)),
+                })
+        sugestoes.sort(key=lambda x: x["qtd_excesso"], reverse=True)
+        return sugestoes[:30]
+    try: return run_async(_go())
+    except Exception as e: return []

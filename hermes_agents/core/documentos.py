@@ -37,7 +37,7 @@ def _list(cols="*", order="id DESC", limit=100, entidade_tipo="", entidade_id=No
         rows = await db.fetch(f"SELECT {cols} FROM documentos WHERE {clause} ORDER BY {order} LIMIT ${p}", *params, limit)
         return [dict(r) for r in rows]
     try: return run_async(_go())
-    except: return []
+    except Exception as e: return []
 
 def listar(entidade_tipo="", entidade_id=None) -> list:
     return _list(entidade_tipo=entidade_tipo, entidade_id=entidade_id)
@@ -79,7 +79,7 @@ def download(doc_id: int) -> tuple:
         with open(filepath, "rb") as f:
             return f.read(), row["nome_original"], row["mime_type"]
     try: return run_async(_go())
-    except: return None, None, None
+    except Exception as e: return None, None, None
 
 def deletar(doc_id: int) -> dict:
     async def _go():
@@ -101,4 +101,4 @@ def stats() -> dict:
         tamanho = await db.fetchval("SELECT COALESCE(SUM(tamanho_bytes),0) FROM documentos")
         return {"total": total or 0, "tamanho_total_bytes": int(tamanho or 0)}
     try: return run_async(_go())
-    except: return {"total": 0, "tamanho_total_bytes": 0}
+    except Exception as e: return {"total": 0, "tamanho_total_bytes": 0}

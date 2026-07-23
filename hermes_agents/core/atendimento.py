@@ -115,11 +115,24 @@ def delete(t: str, i: int): return _delete(f"atend_{t}", i)
 # ── Operacoes especificas ──
 
 def criar_ticket(cliente: str, assunto: str, canal="whatsapp", prioridade="normal") -> dict:
-    sla = _list("atend_sla", f"tempo_resposta_min, tempo_resolucao_h", limit=1)
-    # Find SLA for priority
-    sla_data = next((s for s in sla if s.get("prioridade") == prioridade), None)
-    return create("tickets", {"cliente": cliente, "assunto": assunto, "canal": canal,
-        "prioridade": prioridade, "status": "aberto", "data_abertura": hoje()})
+    """Cria ticket com SLA aplicado — vencimento e tempo de resposta da regra da prioridade."""
+    from datetime import datetime, timedelta
+    async def _go():
+        db = await get_db()
+        sla_row = await db.fetchrow("SELECT tempo_resposta_min, tempo_resolucao_h FROM atend_sla WHERE prioridade = $1 AND ativo = TRUE", prioridade)
+        agora = datetime.now()
+        sla_vencimento = agora + timedelta(minutes=sla_row["tempo_resposta_min"]) if sla_row else None
+        tempo_resposta = sla_row["tempo_resposta_min"] if sla_row else None
+        return {"sla_vencimento": sla_vencimento, "tempo_resposta_min": tempo_resposta}
+    try: sla_data = run_async(_go())
+    except Exception as e: sla_data = {"sla_vencimento": None, "tempo_resposta_min": None}
+
+    return create("tickets", {
+        "cliente": cliente, "assunto": assunto, "canal": canal,
+        "prioridade": prioridade, "status": "aberto", "data_abertura": hoje(),
+        "sla_vencimento": sla_data["sla_vencimento"],
+        "tempo_resposta_min": sla_data["tempo_resposta_min"],
+    })
 
 def adicionar_mensagem(ticket_id: int, remetente: str, conteudo: str, tipo="texto") -> dict:
     return create("mensagens", {"ticket_id": ticket_id, "remetente": remetente,
@@ -147,4 +160,4 @@ def dashboard() -> dict:
             "slas": [dict(r) for r in (slas or [])],
         }
     try: return run_async(_go())
-    except: return {"tickets_abertos":0,"tickets_pendentes":0,"hoje":0,"tempo_medio_resposta":0,"canais":[],"slas":[]}
+    except Exception as e: return {"tickets_abertos":0,"tickets_pendentes":0,"hoje":0,"tempo_medio_resposta":0,"canais":[],"slas":[]}

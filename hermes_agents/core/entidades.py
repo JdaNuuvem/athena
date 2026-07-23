@@ -96,7 +96,7 @@ def vincular_todos_clientes() -> dict:
                 total += 1
         return {"vinculados": total}
     try: return run_async(_go())
-    except: return {"vinculados": 0}
+    except Exception as e: return {"vinculados": 0}
 
 # ─────────────────────────────────────────────────────────
 # Integracao #2b: Sync Contatos do Bling → cad_clientes
@@ -166,7 +166,7 @@ def migrar_fornecedores_compras() -> dict:
                 # ponytail: atualiza cotacoes pelo id original do fornecedor
                 try:
                     await db.execute("UPDATE compras_cotacoes SET fornecedor_id = $1 WHERE fornecedor_id = $2", fid, cf["id"])
-                except: pass
+                except Exception as e: pass
                 total += 1
         return {"migrados": total}
     try: return run_async(_go())
@@ -189,7 +189,7 @@ def migrar_contas_fiscal_para_financeiro() -> dict:
                     exists = await db.fetchval("SELECT column_name FROM information_schema.columns WHERE table_name=$1 AND column_name=$2", tab, col)
                     if not exists:
                         await db.execute(f"ALTER TABLE {tab} ADD COLUMN {col} {tipo}")
-                except: pass
+                except Exception as e: pass
         # Migrar contas a receber
         rows = await db.fetch("SELECT * FROM fiscal_contas_receber_bling")
         migrated_cr = 0
@@ -435,7 +435,7 @@ def gerar_alertas_obrigacoes() -> dict:
         return {"vencendo_hoje": len(vencendo), "atrasadas": len(atrasadas),
             "alertas": [dict(r) for r in (vencendo + atrasadas)]}
     try: return run_async(_go())
-    except: return {"vencendo_hoje": 0, "atrasadas": 0, "alertas": []}
+    except Exception as e: return {"vencendo_hoje": 0, "atrasadas": 0, "alertas": []}
 
 # ─────────────────────────────────────────────────────────
 # Integracao #17: Pipeline completo do Webhook Bling
@@ -503,4 +503,4 @@ def processar_eventos_pendentes(limit: int = 10) -> dict:
                 log(AGENT, f"Erro evento {ev['id']}: {e}")
         return {"processados": processados, "total": len(rows)}
     try: return run_async(_go())
-    except: return {"processados": 0, "total": 0}
+    except Exception as e: return {"processados": 0, "total": 0}

@@ -53,11 +53,24 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
   const [publicando, setPublicando] = useState(false);
   const [resultado, setResultado] = useState<{ ok: boolean; texto: string } | null>(null);
 
+  // ── Modo edicao (produto ja publicado nesta loja) ──
+  const [lojasComShopId, setLojasComShopId] = useState<Record<number, string>>({});
+  const [itemIdExistente, setItemIdExistente] = useState<number | null>(null);
+  const [modoEdicao, setModoEdicao] = useState(false);
+  const [carregandoEdicao, setCarregandoEdicao] = useState(false);
+  const [formEdicao, setFormEdicao] = useState({ nome: "", descricao: "", preco: "", estoque: "", peso: "" });
+  const [salvandoEdicao, setSalvandoEdicao] = useState(false);
+
   useEffect(() => {
     api.shopeeLojas().then(r => {
       const l = r.lojas || [];
       setLojas(l);
       if (l.length === 1) setLojaId(l[0].id);
+      const mapa: Record<number, string> = {};
+      for (const loja of l as Array<{ id: number; shopee_shop_id?: string }>) {
+        if (loja.shopee_shop_id) mapa[loja.id] = loja.shopee_shop_id;
+      }
+      setLojasComShopId(mapa);
     }).catch(() => {});
 
     setForm(f => ({
@@ -74,6 +87,61 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
     // ponytail: imagem_url do catalogo local (Bling) — reaproveitada com 1 clique, sem re-upload manual
     if (p?.imagem_url) setImagemPreview(String(p.imagem_url));
   }, [p]);
+
+  // Detecta se o produto ja esta publicado na loja selecionada (via estoque_lojas do detalhe)
+  useEffect(() => {
+    setItemIdExistente(null);
+    setModoEdicao(false);
+    if (!lojaId) return;
+    const shopId = lojasComShopId[lojaId];
+    if (!shopId) return;
+    const anuncios = (p?.estoque_lojas || []) as Array<{ marketplace: string; shop_id?: string; anuncio_id?: string }>;
+    const existente = anuncios.find(a => a.marketplace === "shopee" && a.shop_id === shopId && a.anuncio_id);
+    if (!existente?.anuncio_id) return;
+    const itemId = Number(existente.anuncio_id);
+    setItemIdExistente(itemId);
+    setModoEdicao(true);
+    setCarregandoEdicao(true);
+    api.shopeeDetalheProduto(itemId, lojaId).then(r => {
+      const item = r.item || {};
+      const priceInfo = (item.price_info as Array<{ current_price?: number }> | undefined)?.[0];
+      const stockInfo = (item.stock_info_v2 as { summary_info?: { total_available_stock?: number } } | undefined)?.summary_info;
+      setFormEdicao({
+        nome: String(item.item_name || ""),
+        descricao: String(item.description || ""),
+        preco: String(priceInfo?.current_price ?? ""),
+        estoque: String(stockInfo?.total_available_stock ?? ""),
+        peso: String(item.weight ?? ""),
+      });
+    }).catch(() => {}).finally(() => setCarregandoEdicao(false));
+  }, [lojaId, lojasComShopId, p]);
+
+  const salvarEdicao = async () => {
+    if (!lojaId || !itemIdExistente) return;
+    setSalvandoEdicao(true);
+    setResultado(null);
+    try {
+      const payload: Record<string, unknown> = {
+        item_name: formEdicao.nome,
+        description: formEdicao.descricao,
+        weight: Number(formEdicao.peso) || undefined,
+      };
+      const r = await api.shopeeEditarProdutoShopee(itemIdExistente, lojaId, payload);
+      if (r.error) {
+        setResultado({ ok: false, texto: r.error });
+      } else {
+        const precoNum = Number(formEdicao.preco);
+        const estoqueNum = Number(formEdicao.estoque);
+        if (precoNum > 0) await api.shopeeAtualizarPreco(itemIdExistente, lojaId, precoNum);
+        if (!Number.isNaN(estoqueNum)) await api.shopeeAtualizarEstoqueProduto(sku, lojaId, estoqueNum);
+        setResultado({ ok: true, texto: "Anúncio atualizado na Shopee." });
+      }
+    } catch (e) {
+      setResultado({ ok: false, texto: e instanceof Error ? e.message : "Erro ao salvar alterações" });
+    } finally {
+      setSalvandoEdicao(false);
+    }
+  };
 
   const carregarCategorias = useCallback(async (parentId?: number) => {
     setCarregandoCategorias(true);
@@ -234,6 +302,47 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
         </select>
       </Section>
 
+      {modoEdicao && itemIdExistente && (
+        <Section title="Produto já publicado nesta loja">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-neutral-500">item_id: <span className="font-mono text-neutral-400">{itemIdExistente}</span></p>
+            <button onClick={() => setModoEdicao(false)} className="text-xs text-indigo-400 hover:text-indigo-300">
+              Publicar como novo anúncio em vez disso
+            </button>
+          </div>
+          {carregandoEdicao ? (
+            <p className="text-xs text-neutral-500">Carregando dados atuais da Shopee...</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <InputGroup label="Nome do produto">
+                  <input value={formEdicao.nome} onChange={e => setFormEdicao({ ...formEdicao, nome: e.target.value })} className={inputCls} />
+                </InputGroup>
+                <InputGroup label="Preço (R$)">
+                  <input type="number" value={formEdicao.preco} onChange={e => setFormEdicao({ ...formEdicao, preco: e.target.value })} className={inputCls} />
+                </InputGroup>
+              </div>
+              <InputGroup label="Descrição">
+                <textarea rows={3} value={formEdicao.descricao} onChange={e => setFormEdicao({ ...formEdicao, descricao: e.target.value })} className={inputCls} />
+              </InputGroup>
+              <div className="grid grid-cols-2 gap-3">
+                <InputGroup label="Estoque"><input type="number" value={formEdicao.estoque} onChange={e => setFormEdicao({ ...formEdicao, estoque: e.target.value })} className={inputCls} /></InputGroup>
+                <InputGroup label="Peso (kg)"><input type="number" value={formEdicao.peso} onChange={e => setFormEdicao({ ...formEdicao, peso: e.target.value })} className={inputCls} /></InputGroup>
+              </div>
+              <button
+                onClick={salvarEdicao}
+                disabled={salvandoEdicao || !formEdicao.nome}
+                className="w-full py-3 bg-orange-600 hover:bg-orange-500 disabled:opacity-40 text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                {salvandoEdicao ? "Salvando alterações..." : "Salvar alterações na Shopee"}
+              </button>
+            </>
+          )}
+        </Section>
+      )}
+
+      {!modoEdicao && (
+      <>
       <Section title="2. Categoria">
         {categoriaSelecionada ? (
           <div className="flex items-center justify-between bg-neutral-800/50 rounded-lg px-3 py-2">
@@ -359,6 +468,8 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
             <p className="text-[10px] text-neutral-600 text-center">Selecione loja, categoria, imagem, nome e preço para habilitar a publicação.</p>
           )}
         </>
+      )}
+      </>
       )}
     </div>
   );

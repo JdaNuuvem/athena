@@ -75,6 +75,7 @@ def _ensure_tables():
         await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS variacoes_detalhe JSONB")
         # Payload bruto completo do Bling — garante 100% dos campos, inclusive os que a Bling adicionar no futuro
         await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS dados_brutos_bling JSONB")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS grupo VARCHAR(50)")
         # ── Full-text search indexes (pg_trgm for ILIKE with leading wildcard) ──
         try:
             await db.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
@@ -106,19 +107,19 @@ def _ensure_tables():
                 await db.execute("""INSERT INTO catalogo_produtos (sku, descricao)
                     SELECT sku, COALESCE(descricao, sku) FROM fichas_tecnicas
                     ON CONFLICT (sku) DO NOTHING""")
-            except: pass
+            except Exception as e: pass
             # Migrar de anuncios
             try:
                 await db.execute("""INSERT INTO catalogo_produtos (sku, descricao)
                     SELECT DISTINCT sku, sku FROM anuncios
                     ON CONFLICT (sku) DO NOTHING""")
-            except: pass
+            except Exception as e: pass
             # Migrar de produtos
             try:
                 await db.execute("""INSERT INTO catalogo_produtos (sku, descricao)
                     SELECT DISTINCT sku, COALESCE(descricao, sku) FROM produtos
                     ON CONFLICT (sku) DO NOTHING""")
-            except: pass
+            except Exception as e: pass
             log(AGENT, f"Migrados {await db.fetchval('SELECT COUNT(*) FROM catalogo_produtos')} produtos para catalogo")
     try: run_async(_go())
     except Exception as e: log(AGENT, f"Erro catalogo: {e}")
@@ -133,7 +134,7 @@ def _list(t: str, cols="*", order="id DESC", limit=500) -> list:
         rows = await db.fetch(f"SELECT {cols} FROM {t} ORDER BY {order} LIMIT {limit}")
         return [dict(r) for r in rows]
     try: return run_async(_go())
-    except: return []
+    except Exception as e: return []
 
 def _get(t: str, id: int) -> dict:
     async def _go():
@@ -174,7 +175,7 @@ def buscar_por_sku(sku: str) -> dict:
         row = await db.fetchrow("SELECT * FROM catalogo_produtos WHERE sku = $1", sku)
         return dict(row) if row else {}
     try: return run_async(_go())
-    except: return {}
+    except Exception as e: return {}
 
 def buscar_por_sku_ou_criar(sku: str, descricao: str = "") -> int:
     """Retorna o ID do produto, criando se nao existir."""
@@ -187,7 +188,7 @@ def buscar_por_sku_ou_criar(sku: str, descricao: str = "") -> int:
             sku, descricao or sku)
         return row["id"] if row else 0
     try: return run_async(_go())
-    except: return 0
+    except Exception as e: return 0
 
 # ── Vinculo com estoque ──
 
@@ -197,7 +198,7 @@ def estoque_por_produto(produto_id: int) -> list:
         rows = await db.fetch("SELECT * FROM estoque_lojas WHERE sku = (SELECT sku FROM catalogo_produtos WHERE id = $1)", produto_id)
         return [dict(r) for r in rows]
     try: return run_async(_go())
-    except: return []
+    except Exception as e: return []
 
 # ── Vinculo com fichas tecnicas (BOM) ──
 
@@ -207,4 +208,4 @@ def ficha_tecnica_por_sku(sku: str) -> dict:
         row = await db.fetchrow("SELECT * FROM fichas_tecnicas WHERE sku = $1", sku)
         return dict(row) if row else {}
     try: return run_async(_go())
-    except: return {}
+    except Exception as e: return {}

@@ -15,7 +15,40 @@ ATHENA_URL = os.environ.get("ATHENA_URL", "http://a181zp5xj2ety5z82mopyqzi.177.7
 GRAPHQL_URL = f"{ATHENA_URL}/graphql"
 
 # Token de autenticação para Athena OS
-API_TOKEN = os.environ.get("ATHENA_TOKEN", "athena-token-123456789")
+API_TOKEN = os.environ.get("ATHENA_TOKEN", "")
+if not API_TOKEN:
+    API_TOKEN = "athena-token-123456789" if os.environ.get("ATHENA_DEV_MODE", "").lower() == "true" else ""
+    if not API_TOKEN:
+        print("[ATHENA] AVISO: ATHENA_TOKEN não definido. Defina a variável de ambiente ATHENA_TOKEN.")
+        API_TOKEN = os.urandom(32).hex()  # token aleatório por segurança, mas quebra OAuth se não configurar
+
+# Rotas públicas (não exigem autenticação)
+URLS_PUBLICAS = {
+    "/api/auth/login", "/api/auth/logout", "/api/health", "/api/auth/me",
+    "/api/shopee/callback", "/api/shopee/oauth2callback",
+    "/api/bling/webhook", "/api/bling/webhooks",
+}
+
+def _autenticado() -> bool:
+    auth = request.headers.get("Authorization", "")
+    cookie_token = request.cookies.get("auth_token", "")
+    token = auth.replace("Bearer ", "") or cookie_token
+    return token == API_TOKEN if API_TOKEN else True
+
+def _verificar_autenticacao():
+    """Protege todos os endpoints exceto rotas públicas e OPTIONS (CORS preflight)."""
+    if request.method == "OPTIONS":
+        return None
+    path = request.path.rstrip("/")
+    # rotas públicas
+    if path in URLS_PUBLICAS or path.startswith("/api/shopee/callback") or path.startswith("/api/bling/webhook"):
+        return None
+    # arquivos estáticos do frontend (Next.js)
+    if not path.startswith("/api/"):
+        return None
+    if not _autenticado():
+        return jsonify({"error": "Unauthorized", "message": "Token de autenticação inválido ou ausente"}), 401
+    return None
 
 def _gql(query: str, variables: dict = None) -> dict:
     """Executa query GraphQL contra o Athena."""
@@ -152,6 +185,7 @@ import time, json
 
 app = Flask(__name__)
 CORS(app)
+app.before_request(_verificar_autenticacao)
 
 from routes.integrations import bling_bp, integrations_bp
 from routes.webhooks import webhook_bp
@@ -168,11 +202,11 @@ import core.catalogo  # noqa: F401
 # Autenticação e Health Check (Athena OS)
 # ===========================================================================
 
-USUARIOS = {
-    "admin": {"password": "athena-admin-2026", "role": "admin", "name": "Admin"},
-    "joao": {"password": "joao2026", "role": "produto", "name": "João (Produtos)"},
-    "maria": {"password": "maria2026", "role": "financeiro", "name": "Maria (Financeiro)"},
-    "pedro": {"password": "pedro2026", "role": "operador", "name": "Pedro (Marketplaces)"},
+# Fallback de emergencia — só ativo em dev mode ou se senha vier por env
+_dev_fallback = os.environ.get("ATHENA_DEV_MODE", "").lower() == "true"
+_dev_admin_pw = os.environ.get("ATHENA_DEV_ADMIN_PW", "")
+USUARIOS = {} if not _dev_fallback or not _dev_admin_pw else {
+    "admin": {"password": _dev_admin_pw, "role": "admin", "name": "Admin"},
 }
 
 @app.route('/api/auth/login', methods=['POST'])
@@ -242,7 +276,7 @@ def current_user():
                 "name": user.get("nome", "Admin"), "role": role or "admin",
                 "user_id": int(user_id), "permissoes": perms,
             })
-        except: pass
+        except Exception as e: pass
     return jsonify({"name": "Admin", "role": "admin", "permissoes": ["*"]})
 
 @app.route('/api/auth/logout', methods=['POST'])
@@ -951,7 +985,14 @@ def estoque_entrada():
             return jsonify({"erro": "quantidade deve ser > 0"}), 400
     except (ValueError, TypeError):
         return jsonify({"erro": "quantidade inválida"}), 400
-    return jsonify(est_entrada(sku, loja, qtd, motivo))
+    result = jsonify(est_entrada(sku, loja, qtd, motivo))
+    # disparar sync Shopee em background (fire-and-forget)
+    try:
+        from shopee import sincronizar_estoque_todas_lojas_automatico
+        from threading import Thread
+        Thread(target=lambda: sincronizar_estoque_todas_lojas_automatico(sku, qtd), daemon=True).start()
+    except Exception as e: pass
+    return result
 
 @app.route('/api/estoque/saida', methods=['POST'])
 def estoque_saida():
@@ -970,7 +1011,13 @@ def estoque_saida():
             return jsonify({"erro": "quantidade deve ser > 0"}), 400
     except (ValueError, TypeError):
         return jsonify({"erro": "quantidade inválida"}), 400
-    return jsonify(est_saida(sku, loja, qtd, motivo))
+    result = jsonify(est_saida(sku, loja, qtd, motivo))
+    try:
+        from shopee import sincronizar_estoque_todas_lojas_automatico
+        from threading import Thread
+        Thread(target=lambda: sincronizar_estoque_todas_lojas_automatico(sku, qtd), daemon=True).start()
+    except Exception as e: pass
+    return result
 
 @app.route('/api/estoque/transferir', methods=['POST'])
 def estoque_transferir():
@@ -993,6 +1040,12 @@ def estoque_transferir():
     except (ValueError, TypeError):
         return jsonify({"erro": "quantidade inválida"}), 400
     return jsonify(est_transferir(sku, origem, destino, qtd, motivo))
+
+@app.route('/api/estoque/sugestao-rotacao', methods=['GET'])
+def estoque_sugestao_rotacao():
+    """Sugere transferencias de estoque entre lojas com desbalanceamento."""
+    from core.estoque import sugestao_rotacao
+    return jsonify({"data": sugestao_rotacao()})
 
 @app.route('/api/estoque/ratear', methods=['POST'])
 def estoque_ratear():
@@ -1600,6 +1653,10 @@ def rel_financeiro():
     from core.relatorios import financeiro; dias=request.args.get('dias',30,type=int)
     return jsonify(financeiro(dias))
 
+@app.route('/api/relatorios/dre-por-loja', methods=['GET'])
+def rel_dre_por_loja():
+    from core.relatorios import dre_por_loja; dias=request.args.get('dias',30,type=int)
+    return jsonify({"data": dre_por_loja(dias)})
 
 
 # ── Fiscal Routes ──
@@ -1618,7 +1675,7 @@ def fiscal_tabelas_cfop():
         rows = await db.fetch("SELECT DISTINCT cfop as codigo, natureza_operacao as descricao, tipo FROM fiscal_notas_fiscais WHERE cfop IS NOT NULL AND cfop != '' ORDER BY cfop LIMIT 50")
         return [dict(r) for r in (rows or [])]
     try: return jsonify(run_async(_go()))
-    except: return jsonify([])
+    except Exception as e: return jsonify([])
 
 @app.route('/api/fiscal/tabelas/ncm', methods=['GET'])
 def fiscal_tabelas_ncm():
@@ -1629,7 +1686,7 @@ def fiscal_tabelas_ncm():
         rows = await db.fetch("SELECT DISTINCT ncm as codigo, '' as descricao FROM fiscal_nfe_itens WHERE ncm IS NOT NULL AND ncm != '' ORDER BY ncm LIMIT 50")
         return [dict(r) for r in (rows or [])]
     try: return jsonify(run_async(_go()))
-    except: return jsonify([])
+    except Exception as e: return jsonify([])
 
 @app.route('/api/fiscal/tabelas/cest', methods=['GET'])
 def fiscal_tabelas_cest():
@@ -1640,7 +1697,7 @@ def fiscal_tabelas_cest():
         rows = await db.fetch("SELECT DISTINCT cest as codigo, '' as descricao FROM fiscal_nfe_itens WHERE cest IS NOT NULL AND cest != '' ORDER BY cest LIMIT 50")
         return [dict(r) for r in (rows or [])]
     try: return jsonify(run_async(_go()))
-    except: return jsonify([])
+    except Exception as e: return jsonify([])
 
 @app.route('/api/fiscal/<tabela>', methods=['GET'])
 def fiscal_list(tabela):
@@ -1740,6 +1797,17 @@ def fiscal_nf_impostos(id):
 def auto_dashboard():
     from core.automacoes import dashboard as ad
     return jsonify(ad())
+
+@app.route('/api/automacoes/disparar', methods=['POST'])
+def auto_disparar_webhooks():
+    """Dispara webhooks para um evento. Body: { evento: 'venda.criada', dados: { ... } }"""
+    from core.automacoes import disparar_webhooks
+    data = request.json or {}
+    evento = data.get("evento", "")
+    dados = data.get("dados", {})
+    if not evento:
+        return jsonify({"error": "evento obrigatorio"}), 400
+    return jsonify(disparar_webhooks(evento, dados))
 
 @app.route('/api/automacoes/<tabela>', methods=['GET'])
 def auto_list(tabela):
@@ -2437,10 +2505,12 @@ def criar_loja_manage():
 def atualizar_loja_manage(id):
     data = request.json or {}
     nome = (data.get("nome") or "").strip()
+    markup = data.get("shopee_markup_pct")
+    grupos = data.get("grupos_publicacao")
     if not nome:
         return jsonify({"error": "Nome é obrigatório"}), 400
     from core.lojas import atualizar as atualizar_loja_fn
-    ok = atualizar_loja_fn(id, nome)
+    ok = atualizar_loja_fn(id, nome, shopee_markup_pct=markup, grupos_publicacao=grupos)
     return jsonify({"success": ok}) if ok else jsonify({"error": "Loja não encontrada"}), 404
 
 @app.route('/api/lojas/manage/<int:id>', methods=['DELETE'])
@@ -3039,13 +3109,13 @@ def health_real():
             alert_count = 0
             try:
                 agent_count = await db.fetchval("SELECT COUNT(*) FROM anuncios") or 0
-            except: pass
+            except Exception as e: pass
             try:
                 order_count = await db.fetchval("SELECT COUNT(*) FROM vendas") or 0
-            except: pass
+            except Exception as e: pass
             try:
                 alert_count = await db.fetchval("SELECT COUNT(*) FROM alertas WHERE NOT resolvido") or 0
-            except: pass
+            except Exception as e: pass
             return {
                 "status": "healthy",
                 "database": {"connected": bool(db_ok), "anuncios": agent_count, "vendas": order_count, "alertas_abertos": alert_count},
@@ -3123,6 +3193,132 @@ def shopee_renovar_token(loja_id):
         return jsonify(refresh_shopee_token(loja_id=loja_id))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/api/shopee/lojas/<int:loja_id>', methods=['DELETE'])
+def shopee_desconectar_loja(loja_id):
+    """Remove a vinculacao Shopee de uma loja (nao apaga a loja, so' os tokens/shop_id)."""
+    from core.lojas import desconectar_shopee
+    return jsonify(desconectar_shopee(loja_id))
+
+@app.route('/api/shopee/sync-log', methods=['GET'])
+def shopee_sync_log():
+    """Historico das ultimas sincronizacoes (produtos/pedidos) da Shopee."""
+    from shopee_sync import status_ultimo_sync
+    return jsonify({"log": status_ultimo_sync()})
+
+@app.route('/api/shopee/pedidos', methods=['GET'])
+def shopee_listar_pedidos():
+    """Pedidos Shopee com detalhe (cliente, itens, valor) de uma loja especifica."""
+    from shopee import listar_pedidos_shopee_detalhado
+    loja_id = request.args.get("loja_id", type=int)
+    dias = request.args.get("dias", 7, type=int)
+    status = request.args.get("status") or None
+    try:
+        return jsonify(listar_pedidos_shopee_detalhado(dias, loja_id=loja_id, status=status))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/shopee/dashboard', methods=['GET'])
+def shopee_dashboard_consolidado():
+    """Painel comparativo entre todas as lojas Shopee conectadas: vendas, anuncios, estoque baixo."""
+    from core.lojas import listar_lojas_shopee
+    dias = request.args.get("dias", 30, type=int)
+    lojas = listar_lojas_shopee()
+    try:
+        conn = _db_sync(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        resultado = []
+        for l in lojas:
+            shop_id = l.get("shopee_shop_id") or ""
+            cur.execute("""
+                SELECT COALESCE(SUM(receita_bruta),0) AS receita, COALESCE(SUM(quantidade),0) AS unidades,
+                       COUNT(DISTINCT sku) AS skus_vendidos
+                FROM vendas WHERE marketplace = 'shopee' AND loja_id = %s AND data >= CURRENT_DATE - %s
+            """, (l["id"], dias))
+            vendas_row = cur.fetchone() or {}
+            cur.execute("""
+                SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE status = 'ativo') AS ativos
+                FROM anuncios WHERE marketplace = 'shopee' AND shop_id = %s
+            """, (shop_id,))
+            anuncios_row = cur.fetchone() or {}
+            cur.execute("""
+                SELECT COUNT(DISTINCT a.sku) AS total FROM anuncios a
+                JOIN catalogo_produtos c ON c.sku = a.sku
+                LEFT JOIN estoque_lojas e ON e.sku = a.sku
+                WHERE a.marketplace = 'shopee' AND a.shop_id = %s
+                  AND c.estoque_minimo IS NOT NULL
+                GROUP BY a.sku HAVING COALESCE(SUM(e.quantidade), 0) <= MAX(c.estoque_minimo)
+            """, (shop_id,))
+            estoque_baixo = len(cur.fetchall() or [])
+            resultado.append({
+                "loja_id": l["id"], "nome": l["nome"], "shop_id": shop_id,
+                "tem_token": l.get("tem_token", False),
+                "receita": float(vendas_row.get("receita") or 0),
+                "unidades_vendidas": int(vendas_row.get("unidades") or 0),
+                "skus_vendidos": int(vendas_row.get("skus_vendidos") or 0),
+                "anuncios_total": int(anuncios_row.get("total") or 0),
+                "anuncios_ativos": int(anuncios_row.get("ativos") or 0),
+                "produtos_estoque_baixo": estoque_baixo,
+            })
+        cur.close(); conn.close()
+        return jsonify({"lojas": resultado, "dias": dias})
+    except Exception as e:
+        return jsonify({"error": str(e), "lojas": []})
+
+@app.route('/api/shopee/lojas/<int:destino_id>/replicar-de/<int:origem_id>', methods=['POST'])
+def shopee_replicar_produtos(destino_id, origem_id):
+    """Replica todos os produtos de uma loja Shopee origem para uma loja destino."""
+    from shopee import transferir_produtos_para_loja
+    max_produtos = (request.json or {}).get("max_produtos")
+    try:
+        return jsonify(transferir_produtos_para_loja(origem_id, destino_id, max_produtos=max_produtos))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/shopee/estoque/sincronizar-todas', methods=['POST'])
+def shopee_sincronizar_estoque_todas():
+    """Sincroniza estoque de um SKU para todas as lojas Shopee conectadas."""
+    from shopee import sincronizar_estoque_todas_lojas_automatico
+    data = request.json or {}
+    sku = data.get("sku", "")
+    qtd = int(data.get("quantidade", 0))
+    if not sku:
+        return jsonify({"error": "SKU obrigatorio"}), 400
+    try:
+        return jsonify(sincronizar_estoque_todas_lojas_automatico(sku, qtd))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/shopee/margem', methods=['GET'])
+def shopee_verificar_margem():
+    """Verifica a margem de um produto antes de publicar na Shopee."""
+    from shopee import calcular_margem_produto
+    sku = request.args.get("sku", "")
+    preco = float(request.args.get("preco", 0))
+    loja_id = request.args.get("loja_id", type=int)
+    if not sku or not preco:
+        return jsonify({"error": "SKU e preco obrigatorios"}), 400
+    try:
+        return jsonify(calcular_margem_produto(sku, preco, loja_id=loja_id))
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+@app.route('/api/shopee/concorrencia', methods=['GET'])
+def shopee_concorrencia():
+    """Analisa concorrencia de preco para um SKU."""
+    from shopee import analisar_concorrencia
+    sku = request.args.get("sku", "")
+    preco = float(request.args.get("preco", 0))
+    if not sku:
+        return jsonify({"error": "SKU obrigatorio"}), 400
+    return jsonify(analisar_concorrencia(sku, preco))
+
+@app.route('/api/shopee/sugestao-kits', methods=['GET'])
+def shopee_sugestao_kits():
+    """Sugere kits com base em produtos comprados juntos."""
+    from shopee import sugerir_kits
+    dias = request.args.get("dias", 90, type=int)
+    min_oc = request.args.get("min", 3, type=int)
+    return jsonify({"data": sugerir_kits(dias, min_oc)})
 
 @app.route('/api/shopee/produtos/<int:item_id>/preco', methods=['POST'])
 def shopee_atualizar_preco(item_id):
@@ -3296,6 +3492,20 @@ def shopee_criar_produto():
     if loja_id is None:
         return jsonify({"error": "loja_id e obrigatorio"}), 400
     return jsonify(add_item(data, loja_id=int(loja_id)))
+
+@app.route('/api/shopee/produtos/<int:item_id>', methods=['GET'])
+def shopee_detalhe_produto(item_id):
+    """Detalhe completo de um item ja publicado na Shopee — usado para prefill do modo edicao."""
+    from shopee import get_item_base_info
+    loja_id = request.args.get("loja_id", type=int)
+    try:
+        r = get_item_base_info([item_id], loja_id=loja_id)
+        itens = (r.get("response", {}) or {}).get("item_list", [])
+        if not itens:
+            return jsonify({"error": "Item nao encontrado"}), 404
+        return jsonify({"item": itens[0]})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/shopee/produtos/<int:item_id>', methods=['PUT'])
 def shopee_editar_produto(item_id):

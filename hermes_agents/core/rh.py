@@ -302,7 +302,7 @@ def dashboard() -> dict:
             "ferias_proximas": [dict(r) for r in (ferias_proximas or [])],
         }
     try: return run_async(_go())
-    except: return {"total_funcionarios":0,"ativos":0,"ferias":0,"afastados":0,"folha_mes":0,"ponto_hoje":0,"ferias_proximas":[]}
+    except Exception as e: return {"total_funcionarios":0,"ativos":0,"ferias":0,"afastados":0,"folha_mes":0,"ponto_hoje":0,"ferias_proximas":[]}
 
 # ── Listagem com filtro ──
 
@@ -328,7 +328,7 @@ def listar_filtrado(tabela: str, data_inicio: str = "", data_fim: str = "", stat
         rows = await db.fetch(f"SELECT * FROM rh_{tabela} {clause} ORDER BY id DESC LIMIT 500", *params)
         return {"data": [dict(r) for r in rows]}
     try: return run_async(_go())
-    except: return {"data": []}
+    except Exception as e: return {"data": []}
 
 # ── Funcionário completo ──
 
@@ -365,7 +365,7 @@ def _ensure_vale():
             status VARCHAR(20) DEFAULT 'pendente', created_at TIMESTAMP DEFAULT NOW()
         )""")
     try: run_async(_go())
-    except: pass
+    except Exception as e: pass
 
 _ensure_vale()
 
@@ -375,7 +375,7 @@ def list_vale() -> list:
         rows = await db.fetch("SELECT * FROM rh_vales ORDER BY id DESC LIMIT 100")
         return [dict(r) for r in rows]
     try: return run_async(_go())
-    except: return []
+    except Exception as e: return []
 
 def criar_vale(func_id: int, nome: str, valor: float, motivo: str = "") -> dict:
     async def _go():
@@ -405,7 +405,7 @@ def _ensure_comissoes():
             status VARCHAR(20) DEFAULT 'pendente', created_at TIMESTAMP DEFAULT NOW()
         )""")
     try: run_async(_go())
-    except: pass
+    except Exception as e: pass
 
 _ensure_comissoes()
 
@@ -415,7 +415,7 @@ def list_comissoes() -> list:
         rows = await db.fetch("SELECT * FROM rh_comissoes ORDER BY id DESC LIMIT 100")
         return [dict(r) for r in rows]
     try: return run_async(_go())
-    except: return []
+    except Exception as e: return []
 
 def criar_comissao(vendedor_id: int, nome: str, mes: str, total_vendas: float, comissao_pct: float, total_comissoes: float) -> dict:
     async def _go():

@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
+import type { ShopeeSyncLogEntry } from "@/lib/api";
 
 interface LojaShopee {
   id: number;
@@ -11,6 +12,7 @@ interface LojaShopee {
   shopee_shop_id: string;
   shopee_shop_name: string | null;
   shopee_token_expira_em: string | null;
+  shopee_markup_pct?: number;
   tem_token: boolean;
 }
 
@@ -55,6 +57,11 @@ function ShopeeIntegrationContent() {
   const [partnerId, setPartnerId] = useState("");
   const [partnerKey, setPartnerKey] = useState("");
   const [savingConfig, setSavingConfig] = useState(false);
+  const [replicandoDe, setReplicandoDe] = useState<number | null>(null);
+  const [replicarPara, setReplicarPara] = useState<number | null>(null);
+  const [desconectandoId, setDesconectandoId] = useState<number | null>(null);
+  const [syncLog, setSyncLog] = useState<ShopeeSyncLogEntry[]>([]);
+  const [mostrarHistorico, setMostrarHistorico] = useState(false);
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -71,6 +78,36 @@ function ShopeeIntegrationContent() {
   }, []);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  const carregarHistorico = async () => {
+    const proximoEstado = !mostrarHistorico;
+    setMostrarHistorico(proximoEstado);
+    if (proximoEstado) {
+      try {
+        const r = await api.shopeeSyncLog();
+        setSyncLog(r.log || []);
+      } catch { setSyncLog([]); }
+    }
+  };
+
+  const desconectarLoja = async (lojaId: number, nome: string) => {
+    if (!confirm(`Desconectar a conta Shopee de "${nome}"? A loja continua existindo, mas voce precisara' reautorizar para usa-la de novo.`)) return;
+    setDesconectandoId(lojaId);
+    setMsg(null);
+    try {
+      const r = await api.shopeeDesconectarLoja(lojaId);
+      if (r.error) {
+        setMsg({ text: `Erro: ${r.error}`, ok: false });
+      } else {
+        setMsg({ text: `Loja "${nome}" desconectada da Shopee.`, ok: true });
+        carregar();
+      }
+    } catch (e) {
+      setMsg({ text: e instanceof Error ? e.message : "Erro ao desconectar", ok: false });
+    } finally {
+      setDesconectandoId(null);
+    }
+  };
 
   const salvarConfig = async () => {
     setSavingConfig(true);
@@ -139,6 +176,25 @@ function ShopeeIntegrationContent() {
     }
   };
 
+  const replicarProdutos = async (origemId: number, destinoId: number) => {
+    setReplicandoDe(origemId);
+    setMsg({ text: `Replicando produtos da loja #${origemId} para #${destinoId}...`, ok: true });
+    try {
+      const r = await fetch(`/api/shopee/lojas/${destinoId}/replicar-de/${origemId}`, { method: "POST" });
+      const d = await r.json();
+      if (d.error) {
+        setMsg({ text: `Erro: ${d.error}`, ok: false });
+      } else {
+        setMsg({ text: `Replicacao concluida! ${d.sucesso} produtos publicados, ${d.erros?.length || 0} erros, ${d.total} total.`, ok: true });
+      }
+    } catch (e) {
+      setMsg({ text: e instanceof Error ? e.message : "Erro ao replicar", ok: false });
+    } finally {
+      setReplicandoDe(null);
+      setReplicarPara(null);
+    }
+  };
+
   const lojasSemShopee = lojasDisponiveis.filter(l => !lojasShopee.some(s => s.id === l.id));
 
   return (
@@ -147,6 +203,10 @@ function ShopeeIntegrationContent() {
         <Link href="/integracoes" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors">← Integrações</Link>
         <h1 className="text-lg font-light text-neutral-300 mt-1">Shopee</h1>
         <p className="text-xs text-neutral-500 mt-0.5">Gerencie suas lojas Shopee e sincronize produtos/estoque — suporta múltiplas contas.</p>
+        <div className="flex gap-3 mt-2">
+          <Link href="/integracoes/shopee/dashboard" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">📊 Painel consolidado</Link>
+          <Link href="/integracoes/shopee/pedidos" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">🧾 Pedidos</Link>
+        </div>
       </div>
 
       <ResultadoAutorizacao />
@@ -198,6 +258,10 @@ function ShopeeIntegrationContent() {
                     </div>
                     <p className="text-[10px] text-neutral-500 font-mono">shop_id: {l.shopee_shop_id}</p>
                     {expiraEm && <p className="text-[10px] text-neutral-600">expira em {expiraEm.toLocaleString("pt-BR")}</p>}
+                    <p className="text-[10px] text-neutral-500">
+                      Markup: <span className="text-amber-400 font-medium">{(l.shopee_markup_pct || 100)}%</span>
+                      {" "}(preço × {((l.shopee_markup_pct || 100) / 100).toFixed(2)})
+                    </p>
                   </div>
                   <div className="flex items-center gap-2">
                     {l.tem_token && !tokenValido && (
@@ -215,6 +279,35 @@ function ShopeeIntegrationContent() {
                       className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"
                     >
                       {syncingId === l.id ? "Sincronizando..." : "Sincronizar"}
+                    </button>
+                    {lojasShopee.length > 1 && l.tem_token && (
+                      <div className="flex items-center gap-1">
+                        {replicandoDe === l.id ? (
+                          <span className="bg-emerald-600 text-white text-xs px-3 py-1.5 rounded-lg animate-pulse">Replicando...</span>
+                        ) : replicarPara !== null && replicarPara !== l.id ? (
+                          <button
+                            onClick={() => replicarProdutos(l.id, replicarPara)}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"
+                          >
+                            Enviar p/ {lojasShopee.find(s => s.id === replicarPara)?.nome || "..."}
+                          </button>
+                        ) : replicandoDe === null ? (
+                          <button
+                            onClick={() => setReplicarPara(replicarPara === l.id ? null : l.id)}
+                            className={"text-xs px-3 py-1.5 rounded-lg transition-colors " + (replicarPara === l.id ? "bg-emerald-800 text-emerald-200" : "bg-neutral-700 hover:bg-neutral-600 text-neutral-300")}
+                          >
+                            {replicarPara === l.id ? "Cancelar" : "Replicar p/ outra loja"}
+                          </button>
+                        ) : null}
+                      </div>
+                    )}
+                    <button
+                      onClick={() => desconectarLoja(l.id, l.nome)}
+                      disabled={desconectandoId === l.id}
+                      className="bg-neutral-800 hover:bg-red-900/50 disabled:opacity-50 text-neutral-400 hover:text-red-300 text-xs px-2.5 py-1.5 rounded-lg transition-colors"
+                      title="Desconectar conta Shopee desta loja"
+                    >
+                      {desconectandoId === l.id ? "..." : "Desconectar"}
                     </button>
                   </div>
                 </div>
@@ -257,6 +350,46 @@ function ShopeeIntegrationContent() {
         >
           {syncingId === "novo" ? "Sincronizando..." : "Sincronizar loja padrão (config legada)"}
         </button>
+      </div>
+
+      <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 space-y-3">
+        <button onClick={carregarHistorico} className="text-sm font-medium text-neutral-300 hover:text-neutral-100 transition-colors">
+          {mostrarHistorico ? "▾" : "▸"} Histórico de Sincronização
+        </button>
+        {mostrarHistorico && (
+          syncLog.length === 0 ? (
+            <p className="text-xs text-neutral-500">Nenhuma sincronização registrada ainda.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-neutral-500 uppercase tracking-wider text-[10px] border-b border-neutral-800">
+                    <th className="text-left py-1.5 pr-3">Tipo</th>
+                    <th className="text-left py-1.5 pr-3">Status</th>
+                    <th className="text-right py-1.5 pr-3">Itens</th>
+                    <th className="text-left py-1.5 pr-3">Iniciado em</th>
+                    <th className="text-left py-1.5">Erro</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {syncLog.map((l) => (
+                    <tr key={l.id} className="border-b border-neutral-800/50">
+                      <td className="py-1.5 pr-3 text-neutral-300 capitalize">{l.tipo}</td>
+                      <td className="py-1.5 pr-3">
+                        <span className={l.status === "concluido" ? "text-green-400" : l.status === "erro" ? "text-red-400" : "text-amber-400"}>
+                          {l.status}
+                        </span>
+                      </td>
+                      <td className="py-1.5 pr-3 text-right text-neutral-300 numeric">{l.itens_processados}</td>
+                      <td className="py-1.5 pr-3 text-neutral-500">{new Date(l.iniciado_em).toLocaleString("pt-BR")}</td>
+                      <td className="py-1.5 text-red-400 max-w-[240px] truncate" title={l.erro || ""}>{l.erro || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        )}
       </div>
     </div>
   );

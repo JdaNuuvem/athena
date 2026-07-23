@@ -123,7 +123,7 @@ def confirmar_recebimento(id: int) -> dict:
     try:
         from core.entidades import ao_receber_compra
         ao_receber_compra(id)
-    except: pass
+    except Exception as e: pass
     return r
 
 def dashboard() -> dict:
@@ -134,4 +134,4 @@ def dashboard() -> dict:
         total_recebido = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM compras_notas_entrada WHERE status = 'confirmada'")
         return {"pendentes": pendentes or 0, "pedidos_abertos": pedidos_abertos or 0, "total_recebido": float(total_recebido or 0)}
     try: return run_async(_go())
-    except: return {"pendentes":0,"pedidos_abertos":0,"total_recebido":0}
+    except Exception as e: return {"pendentes":0,"pedidos_abertos":0,"total_recebido":0}

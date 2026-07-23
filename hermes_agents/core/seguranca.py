@@ -68,7 +68,7 @@ def listar_auditoria(modulo: str = "", email: str = "", entidade: str = "", limi
         rows = await db.fetch(f"SELECT * FROM audit_log WHERE {clause} ORDER BY created_at DESC LIMIT ${p}", *params, limit)
         return [dict(r) for r in rows]
     try: return run_async(_go())
-    except: return []
+    except Exception as e: return []
 
 # ── System Logs ──
 
@@ -95,7 +95,7 @@ def listar_logs(level: str = "", modulo: str = "", limit: int = 100) -> list:
         rows = await db.fetch(f"SELECT * FROM system_logs WHERE {clause} ORDER BY created_at DESC LIMIT ${p}", *params, limit)
         return [dict(r) for r in rows]
     try: return run_async(_go())
-    except: return []
+    except Exception as e: return []
 
 # ── Historico de Alteracoes ──
 
@@ -113,7 +113,7 @@ def listar_historico(entidade: str, entidade_id: int) -> list:
         rows = await db.fetch("SELECT * FROM change_history WHERE entidade=$1 AND entidade_id=$2 ORDER BY created_at DESC LIMIT 100", entidade, entidade_id)
         return [dict(r) for r in rows]
     try: return run_async(_go())
-    except: return []
+    except Exception as e: return []
 
 def historico_resumo(entidade: str, limit: int = 50) -> list:
     async def _go():
@@ -122,7 +122,7 @@ def historico_resumo(entidade: str, limit: int = 50) -> list:
             FROM change_history WHERE entidade=$1 GROUP BY entidade, entidade_id ORDER BY ultima DESC LIMIT $2""", entidade, limit)
         return [dict(r) for r in rows]
     try: return run_async(_go())
-    except: return []
+    except Exception as e: return []
 
 # ── Auditoria de login ──
 

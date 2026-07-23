@@ -73,16 +73,19 @@ def _ensure_tables():
                         p_row = await db.fetchrow("SELECT id FROM rbac_permissoes WHERE codigo=$1", codigo)
                         if p_row:
                             await db.execute("INSERT INTO rbac_role_permissoes (role_id,permissao_id) VALUES ($1,$2)", role_id, p_row["id"])
-        # Seed usuarios padrao
+        # Seed usuarios padrao (senhas via env vars, sem fallback hardcoded)
         count_u = await db.fetchval("SELECT COUNT(*) FROM rbac_usuarios")
         if count_u == 0:
             salt = _os.urandom(16).hex()
+            admin_pw = _os.environ.get("ATHENA_ADMIN_PW", "")
+            dev_mode = _os.environ.get("ATHENA_DEV_MODE", "").lower() == "true"
             users = [
-                ("Admin","admin@athena.local","athena-admin-2026","Admin"),
-                ("Joao","joao@athena.local","joao2026","Gerente"),
-                ("Maria","maria@athena.local","maria2026","Financeiro"),
-                ("Pedro","pedro@athena.local","pedro2026","Operador Loja"),
-            ]
+                ("Admin","admin@athena.local", admin_pw or "", "Admin"),
+            ] if admin_pw or dev_mode else []
+            if dev_mode and not users:
+                users = [
+                    ("Admin","admin@athena.local", "admin", "Admin"),
+                ]
             for nome, email, senha, role_nome in users:
                 pw_hash = hashlib.sha256(f"{senha}:{salt}".encode()).hexdigest()
                 role_row = await db.fetchrow("SELECT id FROM rbac_roles WHERE nome=$1", role_nome)
@@ -130,7 +133,7 @@ def get_permissoes_por_usuario(user_id: int) -> list:
         perms = await db.fetch("SELECT p.codigo FROM rbac_role_permissoes rp JOIN rbac_permissoes p ON p.id=rp.permissao_id WHERE rp.role_id=$1", row["role_id"])
         return [p["codigo"] for p in (perms or [])]
     try: return run_async(_go())
-    except: return []
+    except Exception as e: return []
 
 # ── CRUD ──
 
@@ -140,7 +143,7 @@ def _list(t, order="id DESC", limit=500):
         rows = await db.fetch(f"SELECT * FROM {t} ORDER BY {order} LIMIT {limit}")
         return [dict(r) for r in rows]
     try: return run_async(_go())
-    except: return []
+    except Exception as e: return []
 
 def list_roles(): return _list("rbac_roles")
 def list_permissoes(): return _list("rbac_permissoes")
@@ -215,11 +218,10 @@ def requer_permissao(codigo: str):
             token = request.headers.get("Authorization","").replace("Bearer ","")
             cookie_token = request.cookies.get("auth_token","")
             auth_token = token or cookie_token
-            # Admin token master — sempre tem acesso
-            if auth_token == "athena-token-123456789":
+            # token master via env (so' ativo se configurado, sem fallback hardcoded)
+            master_token = _os.environ.get("ATHENA_TOKEN", "")
+            if master_token and auth_token == master_token:
                 return f(*args, **kwargs)
-            # TODO: extrair user_id do JWT real, verificar permissoes no DB
-            # Por enquanto, verifica cookie simples
             from core.rbac import get_permissoes_por_usuario
             user_id = request.cookies.get("user_id")
             if user_id:

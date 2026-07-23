@@ -20,7 +20,7 @@ def _ensure_tables():
             observacoes TEXT, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW()
         )""")
         try: await db.execute("ALTER TABLE vendas_pedidos ADD COLUMN IF NOT EXISTS transportadora_nome VARCHAR(200)")
-        except: pass
+        except Exception as e: pass
         await db.execute("""CREATE TABLE IF NOT EXISTS vendas_itens (
             id SERIAL PRIMARY KEY, pedido_id INT REFERENCES vendas_pedidos(id),
             numero_item INT DEFAULT 1, sku VARCHAR(50), descricao VARCHAR(200),
@@ -179,7 +179,7 @@ def atualizar_status(id: int, novo_status: str, usuario: str = "") -> dict:
             try:
                 from core.entidades import ao_faturar_pedido
                 ao_faturar_pedido(id)
-            except: pass
+            except Exception as e: pass
         return result
     except Exception as e: return {"error":str(e)}
 
@@ -210,7 +210,7 @@ def dashboard(dias: int = 30) -> dict:
             "recentes": [dict(r) for r in (recentes or [])],
         }
     try: return run_async(_go())
-    except: return {"total_vendas":0,"quantidade":0,"ticket_medio":0,"pedidos_abertos":0,"faturados":0,"cancelados":0,"periodo_dias":dias,"diarias":[],"por_canal":[],"recentes":[]}
+    except Exception as e: return {"total_vendas":0,"quantidade":0,"ticket_medio":0,"pedidos_abertos":0,"faturados":0,"cancelados":0,"periodo_dias":dias,"diarias":[],"por_canal":[],"recentes":[]}
 
 # ── Bling Sync ──
 

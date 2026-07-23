@@ -5,13 +5,13 @@ import { api } from "@/lib/api";
 import StatusBadge from "@/app/_components/StatusBadge";
 import LoadingState from "@/app/_components/LoadingState";
 
-interface Loja { id: number; nome: string; ativa: boolean; bling_id?: number; bling_descricao?: string; }
+interface Loja { id: number; nome: string; ativa: boolean; bling_id?: number; bling_descricao?: string; shopee_markup_pct?: number; }
 
 export default function LojasPage() {
   const [lojas, setLojas] = useState<Loja[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [modal, setModal] = useState<{ open: boolean; nome: string; editId?: number }>({ open: false, nome: "" });
+  const [modal, setModal] = useState<{ open: boolean; nome: string; markup: number; grupos: string; editId?: number }>({ open: false, nome: "", markup: 100, grupos: "" });
 
   const carregar = () => {
     api.lojasManage()
@@ -24,9 +24,9 @@ export default function LojasPage() {
   const salvar = async () => {
     const nome = modal.nome.trim();
     if (!nome) return;
-    if (modal.editId) await api.lojasAtualizar(modal.editId, nome);
+    if (modal.editId) await api.lojasAtualizar(modal.editId, nome, modal.markup, modal.grupos || undefined);
     else await api.lojasCriar(nome);
-    setModal({ open: false, nome: "" });
+    setModal({ open: false, nome: "", markup: 100, grupos: "" });
     carregar();
   };
 
@@ -62,7 +62,7 @@ export default function LojasPage() {
             {syncing ? "Sincronizando..." : "Sync Bling"}
           </button>
           <button
-            onClick={() => setModal({ open: true, nome: "" })}
+            onClick={() => setModal({ open: true, nome: "", markup: 100, grupos: "" })}
             className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1.5 rounded-lg"
           >
             + Nova Loja
@@ -79,9 +79,12 @@ export default function LojasPage() {
                 <StatusBadge label={l.ativa ? "Ativa" : "Inativa"} variant={l.ativa ? "success" : "neutral"} />
               </div>
               <p className="text-[10px] text-neutral-600">ID: {l.id}{l.bling_id ? ` · Bling #${l.bling_id}` : ""}</p>
+              {l.shopee_markup_pct && l.shopee_markup_pct !== 100 && (
+                <p className="text-[10px] text-amber-400">Shopee markup: {l.shopee_markup_pct}%</p>
+              )}
               <div className="flex gap-2">
                 <button
-                  onClick={() => setModal({ open: true, nome: l.nome, editId: l.id })}
+                  onClick={() => setModal({ open: true, nome: l.nome, markup: l.shopee_markup_pct || 100, grupos: (l as any).grupos_publicacao || "", editId: l.id })}
                   className="text-xs text-indigo-400 hover:text-indigo-300"
                 >Editar</button>
                 <button
@@ -96,7 +99,7 @@ export default function LojasPage() {
       )}
 
       {modal.open && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setModal({ open: false, nome: "" })}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setModal({ open: false, nome: "", markup: 100, grupos: "" })}>
           <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-6 w-[350px]" onClick={e => e.stopPropagation()}>
             <h3 className="text-sm font-semibold text-neutral-200 mb-4">{modal.editId ? "Editar Loja" : "Nova Loja"}</h3>
             <input
@@ -104,12 +107,29 @@ export default function LojasPage() {
               value={modal.nome}
               onChange={e => setModal(p => ({ ...p, nome: e.target.value }))}
               placeholder="Nome da loja"
-              className="w-full bg-neutral-700 border border-neutral-600 rounded px-3 py-2 text-xs text-neutral-200 mb-4 focus:outline-none focus:border-indigo-500"
+              className="w-full bg-neutral-700 border border-neutral-600 rounded px-3 py-2 text-xs text-neutral-200 mb-2 focus:outline-none focus:border-indigo-500"
               autoFocus
               onKeyDown={e => e.key === "Enter" && salvar()}
             />
+            <div className="flex items-center gap-2 mb-4">
+              <label className="text-xs text-neutral-400">Shopee Markup:</label>
+              <input
+                type="number"
+                value={modal.markup}
+                onChange={e => setModal(p => ({ ...p, markup: Number(e.target.value) }))}
+                className="w-20 bg-neutral-700 border border-neutral-600 rounded px-2 py-1.5 text-xs text-neutral-200 text-right"
+                min={50} max={500} step={1}
+              />
+              <span className="text-xs text-neutral-500">%</span>
+            </div>
+            <div className="mb-4">
+              <label className="text-xs text-neutral-400">Grupos (separados por vírgula):</label>
+              <input type="text" value={modal.grupos} onChange={e => setModal(p => ({ ...p, grupos: e.target.value }))}
+                placeholder="Ex: Premium, Econômico" className="w-full bg-neutral-700 border border-neutral-600 rounded px-3 py-2 text-xs text-neutral-200 mt-1" />
+              <p className="text-[10px] text-neutral-600 mt-1">Vazio = todos. Preenchido = só produtos com grupo correspondente.</p>
+            </div>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setModal({ open: false, nome: "" })} className="text-xs px-3 py-1.5 rounded-lg text-neutral-400 hover:text-neutral-200">Cancelar</button>
+              <button onClick={() => setModal({ open: false, nome: "", markup: 100, grupos: "" })} className="text-xs px-3 py-1.5 rounded-lg text-neutral-400 hover:text-neutral-200">Cancelar</button>
               <button onClick={salvar} className="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white">Salvar</button>
             </div>
           </div>
