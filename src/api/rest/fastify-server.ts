@@ -203,27 +203,6 @@ export async function startDashboard(registry: AgentRegistry, orchestrator: Orch
     return { status: 'saved', count: req.body.settings.length }
   })
 
-  server.post('/api/shopee/sync', { preHandler: [authMiddleware(null), requirePermission('integrations:manage')] }, async () => {
-    const { syncShopeeProducts } = await import('../../shared/infrastructure/integrations/shopee-stock-sync')
-    const result = await syncShopeeProducts()
-    return result
-  })
-
-  server.post('/api/shopee/orders/sync', { preHandler: [authMiddleware(null), requirePermission('integrations:manage')] }, async () => {
-    const { syncShopeeOrders } = await import('../../shared/infrastructure/integrations/shopee-stock-sync')
-    const result = await syncShopeeOrders()
-    return result
-  })
-
-  server.post<{ Body: { orderId: string; items: Array<{ sku: string; quantity: number }> } }>('/api/stock/decrement', { preHandler: [authMiddleware(null), requirePermission('inventory:edit')] }, async (req, reply) => {
-    const { decrementAndPushStock } = await import('../../shared/infrastructure/integrations/shopee-stock-sync')
-    const check = await decrementAndPushStock(req.body.orderId, req.body.items)
-    if (!check.success) {
-      return reply.status(409).send({ status: 'validation_failed', errors: check.errors })
-    }
-    return { status: 'decremented', items: req.body.items.length }
-  })
-
   server.get('/api/shopee/oauth/callback', async (req, reply) => {
     const { code, shop_id } = req.query as { code?: string; shop_id?: string }
     if (!code || !shop_id) return reply.status(400).send({ error: 'code and shop_id required' })
@@ -316,7 +295,28 @@ export async function startDashboard(registry: AgentRegistry, orchestrator: Orch
     }
   })
 
-  // Shopee Product Management
+  // Shopee — em construção (shopee-adapter.ts e shopee-stock-sync.ts serão implementados)
+  server.post('/api/shopee/sync', { preHandler: [authMiddleware(null), requirePermission('integrations:manage')] }, async () => {
+    const { syncShopeeProducts } = await import('../../shared/infrastructure/integrations/shopee-stock-sync')
+    const result = await syncShopeeProducts()
+    return result
+  })
+
+  server.post('/api/shopee/orders/sync', { preHandler: [authMiddleware(null), requirePermission('integrations:manage')] }, async () => {
+    const { syncShopeeOrders } = await import('../../shared/infrastructure/integrations/shopee-stock-sync')
+    const result = await syncShopeeOrders()
+    return result
+  })
+
+  server.post<{ Body: { orderId: string; items: Array<{ sku: string; quantity: number }> } }>('/api/stock/decrement', { preHandler: [authMiddleware(null), requirePermission('inventory:edit')] }, async (req, reply) => {
+    const { decrementAndPushStock } = await import('../../shared/infrastructure/integrations/shopee-stock-sync')
+    const check = await decrementAndPushStock(req.body.orderId, req.body.items)
+    if (!check.success) {
+      return reply.status(409).send({ status: 'validation_failed', errors: check.errors })
+    }
+    return { status: 'decremented', items: req.body.items.length }
+  })
+
   server.get('/api/shopee/products', { preHandler: [authMiddleware(null), requirePermission('products:view')] }, async (req, reply) => {
     const { ShopeeAdapter } = await import('../../shared/infrastructure/integrations/shopee-adapter')
     const { status, offset, limit } = req.query as { status?: string; offset?: string; limit?: string }

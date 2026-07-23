@@ -35,7 +35,6 @@ interface DashboardData {
 
 export default function DashboardPage() {
   const { lojaId } = useStore();
-  const lojaParam = lojaId !== "todas" ? `&loja_id=${lojaId}` : "";
   const [kpi, setKpi] = useState<KPIOverview | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [dash, setDash] = useState<DashboardData>({ vendasDia:0, vendasMes:0, vendasMesChart:[], estoqueCritico:0, estoqueTotal:0, fluxoCaixa:0, clientesNovos:0, clientesTotal:0, vendasHoje:0, vendasQtd:0, topProdutos:[], alertas:[] });
@@ -46,11 +45,11 @@ export default function DashboardPage() {
     Promise.all([
       api.kpiOverview(),
       api.agentsList(),
-      fetch(`/api/relatorios/vendas?dias=1${lojaParam}`).then(r => r.json()).catch(() => ({})),
-      fetch(`/api/relatorios/vendas?dias=30${lojaParam}`).then(r => r.json()).catch(() => ({})),
-      fetch(`/api/relatorios/estoque${lojaParam ? `?${lojaParam.slice(1)}` : ""}`).then(r => r.json()).catch(() => ({})),
-      fetch(`/api/relatorios/fluxo-caixa?dias=30${lojaParam}`).then(r => r.json()).catch(() => ({})),
-      fetch(`/api/relatorios/clientes?dias=30${lojaParam}`).then(r => r.json()).catch(() => ({})),
+      api.relatorioVendas(1, lojaId),
+      api.relatorioVendas(30, lojaId),
+      api.relatorioEstoque(lojaId),
+      api.relatorioFluxoCaixa(30, lojaId),
+      api.relatorioClientes(30, lojaId),
     ]).then(([k, a, r1, r30, est, fc, cli]) => {
       setKpi(k as unknown as KPIOverview);
       setAgents(a.agents);

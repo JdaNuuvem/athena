@@ -287,6 +287,16 @@ export const api = {
   kpiOverview: (periodo?: number) =>
     request<Record<string, unknown>>(`/api/kpi/overview${periodo ? `?periodo=${periodo}` : ""}`),
 
+  // Relatorios
+  relatorioVendas: (dias: number, lojaId?: string) =>
+    request<Record<string, unknown>>(`/api/relatorios/vendas?dias=${dias}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
+  relatorioEstoque: (lojaId?: string) =>
+    request<Record<string, unknown>>(`/api/relatorios/estoque${lojaId && lojaId !== "todas" ? `?loja_id=${lojaId}` : ""}`),
+  relatorioFluxoCaixa: (dias: number, lojaId?: string) =>
+    request<Record<string, unknown>>(`/api/relatorios/fluxo-caixa?dias=${dias}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
+  relatorioClientes: (dias: number, lojaId?: string) =>
+    request<Record<string, unknown>>(`/api/relatorios/clientes?dias=${dias}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
+
   // Chat
   chat: (mensagem: string, user_id?: string, nome?: string) =>
     request<{ resposta: string; agente: string; intencao: string }>("/api/hermes/chat", {

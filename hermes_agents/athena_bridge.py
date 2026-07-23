@@ -14,17 +14,23 @@ import psycopg2.extras
 ATHENA_URL = os.environ.get("ATHENA_URL", "http://a181zp5xj2ety5z82mopyqzi.177.7.45.242.sslip.io")
 GRAPHQL_URL = f"{ATHENA_URL}/graphql"
 
-# Token de autenticaÃ§Ã£o para Athena OS
 API_TOKEN = os.environ.get("ATHENA_TOKEN", "")
-if not API_TOKEN:
-    API_TOKEN = "athena-token-123456789" if os.environ.get("ATHENA_DEV_MODE", "").lower() == "true" else ""
-    if not API_TOKEN:
-        print("[ATHENA] AVISO: ATHENA_TOKEN nÃ£o definido. Defina a variÃ¡vel de ambiente ATHENA_TOKEN.")
-        API_TOKEN = os.urandom(32).hex()  # token aleatÃ³rio por seguranÃ§a, mas quebra OAuth se nÃ£o configurar
+DEV_MODE = os.environ.get("ATHENA_DEV_MODE", "").lower() == "true"
 
-# Rotas pÃºblicas (nÃ£o exigem autenticaÃ§Ã£o)
+if not API_TOKEN:
+    if DEV_MODE:
+        API_TOKEN = "athena-token-123456789"
+        print("[ATHENA] DEV MODE: usando token fixo de desenvolvimento.")
+    else:
+        print("[ATHENA] FATAL: ATHENA_TOKEN nao definido. Defina a variavel de ambiente ATHENA_TOKEN.")
+        print("[ATHENA] O servidor vai iniciar, mas todas as requisicoes autenticadas retornarao 401.")
+
+# ponytail: /api/me tem auth propria no handler (line ~301); /api/agents e
+# hardcoded (dados de exemplo); ambos precisam estar na lista publica para o
+# before_request nao barrar antes do handler rodar sua propria verificacao.
 URLS_PUBLICAS = {
     "/api/auth/login", "/api/auth/logout", "/api/health", "/api/auth/me",
+    "/api/me", "/api/agents",
     "/api/shopee/callback", "/api/shopee/oauth2callback",
     "/api/bling/webhook", "/api/bling/webhooks",
 }
@@ -33,7 +39,10 @@ def _autenticado() -> bool:
     auth = request.headers.get("Authorization", "")
     cookie_token = request.cookies.get("auth_token", "")
     token = auth.replace("Bearer ", "") or cookie_token
-    return token == API_TOKEN if API_TOKEN else True
+    if API_TOKEN and token == API_TOKEN:
+        return True
+    from core.rbac import verificar_token_sessao
+    return verificar_token_sessao(token) is not None
 
 def _verificar_autenticacao():
     """Protege todos os endpoints exceto rotas pÃºblicas e OPTIONS (CORS preflight)."""
@@ -258,34 +267,36 @@ def simple_login():
     api_key = data.get('api_key', '')
 
     # Tenta RBAC primeiro
-    from core.rbac import autenticar
+    from core.rbac import autenticar, gerar_token_sessao
     rbac_result = autenticar(email, password)
     if rbac_result.get("autenticado"):
         from core.seguranca import auditar_login
         auditar_login(rbac_result.get("email",email), True, request.remote_addr or "", request.headers.get("User-Agent",""))
+        sessao_token = gerar_token_sessao(rbac_result.get("id"), rbac_result.get("email",email), rbac_result.get("role","admin"))
         resp = jsonify({
-            "token": API_TOKEN,
+            "token": sessao_token,
             "role": rbac_result.get("role","admin"),
             "name": rbac_result.get("nome","Admin"),
             "email": rbac_result.get("email",email),
             "user_id": rbac_result.get("id"),
             "permissoes": rbac_result.get("permissoes",[]),
         })
-        resp.set_cookie("auth_token", API_TOKEN, httponly=False, samesite="Lax", max_age=86400*30, secure=False)
-        if rbac_result.get("id"):
-            resp.set_cookie("user_id", str(rbac_result["id"]), httponly=False, samesite="Lax", max_age=86400*30, secure=False)
+        resp.set_cookie("auth_token", sessao_token, httponly=False, samesite="Lax", max_age=86400*30, secure=False)
         return resp
 
-    # Fallback hardcoded
+    # Fallback hardcoded — sem usuario RBAC real, token marcado is_master (mesmo
+    # nivel de acesso "permissoes": ["*"] que ja era devolvido para esses casos)
     username = email.split("@")[0] if "@" in email else email
     user = USUARIOS.get(username, {})
     if user and user["password"] == password:
-        resp = jsonify({"token": API_TOKEN, "role": user["role"], "name": user["name"], "permissoes": ["*"]})
-        resp.set_cookie("auth_token", API_TOKEN, httponly=False, samesite="Lax", max_age=86400*30, secure=False)
+        sessao_token = gerar_token_sessao(None, email, user["role"], is_master=True)
+        resp = jsonify({"token": sessao_token, "role": user["role"], "name": user["name"], "permissoes": ["*"]})
+        resp.set_cookie("auth_token", sessao_token, httponly=False, samesite="Lax", max_age=86400*30, secure=False)
         return resp
     if api_key and api_key == API_TOKEN:
-        resp = jsonify({"token": API_TOKEN, "role": "admin", "name": "Admin", "permissoes": ["*"]})
-        resp.set_cookie("auth_token", API_TOKEN, httponly=False, samesite="Lax", max_age=86400*30, secure=False)
+        sessao_token = gerar_token_sessao(None, email or "admin", "admin", is_master=True)
+        resp = jsonify({"token": sessao_token, "role": "admin", "name": "Admin", "permissoes": ["*"]})
+        resp.set_cookie("auth_token", sessao_token, httponly=False, samesite="Lax", max_age=86400*30, secure=False)
         return resp
     from core.seguranca import auditar_login
     auditar_login(email, False, request.remote_addr or "", request.headers.get("User-Agent",""))
@@ -297,27 +308,31 @@ def current_user():
     auth = request.headers.get("Authorization", "")
     cookie_token = request.cookies.get("auth_token", "")
     token = auth.replace("Bearer ", "") or cookie_token
-    if token != API_TOKEN:
+    if token == API_TOKEN and API_TOKEN:
+        return jsonify({"name": "Admin", "role": "admin", "permissoes": ["*"]})
+    from core.rbac import verificar_token_sessao
+    payload = verificar_token_sessao(token)
+    if not payload:
         return jsonify({"error": "Unauthorized"}), 401
-    user_id = request.cookies.get("user_id")
+    if payload.get("is_master"):
+        return jsonify({"name": payload.get("email", "Admin"), "role": payload.get("role", "admin"), "permissoes": ["*"]})
+    user_id = payload.get("user_id")
     if user_id:
         try:
-            from core.rbac import get_permissoes_por_usuario
+            from core.rbac import get_permissoes_por_usuario, list_usuarios, list_roles
             perms = get_permissoes_por_usuario(int(user_id))
-            # Buscar nome e role
-            from core.rbac import list_usuarios, list_roles
             usuarios = [u for u in list_usuarios() if u.get("id") == int(user_id)]
             user = usuarios[0] if usuarios else {}
             role = None
             if user.get("role_id"):
                 roles = [r for r in list_roles() if r.get("id") == user["role_id"]]
-                role = roles[0]["nome"] if roles else "admin"
+                role = roles[0]["nome"] if roles else payload.get("role", "admin")
             return jsonify({
-                "name": user.get("nome", "Admin"), "role": role or "admin",
+                "name": user.get("nome", payload.get("email", "Admin")), "role": role or payload.get("role", "admin"),
                 "user_id": int(user_id), "permissoes": perms,
             })
-        except Exception as e: pass
-    return jsonify({"name": "Admin", "role": "admin", "permissoes": ["*"]})
+        except Exception: pass
+    return jsonify({"name": payload.get("email", "Admin"), "role": payload.get("role", "admin"), "permissoes": []})
 
 @app.route('/api/auth/logout', methods=['POST'])
 def logout():
