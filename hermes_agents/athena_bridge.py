@@ -318,7 +318,7 @@ def _fazer_login(email, password, api_key, autenticar, gerar_token_sessao):
         return resp
     from core.seguranca import auditar_login
     auditar_login(email, False, request.remote_addr or "", request.headers.get("User-Agent",""))
-    return jsonify({"error": "Invalid credentials"}), 401
+    return jsonify({"error": "Invalid credentials", "tag": "v2ec2e70"}), 401
 
 @app.route('/api/me', methods=['GET'])
 def current_user():
