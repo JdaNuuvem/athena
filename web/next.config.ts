@@ -1,9 +1,14 @@
 import type { NextConfig } from "next";
 
-// ponytail: backend Python (hermes_agents) é o primário — tem 335+ endpoints
-// vs 57 do TS. Roteia /api/* para ele por padrão. Em dev, ATHENA_API_URL pode
-// sobrescrever (ex: Coolify). Porta 3000 = Flask (docker/production/Dockerfile).
-const API_TARGET = process.env.ATHENA_API_URL || "http://127.0.0.1:3000";
+// ponytail: em producao (standalone Docker), o backend Python hermes-agent roda
+// como container irmao no Coolify. Containers no mesmo projeto se alcançam pelo
+// UUID do recurso. O service ID do hermes-agent eh w9hn3qezdgivens9g1o7r3of.
+// Em dev local, usa 127.0.0.1:3000 (Flask direto).
+const API_TARGET = process.env.ATHENA_API_URL || (
+  process.env.NODE_ENV === "production"
+    ? "http://w9hn3qezdgivens9g1o7r3of:3000"
+    : "http://127.0.0.1:3000"
+);
 
 // ponytail: producao serve um export estatico (hermes_agents/dashboard/) direto
 // pelo Flask — nao ha servidor Node.js rodando, entao rewrites() nao se aplica
