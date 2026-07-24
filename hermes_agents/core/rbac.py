@@ -18,7 +18,15 @@ JWT_ALGORITHM = "HS256"
 JWT_EXPIRACAO_HORAS = 24 * 30  # 30 dias — mesma duracao do cookie anterior
 
 def _jwt_secret() -> str:
-    return _os.environ.get("ATHENA_TOKEN", "") or "athena-dev-secret-INSEGURO-configure-ATHENA_TOKEN"
+    """Chave de assinatura do JWT — dedicada (ATHENA_JWT_SECRET), com fallback
+    para ATHENA_TOKEN por compatibilidade com deploys que so' tem esse configurado.
+    ponytail: SEM fallback hardcoded — se nenhum dos dois estiver configurado,
+    assinar/verificar token com uma chave publica no codigo-fonte permitiria
+    qualquer um forjar sessoes validas. Falha alto e visivel em vez disso."""
+    secret = _os.environ.get("ATHENA_JWT_SECRET", "") or _os.environ.get("ATHENA_TOKEN", "")
+    if not secret:
+        raise RuntimeError("ATHENA_JWT_SECRET (ou ATHENA_TOKEN) nao configurado — sessao JWT desabilitada")
+    return secret
 
 def gerar_token_sessao(user_id, email: str, role: str, is_master: bool = False) -> str:
     """Gera um JWT de sessao assinado e unico por usuario."""

@@ -266,8 +266,14 @@ def simple_login():
     password = data.get('password', '')
     api_key = data.get('api_key', '')
 
-    # Tenta RBAC primeiro
     from core.rbac import autenticar, gerar_token_sessao
+    try:
+        return _fazer_login(email, password, api_key, autenticar, gerar_token_sessao)
+    except RuntimeError as e:
+        return jsonify({"error": f"Servidor mal configurado: {e}"}), 500
+
+def _fazer_login(email, password, api_key, autenticar, gerar_token_sessao):
+    # Tenta RBAC primeiro
     rbac_result = autenticar(email, password)
     if rbac_result.get("autenticado"):
         from core.seguranca import auditar_login

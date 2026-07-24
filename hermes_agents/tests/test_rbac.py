@@ -51,6 +51,24 @@ class TestTokenSessao(unittest.TestCase):
         self.assertTrue(payload["is_master"])
         self.assertIsNone(payload["user_id"])
 
+    def test_sem_segredo_configurado_falha_seguro_sem_fallback_hardcoded(self):
+        """Sem ATHENA_JWT_SECRET/ATHENA_TOKEN, gerar token deve falhar alto (nao
+        assinar com uma chave publica conhecida no codigo-fonte) e verificar
+        deve retornar None (nao propagar a excecao)."""
+        with patch.dict(os.environ, {"ATHENA_TOKEN": "", "ATHENA_JWT_SECRET": ""}, clear=False):
+            with self.assertRaises(RuntimeError):
+                rbac.gerar_token_sessao(1, "x@x.com", "admin")
+            self.assertIsNone(rbac.verificar_token_sessao("qualquer.token.aqui"))
+
+    def test_athena_jwt_secret_tem_prioridade_sobre_athena_token(self):
+        with patch.dict(os.environ, {"ATHENA_TOKEN": "token-master", "ATHENA_JWT_SECRET": "segredo-jwt-dedicado"}):
+            token = rbac.gerar_token_sessao(1, "x@x.com", "admin")
+        # assinado com ATHENA_JWT_SECRET — decodificar com ATHENA_TOKEN deve falhar
+        with patch.dict(os.environ, {"ATHENA_TOKEN": "token-master", "ATHENA_JWT_SECRET": ""}):
+            self.assertIsNone(rbac.verificar_token_sessao(token))
+        with patch.dict(os.environ, {"ATHENA_TOKEN": "token-master", "ATHENA_JWT_SECRET": "segredo-jwt-dedicado"}):
+            self.assertIsNotNone(rbac.verificar_token_sessao(token))
+
 
 class TestRequerPermissao(unittest.TestCase):
     def setUp(self):
