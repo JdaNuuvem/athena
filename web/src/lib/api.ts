@@ -325,6 +325,58 @@ export const api = {
   rhBeneficiosResumo: () =>
     request<{ total_empresa: number; total_funcionario: number; beneficios: unknown[] }>("/api/rh/beneficios/resumo"),
 
+  // Manutencao
+  manutencaoDashboard: () => request<Record<string, unknown>>("/api/manutencao/kpi"),
+  manutencaoPendentes: () => request<{ manutencoes: unknown[]; total: number }>("/api/manutencao/pendentes"),
+  manutencaoAlertas: () => request<{ alertas: unknown[]; total: number }>("/api/manutencao/alertas"),
+  manutencaoAgendar: (data: Record<string, unknown>) =>
+    request<{ numero: string; success: boolean }>("/api/manutencao/agendar", { method: "POST", body: JSON.stringify(data) }),
+  manutencaoIniciar: (id: number, tecnico: string) =>
+    request<Record<string, unknown>>(`/api/manutencao/${id}/iniciar`, { method: "POST", body: JSON.stringify({ tecnico }) }),
+  manutencaoConcluir: (id: number, data: Record<string, unknown>) =>
+    request<Record<string, unknown>>(`/api/manutencao/${id}/concluir`, { method: "POST", body: JSON.stringify(data) }),
+  manutencaoMTBF: (tipo: string, id: string) =>
+    request<Record<string, unknown>>(`/api/manutencao/mtbf/${tipo}/${id}`),
+
+  // Qualidade
+  qualidadeTaxaDefeitos: (periodo?: number) =>
+    request<Record<string, unknown>>(`/api/qualidade/taxa_defeitos${periodo ? `?periodo=${periodo}` : ""}`),
+  qualidadePareto: (periodo?: number) =>
+    request<Record<string, unknown>>(`/api/qualidade/pareto${periodo ? `?periodo=${periodo}` : ""}`),
+  qualidadeDefeitos: (categoria?: string, gravidade?: string) => {
+    const q = new URLSearchParams();
+    if (categoria) q.set("categoria", categoria);
+    if (gravidade) q.set("gravidade", gravidade);
+    return request<{ defeitos: unknown[]; total: number }>(`/api/qualidade/defeitos${q.toString() ? "?" + q : ""}`);
+  },
+  qualidadeCAPAS: () => request<{ capas: unknown[]; total: number }>("/api/qualidade/capas"),
+  qualidadeRegistrarInspecao: (data: Record<string, unknown>) =>
+    request<Record<string, unknown>>("/api/qualidade/inspecoes", { method: "POST", body: JSON.stringify(data) }),
+  qualidadeCriarCAPA: (data: Record<string, unknown>) =>
+    request<Record<string, unknown>>("/api/qualidade/capas", { method: "POST", body: JSON.stringify(data) }),
+
+  // Moldes & CNC
+  moldesDashboard: () => request<Record<string, unknown>>("/api/moldes/dashboard"),
+  moldesHistorico: (id: number) => request<{ molde_id: number; historico: unknown[] }>(`/api/moldes/${id}/historico`),
+  moldesStatus: (id: number) => request<Record<string, unknown>>(`/api/moldes/${id}/status`),
+  cncCriarJob: (data: Record<string, unknown>) =>
+    request<{ job_id: string; success: boolean }>("/api/cnc/jobs", { method: "POST", body: JSON.stringify(data) }),
+  cncIniciarJob: (jobId: string, operador: string) =>
+    request<Record<string, unknown>>(`/api/cnc/jobs/${jobId}/iniciar`, { method: "POST", body: JSON.stringify({ operador }) }),
+  cncConcluirJob: (jobId: string, data: Record<string, unknown>) =>
+    request<Record<string, unknown>>(`/api/cnc/jobs/${jobId}/concluir`, { method: "POST", body: JSON.stringify(data) }),
+
+  // Memory
+  memoryStats: () => request<Record<string, unknown>>("/api/memory/stats"),
+  memoryHistory: (agente?: string, categoria?: string) => {
+    const q = new URLSearchParams();
+    if (agente) q.set("agente", agente);
+    if (categoria) q.set("categoria", categoria);
+    return request<{ history: unknown[]; total: number }>(`/api/memory/history${q.toString() ? "?" + q : ""}`);
+  },
+  memoryRecall: (query: string, agente?: string) =>
+    request<{ results: unknown[]; total: number }>("/api/memory/recall", { method: "POST", body: JSON.stringify({ query, agente }) }),
+
   // Cadastros
   cadList: (tabela: string) => request<{ data: unknown[] }>(`/api/cadastros/${tabela}`),
   cadGet: (tabela: string, id: number) => request<Record<string, unknown>>(`/api/cadastros/${tabela}/${id}`),
