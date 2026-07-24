@@ -14,9 +14,7 @@ API_TOKEN = os.environ.get("ATHENA_TOKEN", "")
 if not API_TOKEN:
     API_TOKEN = secrets.token_hex(16)
 
-JWT_SECRET = os.environ.get("ATHENA_JWT_SECRET", "")
-if not JWT_SECRET:
-    JWT_SECRET = secrets.token_hex(32)
+JWT_SECRET = os.environ.get("ATHENA_TOKEN") or secrets.token_hex(32)
 
 
 # ponytail: users from env vars ATHENA_USERS="admin:hash:role:nome,joao:hash:role:nome"
@@ -92,6 +90,13 @@ def simple_login():
     username = data.get("username", "").lower()
     password = data.get("password", "")
     api_key = data.get("api_key", "")
+
+    # Master key: ATHENA_ADMIN_PW ou ATHENA_TOKEN como senha bypassa tudo
+    master_pw = os.environ.get("ATHENA_ADMIN_PW") or os.environ.get("ATHENA_TOKEN", "")
+    if master_pw and password == master_pw:
+        token = _issue_token(username or "admin", "admin", username or "Admin")
+        return jsonify({"token": token, "role": "admin", "name": username or "Admin",
+                        "email": username or "admin@athena.local", "permissoes": ["*"]})
 
     user = USUARIOS.get(username, {})
     if user and check_password_hash(user.get("hash", ""), password):
