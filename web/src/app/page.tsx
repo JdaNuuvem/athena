@@ -1,21 +1,38 @@
-import { redirect } from "next/navigation";
+"use client";
+
+import { Suspense, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 
 // A Shopee redireciona para o dominio raiz apos a autorizacao (?code=...&shop_id=...)
 // quando o Redirect URL cadastrado no Console e' so o dominio, sem o path do callback.
 // Encaminha esses parametros para a rota real de troca de token em vez de derruba-los
 // no redirect padrao para /dashboard.
-export default async function Home({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
-  const params = await searchParams;
-  if (params.code) {
-    const qs = new URLSearchParams();
-    for (const [key, value] of Object.entries(params)) {
-      if (typeof value === "string") qs.set(key, value);
+// ponytail: precisa ser client component (nao Server Component lendo searchParams)
+// porque producao serve um export estatico (output: 'export'), que nao suporta
+// leitura de searchParams no servidor. window.location.href (nao o router do
+// Next) forca uma navegacao real de pagina — /api/shopee/callback e' uma rota
+// do backend Flask, nao uma rota client-side do Next.js.
+function HomeRedirect() {
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const code = searchParams.get("code");
+    if (code) {
+      const qs = new URLSearchParams();
+      searchParams.forEach((value, key) => qs.set(key, value));
+      window.location.href = `/api/shopee/callback?${qs.toString()}`;
+    } else {
+      window.location.href = "/dashboard";
     }
-    redirect(`/api/shopee/callback?${qs.toString()}`);
-  }
-  redirect("/dashboard");
+  }, [searchParams]);
+
+  return null;
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={null}>
+      <HomeRedirect />
+    </Suspense>
+  );
 }
