@@ -12,6 +12,7 @@ import LotesSeriesTab from "./_components/LotesSeriesTab";
 import LocalizacaoTab from "./_components/LocalizacaoTab";
 import ControleTab from "./_components/ControleTab";
 import PublicarShopeeTab from "./_components/PublicarShopeeTab";
+import RateioModal from "@/app/estoque/rateio/_components/RateioModal";
 
 const TABS = [
   { id: "visao-geral", label: "Visão Geral" },
@@ -27,12 +28,15 @@ const TABS = [
 type TabId = (typeof TABS)[number]["id"];
 
 export default function ProdutoClientPage() {
-  const { sku } = useParams<{ sku: string }>();
+  const params = useParams<{ sku: string }>();
+  const sku = params?.sku || "";
   const [produto, setProduto] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<TabId>("visao-geral");
+  const [showRateio, setShowRateio] = useState(false);
 
   useEffect(() => {
+    if (!sku) { setLoading(false); return; }
     api.detalheProduto(sku)
       .then((d) => setProduto(d as Record<string, unknown>))
       .catch(() => {})
@@ -45,6 +49,7 @@ export default function ProdutoClientPage() {
   };
 
   if (loading) return <div className="p-6 text-neutral-500">Carregando...</div>;
+  if (!sku) return <div className="p-6 text-red-400">SKU não encontrado na URL</div>;
   if (!produto) return <div className="p-6 text-red-400">Produto não encontrado</div>;
 
   return (
@@ -57,6 +62,9 @@ export default function ProdutoClientPage() {
           {String(produto.descricao || produto.nome || sku)}
         </h1>
         <p className="text-xs font-mono text-neutral-500 mt-1">{sku}</p>
+        <button onClick={() => setShowRateio(true)} className="mt-2 bg-amber-600 hover:bg-amber-500 text-white text-xs px-3 py-1.5 rounded-lg transition-colors">
+          Rateio Estoque
+        </button>
       </div>
 
       <div className="flex gap-2 overflow-x-auto">
@@ -76,13 +84,21 @@ export default function ProdutoClientPage() {
       </div>
 
       {tab === "visao-geral" && <VisaoGeralTab produto={produto} formatarMoeda={formatarMoeda} />}
-      {tab === "cadastro" && <CadastroTab produto={produto} sku={sku as string} onUpdate={() => { api.detalheProduto(sku as string).then(d => setProduto(d as Record<string, unknown>)).catch(() => {}); }} />}
-      {tab === "variacoes" && <VariacoesTab variacoes={(produto?.variacoes as any) || []} />}
+      {tab === "cadastro" && <CadastroTab produto={produto} sku={sku} onUpdate={() => { api.detalheProduto(sku).then(d => setProduto(d as Record<string, unknown>)).catch(() => {}); }} />}
+      {tab === "variacoes" && <VariacoesTab variacoes={(produto?.variacoes as any[]) || []} />}
       {tab === "kits-bom" && <KitsBomTab />}
       {tab === "lotes-series" && <LotesSeriesTab />}
       {tab === "localizacao" && <LocalizacaoTab />}
       {tab === "controle" && <ControleTab produto={produto} />}
-      {tab === "shopee" && <PublicarShopeeTab produto={produto} sku={sku as string} />}
+      {tab === "shopee" && <PublicarShopeeTab produto={produto} sku={sku} />}
+
+      {showRateio && (
+        <RateioModal
+          sku={sku}
+          produtoNome={String(produto.descricao || produto.nome || "")}
+          onClose={() => setShowRateio(false)}
+        />
+      )}
     </div>
   );
 }
