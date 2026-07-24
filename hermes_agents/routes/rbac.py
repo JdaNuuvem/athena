@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+from core.rbac import requer_permissao
 
 rbac_bp = Blueprint("rbac", __name__, url_prefix="/api/rbac")
 
@@ -10,6 +11,7 @@ def rbac_list_roles():
 
 
 @rbac_bp.route("/roles", methods=["POST"])
+@requer_permissao("configuracoes.criar")
 def rbac_create_role():
     data = request.json or {}
     from core.rbac import criar_role
@@ -17,6 +19,7 @@ def rbac_create_role():
 
 
 @rbac_bp.route("/roles/<int:id>", methods=["PUT"])
+@requer_permissao("configuracoes.editar")
 def rbac_update_role(id):
     data = request.json or {}
     from core.rbac import atualizar_role
@@ -24,6 +27,7 @@ def rbac_update_role(id):
 
 
 @rbac_bp.route("/roles/<int:id>", methods=["DELETE"])
+@requer_permissao("configuracoes.excluir")
 def rbac_delete_role(id):
     from core.rbac import deletar_role
     return jsonify(deletar_role(id))
@@ -42,6 +46,7 @@ def rbac_list_usuarios():
 
 
 @rbac_bp.route("/usuarios", methods=["POST"])
+@requer_permissao("configuracoes.criar")
 def rbac_create_usuario():
     data = request.json or {}
     from core.rbac import criar_usuario
@@ -49,6 +54,7 @@ def rbac_create_usuario():
 
 
 @rbac_bp.route("/usuarios/<int:id>", methods=["PUT"])
+@requer_permissao("configuracoes.editar")
 def rbac_update_usuario(id):
     data = request.json or {}
     from core.rbac import atualizar_usuario

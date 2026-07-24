@@ -35,15 +35,19 @@ def estoque_por_loja():
         conn = _db_sync()
         cur = conn.cursor()
         where = ["1=1"]
+        params = []
         if loja and loja != "todas":
             if loja.isdigit():
-                where.append(f"e.loja = (SELECT nome FROM lojas WHERE id = {int(loja)})")
+                where.append("e.loja = (SELECT nome FROM lojas WHERE id = %s)")
+                params.append(int(loja))
             else:
-                where.append(f"e.loja = '{loja.replace(chr(39), chr(39)+chr(39))}'")
+                where.append("e.loja = %s")
+                params.append(loja)
         if busca:
-            where.append(f"(c.sku ILIKE '%{busca}%' OR c.descricao ILIKE '%{busca}%')")
+            where.append("(c.sku ILIKE %s OR c.descricao ILIKE %s)")
+            params.extend([f"%{busca}%", f"%{busca}%"])
         sql_where = " AND ".join(where)
-        cur.execute(f"SELECT COUNT(*) FROM estoque_lojas e JOIN catalogo_produtos c ON c.sku = e.sku WHERE {sql_where}")
+        cur.execute(f"SELECT COUNT(*) FROM estoque_lojas e JOIN catalogo_produtos c ON c.sku = e.sku WHERE {sql_where}", params)
         total = cur.fetchone()[0]
         offset = (pagina - 1) * por_pagina
         cur.execute(f"""
@@ -52,8 +56,8 @@ def estoque_por_loja():
             JOIN catalogo_produtos c ON c.sku = e.sku
             WHERE {sql_where}
             ORDER BY e.data_atualizacao DESC
-            LIMIT {por_pagina} OFFSET {offset}
-        """)
+            LIMIT %s OFFSET %s
+        """, params + [por_pagina, offset])
         rows = _dicts(cur)
         cur.close(); conn.close()
         return jsonify({"estoque": rows, "total": total, "pagina": pagina})

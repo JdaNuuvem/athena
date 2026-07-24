@@ -1544,12 +1544,6 @@ def _dicts(cur):
     cols = [d[0] for d in cur.description] if cur.description else []
     return [dict(zip(cols, row)) for row in cur.fetchall()]
 
-def _autenticado() -> bool:
-    auth = request.headers.get("Authorization", "")
-    cookie_token = request.cookies.get("auth_token", "")
-    token = auth.replace("Bearer ", "") or cookie_token
-    return token == API_TOKEN
-
 @app.route('/api/produtos', methods=['GET'])
 def listar_produtos():
     if not _autenticado():

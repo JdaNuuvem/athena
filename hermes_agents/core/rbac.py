@@ -2,9 +2,41 @@
 from core import get_db, run_async, log, hoje
 from functools import wraps
 from flask import request, jsonify
-import hashlib, os as _os
+from datetime import datetime, timedelta, timezone
+import hashlib, os as _os, jwt as _jwt
 
 AGENT = "RBAC Core"
+
+# ── Sessao por usuario (JWT) ──
+# ponytail: antes, TODO login (independente do usuario/role) gravava o mesmo
+# API_TOKEN global no cookie auth_token — qualquer usuario logado normalmente
+# batia com o "token master" e pulava qualquer checagem de permissao por
+# usuario em requer_permissao(). Agora cada login gera um JWT assinado e
+# unico, com user_id/role dentro do payload (nao falsificavel sem a chave).
+
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRACAO_HORAS = 24 * 30  # 30 dias — mesma duracao do cookie anterior
+
+def _jwt_secret() -> str:
+    return _os.environ.get("ATHENA_TOKEN", "") or "athena-dev-secret-INSEGURO-configure-ATHENA_TOKEN"
+
+def gerar_token_sessao(user_id, email: str, role: str, is_master: bool = False) -> str:
+    """Gera um JWT de sessao assinado e unico por usuario."""
+    payload = {
+        "user_id": user_id, "email": email, "role": role, "is_master": is_master,
+        "exp": datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRACAO_HORAS),
+        "iat": datetime.now(timezone.utc),
+    }
+    return _jwt.encode(payload, _jwt_secret(), algorithm=JWT_ALGORITHM)
+
+def verificar_token_sessao(token: str):
+    """Decodifica e valida um token de sessao. Retorna o payload (dict) ou None se invalido/expirado."""
+    if not token:
+        return None
+    try:
+        return _jwt.decode(token, _jwt_secret(), algorithms=[JWT_ALGORITHM])
+    except Exception:
+        return None
 
 # ── Modulos e Acoes ──
 
@@ -218,16 +250,22 @@ def requer_permissao(codigo: str):
             token = request.headers.get("Authorization","").replace("Bearer ","")
             cookie_token = request.cookies.get("auth_token","")
             auth_token = token or cookie_token
-            # token master via env (so' ativo se configurado, sem fallback hardcoded)
+            # token master via env (bypass administrativo/scripts — nao usado pelo login normal)
             master_token = _os.environ.get("ATHENA_TOKEN", "")
             if master_token and auth_token == master_token:
                 return f(*args, **kwargs)
-            from core.rbac import get_permissoes_por_usuario
-            user_id = request.cookies.get("user_id")
-            if user_id:
-                perms = get_permissoes_por_usuario(int(user_id))
-                if codigo in perms:
+            # ponytail: user_id vem do JWT assinado (payload), NUNCA de um cookie separado
+            # nao-assinado — um cookie user_id solto poderia ser trocado pelo cliente para
+            # qualquer valor e se passar por outro usuario.
+            payload = verificar_token_sessao(auth_token)
+            if payload:
+                if payload.get("is_master"):
                     return f(*args, **kwargs)
+                user_id = payload.get("user_id")
+                if user_id:
+                    perms = get_permissoes_por_usuario(int(user_id))
+                    if codigo in perms:
+                        return f(*args, **kwargs)
             return jsonify({"error": "Permissao negada", "required": codigo}), 403
         return wrapper
     return decorator
