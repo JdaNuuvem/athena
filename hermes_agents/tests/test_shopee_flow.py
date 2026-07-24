@@ -229,14 +229,22 @@ class TestRotasFlask(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        os.environ["ATHENA_TOKEN"] = "test-token-123"
+        # ponytail: NAO assume que setar ATHENA_TOKEN aqui vai valer — se
+        # athena_bridge ja foi importado por outro arquivo de teste antes
+        # (na mesma sessao pytest), API_TOKEN ja esta fixado com o valor que
+        # aquele import viu. Le o valor REAL do modulo em vez de supor um
+        # literal fixo, para os headers sempre baterem independente da ordem
+        # de execucao dos testes.
+        os.environ.setdefault("ATHENA_TOKEN", "test-token-123")
+        import athena_bridge
         from athena_bridge import app
         app.config["TESTING"] = True
         cls.client = app.test_client()
+        cls.token = athena_bridge.API_TOKEN
 
     def _h(self):
         """Headers com token de autenticacao."""
-        return {"Authorization": "Bearer test-token-123"}
+        return {"Authorization": f"Bearer {self.token}"}
 
     def test_callback_sem_code_redireciona_com_erro(self):
         resp = self.client.get("/api/shopee/callback", follow_redirects=False)

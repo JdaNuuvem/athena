@@ -1,9 +1,16 @@
 """Testes unitarios — RBAC / Sessao JWT por usuario."""
+# ponytail: NAO setar ATHENA_TOKEN no nivel do modulo (via os.environ.setdefault) —
+# isso "vaza" para outros arquivos de teste na mesma sessao pytest, porque
+# athena_bridge.API_TOKEN so' e' lido uma vez, na primeira importacao do modulo em
+# todo o processo. Se ATHENA_TOKEN estiver setado nesse momento (mesmo que so'
+# durante a fase de coleta do pytest), o valor fica preso para o resto da sessao,
+# quebrando testes de outros arquivos que esperam rodar sem nenhum token
+# configurado. Cada teste abaixo usa patch.dict escopado quando precisa da env var.
 import sys, os, unittest, time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from unittest.mock import patch, AsyncMock
 
-os.environ.setdefault("ATHENA_TOKEN", "test-master-token-32-bytes-long!!")
+_TEST_TOKEN = "test-master-token-32-bytes-long!!"
 
 async def _mp(*a, **kw):
     m = AsyncMock()
@@ -20,6 +27,13 @@ import core.rbac as rbac
 
 
 class TestTokenSessao(unittest.TestCase):
+    def setUp(self):
+        self._env_patch = patch.dict(os.environ, {"ATHENA_TOKEN": _TEST_TOKEN})
+        self._env_patch.start()
+
+    def tearDown(self):
+        self._env_patch.stop()
+
     def test_gera_e_verifica_token_valido(self):
         token = rbac.gerar_token_sessao(7, "op@x.com", "Operador")
         payload = rbac.verificar_token_sessao(token)
@@ -72,6 +86,8 @@ class TestTokenSessao(unittest.TestCase):
 
 class TestRequerPermissao(unittest.TestCase):
     def setUp(self):
+        self._env_patch = patch.dict(os.environ, {"ATHENA_TOKEN": _TEST_TOKEN})
+        self._env_patch.start()
         from flask import Flask
         self.app = Flask(__name__)
 
@@ -83,12 +99,15 @@ class TestRequerPermissao(unittest.TestCase):
 
         self.client = self.app.test_client()
 
+    def tearDown(self):
+        self._env_patch.stop()
+
     def test_sem_token_nega(self):
         r = self.client.post("/protegido")
         self.assertEqual(r.status_code, 403)
 
     def test_token_master_libera(self):
-        headers = {"Authorization": f"Bearer {os.environ['ATHENA_TOKEN']}"}
+        headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
         r = self.client.post("/protegido", headers=headers)
         self.assertEqual(r.status_code, 200)
 
