@@ -117,7 +117,7 @@ def _ensure_tables():
         count_u = await db.fetchval("SELECT COUNT(*) FROM rbac_usuarios")
         if count_u == 0:
             salt = _os.urandom(16).hex()
-            admin_pw = _os.environ.get("ATHENA_ADMIN_PW", "")
+            admin_pw = _os.environ.get("ATHENA_ADMIN_PW") or _os.environ.get("ATHENA_TOKEN", "")
             dev_mode = _os.environ.get("ATHENA_DEV_MODE", "").lower() == "true"
             users = [
                 ("Admin","admin@athena.local", admin_pw or "", "Admin"),
