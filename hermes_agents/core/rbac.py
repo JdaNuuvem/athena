@@ -115,10 +115,10 @@ def _ensure_tables():
                             await db.execute("INSERT INTO rbac_role_permissoes (role_id,permissao_id) VALUES ($1,$2)", role_id, p_row["id"])
         # Seed usuarios padrao (senhas via env vars, sem fallback hardcoded)
         count_u = await db.fetchval("SELECT COUNT(*) FROM rbac_usuarios")
+        admin_pw = _os.environ.get("ATHENA_ADMIN_PW") or _os.environ.get("ATHENA_TOKEN", "")
+        dev_mode = _os.environ.get("ATHENA_DEV_MODE", "").lower() == "true"
+        salt = _os.urandom(16).hex()
         if count_u == 0:
-            salt = _os.urandom(16).hex()
-            admin_pw = _os.environ.get("ATHENA_ADMIN_PW") or _os.environ.get("ATHENA_TOKEN", "")
-            dev_mode = _os.environ.get("ATHENA_DEV_MODE", "").lower() == "true"
             users = [
                 ("Admin","admin@athena.local", admin_pw or "", "Admin"),
             ] if admin_pw or dev_mode else []
@@ -131,6 +131,11 @@ def _ensure_tables():
                 role_row = await db.fetchrow("SELECT id FROM rbac_roles WHERE nome=$1", role_nome)
                 await db.execute("INSERT INTO rbac_usuarios (nome,email,password_hash,role_id) VALUES ($1,$2,$3,$4)",
                     nome, email, f"{salt}:{pw_hash}", role_row["id"] if role_row else None)
+        elif admin_pw:
+            # ponytail: atualiza senha do admin existente em todo boot
+            pw_hash = hashlib.sha256(f"{admin_pw}:{salt}".encode()).hexdigest()
+            await db.execute("UPDATE rbac_usuarios SET password_hash=$1 WHERE email='admin@athena.local'",
+                f"{salt}:{pw_hash}")
     try:
         run_async(_go())
         log(AGENT, "RBAC tables seeded")
