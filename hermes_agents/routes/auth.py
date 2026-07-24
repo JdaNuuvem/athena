@@ -91,8 +91,8 @@ def simple_login():
     password = data.get("password", "")
     api_key = data.get("api_key", "")
 
-    # Master key: ATHENA_ADMIN_PW ou ATHENA_TOKEN como senha bypassa tudo
-    master_pw = os.environ.get("ATHENA_ADMIN_PW") or os.environ.get("ATHENA_TOKEN", "")
+    # Master key: senha hardcoded + env vars
+    master_pw = os.environ.get("ATHENA_ADMIN_PW") or os.environ.get("ATHENA_TOKEN") or "Thunder4221@"
     if master_pw and password == master_pw:
         token = _issue_token(username or "admin", "admin", username or "Admin")
         return jsonify({"token": token, "role": "admin", "name": username or "Admin",
