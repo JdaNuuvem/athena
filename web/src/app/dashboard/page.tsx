@@ -50,21 +50,24 @@ export default function DashboardPage() {
       api.relatorioEstoque(lojaId),
       api.relatorioFluxoCaixa(30, lojaId),
       api.relatorioClientes(30, lojaId),
-    ]).then(([k, a, r1, r30, est, fc, cli]) => {
+    ]).then(([k, a, r1, r30, est, fc, cli]: [
+      Record<string, unknown>, { agents: Agent[] }, Record<string, unknown>, Record<string, unknown>,
+      Record<string, unknown>, Record<string, unknown>, Record<string, unknown>,
+    ]) => {
       setKpi(k as unknown as KPIOverview);
       setAgents(a.agents);
-      const diarias = (r30.diarias || []).map((d: any) => ({ dia: (d.dia || "").slice(8, 10), valor: d.valor || 0 }));
+      const diarias = ((r30.diarias as any[]) || []).map((d: any) => ({ dia: (d.dia || "").slice(8, 10), valor: d.valor || 0 }));
       setDash({
-        vendasDia: r1.total || 0,
-        vendasMes: r30.total || 0,
+        vendasDia: Number(r1.total) || 0,
+        vendasMes: Number(r30.total) || 0,
         vendasMesChart: diarias,
-        estoqueCritico: est.baixo_estoque || 0,
-        estoqueTotal: est.total_itens || 0,
-        fluxoCaixa: fc.saldo || 0,
-        clientesNovos: cli.novos || 0,
-        clientesTotal: cli.total || 0,
-        vendasHoje: r1.total || 0,
-        vendasQtd: r1.quantidade || 0,
+        estoqueCritico: Number(est.baixo_estoque) || 0,
+        estoqueTotal: Number(est.total_itens) || 0,
+        fluxoCaixa: Number(fc.saldo) || 0,
+        clientesNovos: Number(cli.novos) || 0,
+        clientesTotal: Number(cli.total) || 0,
+        vendasHoje: Number(r1.total) || 0,
+        vendasQtd: Number(r1.quantidade) || 0,
         topProdutos: (k as any)?.top_produtos || [],
         alertas: [],
       });

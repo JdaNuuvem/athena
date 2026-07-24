@@ -60,9 +60,12 @@ const NAV_ITEMS = [
     href: "/integracoes", label: "Shopee", icon: "bling",
     children: [
       { href: "/integracoes/shopee", label: "Config & Lojas" },
+      { href: "/integracoes/shopee/dashboard", label: "Dashboard" },
+      { href: "/integracoes/shopee/pedidos", label: "Pedidos" },
       { href: "/shopee/regras", label: "Regras de Preco" },
       { href: "/shopee/kits", label: "Kits & Consistência de Preço" },
       { href: "/relatorios/dre-lojas", label: "DRE por Loja" },
+      { href: "/integracoes/shopee-ads", label: "Shopee Ads" },
     ],
   },
   { href: "/integracoes/bling", label: "Bling", icon: "bling" },
