@@ -56,6 +56,18 @@ async def _init_tables():
             fim_execucao TIMESTAMP, duracao_segundos INT
         )
     """)
+    # sync_pedidos rodava puro INSERT sem chave de dedup — cada chamada repetida
+    # (clique duplo, retry, chamada manual do endpoint) duplicava a receita da
+    # Shopee na tabela 'vendas' (lida pelo Dashboard/KPI e pelo AG-02).
+    try:
+        await db.execute("ALTER TABLE vendas ADD COLUMN IF NOT EXISTS shopee_order_sn VARCHAR(50)")
+    except Exception:
+        pass
+    try:
+        await db.execute("""CREATE UNIQUE INDEX IF NOT EXISTS idx_vendas_shopee_order_sn_sku
+            ON vendas (shopee_order_sn, sku) WHERE shopee_order_sn IS NOT NULL""")
+    except Exception:
+        pass
 
 async def sync_produtos(loja_id: int = None) -> dict:
     """Sincroniza produtos da Shopee para o catalogo local. loja_id identifica qual conta
@@ -119,12 +131,15 @@ async def sync_pedidos(dias: int = 30, loja_id: int = None) -> dict:
                 items = o.get("items", [])
                 receita = float(o.get("total_amount", 0))
                 data_criacao = datetime.fromtimestamp(o.get("create_time", now))
-                sku = (items[0] or {}).get("item_sku", "") if items else ""
+                order_sn = str(o.get("order_sn", ""))
                 marketplace_fee = receita * 0.12
-                # Inserir em vendas (tabela do AG-02)
-                for item in items:
+                # Inserir em vendas (tabela do AG-02) — ON CONFLICT protege contra
+                # duplicacao quando o mesmo pedido e' sincronizado mais de uma vez
+                # (o range de 'dias' se sobrepoe entre chamadas consecutivas).
+                for idx, item in enumerate(items):
                     qtd = item.get("model_quantity_purchased", 1)
                     preco_item = float(item.get("model_original_price", 0) or 0)
+                    item_sku = item.get("item_sku", "") or f"{order_sn}-{idx}"
                     loja_param = loja_id if loja_id else None
                     if loja_param is None:
                         shop_id_cfg = get_shopee_config(loja_id).get("shop_id") or ""
@@ -133,10 +148,11 @@ async def sync_pedidos(dias: int = 30, loja_id: int = None) -> dict:
                             loja_param = row if row else None
                     await db.execute("""
                         INSERT INTO vendas (data, sku, marketplace, loja_id, quantidade, preco_venda, receita_bruta,
-                            taxa_marketplace_pct, taxa_marketplace_valor, frete, impostos)
-                        VALUES ($1, $2, 'shopee', $3, $4, $5, $6, 12.0, $7, 0, 0)
-                    """, data_criacao.date(), sku or str(o.get("order_sn", "")),
-                        loja_param, qtd, preco_item, preco_item * qtd, preco_item * qtd * 0.12)
+                            taxa_marketplace_pct, taxa_marketplace_valor, frete, impostos, shopee_order_sn)
+                        VALUES ($1, $2, 'shopee', $3, $4, $5, $6, 12.0, $7, 0, 0, $8)
+                        ON CONFLICT (shopee_order_sn, sku) WHERE shopee_order_sn IS NOT NULL DO NOTHING
+                    """, data_criacao.date(), item_sku,
+                        loja_param, qtd, preco_item, preco_item * qtd, preco_item * qtd * 0.12, order_sn)
                 total += 1
             except Exception as e:
                 erros.append(f"pedido {o.get('order_sn')}: {e}")
