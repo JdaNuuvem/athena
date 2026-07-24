@@ -35,3 +35,8 @@ graphify-out/
 /"shopee
 /web/,-
 athena/
+
+# hermes_agents/dashboard/ (export estatico do Next.js) e' 100% gerado pelo
+# Dockerfile a cada build (npm run build com NEXT_STATIC_EXPORT=true dentro
+# do container) — versionar so' gera diffs gigantes sem beneficio real.
+/hermes_agents/dashboard/
