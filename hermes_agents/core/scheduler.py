@@ -37,6 +37,13 @@ def _sync_pedidos():
         if r.get("sync", 0) > 0: log(AGENT, f"Pedidos sync: {r['sync']}")
     except Exception as e: pass
 
+def _sync_pedidos_shopee():
+    try:
+        from core.vendas import sincronizar_pedidos_shopee
+        r = sincronizar_pedidos_shopee()
+        if r.get("sync", 0) > 0: log(AGENT, f"Pedidos Shopee sync: {r['sync']}")
+    except Exception as e: pass
+
 def _sync_contatos():
     try:
         from core.entidades import sincronizar_contatos_bling
@@ -83,6 +90,7 @@ def _sync_categorias():
 
 # ponytail: jobs run every N seconds. Adjust intervals based on volume.
 add_job(_sync_pedidos, "bling-pedidos", 300)          # 5 min
+add_job(_sync_pedidos_shopee, "shopee-pedidos", 300)   # 5 min
 add_job(_sync_nf, "bling-nf", 600)                     # 10 min
 add_job(_sync_contatos, "bling-contatos", 1800)        # 30 min
 add_job(_sync_cr_cp, "bling-cr-cp", 3600)              # 1 hour
