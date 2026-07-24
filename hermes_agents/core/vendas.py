@@ -21,6 +21,10 @@ def _ensure_tables():
         )""")
         try: await db.execute("ALTER TABLE vendas_pedidos ADD COLUMN IF NOT EXISTS transportadora_nome VARCHAR(200)")
         except Exception as e: pass
+        try: await db.execute("ALTER TABLE vendas_pedidos ADD COLUMN IF NOT EXISTS shopee_order_sn VARCHAR(50)")
+        except Exception as e: pass
+        try: await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_vendas_pedidos_shopee_order_sn ON vendas_pedidos (shopee_order_sn) WHERE shopee_order_sn IS NOT NULL")
+        except Exception as e: pass
         await db.execute("""CREATE TABLE IF NOT EXISTS vendas_itens (
             id SERIAL PRIMARY KEY, pedido_id INT REFERENCES vendas_pedidos(id),
             numero_item INT DEFAULT 1, sku VARCHAR(50), descricao VARCHAR(200),
@@ -341,6 +345,71 @@ def sincronizar_pedidos_bling(pagina: int = 1, limite: int = 100) -> dict:
             except Exception as e:
                 log(AGENT, f"Erro sync pedido {ped_resumo.get('numero')}: {e}")
         return {"sync": total, "erros": erros, "mais_paginas": mais_paginas}
+    return run_async(_go())
+
+MAPA_STATUS_SHOPEE = {
+    "UNPAID": "aberto", "READY_TO_SHIP": "aberto", "PROCESSED": "em_andamento",
+    "SHIPPED": "enviado", "TO_CONFIRM_RECEIVE": "enviado", "COMPLETED": "concluido",
+    "IN_CANCEL": "cancelado", "CANCELLED": "cancelado", "TO_RETURN": "devolvido",
+}
+
+def sincronizar_pedidos_shopee(dias: int = 30, loja_id: int = None) -> dict:
+    """Sync de pedidos Shopee para vendas_pedidos/vendas_itens — a mesma tabela usada
+    pelo Bling. Sem isso, vendas da Shopee nunca apareciam na tela de Vendas nem no
+    DRE por Loja (que le exclusivamente vendas_pedidos), so' no Dashboard/KPI geral
+    (que le da tabela legada 'vendas', alimentada por um sync separado)."""
+    from shopee import listar_pedidos_shopee_detalhado
+    r = listar_pedidos_shopee_detalhado(dias=dias, loja_id=loja_id, max_pedidos=200)
+    if r.get("error"):
+        return r
+    pedidos = r.get("pedidos", [])
+    if not pedidos:
+        return {"sync": 0, "message": "sem dados"}
+
+    async def _go():
+        db = await get_db()
+        total = 0
+        erros = []
+        for ped in pedidos:
+            order_sn = ped.get("order_sn")
+            if not order_sn:
+                continue
+            try:
+                existing = await db.fetchval("SELECT id FROM vendas_pedidos WHERE shopee_order_sn = $1", order_sn)
+                cliente = ped.get("recipient_nome") or ped.get("buyer_username") or ""
+                status = MAPA_STATUS_SHOPEE.get(ped.get("status", ""), "aberto")
+                total_val = float(ped.get("total_amount", 0) or 0)
+                data_pedido = None
+                if ped.get("create_time"):
+                    from datetime import datetime
+                    data_pedido = datetime.fromtimestamp(int(ped["create_time"])).date()
+                if existing:
+                    await db.execute("""UPDATE vendas_pedidos SET
+                        cliente=$1, total=$2, status=$3, data=$4::date,
+                        marketplace='shopee', loja_id=$5, updated_at=NOW()
+                        WHERE shopee_order_sn=$6""",
+                        cliente, total_val, status, data_pedido, loja_id, order_sn)
+                    pid = existing
+                    await db.execute("DELETE FROM vendas_itens WHERE pedido_id = $1", pid)
+                else:
+                    pid = await db.fetchval("""INSERT INTO vendas_pedidos
+                        (cliente, total, status, data, marketplace, origem, shopee_order_sn, loja_id)
+                        VALUES ($1,$2,$3,$4::date,'shopee','shopee',$5,$6)
+                        RETURNING id""",
+                        cliente, total_val, status, data_pedido, order_sn, loja_id)
+
+                for idx, item in enumerate(ped.get("itens", []) or [], 1):
+                    qtd = float(item.get("quantidade", 0) or 0)
+                    vu = float(item.get("preco", 0) or 0)
+                    await db.execute("""INSERT INTO vendas_itens
+                        (pedido_id, numero_item, sku, descricao, quantidade, valor_unitario, valor_total)
+                        VALUES ($1,$2,$3,$4,$5,$6,$7)""",
+                        pid, idx, item.get("sku", ""), item.get("nome", ""), qtd, vu, qtd * vu)
+                total += 1
+            except Exception as e:
+                erros.append(f"pedido {order_sn}: {e}")
+                log(AGENT, f"Erro sync pedido Shopee {order_sn}: {e}")
+        return {"sync": total, "erros": erros}
     return run_async(_go())
 
 # ── Seed ──

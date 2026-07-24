@@ -92,3 +92,11 @@ def vendas_sync_bling():
     data = request.json or {}
     return jsonify(sincronizar_pedidos_bling(
         pagina=data.get("pagina", 1), limite=data.get("limite", 100)))
+
+
+@vendas_bp.route("/sync/shopee", methods=["POST"])
+def vendas_sync_shopee():
+    from core.vendas import sincronizar_pedidos_shopee
+    data = request.json or {}
+    return jsonify(sincronizar_pedidos_shopee(
+        dias=data.get("dias", 30), loja_id=data.get("loja_id")))
