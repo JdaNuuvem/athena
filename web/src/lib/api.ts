@@ -1,5 +1,16 @@
 const API_BASE = "";
 
+// Token invalido/expirado (ex: troca de ATHENA_JWT_SECRET invalida sessoes
+// antigas) — limpa e manda pro login em vez de deixar a tela presa com 401
+// silencioso em toda chamada.
+export function handleUnauthorized() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem("token");
+  if (window.location.pathname !== "/login") {
+    window.location.href = "/login";
+  }
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
   const headers: Record<string, string> = {};
@@ -12,6 +23,9 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     headers,
     credentials: "include",
   });
+  if (res.status === 401) {
+    handleUnauthorized();
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error || `HTTP ${res.status}`);

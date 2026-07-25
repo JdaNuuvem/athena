@@ -1,5 +1,6 @@
 "use client";
 import React, { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import { handleUnauthorized } from "./api";
 
 type AuthUser = { id: string; name: string; role: string; roles?: string[] };
 
@@ -21,7 +22,10 @@ const fetchMe = (): Promise<{ id: string; name: string; role: string; roles: str
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
   if (!token) return Promise.resolve(null);
   return fetch("/api/me", { headers: { Authorization: `Bearer ${token}` } })
-    .then(r => r.ok ? r.json() : null)
+    .then(r => {
+      if (r.status === 401) { handleUnauthorized(); return null; }
+      return r.ok ? r.json() : null;
+    })
     .catch(() => null);
 };
 
