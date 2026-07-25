@@ -2,7 +2,7 @@
 Athena Bridge â€” conecta o Hermes Agent ao ATHENA OS via GraphQL.
 ATHENA OS tem 52 agentes, 40+ queries GraphQL, 30+ endpoints REST.
 """
-import os, sys, json, urllib.request
+import os, sys, json, hmac, urllib.request
 from typing import Optional
 from flask import Flask, request, jsonify, send_from_directory, redirect
 from flask_cors import CORS
@@ -273,10 +273,12 @@ def simple_login():
         return jsonify({"error": f"Servidor mal configurado: {e}"}), 500
 
 def _fazer_login(email, password, api_key, autenticar, gerar_token_sessao):
-    # Master key: compara direto + env vars como fallback
+    # Admin fixo: exige EMAIL e SENHA configurados via env vars — sem
+    # ATHENA_ADMIN_EMAIL setado, o login master fica desabilitado (nao aceita
+    # mais qualquer email digitado, so' a senha, como fazia antes).
     master_pw = os.environ.get("ATHENA_ADMIN_PW") or os.environ.get("ATHENA_TOKEN", "")
-    if master_pw and password == master_pw:
-        email = email or "admin@athena.local"
+    master_email = os.environ.get("ATHENA_ADMIN_EMAIL", "").lower()
+    if master_pw and master_email and email == master_email and hmac.compare_digest(password, master_pw):
         sessao_token = gerar_token_sessao(0, email, "admin", is_master=True)
         resp = jsonify({
             "token": sessao_token, "role": "admin", "name": email.split("@")[0],
