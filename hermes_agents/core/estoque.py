@@ -3,6 +3,18 @@ from core import get_db, run_async, log
 
 AGENT = "Estoque"
 
+# Limite acima do qual saida/transferencia exige aprovacao de Gerente/Admin
+# (ver core/estoque_aprovacoes.py e core/estoque_transferencias.py). Entrada
+# de mercadoria fica de fora — recebimento de fornecedor costuma vir em lotes
+# grandes e e' baixo risco de fraude (o risco esta em TIRAR estoque, nao receber).
+LIMITE_APROVACAO_UNIDADES = 10
+
+# Motivos de lista fechada — texto livre vira ruido que ninguem analisa depois;
+# lista fechada permite relatorio de discrepancia por motivo/loja/operador.
+MOTIVOS_ENTRADA = ["compra_fornecedor", "devolucao_cliente", "producao_interna", "ajuste_inventario", "outro"]
+MOTIVOS_SAIDA = ["quebra", "perda", "devolucao_fornecedor", "uso_interno", "furto_identificado", "ajuste_inventario", "outro"]
+MOTIVOS_TRANSFERENCIA = ["reposicao_entre_lojas", "redistribuicao_estoque_parado", "solicitacao_loja_destino", "outro"]
+
 _ok = False
 
 def _ensure():
@@ -22,6 +34,10 @@ def _ensure():
                 data TIMESTAMP DEFAULT NOW()
             )
         """)
+        # Rastreabilidade — quem fez a movimentacao (sem isso, nao ha
+        # responsabilizacao individual em caso de perda/roubo de estoque).
+        await db.execute("ALTER TABLE estoque_movimentacoes ADD COLUMN IF NOT EXISTS usuario_id INT")
+        await db.execute("ALTER TABLE estoque_movimentacoes ADD COLUMN IF NOT EXISTS usuario_nome VARCHAR(100)")
     try:
         run_async(_go())
         _ok = True
@@ -93,8 +109,11 @@ def atualizar(sku: str, loja_nome: str, quantidade: float, sync_bling: bool = Tr
         return {"erro": str(e)}
 
 
-def entrada(sku: str, loja: str, quantidade: float, motivo: str = "") -> dict:
+def entrada(sku: str, loja: str, quantidade: float, motivo: str = "",
+            usuario_id: int = None, usuario_nome: str = "") -> dict:
     _ensure()
+    if motivo not in MOTIVOS_ENTRADA:
+        motivo = "outro"
     async def _go():
         db = await get_db()
         atual = await db.fetchval(
@@ -107,9 +126,9 @@ def entrada(sku: str, loja: str, quantidade: float, motivo: str = "") -> dict:
             ON CONFLICT (sku, loja) DO UPDATE SET quantidade = $3, data_atualizacao = NOW()
         """, sku, loja, nova)
         await db.execute("""
-            INSERT INTO estoque_movimentacoes (sku, loja, tipo, quantidade, motivo)
-            VALUES ($1, $2, 'entrada', $3, $4)
-        """, sku, loja, quantidade, motivo)
+            INSERT INTO estoque_movimentacoes (sku, loja, tipo, quantidade, motivo, usuario_id, usuario_nome)
+            VALUES ($1, $2, 'entrada', $3, $4, $5, $6)
+        """, sku, loja, quantidade, motivo, usuario_id, usuario_nome)
         return {"ok": True, "sku": sku, "loja": loja, "quantidade": quantidade,
                 "anterior": atual, "atual": nova}
     try:
@@ -118,8 +137,14 @@ def entrada(sku: str, loja: str, quantidade: float, motivo: str = "") -> dict:
         return {"erro": str(e)}
 
 
-def saida(sku: str, loja: str, quantidade: float, motivo: str = "") -> dict:
+def saida(sku: str, loja: str, quantidade: float, motivo: str = "",
+          usuario_id: int = None, usuario_nome: str = "") -> dict:
+    """Aplica a saida diretamente. Nao decide alcada de aprovacao — quem chama
+    (routes/estoque.py ou core/estoque_aprovacoes.py) decide se a quantidade
+    exige aprovacao antes de chegar aqui."""
     _ensure()
+    if motivo not in MOTIVOS_SAIDA:
+        return {"erro": f"Motivo invalido. Use um de: {', '.join(MOTIVOS_SAIDA)}"}
     async def _go():
         db = await get_db()
         atual = await db.fetchval(
@@ -132,9 +157,9 @@ def saida(sku: str, loja: str, quantidade: float, motivo: str = "") -> dict:
             "UPDATE estoque_lojas SET quantidade = $1, data_atualizacao = NOW() WHERE sku = $2 AND loja = $3",
             nova, sku, loja)
         await db.execute("""
-            INSERT INTO estoque_movimentacoes (sku, loja, tipo, quantidade, motivo)
-            VALUES ($1, $2, 'saida', $3, $4)
-        """, sku, loja, quantidade, motivo)
+            INSERT INTO estoque_movimentacoes (sku, loja, tipo, quantidade, motivo, usuario_id, usuario_nome)
+            VALUES ($1, $2, 'saida', $3, $4, $5, $6)
+        """, sku, loja, quantidade, motivo, usuario_id, usuario_nome)
         return {"ok": True, "sku": sku, "loja": loja, "quantidade": quantidade,
                 "anterior": atual, "atual": nova}
     try:

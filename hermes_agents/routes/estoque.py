@@ -137,10 +137,33 @@ def estoque_buscar_codigo():
     return jsonify(dict(row, estoque_total=float(row["estoque_total"])))
 
 
+def _sync_shopee_async(sku, atual):
+    try:
+        from shopee import sincronizar_estoque_todas_lojas_automatico
+        # ponytail: usa o saldo TOTAL apos o movimento, nunca o delta — a Shopee
+        # espera o estoque absoluto, nao um incremento.
+        Thread(target=lambda: sincronizar_estoque_todas_lojas_automatico(sku, atual), daemon=True).start()
+    except Exception:
+        pass
+
+
+@estoque_bp.route('/motivos', methods=['GET'])
+def estoque_motivos():
+    """Listas fechadas de motivo por tipo de movimento — usadas para popular
+    os dropdowns no frontend (texto livre vira ruido que ninguem analisa)."""
+    from core.estoque import MOTIVOS_ENTRADA, MOTIVOS_SAIDA, MOTIVOS_TRANSFERENCIA, LIMITE_APROVACAO_UNIDADES
+    return jsonify({
+        "entrada": MOTIVOS_ENTRADA, "saida": MOTIVOS_SAIDA, "transferencia": MOTIVOS_TRANSFERENCIA,
+        "limite_aprovacao_unidades": LIMITE_APROVACAO_UNIDADES,
+    })
+
+
 @estoque_bp.route('/entrada', methods=['POST'])
 def estoque_entrada():
-    """Registra entrada de estoque em uma loja."""
+    """Registra entrada de estoque em uma loja. Sempre livre (sem alcada) —
+    recebimento de fornecedor costuma vir em lotes grandes e e' baixo risco."""
     from core.estoque import entrada as est_entrada
+    from core.rbac import usuario_atual_da_request
     dados = request.json or {}
     sku = str(dados.get("sku", "")).strip()
     loja = str(dados.get("loja", "")).strip()
@@ -154,66 +177,191 @@ def estoque_entrada():
             return jsonify({"erro": "quantidade deve ser > 0"}), 400
     except (ValueError, TypeError):
         return jsonify({"erro": "quantidade invalida"}), 400
-    resultado = est_entrada(sku, loja, qtd, motivo)
+    usuario = usuario_atual_da_request()
+    resultado = est_entrada(sku, loja, qtd, motivo, usuario["user_id"], usuario["nome"])
     if not resultado.get("erro") and "atual" in resultado:
-        try:
-            from shopee import sincronizar_estoque_todas_lojas_automatico
-            # ponytail: usa o saldo TOTAL apos o movimento (resultado["atual"]), nunca o
-            # delta da entrada/saida — a Shopee espera o estoque absoluto, nao um incremento.
-            Thread(target=lambda: sincronizar_estoque_todas_lojas_automatico(sku, resultado["atual"]), daemon=True).start()
-        except Exception:
-            pass
+        _sync_shopee_async(sku, resultado["atual"])
     return jsonify(resultado)
 
 
 @estoque_bp.route('/saida', methods=['POST'])
 def estoque_saida():
-    """Registra saida de estoque de uma loja."""
+    """Registra saida de estoque de uma loja. Acima do limite de unidades,
+    fica pendente ate um Gerente/Admin aprovar (ver /aprovacoes)."""
     from core.estoque import saida as est_saida
+    from core.estoque_aprovacoes import precisa_aprovacao, solicitar as solicitar_aprovacao
+    from core.rbac import usuario_atual_da_request
     dados = request.json or {}
     sku = str(dados.get("sku", "")).strip()
     loja = str(dados.get("loja", "")).strip()
     quantidade = dados.get("quantidade")
     motivo = str(dados.get("motivo", "")).strip()
-    if not sku or not loja or quantidade is None:
-        return jsonify({"erro": "sku, loja e quantidade obrigatorios"}), 400
+    if not sku or not loja or quantidade is None or not motivo:
+        return jsonify({"erro": "sku, loja, quantidade e motivo sao obrigatorios"}), 400
     try:
         qtd = float(quantidade)
         if qtd <= 0:
             return jsonify({"erro": "quantidade deve ser > 0"}), 400
     except (ValueError, TypeError):
         return jsonify({"erro": "quantidade invalida"}), 400
-    resultado = est_saida(sku, loja, qtd, motivo)
+    usuario = usuario_atual_da_request()
+    if precisa_aprovacao(qtd):
+        return jsonify(solicitar_aprovacao(sku, loja, qtd, motivo, usuario["user_id"], usuario["nome"]))
+    resultado = est_saida(sku, loja, qtd, motivo, usuario["user_id"], usuario["nome"])
     if not resultado.get("erro") and "atual" in resultado:
-        try:
-            from shopee import sincronizar_estoque_todas_lojas_automatico
-            Thread(target=lambda: sincronizar_estoque_todas_lojas_automatico(sku, resultado["atual"]), daemon=True).start()
-        except Exception:
-            pass
+        _sync_shopee_async(sku, resultado["atual"])
     return jsonify(resultado)
+
+
+@estoque_bp.route('/aprovacoes', methods=['GET'])
+def estoque_listar_aprovacoes():
+    from core.estoque_aprovacoes import listar
+    status = request.args.get("status", "pendente")
+    loja = request.args.get("loja", "")
+    return jsonify({"aprovacoes": listar(status, loja)})
+
+
+@estoque_bp.route('/aprovacoes/<int:aprovacao_id>/aprovar', methods=['POST'])
+def estoque_aprovar(aprovacao_id):
+    from core.estoque_aprovacoes import aprovar as aprovar_saida
+    from core.rbac import requer_permissao, usuario_atual_da_request
+    @requer_permissao("estoque.aprovar")
+    def _go():
+        usuario = usuario_atual_da_request()
+        resultado = aprovar_saida(aprovacao_id, usuario["user_id"], usuario["nome"])
+        if not resultado.get("erro") and "atual" in resultado:
+            _sync_shopee_async(resultado["sku"], resultado["atual"])
+        return jsonify(resultado)
+    return _go()
+
+
+@estoque_bp.route('/aprovacoes/<int:aprovacao_id>/rejeitar', methods=['POST'])
+def estoque_rejeitar(aprovacao_id):
+    from core.estoque_aprovacoes import rejeitar as rejeitar_saida
+    from core.rbac import requer_permissao, usuario_atual_da_request
+    @requer_permissao("estoque.aprovar")
+    def _go():
+        dados = request.json or {}
+        usuario = usuario_atual_da_request()
+        return jsonify(rejeitar_saida(aprovacao_id, usuario["user_id"], usuario["nome"], str(dados.get("motivo_rejeicao", ""))))
+    return _go()
 
 
 @estoque_bp.route('/transferir', methods=['POST'])
 def estoque_transferir():
-    """Transfere estoque entre duas lojas/depositos."""
-    from core.estoque import transferir as est_transferir
+    """Solicita transferencia entre duas lojas. Acima do limite de unidades,
+    fica pendente de aprovacao antes de debitar a origem. Sempre exige
+    confirmacao da loja destino antes de creditar (ver /transferencias/<id>/confirmar)."""
+    from core.estoque_transferencias import solicitar as solicitar_transferencia
+    from core.rbac import usuario_atual_da_request
     dados = request.json or {}
     sku = str(dados.get("sku", "")).strip()
     origem = str(dados.get("origem", "")).strip()
     destino = str(dados.get("destino", "")).strip()
     quantidade = dados.get("quantidade")
     motivo = str(dados.get("motivo", "")).strip()
-    if not sku or not origem or not destino or quantidade is None:
-        return jsonify({"erro": "sku, origem, destino e quantidade obrigatorios"}), 400
-    if origem == destino:
-        return jsonify({"erro": "origem e destino devem ser diferentes"}), 400
+    if not sku or not origem or not destino or quantidade is None or not motivo:
+        return jsonify({"erro": "sku, origem, destino, quantidade e motivo sao obrigatorios"}), 400
     try:
         qtd = float(quantidade)
         if qtd <= 0:
             return jsonify({"erro": "quantidade deve ser > 0"}), 400
     except (ValueError, TypeError):
         return jsonify({"erro": "quantidade invalida"}), 400
-    return jsonify(est_transferir(sku, origem, destino, qtd, motivo))
+    usuario = usuario_atual_da_request()
+    return jsonify(solicitar_transferencia(sku, origem, destino, qtd, motivo, usuario["user_id"], usuario["nome"]))
+
+
+@estoque_bp.route('/transferencias', methods=['GET'])
+def estoque_listar_transferencias():
+    from core.estoque_transferencias import listar
+    status = request.args.get("status", "")
+    loja = request.args.get("loja", "")
+    return jsonify({"transferencias": listar(status, loja)})
+
+
+@estoque_bp.route('/transferencias/<int:transferencia_id>/aprovar', methods=['POST'])
+def estoque_transferencia_aprovar(transferencia_id):
+    from core.estoque_transferencias import aprovar as aprovar_transf
+    from core.rbac import requer_permissao, usuario_atual_da_request
+    @requer_permissao("estoque.aprovar")
+    def _go():
+        usuario = usuario_atual_da_request()
+        return jsonify(aprovar_transf(transferencia_id, usuario["user_id"], usuario["nome"]))
+    return _go()
+
+
+@estoque_bp.route('/transferencias/<int:transferencia_id>/rejeitar', methods=['POST'])
+def estoque_transferencia_rejeitar(transferencia_id):
+    from core.estoque_transferencias import rejeitar as rejeitar_transf
+    from core.rbac import requer_permissao, usuario_atual_da_request
+    @requer_permissao("estoque.aprovar")
+    def _go():
+        dados = request.json or {}
+        usuario = usuario_atual_da_request()
+        return jsonify(rejeitar_transf(transferencia_id, usuario["user_id"], usuario["nome"], str(dados.get("motivo_rejeicao", ""))))
+    return _go()
+
+
+@estoque_bp.route('/transferencias/<int:transferencia_id>/confirmar', methods=['POST'])
+def estoque_transferencia_confirmar(transferencia_id):
+    """A loja destino confirma quanto realmente chegou — pode ser diferente
+    do solicitado (extravio/erro no caminho vira discrepancia registrada)."""
+    from core.estoque_transferencias import confirmar as confirmar_transf
+    from core.rbac import usuario_atual_da_request
+    dados = request.json or {}
+    quantidade_recebida = dados.get("quantidade_recebida")
+    if quantidade_recebida is None:
+        return jsonify({"erro": "quantidade_recebida obrigatoria"}), 400
+    try:
+        qtd = float(quantidade_recebida)
+        if qtd < 0:
+            return jsonify({"erro": "quantidade_recebida nao pode ser negativa"}), 400
+    except (ValueError, TypeError):
+        return jsonify({"erro": "quantidade_recebida invalida"}), 400
+    usuario = usuario_atual_da_request()
+    return jsonify(confirmar_transf(transferencia_id, usuario["user_id"], usuario["nome"], qtd))
+
+
+@estoque_bp.route('/contagem/sugestoes', methods=['GET'])
+def estoque_contagem_sugestoes():
+    from core.estoque_contagem import sugestoes
+    loja = request.args.get("loja", "")
+    return jsonify({"sugestoes": sugestoes(loja)})
+
+
+@estoque_bp.route('/contagem/registrar', methods=['POST'])
+def estoque_contagem_registrar():
+    from core.estoque_contagem import registrar
+    from core.rbac import usuario_atual_da_request
+    dados = request.json or {}
+    sku = str(dados.get("sku", "")).strip()
+    loja = str(dados.get("loja", "")).strip()
+    quantidade_contada = dados.get("quantidade_contada")
+    if not sku or not loja or quantidade_contada is None:
+        return jsonify({"erro": "sku, loja e quantidade_contada sao obrigatorios"}), 400
+    try:
+        qtd = float(quantidade_contada)
+        if qtd < 0:
+            return jsonify({"erro": "quantidade_contada nao pode ser negativa"}), 400
+    except (ValueError, TypeError):
+        return jsonify({"erro": "quantidade_contada invalida"}), 400
+    usuario = usuario_atual_da_request()
+    return jsonify(registrar(sku, loja, qtd, usuario["user_id"], usuario["nome"]))
+
+
+@estoque_bp.route('/contagem/historico', methods=['GET'])
+def estoque_contagem_historico():
+    from core.estoque_contagem import historico
+    loja = request.args.get("loja", "")
+    return jsonify({"historico": historico(loja)})
+
+
+@estoque_bp.route('/relatorio-discrepancias', methods=['GET'])
+def estoque_relatorio_discrepancias():
+    from core.estoque_relatorios import por_loja, por_operador
+    dias = request.args.get("dias", 30, type=int)
+    return jsonify({"por_loja": por_loja(dias), "por_operador": por_operador(dias)})
 
 
 @estoque_bp.route('/sugestao-rotacao', methods=['GET'])
