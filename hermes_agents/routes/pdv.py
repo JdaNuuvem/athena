@@ -41,14 +41,14 @@ def pdv_cancelar_venda(id):
     data = request.json or {}; from core.pdv import cancelar_venda
     return jsonify(cancelar_venda(id, data.get("motivo",""), data.get("operador",""),
         data.get("operador_id"), data.get("senha",""),
-        data.get("gerente_pin_id"), data.get("pin","")))
+        data.get("gerente_pin_id"), data.get("pin",""), data.get("codigo_barras","")))
 
 @pdv_bp.route('/venda/<int:id>/devolver-item', methods=['POST'])
 def pdv_devolver_item(id):
     data = request.json or {}; from core.pdv import devolver_item_venda
     return jsonify(devolver_item_venda(id, float(data.get("quantidade",1)), data.get("motivo",""),
         data.get("operador",""), data.get("operador_id"), data.get("senha",""),
-        data.get("gerente_pin_id"), data.get("pin","")))
+        data.get("gerente_pin_id"), data.get("pin",""), data.get("codigo_barras","")))
 
 @pdv_bp.route('/historico', methods=['GET'])
 def pdv_historico():
@@ -68,7 +68,7 @@ def pdv_fechar_caixa(id):
     data = request.json or {}
     from core.pdv import fechar_caixa
     return jsonify(fechar_caixa(id, float(data.get("saldo_final",0)), data.get("operador_id"), data.get("senha",""),
-        data.get("gerente_pin_id"), data.get("pin","")))
+        data.get("gerente_pin_id"), data.get("pin",""), data.get("codigo_barras","")))
 
 @pdv_bp.route('/operadores/<int:id>/pin', methods=['PUT'])
 def pdv_definir_pin(id):
@@ -79,6 +79,27 @@ def pdv_definir_pin(id):
         data = request.json or {}
         return jsonify(definir_pin(id, str(data.get("pin", ""))))
     return _go()
+
+@pdv_bp.route('/operadores/<int:id>/codigo-barras', methods=['POST'])
+def pdv_gerar_codigo_barras(id):
+    """Gera um codigo de barras novo (cracha fisico) para o operador — o
+    codigo em texto so' vem nesta resposta, para imprimir na hora; depois so'
+    o hash fica salvo (mesmo padrao de senha/PIN)."""
+    from core.rbac import requer_permissao
+    from core.pdv import gerar_codigo_barras
+    @requer_permissao("configuracoes.editar")
+    def _go():
+        return jsonify(gerar_codigo_barras(id))
+    return _go()
+
+@pdv_bp.route('/autorizar-codigo-barras', methods=['POST'])
+def pdv_autorizar_codigo_barras():
+    """Resolve um codigo de barras bipado para o gerente correspondente, sem
+    aplicar nenhuma acao — usado pelo frontend para mostrar 'autorizado por
+    Fulano' antes de confirmar a operacao sensivel."""
+    from core.pdv import verificar_codigo_barras_gerencial, _ROLES_GERENCIAIS
+    data = request.json or {}
+    return jsonify(verificar_codigo_barras_gerencial(str(data.get("codigo", "")), _ROLES_GERENCIAIS))
 
 @pdv_bp.route('/caixa/<int:id>/resumo', methods=['GET'])
 def pdv_resumo_caixa(id):
@@ -152,14 +173,16 @@ def pdv_sangria(id):
     data = request.json or {}
     from core.pdv import sangria
     return jsonify(sangria(id, float(data.get("valor",0)), data.get("motivo",""), data.get("operador",""),
-        data.get("operador_id"), data.get("senha",""), data.get("gerente_pin_id"), data.get("pin","")))
+        data.get("operador_id"), data.get("senha",""), data.get("gerente_pin_id"), data.get("pin",""),
+        data.get("codigo_barras","")))
 
 @pdv_bp.route('/caixa/<int:id>/suprimento', methods=['POST'])
 def pdv_suprimento(id):
     data = request.json or {}
     from core.pdv import suprimento
     return jsonify(suprimento(id, float(data.get("valor",0)), data.get("motivo",""), data.get("operador",""),
-        data.get("operador_id"), data.get("senha",""), data.get("gerente_pin_id"), data.get("pin","")))
+        data.get("operador_id"), data.get("senha",""), data.get("gerente_pin_id"), data.get("pin",""),
+        data.get("codigo_barras","")))
 
 @pdv_bp.route('/venda', methods=['POST'])
 def pdv_venda():
@@ -175,7 +198,8 @@ def pdv_venda():
         operador_id=data.get("operador_id"),
         desconto=float(data.get("desconto",0)),
         gerente_pin_id=data.get("gerente_pin_id"),
-        pin=data.get("pin","")
+        pin=data.get("pin",""),
+        codigo_barras=data.get("codigo_barras","")
     ))
 
 @pdv_bp.route('/orcamento', methods=['POST'])

@@ -132,13 +132,64 @@ def verificar_pin_gerencial(gerente_id: int, pin: str, roles_permitidas: set = N
     except Exception as e: return {"error": str(e)}
 
 
+def gerar_codigo_barras(operador_id: int) -> dict:
+    """Gera um codigo unico para cracha/etiqueta fisica — funciona como um
+    'PIN fisico': bipar esse codigo de barras autoriza igual ao PIN digitado,
+    mas identificando o gerente automaticamente (sem selecionar da lista).
+    So' o hash e' salvo — o codigo em texto e' devolvido UMA VEZ nesta
+    chamada, mesmo padrao de senha (se perder o cracha, gera um novo)."""
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow("SELECT id FROM pdv_operadores WHERE id = $1 AND ativo = TRUE", operador_id)
+        if not row:
+            return {"error": "Operador nao encontrado ou inativo"}
+        codigo = _os.urandom(8).hex().upper()
+        salt, codigo_hash = _hash_senha(codigo)
+        await db.execute("UPDATE pdv_operadores SET codigo_barras_hash = $1 WHERE id = $2", f"{salt}:{codigo_hash}", operador_id)
+        return {"ok": True, "codigo_barras": codigo}
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
+
+
+def verificar_codigo_barras_gerencial(codigo: str, roles_permitidas: set = None) -> dict:
+    """Busca entre os operadores ativos (com role permitida, se informado)
+    qual tem esse codigo de barras cadastrado — ao contrario do PIN, nao
+    exige saber de antemao qual gerente esta autorizando."""
+    if not codigo:
+        return {"error": "codigo de barras obrigatorio"}
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch("SELECT * FROM pdv_operadores WHERE ativo = TRUE AND codigo_barras_hash IS NOT NULL")
+        return [dict(r) for r in rows]
+    try:
+        candidatos = run_async(_go())
+    except Exception as e:
+        return {"error": str(e)}
+    for row in candidatos:
+        if roles_permitidas and row["role"] not in roles_permitidas:
+            continue
+        stored = row.get("codigo_barras_hash") or ""
+        parts = stored.split(":", 1)
+        if len(parts) != 2:
+            continue
+        salt, hs = parts
+        valido, _ = _verificar_senha(codigo, salt, hs)
+        if valido:
+            return {"ok": True, "id": row["id"], "nome": row["nome"], "role": row["role"]}
+    return {"error": "Codigo de barras nao reconhecido"}
+
+
 def _autorizar_gerencial(operador_id: int = None, senha: str = "", gerente_pin_id: int = None,
-                          pin: str = "", roles_permitidas: set = None) -> dict:
-    """Autoriza uma acao sensivel de duas formas: (1) o proprio operador logado
-    ja tem a role exigida e informa sua senha normal, OU (2) um operador comum
+                          pin: str = "", codigo_barras: str = "", roles_permitidas: set = None) -> dict:
+    """Autoriza uma acao sensivel de tres formas: (1) o proprio operador logado
+    ja tem a role exigida e informa sua senha normal, (2) um operador comum
     esta operando e um gerente autoriza via PIN numerico curto (gerente_pin_id
-    + pin) sem precisar fazer logout/login. Retorna dict de erro, ou o dict
-    do autorizador (id/nome/role) se autorizado."""
+    + pin), ou (3) o gerente bipa o codigo de barras do seu cracha (identifica
+    automaticamente quem e', sem precisar selecionar da lista) — nenhuma das
+    duas ultimas exige logout/login. Retorna dict de erro, ou o dict do
+    autorizador (id/nome/role) se autorizado."""
+    if codigo_barras:
+        return verificar_codigo_barras_gerencial(codigo_barras, roles_permitidas)
     if gerente_pin_id and pin:
         return verificar_pin_gerencial(gerente_pin_id, pin, roles_permitidas)
     v = verificar_operador(operador_id, senha)
@@ -219,6 +270,11 @@ def _ensure_tables():
         # sensivel (cancelamento, devolucao, sangria, desconto acima do limite)
         # sem precisar fazer logout/login completo no meio do atendimento.
         try: await db.execute("ALTER TABLE pdv_operadores ADD COLUMN IF NOT EXISTS pin_hash VARCHAR(200)")
+        except Exception as e: pass
+        # Codigo de barras (cracha fisico) — mesmo papel do PIN, mas lido por
+        # um leitor USB/Bluetooth em vez de digitado: bipar ja identifica o
+        # gerente automaticamente (nao precisa selecionar da lista antes).
+        try: await db.execute("ALTER TABLE pdv_operadores ADD COLUMN IF NOT EXISTS codigo_barras_hash VARCHAR(200)")
         except Exception as e: pass
         await db.execute("""CREATE TABLE IF NOT EXISTS pdv_turnos (
             id SERIAL PRIMARY KEY, caixa_id INT REFERENCES pdv_caixas(id),
@@ -358,8 +414,8 @@ def abrir_caixa(operador: str, saldo_inicial: float = 0, operador_id: int = None
     return create("caixas", {"operador": operador, "saldo_inicial": saldo_inicial, "status": "aberto", "data_abertura": hoje()})
 
 def fechar_caixa(caixa_id: int, saldo_final: float, operador_id: int = None, senha: str = "",
-                  gerente_pin_id: int = None, pin: str = "") -> dict:
-    fechador = _autorizar_gerencial(operador_id, senha, gerente_pin_id, pin, _ROLES_GERENCIAIS)
+                  gerente_pin_id: int = None, pin: str = "", codigo_barras: str = "") -> dict:
+    fechador = _autorizar_gerencial(operador_id, senha, gerente_pin_id, pin, codigo_barras, _ROLES_GERENCIAIS)
     if fechador.get("error"): return fechador
     nome_fechador = fechador.get("nome", "")
     async def _go():
@@ -519,8 +575,8 @@ def buscar_clientes(q: str, limit: int = 10) -> list:
     except Exception as e: return []
 
 def cancelar_venda(venda_id: int, motivo: str = "", operador: str = "", operador_id: int = None, senha: str = "",
-                    gerente_pin_id: int = None, pin: str = "") -> dict:
-    autorizador = _autorizar_gerencial(operador_id, senha, gerente_pin_id, pin, _ROLES_GERENCIAIS)
+                    gerente_pin_id: int = None, pin: str = "", codigo_barras: str = "") -> dict:
+    autorizador = _autorizar_gerencial(operador_id, senha, gerente_pin_id, pin, codigo_barras, _ROLES_GERENCIAIS)
     if autorizador.get("error"): return autorizador
     operador_registro = autorizador.get("nome") or operador
     async def _go():
@@ -537,12 +593,13 @@ def cancelar_venda(venda_id: int, motivo: str = "", operador: str = "", operador
     except Exception as e: return {"error": str(e)}
 
 def devolver_item_venda(item_id: int, quantidade: float, motivo: str = "", operador: str = "", operador_id: int = None, senha: str = "",
-                         gerente_pin_id: int = None, pin: str = "") -> dict:
+                         gerente_pin_id: int = None, pin: str = "", codigo_barras: str = "") -> dict:
     """Devolucao parcial: remove qtd de um item da venda, ajusta total, registra devolucao.
-    Exige autorizacao gerencial (senha do proprio gerente logado, ou PIN de um
-    gerente chamado ao caixa) — cancelamento/devolucao e' forma comum de
-    fraude ("desconta" a venda depois que o cliente ja pagou e saiu)."""
-    autorizador = _autorizar_gerencial(operador_id, senha, gerente_pin_id, pin, _ROLES_GERENCIAIS)
+    Exige autorizacao gerencial (senha do proprio gerente logado, PIN ou
+    codigo de barras de um gerente chamado ao caixa) — cancelamento/devolucao
+    e' forma comum de fraude ("desconta" a venda depois que o cliente ja
+    pagou e saiu)."""
+    autorizador = _autorizar_gerencial(operador_id, senha, gerente_pin_id, pin, codigo_barras, _ROLES_GERENCIAIS)
     if autorizador.get("error"): return autorizador
     operador_registro = autorizador.get("nome") or operador
     if quantidade is None or quantidade <= 0:
@@ -600,8 +657,8 @@ def _aplicar_sangria(caixa_id: int, valor: float, motivo: str, operador: str) ->
 
 
 def sangria(caixa_id: int, valor: float, motivo: str, operador: str, operador_id: int = None, senha: str = "",
-            gerente_pin_id: int = None, pin: str = "") -> dict:
-    v = _autorizar_gerencial(operador_id, senha, gerente_pin_id, pin, _ROLES_GERENCIAIS)
+            gerente_pin_id: int = None, pin: str = "", codigo_barras: str = "") -> dict:
+    v = _autorizar_gerencial(operador_id, senha, gerente_pin_id, pin, codigo_barras, _ROLES_GERENCIAIS)
     if v.get("error"): return v
     from core.pdv_aprovacoes import MOTIVOS_SANGRIA, precisa_aprovacao, solicitar as solicitar_aprovacao
     if motivo not in MOTIVOS_SANGRIA:
@@ -612,13 +669,13 @@ def sangria(caixa_id: int, valor: float, motivo: str, operador: str, operador_id
     return _aplicar_sangria(caixa_id, valor, motivo, nome_operador)
 
 def suprimento(caixa_id: int, valor: float, motivo: str, operador: str, operador_id: int = None, senha: str = "",
-               gerente_pin_id: int = None, pin: str = "") -> dict:
-    v = _autorizar_gerencial(operador_id, senha, gerente_pin_id, pin, _ROLES_GERENCIAIS)
+               gerente_pin_id: int = None, pin: str = "", codigo_barras: str = "") -> dict:
+    v = _autorizar_gerencial(operador_id, senha, gerente_pin_id, pin, codigo_barras, _ROLES_GERENCIAIS)
     if v.get("error"): return v
     return create("suprimentos", {"caixa_id": caixa_id, "valor": valor, "motivo": motivo, "operador": v.get("nome") or operador})
 
 def realizar_venda(caixa_id: int, itens: list, pagamentos: list, cliente="", cliente_id=None, operador="", operador_id=None,
-                    desconto=0.0, gerente_pin_id: int = None, pin: str = "") -> dict:
+                    desconto=0.0, gerente_pin_id: int = None, pin: str = "", codigo_barras: str = "") -> dict:
     total_itens = sum((i.get("quantidade",1) or 1) * (i.get("valor_unitario",0) or 0) - (i.get("desconto",0) or 0) for i in itens)
     total = round(total_itens - desconto, 2)
 
@@ -632,7 +689,10 @@ def realizar_venda(caixa_id: int, itens: list, pagamentos: list, cliente="", cli
         max_pct = float(op.get("desconto_maximo_percent") or 0) if op and not op.get("error") else 0
         if max_pct > 0:
             autorizado_por_gerente = False
-            if gerente_pin_id and pin:
+            if codigo_barras:
+                v = verificar_codigo_barras_gerencial(codigo_barras, _ROLES_GERENCIAIS)
+                autorizado_por_gerente = not v.get("error")
+            elif gerente_pin_id and pin:
                 v = verificar_pin_gerencial(gerente_pin_id, pin, _ROLES_GERENCIAIS)
                 autorizado_por_gerente = not v.get("error")
             if not autorizado_por_gerente:

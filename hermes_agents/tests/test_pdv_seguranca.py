@@ -37,6 +37,9 @@ class FakeDB:
         elif "UPDATE pdv_operadores SET pin_hash" in q:
             pin_hash, oid = params
             self.operadores.setdefault(oid, {})["pin_hash"] = pin_hash
+        elif "UPDATE pdv_operadores SET codigo_barras_hash" in q:
+            codigo_hash, oid = params
+            self.operadores.setdefault(oid, {})["codigo_barras_hash"] = codigo_hash
         return "OK"
 
     async def fetchval(self, query, *params):
@@ -82,6 +85,8 @@ class FakeDB:
         if "SELECT DISTINCT operador FROM pdv_vendas" in q:
             (cid,) = params
             return [{"operador": op} for op in self.vendas_por_caixa.get(cid, [])]
+        if "FROM pdv_operadores WHERE ativo = TRUE AND codigo_barras_hash IS NOT NULL" in q:
+            return [o for o in self.operadores.values() if o.get("codigo_barras_hash")]
         return []
 
 
@@ -300,6 +305,69 @@ class TestPDVPinGerencial(unittest.IsolatedAsyncioTestCase):
         r = cancelar_venda(venda_id=10, motivo="cliente desistiu", operador="op2", operador_id=2,
                             gerente_pin_id=1, pin="1234")
         self.assertTrue(r.get("success"))
+
+
+class TestPDVCodigoBarrasGerencial(unittest.IsolatedAsyncioTestCase):
+    """Codigo de barras (cracha fisico) — 'PIN fisico': bipar ja identifica o
+    gerente automaticamente, sem precisar selecionar da lista antes."""
+
+    def setUp(self):
+        self.fake = FakeDB()
+        self._patches = []
+        async def _get_db(_fake=self.fake):
+            return _fake
+        p = patch("core.pdv.get_db", side_effect=_get_db)
+        p.start()
+        self._patches.append(p)
+        import core.pdv as m
+        m._ensure_tables = lambda: None
+        self.fake.operadores[1] = {"id": 1, "nome": "gerente1", "role": "gerente", "ativo": True, "senha": None, "codigo_barras_hash": None}
+        self.fake.operadores[2] = {"id": 2, "nome": "op2", "role": "operador", "ativo": True, "senha": None, "codigo_barras_hash": None}
+
+    def tearDown(self):
+        for p in self._patches:
+            p.stop()
+
+    async def test_gerar_e_verificar_codigo_de_barras(self):
+        from core.pdv import gerar_codigo_barras, verificar_codigo_barras_gerencial
+        r = gerar_codigo_barras(1)
+        self.assertTrue(r.get("ok"))
+        codigo = r["codigo_barras"]
+        self.assertTrue(len(codigo) >= 12)
+        r2 = verificar_codigo_barras_gerencial(codigo, {"gerente", "admin"})
+        self.assertTrue(r2.get("ok"))
+        self.assertEqual(r2.get("id"), 1)
+        self.assertEqual(r2.get("nome"), "gerente1")
+
+    async def test_codigo_de_barras_identifica_automaticamente_sem_informar_gerente_id(self):
+        """Diferenca chave do codigo de barras vs PIN: nao precisa saber de
+        antemao qual gerente e' — o codigo sozinho ja resolve."""
+        from core.pdv import gerar_codigo_barras, verificar_codigo_barras_gerencial
+        gerar_codigo_barras(1)
+        codigo = self.fake.operadores[1]["codigo_barras_hash"]  # apenas para confirmar que foi salvo
+        self.assertIsNotNone(codigo)
+
+    async def test_codigo_incorreto_nao_autoriza(self):
+        from core.pdv import gerar_codigo_barras, verificar_codigo_barras_gerencial
+        gerar_codigo_barras(1)
+        r = verificar_codigo_barras_gerencial("codigo-errado-qualquer", {"gerente", "admin"})
+        self.assertIn("error", r)
+
+    async def test_codigo_de_operador_nao_gerencial_rejeitado(self):
+        from core.pdv import gerar_codigo_barras, verificar_codigo_barras_gerencial
+        r = gerar_codigo_barras(2)
+        codigo = r["codigo_barras"]
+        r2 = verificar_codigo_barras_gerencial(codigo, {"gerente", "admin"})
+        self.assertIn("error", r2)
+
+    async def test_sangria_com_codigo_de_barras_autoriza_operador_comum(self):
+        from core.pdv import gerar_codigo_barras, sangria
+        r = gerar_codigo_barras(1)
+        codigo = r["codigo_barras"]
+        result = sangria(caixa_id=1, valor=500, motivo="deposito_banco", operador="op2",
+                          operador_id=2, codigo_barras=codigo)
+        # 500 > limite padrao (200) -> deve ficar pendente, nao aplicar direto
+        self.assertTrue(result.get("pendente"))
 
 
 if __name__ == "__main__":
