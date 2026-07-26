@@ -114,6 +114,29 @@ def status_sync_sku(sku):
     return jsonify(status_sync_sku(sku))
 
 
+@estoque_bp.route('/buscar-codigo', methods=['GET'])
+def estoque_buscar_codigo():
+    """Localiza um produto por codigo de barras OU sku exato — usado pelo fluxo
+    de entrada de estoque via leitor de codigo de barras (bipa e localiza)."""
+    codigo = request.args.get("codigo", "").strip()
+    if not codigo:
+        return jsonify({"erro": "codigo obrigatorio"}), 400
+    conn = _db_sync()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT sku, descricao, codigo_barras,
+               COALESCE((SELECT SUM(quantidade) FROM estoque_lojas WHERE sku = c.sku), 0) AS estoque_total
+        FROM catalogo_produtos c
+        WHERE codigo_barras = %s OR sku = %s
+        LIMIT 1
+    """, (codigo, codigo))
+    row = cur.fetchone()
+    cur.close(); conn.close()
+    if not row:
+        return jsonify({"erro": "produto nao encontrado", "codigo": codigo}), 404
+    return jsonify(dict(row, estoque_total=float(row["estoque_total"])))
+
+
 @estoque_bp.route('/entrada', methods=['POST'])
 def estoque_entrada():
     """Registra entrada de estoque em uma loja."""

@@ -69,6 +69,8 @@ def _ensure_tables():
         await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS fornecedor_nome VARCHAR(200)")
         await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS fornecedor_codigo VARCHAR(50)")
         await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS preco_custo DECIMAL(12,2)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS custo_transporte DECIMAL(12,2)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS preco_venda DECIMAL(12,2)")
         await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS imagens JSONB")
         await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS campos_customizados JSONB")
         await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS estrutura JSONB")

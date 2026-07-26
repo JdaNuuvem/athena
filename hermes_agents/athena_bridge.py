@@ -1671,6 +1671,44 @@ def listar_produtos():
     except Exception as e:
         return jsonify({"erro": str(e), "produtos": [], "total": 0})
 
+@app.route('/api/produtos', methods=['POST'])
+def criar_produto_local():
+    """Cria produto 100% local em catalogo_produtos, sem depender de sync do Bling."""
+    if not _autenticado():
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.json or {}
+    sku = (data.get("sku") or "").strip()
+    descricao = (data.get("descricao") or "").strip()
+    if not sku or not descricao:
+        return jsonify({"error": "sku e descricao sao obrigatorios"}), 400
+
+    campos = {"sku": sku, "descricao": descricao}
+    for campo in ("categoria", "marca", "codigo_barras", "fornecedor_codigo",
+                  "unidade_padrao", "tipo", "estoque_localizacao"):
+        if data.get(campo):
+            campos[campo] = data[campo]
+    for campo in ("preco_custo", "custo_transporte", "preco_venda",
+                  "estoque_minimo", "estoque_maximo"):
+        if data.get(campo) not in (None, ""):
+            try: campos[campo] = float(data[campo])
+            except (TypeError, ValueError): pass
+    if data.get("fornecedor_id") not in (None, ""):
+        try: campos["fornecedor_id"] = int(data["fornecedor_id"])
+        except (TypeError, ValueError): pass
+
+    from core.catalogo import criar
+    resultado = criar(campos)
+    if resultado.get("error"):
+        msg = resultado["error"]
+        status = 409 if "unique" in msg.lower() or "duplicate" in msg.lower() else 500
+        return jsonify({"error": f"SKU ja existe" if status == 409 else msg}), status
+    try:
+        from core.seguranca import auditar
+        auditar("criar", "produtos", "produto", dados_depois=campos)
+    except Exception:
+        pass
+    return jsonify({"success": True, "produto": resultado}), 201
+
 @app.route('/api/produtos/<sku>', methods=['PUT'])
 def editar_produto(sku):
     if not _autenticado():
@@ -1685,7 +1723,8 @@ def editar_produto(sku):
                   "codigo_barras","gtin_embalagem","descricao_curta","descricao_complementar",
                   "peso_liquido","largura","altura","profundidade","unidade_medida_dimensao",
                   "volumes","itens_por_caixa","cfop_padrao","observacoes","link_externo",
-                  "fornecedor_nome","fornecedor_codigo","preco_custo",
+                  "fornecedor_nome","fornecedor_codigo","fornecedor_id","preco_custo",
+                  "custo_transporte","preco_venda",
                   "estoque_minimo","estoque_maximo","estoque_localizacao"]
         for campo in campos:
             if campo in data and data[campo] is not None:
@@ -1716,8 +1755,11 @@ def detalhe_produto(sku):
     try:
         conn = _db_sync(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("""
-            SELECT c.*, COALESCE(a.preco,0) AS valor
-            FROM catalogo_produtos c LEFT JOIN anuncios a ON a.sku=c.sku AND a.marketplace='bling' WHERE c.sku=%s
+            SELECT c.*, COALESCE(a.preco,0) AS valor, cf.nome AS fornecedor_cadastro_nome
+            FROM catalogo_produtos c
+            LEFT JOIN anuncios a ON a.sku=c.sku AND a.marketplace='bling'
+            LEFT JOIN cad_fornecedores cf ON cf.id = c.fornecedor_id
+            WHERE c.sku=%s
         """, (sku,))
         p = cur.fetchone()
         if not p:
@@ -1742,7 +1784,7 @@ def detalhe_produto(sku):
         for k in ("peso_gramas","tempo_ciclo_segundos","valor",
                   "peso_bruto","peso_liquido","largura","altura","profundidade",
                   "percentual_tributos","valor_base_st_retencao","valor_st_retencao","valor_icms_st",
-                  "preco_custo","estoque_minimo","estoque_maximo"):
+                  "preco_custo","custo_transporte","preco_venda","estoque_minimo","estoque_maximo"):
             if k in p and p[k] is not None: p[k] = float(p[k])
         cur.close(); conn.close()
         return jsonify(p)
