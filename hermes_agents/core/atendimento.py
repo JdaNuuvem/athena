@@ -77,7 +77,11 @@ def _get(t: str, id: int) -> dict:
     except Exception as e: return {"error": str(e)}
 
 def _create(t: str, d: dict) -> dict:
-    keys = list(d.keys()); vals = list(d.values())
+    # ponytail: NAO usar list(...) — este modulo define list(t) no nivel de
+    # modulo (funcao publica de CRUD), que sombreia o builtin para qualquer
+    # funcao neste arquivo. list(d.keys()) chamaria list(t) com um dict_keys,
+    # gerando um INSERT vazio (colunas/valores nulos) sem erro visivel.
+    keys = [*d.keys()]; vals = [*d.values()]
     ph = ", ".join(f"${i+1}" for i in range(len(keys)))
     cols = ", ".join(keys)
     async def _go():
@@ -89,7 +93,7 @@ def _create(t: str, d: dict) -> dict:
 
 def _update(t: str, id: int, d: dict) -> dict:
     sets = ", ".join(f"{k} = ${i+1}" for i, k in enumerate(d.keys()))
-    vals = list(d.values()) + [id]
+    vals = [*d.values(), id]
     async def _go():
         db = await get_db()
         row = await db.fetchrow(f"UPDATE {t} SET {sets} WHERE id = ${len(vals)} RETURNING *", *vals)

@@ -176,8 +176,10 @@ def _get(tabela: str, id: int) -> dict:
         return {"error": str(e)}
 
 def _create(tabela: str, dados: dict) -> dict:
-    keys = list(dados.keys())
-    vals = list(dados.values())
+    # ponytail: NAO usar list(...) — este modulo define list(t) no nivel de
+    # modulo, que sombreia o builtin para qualquer funcao neste arquivo.
+    keys = [*dados.keys()]
+    vals = [*dados.values()]
     placeholders = ", ".join(f"${i+1}" for i in range(len(keys)))
     cols = ", ".join(keys)
     async def _go():
@@ -191,7 +193,7 @@ def _create(tabela: str, dados: dict) -> dict:
 
 def _update(tabela: str, id: int, dados: dict) -> dict:
     sets = ", ".join(f"{k} = ${i+1}" for i, k in enumerate(dados.keys()))
-    vals = list(dados.values()) + [id]
+    vals = [*dados.values(), id]
     async def _go():
         db = await get_db()
         row = await db.fetchrow(f"UPDATE rh_{tabela} SET {sets} WHERE id = ${len(vals)} RETURNING *", *vals)
