@@ -209,7 +209,9 @@ def pdv_criar_orcamento():
     return jsonify(criar_orcamento(
         cliente=data.get("cliente",""), cliente_id=data.get("cliente_id"),
         itens=data.get("itens",[]), operador=data.get("operador",""),
-        operador_id=data.get("operador_id"), desconto=float(data.get("desconto",0))
+        operador_id=data.get("operador_id"), desconto=float(data.get("desconto",0)),
+        gerente_pin_id=data.get("gerente_pin_id"), pin=data.get("pin",""),
+        codigo_barras=data.get("codigo_barras","")
     ))
 
 @pdv_bp.route('/orcamento/<int:id>/converter', methods=['POST'])
@@ -217,7 +219,8 @@ def pdv_converter_orcamento(id):
     data = request.json or {}
     from core.pdv import converter_orcamento
     return jsonify(converter_orcamento(id, data.get("caixa_id",0), data.get("pagamentos",[]),
-        data.get("operador",""), data.get("operador_id")))
+        data.get("operador",""), data.get("operador_id"),
+        data.get("gerente_pin_id"), data.get("pin",""), data.get("codigo_barras","")))
 
 @pdv_bp.route('/venda/<int:id>/cupom', methods=['GET'])
 def pdv_cupom(id):

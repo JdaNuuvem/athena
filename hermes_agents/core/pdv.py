@@ -674,39 +674,53 @@ def suprimento(caixa_id: int, valor: float, motivo: str, operador: str, operador
     if v.get("error"): return v
     return create("suprimentos", {"caixa_id": caixa_id, "valor": valor, "motivo": motivo, "operador": v.get("nome") or operador})
 
+def _validar_desconto_operador(operador_id, itens: list, desconto: float, total_itens: float,
+                                gerente_pin_id: int = None, pin: str = "", codigo_barras: str = "") -> dict:
+    """Valida desconto maximo do operador — total agregado E por item
+    individual (so' validar o total permitia burlar o limite concentrando o
+    desconto inteiro em um item). Reusada por realizar_venda, criar_orcamento
+    e converter_orcamento — as tres portas que geram uma venda finalizada;
+    validar so' em realizar_venda deixava orcamento->conversao como um
+    caminho para contornar o limite sem passar pela checagem.
+    Um gerente pode autorizar acima do limite via PIN ou codigo de barras,
+    sem o operador precisar fazer logout/login. Retorna {} se ok, ou
+    {"error": ...} se o desconto exceder o limite sem autorizacao."""
+    if not operador_id:
+        return {}
+    op = _get("pdv_operadores", operador_id)
+    max_pct = float(op.get("desconto_maximo_percent") or 0) if op and not op.get("error") else 0
+    if max_pct <= 0:
+        return {}
+    autorizado_por_gerente = False
+    if codigo_barras:
+        v = verificar_codigo_barras_gerencial(codigo_barras, _ROLES_GERENCIAIS)
+        autorizado_por_gerente = not v.get("error")
+    elif gerente_pin_id and pin:
+        v = verificar_pin_gerencial(gerente_pin_id, pin, _ROLES_GERENCIAIS)
+        autorizado_por_gerente = not v.get("error")
+    if autorizado_por_gerente:
+        return {}
+    if desconto > 0 and total_itens > 0:
+        pct_desconto = (desconto / total_itens) * 100
+        if pct_desconto > max_pct:
+            return {"error": f"Desconto maximo permitido: {max_pct:.1f}% (tentativa: {pct_desconto:.1f}%)"}
+    for item in itens:
+        item_desconto = item.get("desconto", 0) or 0
+        subtotal_item = (item.get("quantidade", 1) or 1) * (item.get("valor_unitario", 0) or 0)
+        if item_desconto > 0 and subtotal_item > 0:
+            pct_item = (item_desconto / subtotal_item) * 100
+            if pct_item > max_pct:
+                return {"error": f"Desconto maximo permitido: {max_pct:.1f}% (item '{item.get('descricao','')}' com {pct_item:.1f}%)"}
+    return {}
+
+
 def realizar_venda(caixa_id: int, itens: list, pagamentos: list, cliente="", cliente_id=None, operador="", operador_id=None,
                     desconto=0.0, gerente_pin_id: int = None, pin: str = "", codigo_barras: str = "") -> dict:
     total_itens = sum((i.get("quantidade",1) or 1) * (i.get("valor_unitario",0) or 0) - (i.get("desconto",0) or 0) for i in itens)
     total = round(total_itens - desconto, 2)
 
-    # validar desconto maximo do operador — total da venda E por item individual.
-    # so' validar o total agregado permitia burlar o limite concentrando o
-    # desconto inteiro em um unico item (o desconto por item nunca era checado).
-    # Um gerente pode autorizar via PIN um desconto acima do limite do operador
-    # (gerente_pin_id + pin), sem precisar o operador fazer logout/login.
-    if operador_id:
-        op = _get("pdv_operadores", operador_id)
-        max_pct = float(op.get("desconto_maximo_percent") or 0) if op and not op.get("error") else 0
-        if max_pct > 0:
-            autorizado_por_gerente = False
-            if codigo_barras:
-                v = verificar_codigo_barras_gerencial(codigo_barras, _ROLES_GERENCIAIS)
-                autorizado_por_gerente = not v.get("error")
-            elif gerente_pin_id and pin:
-                v = verificar_pin_gerencial(gerente_pin_id, pin, _ROLES_GERENCIAIS)
-                autorizado_por_gerente = not v.get("error")
-            if not autorizado_por_gerente:
-                if desconto > 0 and total_itens > 0:
-                    pct_desconto = (desconto / total_itens) * 100
-                    if pct_desconto > max_pct:
-                        return {"error": f"Desconto maximo permitido: {max_pct:.1f}% (tentativa: {pct_desconto:.1f}%)"}
-                for item in itens:
-                    item_desconto = item.get("desconto", 0) or 0
-                    subtotal_item = (item.get("quantidade", 1) or 1) * (item.get("valor_unitario", 0) or 0)
-                    if item_desconto > 0 and subtotal_item > 0:
-                        pct_item = (item_desconto / subtotal_item) * 100
-                        if pct_item > max_pct:
-                            return {"error": f"Desconto maximo permitido: {max_pct:.1f}% (item '{item.get('descricao','')}' com {pct_item:.1f}%)"}
+    erro = _validar_desconto_operador(operador_id, itens, desconto, total_itens, gerente_pin_id, pin, codigo_barras)
+    if erro: return erro
 
     # ponytail: transacao atomica — se item/pgto falhar, venda inteira rollback
     async def _go():
@@ -794,10 +808,19 @@ def dashboard() -> dict:
 
 # ── Orcamento / Pre-venda ──
 
-def criar_orcamento(cliente: str = "", cliente_id=None, itens: list = None, operador: str = "", operador_id=None, desconto: float = 0) -> dict:
-    """Cria venda com status 'orcamento' — igual a venda normal, mas sem caixa_id"""
-    total_itens = sum((i.get("quantidade",1) or 1) * (i.get("valor_unitario",0) or 0) - (i.get("desconto",0) or 0) for i in (itens or []))
+def criar_orcamento(cliente: str = "", cliente_id=None, itens: list = None, operador: str = "", operador_id=None, desconto: float = 0,
+                     gerente_pin_id: int = None, pin: str = "", codigo_barras: str = "") -> dict:
+    """Cria venda com status 'orcamento' — igual a venda normal, mas sem caixa_id.
+    Valida o mesmo limite de desconto de realizar_venda — sem isso, orcamento
+    virava uma porta lateral para aplicar qualquer desconto e depois converter
+    em venda finalizada sem nunca passar pela checagem."""
+    itens = itens or []
+    total_itens = sum((i.get("quantidade",1) or 1) * (i.get("valor_unitario",0) or 0) - (i.get("desconto",0) or 0) for i in itens)
     total = round(total_itens - desconto, 2)
+
+    erro = _validar_desconto_operador(operador_id, itens, desconto, total_itens, gerente_pin_id, pin, codigo_barras)
+    if erro: return erro
+
     async def _go():
         db = await get_db()
         async with db.acquire() as conn:
@@ -816,8 +839,31 @@ def criar_orcamento(cliente: str = "", cliente_id=None, itens: list = None, oper
     try: return run_async(_go())
     except Exception as e: return {"error": str(e)}
 
-def converter_orcamento(venda_id: int, caixa_id: int, pagamentos: list, operador: str = "", operador_id=None) -> dict:
-    """Converte orcamento em venda finalizada, vinculando ao caixa e registrando pagamentos"""
+def converter_orcamento(venda_id: int, caixa_id: int, pagamentos: list, operador: str = "", operador_id=None,
+                         gerente_pin_id: int = None, pin: str = "", codigo_barras: str = "") -> dict:
+    """Converte orcamento em venda finalizada, vinculando ao caixa e registrando pagamentos.
+    Revalida o limite de desconto do operador (o orcamento pode ter sido
+    criado por outra sessao, ou o limite do operador pode ter mudado desde
+    a criacao) — defesa em profundidade alem da checagem em criar_orcamento."""
+    async def _buscar():
+        db = await get_db()
+        venda = await db.fetchrow("SELECT * FROM pdv_vendas WHERE id = $1", venda_id)
+        itens = await db.fetch("SELECT * FROM pdv_itens WHERE venda_id = $1", venda_id)
+        return venda, [dict(i) for i in itens]
+    venda_atual, itens_atuais = run_async(_buscar())
+    if not venda_atual:
+        return {"error": "Orcamento nao encontrado"}
+    if venda_atual["status"] != "orcamento":
+        return {"error": "Venda nao e um orcamento"}
+    desconto_total = float(venda_atual["desconto"] or 0)
+    total_itens_atual = sum(float(i.get("valor_unitario") or 0) * float(i.get("quantidade") or 1) for i in itens_atuais)
+    itens_para_validar = [{"descricao": i.get("descricao", ""), "quantidade": float(i.get("quantidade") or 1),
+                            "valor_unitario": float(i.get("valor_unitario") or 0), "desconto": float(i.get("desconto") or 0)}
+                           for i in itens_atuais]
+    erro = _validar_desconto_operador(operador_id, itens_para_validar, desconto_total, total_itens_atual,
+                                       gerente_pin_id, pin, codigo_barras)
+    if erro: return erro
+
     async def _go():
         db = await get_db()
         venda = await db.fetchrow("SELECT * FROM pdv_vendas WHERE id = $1", venda_id)

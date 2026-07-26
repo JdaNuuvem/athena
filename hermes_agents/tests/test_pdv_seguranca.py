@@ -8,6 +8,17 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from unittest.mock import patch, AsyncMock
 
 
+class _FakeTransaction:
+    async def __aenter__(self): return None
+    async def __aexit__(self, *a): return None
+
+
+class _FakeAcquire:
+    def __init__(self, db): self.db = db
+    async def __aenter__(self): return self.db
+    async def __aexit__(self, *a): return None
+
+
 class FakeDB:
     def __init__(self):
         self.operadores = {}  # id -> dict
@@ -16,6 +27,13 @@ class FakeDB:
         self.sangria_aprovacoes = []
         self.vendas_por_caixa = {}  # caixa_id -> list[operador]
         self.config = {}
+        self.orcamentos = {}  # id -> dict, usado por criar_orcamento nos testes
+
+    def acquire(self):
+        return _FakeAcquire(self)
+
+    def transaction(self):
+        return _FakeTransaction()
 
     async def execute(self, query, *params):
         q = " ".join(query.split())
@@ -71,6 +89,13 @@ class FakeDB:
             row = {"id": len(self.sangrias) + 1, "caixa_id": caixa_id, "valor": valor,
                    "motivo": motivo, "operador": operador}
             self.sangrias.append(row)
+            return row
+        if "INSERT INTO pdv_vendas" in q:
+            cliente, cliente_id, total, desconto, operador, data = params
+            row = {"id": len(self.orcamentos) + 1, "cliente": cliente, "cliente_id": cliente_id,
+                   "total": total, "desconto": desconto, "operador": operador,
+                   "status": "orcamento", "tipo": "orcamento", "data": data}
+            self.orcamentos[row["id"]] = row
             return row
         if "UPDATE pdv_caixas SET status='fechado'" in q:
             saldo_final, diferenca, operador_fechamento, cid = params
@@ -205,6 +230,68 @@ class TestPDVDescontoPorItem(unittest.IsolatedAsyncioTestCase):
                             pagamentos=[], operador="op1", operador_id=1, desconto=0)
         self.assertIn("error", r)
         self.assertIn("Produto X", r["error"])
+
+    async def test_orcamento_com_desconto_acima_do_limite_bloqueado(self):
+        """Antes desta correcao, criar_orcamento() nao validava desconto algum
+        — dava para criar um orcamento com desconto de 100% e converter em
+        venda finalizada sem nunca passar pela checagem de realizar_venda."""
+        from core.pdv import criar_orcamento
+        r = criar_orcamento(itens=[{"quantidade": 1, "valor_unitario": 100, "desconto": 0}],
+                             operador="op1", operador_id=1, desconto=50)
+        self.assertIn("error", r)
+
+    async def test_orcamento_dentro_do_limite_aplica(self):
+        from core.pdv import criar_orcamento
+        r = criar_orcamento(itens=[{"quantidade": 1, "valor_unitario": 100, "desconto": 0}],
+                             operador="op1", operador_id=1, desconto=5)
+        self.assertNotIn("error", r)
+        self.assertTrue(r.get("orcamento"))
+
+
+class TestPDVConverterOrcamento(unittest.IsolatedAsyncioTestCase):
+    """converter_orcamento() revalida o limite de desconto — defesa em
+    profundidade alem da checagem em criar_orcamento (o orcamento poderia
+    em tese ser manipulado direto no banco entre a criacao e a conversao)."""
+
+    def setUp(self):
+        self.fake = FakeDB()
+        self._patches = []
+        async def _get_db(_fake=self.fake):
+            return _fake
+        p = patch("core.pdv.get_db", side_effect=_get_db)
+        p.start()
+        self._patches.append(p)
+        import core.pdv as m
+        m._ensure_tables = lambda: None
+        self.fake.operadores[1] = {"id": 1, "nome": "op1", "role": "operador", "ativo": True, "senha": None, "desconto_maximo_percent": 10}
+
+        self.fake.orcamento = {"id": 10, "status": "orcamento", "desconto": 50, "total": 50}
+        self.fake.itens_orcamento = [{"id": 1, "venda_id": 10, "descricao": "Produto X", "quantidade": 1, "valor_unitario": 100, "desconto": 0}]
+
+        async def fetchrow(query, *params):
+            q = " ".join(query.split())
+            if "FROM pdv_operadores WHERE id" in q:
+                (oid,) = params
+                return self.fake.operadores.get(oid)
+            if "FROM pdv_vendas WHERE id" in q:
+                return self.fake.orcamento
+            return None
+        async def fetch(query, *params):
+            q = " ".join(query.split())
+            if "FROM pdv_itens WHERE venda_id" in q:
+                return self.fake.itens_orcamento
+            return []
+        self.fake.fetchrow = fetchrow
+        self.fake.fetch = fetch
+
+    def tearDown(self):
+        for p in self._patches:
+            p.stop()
+
+    async def test_converter_orcamento_com_desconto_acima_do_limite_bloqueado(self):
+        from core.pdv import converter_orcamento
+        r = converter_orcamento(venda_id=10, caixa_id=1, pagamentos=[], operador="op1", operador_id=1)
+        self.assertIn("error", r)
 
 
 class TestPDVFecharCaixa(unittest.IsolatedAsyncioTestCase):
