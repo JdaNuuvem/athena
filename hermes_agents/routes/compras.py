@@ -52,7 +52,11 @@ def compras_delete(tabela, id):
 
 @compras_bp.route("/solicitacoes/<int:id>/aprovar", methods=["POST"])
 def compras_aprovar(id):
-    data = request.json or {}
-    aprovador = data.get("aprovador", "Admin")
     from core.compras import aprovar_solicitacao
-    return jsonify(aprovar_solicitacao(id, aprovador))
+    from core.rbac import requer_permissao, usuario_atual_da_request
+
+    @requer_permissao("compras.aprovar")
+    def _go():
+        usuario = usuario_atual_da_request()
+        return jsonify(aprovar_solicitacao(id, usuario["user_id"], usuario["nome"]))
+    return _go()

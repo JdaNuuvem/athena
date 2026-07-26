@@ -18,6 +18,8 @@ def _ensure_tables():
             status VARCHAR(30) DEFAULT 'pendente', aprovado_por VARCHAR(100), aprovado_em TIMESTAMP,
             observacoes TEXT, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW()
         )""")
+        try: await db.execute("ALTER TABLE compras_solicitacoes ADD COLUMN IF NOT EXISTS aprovado_por_id INT")
+        except Exception: pass
         await db.execute("""CREATE TABLE IF NOT EXISTS compras_cotacoes (
             id SERIAL PRIMARY KEY, solicitacao_id INT REFERENCES compras_solicitacoes(id),
             fornecedor_id INT REFERENCES compras_fornecedores(id),
@@ -117,8 +119,14 @@ def delete(t: str, i: int): return _delete(f"compras_{t}", i)
 
 # ── Aprovacao ──
 
-def aprovar_solicitacao(id: int, aprovador: str) -> dict:
-    return update("solicitacoes", id, {"status": "aprovada", "aprovado_por": aprovador, "aprovado_em": hoje()})
+def aprovar_solicitacao(id: int, aprovador_id, aprovador_nome: str) -> dict:
+    """aprovador_id/aprovador_nome devem vir do usuario autenticado da request
+    (usuario_atual_da_request), nunca de texto livre enviado pelo cliente —
+    senao qualquer pessoa logada poderia "aprovar como" qualquer nome."""
+    return update("solicitacoes", id, {
+        "status": "aprovada", "aprovado_por": aprovador_nome,
+        "aprovado_por_id": aprovador_id, "aprovado_em": hoje(),
+    })
 
 def confirmar_recebimento(id: int) -> dict:
     r = update("recebimentos", id, {"status": "confirmado"})
