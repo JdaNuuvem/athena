@@ -302,6 +302,64 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ sku, loja, quantidade, motivo: motivo || "" }),
     }),
+  estoqueMotivos: () =>
+    request<{ entrada: string[]; saida: string[]; transferencia: string[]; limite_aprovacao_unidades: number }>("/api/estoque/motivos"),
+
+  // Estoque — saida com alcada de aprovacao
+  estoqueSaida: (sku: string, loja: string, quantidade: number, motivo: string) =>
+    request<{ ok?: boolean; atual?: number; pendente?: boolean; aprovacao_id?: number; erro?: string }>("/api/estoque/saida", {
+      method: "POST",
+      body: JSON.stringify({ sku, loja, quantidade, motivo }),
+    }),
+  estoqueListarAprovacoes: (status = "pendente", loja?: string) =>
+    request<{ aprovacoes: EstoqueAprovacao[] }>(`/api/estoque/aprovacoes?status=${status}${loja ? `&loja=${encodeURIComponent(loja)}` : ""}`),
+  estoqueAprovar: (id: number) =>
+    request<{ ok?: boolean; atual?: number; erro?: string }>(`/api/estoque/aprovacoes/${id}/aprovar`, { method: "POST" }),
+  estoqueRejeitar: (id: number, motivoRejeicao?: string) =>
+    request<{ ok?: boolean; erro?: string }>(`/api/estoque/aprovacoes/${id}/rejeitar`, {
+      method: "POST",
+      body: JSON.stringify({ motivo_rejeicao: motivoRejeicao || "" }),
+    }),
+
+  // Estoque — transferencia entre lojas com confirmacao em duas pontas
+  estoqueTransferir: (sku: string, origem: string, destino: string, quantidade: number, motivo: string) =>
+    request<{ transferencia_id?: number; status?: string; pendente_aprovacao?: boolean; erro?: string }>("/api/estoque/transferir", {
+      method: "POST",
+      body: JSON.stringify({ sku, origem, destino, quantidade, motivo }),
+    }),
+  estoqueListarTransferencias: (status?: string, loja?: string) => {
+    const q = new URLSearchParams();
+    if (status) q.set("status", status);
+    if (loja) q.set("loja", loja);
+    return request<{ transferencias: EstoqueTransferencia[] }>(`/api/estoque/transferencias?${q}`);
+  },
+  estoqueTransferenciaAprovar: (id: number) =>
+    request<{ ok?: boolean; erro?: string }>(`/api/estoque/transferencias/${id}/aprovar`, { method: "POST" }),
+  estoqueTransferenciaRejeitar: (id: number, motivoRejeicao?: string) =>
+    request<{ ok?: boolean; erro?: string }>(`/api/estoque/transferencias/${id}/rejeitar`, {
+      method: "POST",
+      body: JSON.stringify({ motivo_rejeicao: motivoRejeicao || "" }),
+    }),
+  estoqueTransferenciaConfirmar: (id: number, quantidadeRecebida: number) =>
+    request<{ ok?: boolean; status?: string; discrepancia?: boolean; erro?: string }>(`/api/estoque/transferencias/${id}/confirmar`, {
+      method: "POST",
+      body: JSON.stringify({ quantidade_recebida: quantidadeRecebida }),
+    }),
+
+  // Estoque — contagem ciclica
+  estoqueContagemSugestoes: (loja?: string) =>
+    request<{ sugestoes: EstoqueContagemSugestao[] }>(`/api/estoque/contagem/sugestoes${loja ? `?loja=${encodeURIComponent(loja)}` : ""}`),
+  estoqueContagemRegistrar: (sku: string, loja: string, quantidadeContada: number) =>
+    request<{ diferenca?: number; ajuste_status?: string; erro?: string }>("/api/estoque/contagem/registrar", {
+      method: "POST",
+      body: JSON.stringify({ sku, loja, quantidade_contada: quantidadeContada }),
+    }),
+  estoqueContagemHistorico: (loja?: string) =>
+    request<{ historico: EstoqueContagemHistorico[] }>(`/api/estoque/contagem/historico${loja ? `?loja=${encodeURIComponent(loja)}` : ""}`),
+
+  // Estoque — relatorio de discrepancias
+  estoqueRelatorioDiscrepancias: (dias = 30) =>
+    request<{ por_loja: EstoqueDiscrepanciaLoja[]; por_operador: EstoqueDiscrepanciaOperador[] }>(`/api/estoque/relatorio-discrepancias?dias=${dias}`),
 
   // Lojas
   lojas: (periodo?: number) =>
@@ -491,6 +549,80 @@ export interface ShopeeDashboardLoja {
   anuncios_total: number;
   anuncios_ativos: number;
   produtos_estoque_baixo: number;
+}
+
+export interface EstoqueAprovacao {
+  id: number;
+  tipo: string;
+  sku: string;
+  produto_nome?: string;
+  loja: string;
+  quantidade: number;
+  motivo: string;
+  status: string;
+  usuario_solicitante_id: number | null;
+  usuario_solicitante_nome: string | null;
+  usuario_aprovador_nome: string | null;
+  motivo_rejeicao: string | null;
+  criado_em: string;
+  resolvido_em: string | null;
+}
+
+export interface EstoqueTransferencia {
+  id: number;
+  sku: string;
+  produto_nome?: string;
+  loja_origem: string;
+  loja_destino: string;
+  quantidade_solicitada: number;
+  quantidade_recebida: number | null;
+  motivo: string;
+  status: string;
+  usuario_solicitante_nome: string | null;
+  usuario_aprovador_nome: string | null;
+  usuario_confirmador_nome: string | null;
+  criado_em: string;
+}
+
+export interface EstoqueContagemSugestao {
+  sku: string;
+  loja: string;
+  quantidade: number;
+  nome: string;
+  preco_custo: number;
+  valor_total: number;
+  ultima_contagem: string | null;
+}
+
+export interface EstoqueContagemHistorico {
+  id: number;
+  sku: string;
+  produto_nome?: string;
+  loja: string;
+  quantidade_sistema: number;
+  quantidade_contada: number;
+  diferenca: number;
+  ajuste_status: string;
+  usuario_nome: string | null;
+  criado_em: string;
+}
+
+export interface EstoqueDiscrepanciaLoja {
+  loja: string;
+  saidas_aprovadas_qtd: number;
+  saidas_aprovadas_eventos: number;
+  transferencias_com_discrepancia: number;
+  contagens_com_falta: number;
+  unidades_falta_contagem: number;
+}
+
+export interface EstoqueDiscrepanciaOperador {
+  operador: string;
+  saidas_grandes_solicitadas: number;
+  saidas_grandes_aprovadas_qtd: number;
+  saidas_grandes_rejeitadas: number;
+  contagens_com_falta: number;
+  unidades_falta_contagem: number;
 }
 
 export interface BlingProduto {
