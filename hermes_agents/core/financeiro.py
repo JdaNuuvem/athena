@@ -1,9 +1,32 @@
 """Financeiro Core — Fluxo Caixa, Receber, Pagar, Boletos, PIX, Conciliação, Banco, DRE"""
 from core import get_db, run_async, log, hoje
+from core.config import get_config
 
 AGENT = "Financeiro Core"
 
 FIN_TABLES = ["fluxo_caixa", "contas_receber", "contas_pagar", "boletos", "pix", "conciliacao", "bancos", "centro_custo", "plano_contas", "dre"]
+
+# ── Alçada de aprovação para pagamentos/recebimentos de valor alto ──
+# Sem isso, qualquer usuario com permissao financeiro.criar/editar podia
+# executar (marcar como pago/concluido) um lancamento de qualquer valor —
+# a permissao financeiro.aprovar ja existia no RBAC mas nao era checada em
+# lugar nenhum.
+TABELAS_PAGAMENTO = {"contas_pagar", "boletos", "pix"}
+STATUS_EXECUTADO = {"pago", "concluido", "compensado"}
+STATUS_PADRAO_TABELA = {"contas_pagar": "pendente", "boletos": "pendente", "pix": "concluido"}
+LIMITE_APROVACAO_PADRAO = 5000.0
+
+def limite_aprovacao_pagamento() -> float:
+    val = get_config("financeiro", "limite_aprovacao_pagamento")
+    try:
+        return float(val) if val not in (None, "") else LIMITE_APROVACAO_PADRAO
+    except (TypeError, ValueError):
+        return LIMITE_APROVACAO_PADRAO
+
+def _exige_aprovacao(tabela: str, valor: float, status: str) -> bool:
+    return (tabela in TABELAS_PAGAMENTO
+            and str(status or "").lower() in STATUS_EXECUTADO
+            and valor >= limite_aprovacao_pagamento())
 
 def _ensure_tables():
     async def _go():
@@ -118,6 +141,12 @@ def _ensure_tables():
                 ('1', 'ATIVO', 'sintetica', 'devedora'),('1.1', 'Ativo Circulante', 'sintetica', 'devedora'),('1.1.1', 'Caixa', 'analitica', 'devedora'),('1.1.2', 'Bancos', 'analitica', 'devedora'),
                 ('2', 'PASSIVO', 'sintetica', 'credora'),('2.1', 'Passivo Circulante', 'sintetica', 'credora'),('2.1.1', 'Fornecedores', 'analitica', 'credora'),
                 ('3', 'RECEITAS', 'sintetica', 'credora'),('3.1', 'Vendas', 'analitica', 'credora'),('4', 'DESPESAS', 'sintetica', 'devedora'),('4.1', 'Custos Fixos', 'analitica', 'devedora')""")
+        for _tabela in ("fin_contas_pagar", "fin_boletos", "fin_pix"):
+            try: await db.execute(f"ALTER TABLE {_tabela} ADD COLUMN IF NOT EXISTS aprovado_por VARCHAR(100)")
+            except Exception: pass
+            try: await db.execute(f"ALTER TABLE {_tabela} ADD COLUMN IF NOT EXISTS aprovado_por_id INT")
+            except Exception: pass
+
         count = await db.fetchval("SELECT COUNT(*) FROM fin_dre")
         if count == 0:
             mes = hoje()[:7]
@@ -190,6 +219,30 @@ def get(tabela: str, id: int): return _get(f"fin_{tabela}", id)
 def create(tabela: str, data: dict): return _create(f"fin_{tabela}", data)
 def update(tabela: str, id: int, data: dict): return _update(f"fin_{tabela}", id, data)
 def delete(tabela: str, id: int): return _delete(f"fin_{tabela}", id)
+
+# ── Criação/atualização com alçada ──
+
+def criar_pagamento(tabela: str, dados: dict, usuario_id=None, usuario_nome: str = "", tem_permissao_aprovar: bool = False) -> dict:
+    valor = float(dados.get("valor") or 0)
+    status = dados.get("status") or STATUS_PADRAO_TABELA.get(tabela, "")
+    if _exige_aprovacao(tabela, valor, status):
+        if not tem_permissao_aprovar:
+            return {"error": f"Lancamento de R$ {valor:.2f} exige aprovacao (limite: R$ {limite_aprovacao_pagamento():.2f})"}
+        dados = {**dados, "aprovado_por": usuario_nome, "aprovado_por_id": usuario_id}
+    return create(tabela, dados)
+
+def atualizar_pagamento(tabela: str, id: int, dados: dict, usuario_id=None, usuario_nome: str = "", tem_permissao_aprovar: bool = False) -> dict:
+    if "status" in dados or "valor" in dados:
+        atual = get(tabela, id)
+        if atual.get("error"):
+            return atual
+        status = dados.get("status") if "status" in dados else atual.get("status")
+        valor = float(dados.get("valor") if dados.get("valor") is not None else (atual.get("valor") or 0))
+        if _exige_aprovacao(tabela, valor, status):
+            if not tem_permissao_aprovar:
+                return {"error": f"Lancamento de R$ {valor:.2f} exige aprovacao (limite: R$ {limite_aprovacao_pagamento():.2f})"}
+            dados = {**dados, "aprovado_por": usuario_nome, "aprovado_por_id": usuario_id}
+    return update(tabela, id, dados)
 
 # ── Queries especiais ──
 

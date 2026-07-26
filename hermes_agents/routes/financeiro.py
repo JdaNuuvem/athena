@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+from core.rbac import requer_permissao, usuario_atual_da_request, usuario_tem_permissao
 
 financeiro_bp = Blueprint("financeiro", __name__, url_prefix="/api/financeiro")
 
@@ -13,13 +14,19 @@ def fin_list(tabela):
 
 @financeiro_bp.route("/<tabela>", methods=["POST"])
 def fin_create(tabela):
-    from core.financeiro import create as fin_create_fn, FIN_TABLES
+    from core.financeiro import criar_pagamento, FIN_TABLES
     if tabela not in FIN_TABLES:
         return jsonify({"error": "Tabela invalida"}), 404
     data = request.json or {}
     if not data:
         return jsonify({"error": "Dados obrigatorios"}), 400
-    return jsonify(fin_create_fn(tabela, data))
+
+    @requer_permissao("financeiro.criar")
+    def _go():
+        usuario = usuario_atual_da_request()
+        tem_aprovar = usuario_tem_permissao("financeiro.aprovar")
+        return jsonify(criar_pagamento(tabela, data, usuario["user_id"], usuario["nome"], tem_aprovar))
+    return _go()
 
 
 @financeiro_bp.route("/<tabela>/<int:id>", methods=["GET"])
@@ -32,11 +39,17 @@ def fin_get(tabela, id):
 
 @financeiro_bp.route("/<tabela>/<int:id>", methods=["PUT"])
 def fin_update(tabela, id):
-    from core.financeiro import update as fin_update_fn, FIN_TABLES
+    from core.financeiro import atualizar_pagamento, FIN_TABLES
     if tabela not in FIN_TABLES:
         return jsonify({"error": "Tabela invalida"}), 404
     data = request.json or {}
-    return jsonify(fin_update_fn(tabela, id, data))
+
+    @requer_permissao("financeiro.editar")
+    def _go():
+        usuario = usuario_atual_da_request()
+        tem_aprovar = usuario_tem_permissao("financeiro.aprovar")
+        return jsonify(atualizar_pagamento(tabela, id, data, usuario["user_id"], usuario["nome"], tem_aprovar))
+    return _go()
 
 
 @financeiro_bp.route("/<tabela>/<int:id>", methods=["DELETE"])
@@ -44,7 +57,11 @@ def fin_delete(tabela, id):
     from core.financeiro import delete as fin_delete_fn, FIN_TABLES
     if tabela not in FIN_TABLES:
         return jsonify({"error": "Tabela invalida"}), 404
-    return jsonify(fin_delete_fn(tabela, id))
+
+    @requer_permissao("financeiro.excluir")
+    def _go():
+        return jsonify(fin_delete_fn(tabela, id))
+    return _go()
 
 
 @financeiro_bp.route("/fluxo_caixa/resumo", methods=["GET"])

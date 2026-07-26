@@ -292,29 +292,37 @@ def atualizar_usuario(user_id: int, nome: str = None, role_nome: str = None, ati
 
 # ── Decorator de permissao ──
 
+def usuario_tem_permissao(codigo: str) -> bool:
+    """Checagem booleana de permissao do usuario da request atual (mesma logica
+    de requer_permissao, sem interromper a request) — usada quando uma rota
+    libera a acao basica para todos, mas exige uma permissao extra so' acima
+    de algum limiar (ex: alcada de aprovacao financeira por valor)."""
+    token = request.headers.get("Authorization","").replace("Bearer ","")
+    cookie_token = request.cookies.get("auth_token","")
+    auth_token = token or cookie_token
+    # token master via env (bypass administrativo/scripts — nao usado pelo login normal)
+    master_token = _os.environ.get("ATHENA_TOKEN", "")
+    if master_token and auth_token == master_token:
+        return True
+    # ponytail: user_id vem do JWT assinado (payload), NUNCA de um cookie separado
+    # nao-assinado — um cookie user_id solto poderia ser trocado pelo cliente para
+    # qualquer valor e se passar por outro usuario.
+    payload = verificar_token_sessao(auth_token)
+    if not payload:
+        return False
+    if payload.get("is_master"):
+        return True
+    user_id = payload.get("user_id")
+    if not user_id:
+        return False
+    return codigo in get_permissoes_por_usuario(int(user_id))
+
 def requer_permissao(codigo: str):
     def decorator(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
-            token = request.headers.get("Authorization","").replace("Bearer ","")
-            cookie_token = request.cookies.get("auth_token","")
-            auth_token = token or cookie_token
-            # token master via env (bypass administrativo/scripts — nao usado pelo login normal)
-            master_token = _os.environ.get("ATHENA_TOKEN", "")
-            if master_token and auth_token == master_token:
+            if usuario_tem_permissao(codigo):
                 return f(*args, **kwargs)
-            # ponytail: user_id vem do JWT assinado (payload), NUNCA de um cookie separado
-            # nao-assinado — um cookie user_id solto poderia ser trocado pelo cliente para
-            # qualquer valor e se passar por outro usuario.
-            payload = verificar_token_sessao(auth_token)
-            if payload:
-                if payload.get("is_master"):
-                    return f(*args, **kwargs)
-                user_id = payload.get("user_id")
-                if user_id:
-                    perms = get_permissoes_por_usuario(int(user_id))
-                    if codigo in perms:
-                        return f(*args, **kwargs)
             return jsonify({"error": "Permissao negada", "required": codigo}), 403
         return wrapper
     return decorator
