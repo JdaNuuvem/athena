@@ -25,7 +25,7 @@ export function SangriaSuprimentoModal({ tipo, caixaId, operador, operadorSenha,
   const [motivos, setMotivos] = useState<string[]>(Object.keys(LABEL_MOTIVO));
   const [limite, setLimite] = useState(200);
   const [senha, setSenha] = useState("");
-  const [autorizacao, setAutorizacao] = useState<AutorizacaoGerencialValue>({ gerente_pin_id: null, pin: "" });
+  const [autorizacao, setAutorizacao] = useState<AutorizacaoGerencialValue>({ gerente_pin_id: null, pin: "", codigo_barras: "" });
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -47,6 +47,7 @@ export function SangriaSuprimentoModal({ tipo, caixaId, operador, operadorSenha,
           valor: v, motivo, operador: operador.nome, operador_id: operador.id,
           senha: senha || operadorSenha,
           gerente_pin_id: autorizacao.gerente_pin_id, pin: autorizacao.pin,
+          codigo_barras: autorizacao.codigo_barras,
         }),
       });
       const d = await r.json();

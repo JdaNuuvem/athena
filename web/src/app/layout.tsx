@@ -83,6 +83,7 @@ const NAV_ITEMS: NavItem[] = [
       { href: "/pdv", label: "Caixa (Terminal)" },
       { href: "/pdv/aprovacoes", label: "Aprovações de Sangria" },
       { href: "/pdv/quebra-caixa", label: "Quebra de Caixa" },
+      { href: "/pdv/operadores", label: "Operadores (PIN/Crachá)" },
     ],
   },
   { href: "/financeiro", label: "Financeiro", icon: "financeiro" },

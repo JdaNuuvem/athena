@@ -14,7 +14,7 @@ export function FechaModal({ open, caixa, operador, onClose, onFechar }: {
   const [fechaResumo, setFechaResumo] = useState<any>(null);
   const [fechaSaldo, setFechaSaldo] = useState("");
   const [fechaSenha, setFechaSenha] = useState("");
-  const [autorizacao, setAutorizacao] = useState<AutorizacaoGerencialValue>({ gerente_pin_id: null, pin: "" });
+  const [autorizacao, setAutorizacao] = useState<AutorizacaoGerencialValue>({ gerente_pin_id: null, pin: "", codigo_barras: "" });
 
   useEffect(() => {
     if (!open || !caixa) return;
@@ -30,7 +30,7 @@ export function FechaModal({ open, caixa, operador, onClose, onFechar }: {
       const r = await fetch("/api/pdv/caixa/" + caixa.id + "/fechar", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ saldo_final: saldo, operador_id: operador.id, senha: fechaSenha,
-          gerente_pin_id: autorizacao.gerente_pin_id, pin: autorizacao.pin }),
+          gerente_pin_id: autorizacao.gerente_pin_id, pin: autorizacao.pin, codigo_barras: autorizacao.codigo_barras }),
       });
       const d = await r.json();
       if (d.error) { alert(d.error); onClose(); return; }

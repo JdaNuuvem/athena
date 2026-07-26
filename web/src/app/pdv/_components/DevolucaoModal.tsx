@@ -13,7 +13,7 @@ export function DevolucaoModal({ devolverItem, onClose, onDevolver, operador, op
 }) {
   const [item, setItem] = useState(devolverItem);
   const [devolverSenha, setDevolverSenha] = useState("");
-  const [autorizacao, setAutorizacao] = useState<AutorizacaoGerencialValue>({ gerente_pin_id: null, pin: "" });
+  const [autorizacao, setAutorizacao] = useState<AutorizacaoGerencialValue>({ gerente_pin_id: null, pin: "", codigo_barras: "" });
 
   const handleDevolver = async () => {
     if (!item || !item.qtd) return;
@@ -22,7 +22,7 @@ export function DevolucaoModal({ devolverItem, onClose, onDevolver, operador, op
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ quantidade: item.qtd, motivo: item.motivo,
           operador: operador.nome, operador_id: operador.id, senha: devolverSenha || operadorSenha,
-          gerente_pin_id: autorizacao.gerente_pin_id, pin: autorizacao.pin }),
+          gerente_pin_id: autorizacao.gerente_pin_id, pin: autorizacao.pin, codigo_barras: autorizacao.codigo_barras }),
       });
       const d = await r.json();
       if (d.error) { alert(d.error); return; }
