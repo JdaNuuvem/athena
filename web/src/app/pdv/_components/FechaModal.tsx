@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Operador } from "./types";
+import { AutorizacaoGerencial, type AutorizacaoGerencialValue } from "./AutorizacaoGerencial";
 
 export function FechaModal({ open, caixa, operador, onClose, onFechar }: {
   open: boolean;
@@ -13,6 +14,7 @@ export function FechaModal({ open, caixa, operador, onClose, onFechar }: {
   const [fechaResumo, setFechaResumo] = useState<any>(null);
   const [fechaSaldo, setFechaSaldo] = useState("");
   const [fechaSenha, setFechaSenha] = useState("");
+  const [autorizacao, setAutorizacao] = useState<AutorizacaoGerencialValue>({ gerente_pin_id: null, pin: "" });
 
   useEffect(() => {
     if (!open || !caixa) return;
@@ -27,10 +29,14 @@ export function FechaModal({ open, caixa, operador, onClose, onFechar }: {
     try {
       const r = await fetch("/api/pdv/caixa/" + caixa.id + "/fechar", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ saldo_final: saldo, operador_id: operador.id, senha: fechaSenha }),
+        body: JSON.stringify({ saldo_final: saldo, operador_id: operador.id, senha: fechaSenha,
+          gerente_pin_id: autorizacao.gerente_pin_id, pin: autorizacao.pin }),
       });
       const d = await r.json();
       if (d.error) { alert(d.error); onClose(); return; }
+      if (d.aviso_segregacao) {
+        alert("Aviso: você é o único operador que vendeu neste turno. Considere ter uma segunda pessoa conferindo o caixa.");
+      }
       onFechar(d);
     } catch { alert("Erro ao fechar"); onClose(); }
   };
@@ -73,7 +79,10 @@ export function FechaModal({ open, caixa, operador, onClose, onFechar }: {
         <input type="password" value={fechaSenha} onChange={e => setFechaSenha(e.target.value)}
           placeholder="Senha para confirmar"
           onKeyDown={e => { if (e.key === "Enter") fecharCaixa(); }}
-          className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-4 py-2 text-sm text-neutral-200 mb-3" />
+          className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-4 py-2 text-sm text-neutral-200 mb-2" />
+        <div className="mb-3">
+          <AutorizacaoGerencial onChange={setAutorizacao} />
+        </div>
         <div className="flex gap-2">
           <button onClick={onClose} className="flex-1 py-2 text-sm text-neutral-400 hover:text-neutral-200">Cancelar</button>
           <button onClick={fecharCaixa} className="flex-1 py-2 bg-red-600 text-white text-sm rounded-lg">Fechar Caixa</button>

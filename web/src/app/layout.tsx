@@ -77,7 +77,14 @@ const NAV_ITEMS: NavItem[] = [
   },
   { href: "/compras", label: "Compras", icon: "compras" },
   { href: "/vendas", label: "Vendas", icon: "vendas" },
-  { href: "/pdv", label: "PDV", icon: "pdv", store: "fisica" },
+  {
+    href: "/pdv", label: "PDV", icon: "pdv", store: "fisica",
+    children: [
+      { href: "/pdv", label: "Caixa (Terminal)" },
+      { href: "/pdv/aprovacoes", label: "Aprovações de Sangria" },
+      { href: "/pdv/quebra-caixa", label: "Quebra de Caixa" },
+    ],
+  },
   { href: "/financeiro", label: "Financeiro", icon: "financeiro" },
   { href: "/fiscal", label: "Fiscal", icon: "fiscal" },
   { href: "/crm", label: "CRM", icon: "crm" },

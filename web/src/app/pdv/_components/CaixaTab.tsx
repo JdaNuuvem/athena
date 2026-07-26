@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Operador } from "./types";
+import { SangriaSuprimentoModal } from "./SangriaSuprimentoModal";
 
 export function CaixaTab({ operador, operadorSenha, caixa, onAbrirCaixa, onFecharCaixa }: {
   operador: Operador;
@@ -11,15 +12,28 @@ export function CaixaTab({ operador, operadorSenha, caixa, onAbrirCaixa, onFecha
   onFecharCaixa: () => void;
 }) {
   const [saldoInicial, setSaldoInicial] = useState(0);
+  const [modalTipo, setModalTipo] = useState<"sangria" | "suprimento" | null>(null);
+  const [msg, setMsg] = useState("");
+
+  const handleConcluido = (texto: string) => {
+    setModalTipo(null);
+    setMsg(texto);
+    setTimeout(() => setMsg(""), 4000);
+  };
 
   return (
     <div className="p-4 space-y-3">
       <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-4 max-w-md">
         <h3 className="text-sm font-semibold text-neutral-200 mb-3">Caixa</h3>
+        {msg && <p className="text-xs text-emerald-400 mb-2">{msg}</p>}
         {caixa ? (
           <div className="space-y-2 text-sm">
             <p className="text-neutral-400">Status: <span className="text-emerald-400">Aberto</span></p>
             <p className="text-neutral-400">Saldo inicial: <span className="text-neutral-200">R$ {(caixa.saldo_inicial || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span></p>
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setModalTipo("sangria")} className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs rounded-lg">Sangria</button>
+              <button onClick={() => setModalTipo("suprimento")} className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white text-xs rounded-lg">Suprimento</button>
+            </div>
             <button onClick={onFecharCaixa} className="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-500">Fechar Caixa</button>
           </div>
         ) : (
@@ -29,6 +43,17 @@ export function CaixaTab({ operador, operadorSenha, caixa, onAbrirCaixa, onFecha
           </div>
         )}
       </div>
+
+      {modalTipo && caixa && (
+        <SangriaSuprimentoModal
+          tipo={modalTipo}
+          caixaId={caixa.id}
+          operador={operador}
+          operadorSenha={operadorSenha}
+          onClose={() => setModalTipo(null)}
+          onConcluido={handleConcluido}
+        />
+      )}
     </div>
   );
 }

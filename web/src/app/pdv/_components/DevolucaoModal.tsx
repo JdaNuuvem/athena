@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Operador } from "./types";
+import { AutorizacaoGerencial, type AutorizacaoGerencialValue } from "./AutorizacaoGerencial";
 
 export function DevolucaoModal({ devolverItem, onClose, onDevolver, operador, operadorSenha }: {
   devolverItem: { itemId: number; qtd: number; motivo: string };
@@ -12,6 +13,7 @@ export function DevolucaoModal({ devolverItem, onClose, onDevolver, operador, op
 }) {
   const [item, setItem] = useState(devolverItem);
   const [devolverSenha, setDevolverSenha] = useState("");
+  const [autorizacao, setAutorizacao] = useState<AutorizacaoGerencialValue>({ gerente_pin_id: null, pin: "" });
 
   const handleDevolver = async () => {
     if (!item || !item.qtd) return;
@@ -19,7 +21,8 @@ export function DevolucaoModal({ devolverItem, onClose, onDevolver, operador, op
       const r = await fetch("/api/pdv/venda/" + item.itemId + "/devolver-item", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ quantidade: item.qtd, motivo: item.motivo,
-          operador: operador.nome, operador_id: operador.id, senha: devolverSenha || operadorSenha }),
+          operador: operador.nome, operador_id: operador.id, senha: devolverSenha || operadorSenha,
+          gerente_pin_id: autorizacao.gerente_pin_id, pin: autorizacao.pin }),
       });
       const d = await r.json();
       if (d.error) { alert(d.error); return; }
@@ -45,6 +48,7 @@ export function DevolucaoModal({ devolverItem, onClose, onDevolver, operador, op
             onChange={e => setDevolverSenha(e.target.value)}
             placeholder="Senha"
             className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-4 py-2 text-sm text-neutral-200" />
+          <AutorizacaoGerencial onChange={setAutorizacao} />
           <div className="flex gap-2 pt-2">
             <button onClick={onClose} className="flex-1 py-2 text-sm text-neutral-400">Cancelar</button>
             <button onClick={handleDevolver} className="flex-1 py-2 bg-red-600 text-white text-sm rounded-lg">Devolver</button>
