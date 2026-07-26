@@ -180,6 +180,12 @@ export default function ProdutosPage() {
           <p className="text-xs text-neutral-500 mt-0.5">{total} produto{total !== 1 ? "s" : ""} no catálogo</p>
         </div>
         <div className="flex items-center gap-2">
+          <Link
+            href="/produtos/novo"
+            className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"
+          >
+            + Adicionar produto
+          </Link>
           <button
             onClick={toggleVariacoes}
             className={`text-xs px-3 py-1.5 rounded-lg transition-colors ${

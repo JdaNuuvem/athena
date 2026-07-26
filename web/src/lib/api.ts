@@ -286,6 +286,22 @@ export const api = {
 
   detalheProduto: (sku: string) => request<Record<string, unknown>>(`/api/produtos/${sku}`),
   produtosLimites: () => request<Record<string, ProdutoLimites>>("/api/produtos/limites"),
+  criarProduto: (dados: Record<string, unknown>) =>
+    request<{ success: boolean; produto?: Record<string, unknown>; error?: string }>("/api/produtos", {
+      method: "POST",
+      body: JSON.stringify(dados),
+    }),
+
+  // Estoque — entrada via scanner de codigo de barras
+  estoqueBuscarCodigo: (codigo: string) =>
+    request<{ sku: string; descricao: string; codigo_barras: string | null; estoque_total: number; erro?: string }>(
+      `/api/estoque/buscar-codigo?codigo=${encodeURIComponent(codigo)}`
+    ),
+  estoqueEntrada: (sku: string, loja: string, quantidade: number, motivo?: string) =>
+    request<{ atual?: number; erro?: string }>("/api/estoque/entrada", {
+      method: "POST",
+      body: JSON.stringify({ sku, loja, quantidade, motivo: motivo || "" }),
+    }),
 
   // Lojas
   lojas: (periodo?: number) =>

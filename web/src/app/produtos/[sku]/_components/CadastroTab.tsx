@@ -1,7 +1,10 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
+import { api } from "@/lib/api";
+
+interface Fornecedor { id: number; nome: string; }
 
 function InputGroup({ label, children }: { label: string; children: React.ReactNode }) {
   return <div className="space-y-1"><label className="text-[10px] text-neutral-500 uppercase tracking-wider">{label}</label>{children}</div>;
@@ -17,7 +20,12 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
   const [msg, setMsg] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState("");
+  const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    api.cadList("fornecedores").then(r => setFornecedores((r.data ?? []) as Fornecedor[])).catch(() => {});
+  }, []);
 
   const p = produto as any;
   const idBling = p?.id_bling;
@@ -28,7 +36,8 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
     "codigo_barras", "gtin_embalagem", "descricao_curta", "descricao_complementar",
     "peso_bruto", "peso_liquido", "largura", "altura", "profundidade", "unidade_medida_dimensao",
     "volumes", "itens_por_caixa", "cfop_padrao", "observacoes", "link_externo",
-    "fornecedor_nome", "fornecedor_codigo", "preco_custo",
+    "fornecedor_nome", "fornecedor_codigo", "fornecedor_id", "preco_custo",
+    "custo_transporte", "preco_venda",
     "estoque_minimo", "estoque_maximo", "estoque_localizacao",
   ];
 
@@ -42,9 +51,12 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
   const handleSave = async () => {
     setSaving(true); setMsg("");
     try {
+      // fornecedor_id e' BIGINT no banco — string vazia quebraria o UPDATE, so' envia se selecionado
+      const payload: Record<string, unknown> = { ...form };
+      if (!payload.fornecedor_id) delete payload.fornecedor_id;
       // 1. Save locally
       const r = await fetch("/api/produtos/" + sku, {
-        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form),
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
       });
       const d = await r.json();
       if (d.error) { setMsg(d.error); setSaving(false); return; }
@@ -189,9 +201,26 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
 
       <Section title="Fornecimento">
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          <InputGroup label="Fornecedor">{field("fornecedor_nome")}</InputGroup>
+          <InputGroup label="Fornecedor">
+            {editando ? (
+              <select
+                value={form.fornecedor_id || ""}
+                onChange={e => setForm({ ...form, fornecedor_id: e.target.value })}
+                className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-indigo-500"
+              >
+                <option value="">— Nenhum —</option>
+                {fornecedores.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
+              </select>
+            ) : (
+              <div className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200">
+                {String(p?.fornecedor_cadastro_nome || p?.fornecedor_nome || "—")}
+              </div>
+            )}
+          </InputGroup>
           <InputGroup label="Código no Fornecedor">{field("fornecedor_codigo")}</InputGroup>
           <InputGroup label="Preço de Custo">{field("preco_custo")}</InputGroup>
+          <InputGroup label="Custo de Transporte">{field("custo_transporte")}</InputGroup>
+          <InputGroup label="Preço de Venda">{field("preco_venda")}</InputGroup>
           {!editando && (
             <InputGroup label="Margem Real">
               <div className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-emerald-400">

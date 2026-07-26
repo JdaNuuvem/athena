@@ -57,6 +57,7 @@ const NAV_ITEMS = [
   { href: "/atendimento/chat", label: "Chat", icon: "atendimento" },
   { href: "/produtos", label: "Produtos", icon: "produtos" },
   { href: "/estoque", label: "Estoque", icon: "estoque" },
+  { href: "/estoque/entrada", label: "Entrada (Scanner)", icon: "estoque" },
   { href: "/estoque/rotacao", label: "Rotação", icon: "estoque" },
   { href: "/compras", label: "Compras", icon: "compras" },
   { href: "/vendas", label: "Vendas", icon: "vendas" },
