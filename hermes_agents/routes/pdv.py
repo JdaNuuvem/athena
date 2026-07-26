@@ -40,13 +40,15 @@ def pdv_buscar_produtos():
 def pdv_cancelar_venda(id):
     data = request.json or {}; from core.pdv import cancelar_venda
     return jsonify(cancelar_venda(id, data.get("motivo",""), data.get("operador",""),
-        data.get("operador_id"), data.get("senha","")))
+        data.get("operador_id"), data.get("senha",""),
+        data.get("gerente_pin_id"), data.get("pin","")))
 
 @pdv_bp.route('/venda/<int:id>/devolver-item', methods=['POST'])
 def pdv_devolver_item(id):
     data = request.json or {}; from core.pdv import devolver_item_venda
     return jsonify(devolver_item_venda(id, float(data.get("quantidade",1)), data.get("motivo",""),
-        data.get("operador",""), data.get("operador_id"), data.get("senha","")))
+        data.get("operador",""), data.get("operador_id"), data.get("senha",""),
+        data.get("gerente_pin_id"), data.get("pin","")))
 
 @pdv_bp.route('/historico', methods=['GET'])
 def pdv_historico():
@@ -65,26 +67,99 @@ def pdv_abrir_caixa():
 def pdv_fechar_caixa(id):
     data = request.json or {}
     from core.pdv import fechar_caixa
-    return jsonify(fechar_caixa(id, float(data.get("saldo_final",0)), data.get("operador_id"), data.get("senha","")))
+    return jsonify(fechar_caixa(id, float(data.get("saldo_final",0)), data.get("operador_id"), data.get("senha",""),
+        data.get("gerente_pin_id"), data.get("pin","")))
+
+@pdv_bp.route('/operadores/<int:id>/pin', methods=['PUT'])
+def pdv_definir_pin(id):
+    from core.rbac import requer_permissao
+    from core.pdv import definir_pin
+    @requer_permissao("configuracoes.editar")
+    def _go():
+        data = request.json or {}
+        return jsonify(definir_pin(id, str(data.get("pin", ""))))
+    return _go()
 
 @pdv_bp.route('/caixa/<int:id>/resumo', methods=['GET'])
 def pdv_resumo_caixa(id):
     from core.pdv import resumo_fechamento
     return jsonify(resumo_fechamento(id))
 
+@pdv_bp.route('/relatorio-descontos', methods=['GET'])
+def pdv_relatorio_descontos():
+    from core.pdv import relatorio_descontos_por_operador
+    dias = request.args.get("dias", 30, type=int)
+    return jsonify({"operadores": relatorio_descontos_por_operador(dias)})
+
+@pdv_bp.route('/quebras-caixa', methods=['GET'])
+def pdv_quebras_caixa():
+    from core.pdv import historico_quebras
+    loja_id = request.args.get("loja_id", type=int)
+    operador = request.args.get("operador", "")
+    dias = request.args.get("dias", 90, type=int)
+    return jsonify({"quebras": historico_quebras(loja_id, operador, dias)})
+
+@pdv_bp.route('/sangria/limite', methods=['GET'])
+def pdv_sangria_limite_get():
+    from core.pdv_aprovacoes import limite_aprovacao, MOTIVOS_SANGRIA
+    return jsonify({"limite": limite_aprovacao(), "motivos": MOTIVOS_SANGRIA})
+
+@pdv_bp.route('/sangria/limite', methods=['PUT'])
+def pdv_sangria_limite_put():
+    from core.rbac import requer_permissao
+    from core.pdv_aprovacoes import definir_limite_aprovacao
+    @requer_permissao("configuracoes.editar")
+    def _go():
+        data = request.json or {}
+        try:
+            valor = float(data.get("limite"))
+        except (TypeError, ValueError):
+            return jsonify({"error": "limite invalido"}), 400
+        if valor < 0:
+            return jsonify({"error": "limite nao pode ser negativo"}), 400
+        return jsonify(definir_limite_aprovacao(valor))
+    return _go()
+
+@pdv_bp.route('/sangria/aprovacoes', methods=['GET'])
+def pdv_sangria_aprovacoes_listar():
+    from core.pdv_aprovacoes import listar
+    status = request.args.get("status", "pendente")
+    return jsonify({"aprovacoes": listar(status)})
+
+@pdv_bp.route('/sangria/aprovacoes/<int:aprovacao_id>/aprovar', methods=['POST'])
+def pdv_sangria_aprovar(aprovacao_id):
+    from core.rbac import requer_permissao, usuario_atual_da_request
+    from core.pdv_aprovacoes import aprovar as aprovar_sangria
+    @requer_permissao("pdv.aprovar")
+    def _go():
+        usuario = usuario_atual_da_request()
+        return jsonify(aprovar_sangria(aprovacao_id, usuario["user_id"], usuario["nome"]))
+    return _go()
+
+@pdv_bp.route('/sangria/aprovacoes/<int:aprovacao_id>/rejeitar', methods=['POST'])
+def pdv_sangria_rejeitar(aprovacao_id):
+    from core.rbac import requer_permissao, usuario_atual_da_request
+    from core.pdv_aprovacoes import rejeitar as rejeitar_sangria
+    @requer_permissao("pdv.aprovar")
+    def _go():
+        data = request.json or {}
+        usuario = usuario_atual_da_request()
+        return jsonify(rejeitar_sangria(aprovacao_id, usuario["user_id"], usuario["nome"], str(data.get("motivo_rejeicao", ""))))
+    return _go()
+
 @pdv_bp.route('/caixa/<int:id>/sangria', methods=['POST'])
 def pdv_sangria(id):
     data = request.json or {}
     from core.pdv import sangria
     return jsonify(sangria(id, float(data.get("valor",0)), data.get("motivo",""), data.get("operador",""),
-        data.get("operador_id"), data.get("senha","")))
+        data.get("operador_id"), data.get("senha",""), data.get("gerente_pin_id"), data.get("pin","")))
 
 @pdv_bp.route('/caixa/<int:id>/suprimento', methods=['POST'])
 def pdv_suprimento(id):
     data = request.json or {}
     from core.pdv import suprimento
     return jsonify(suprimento(id, float(data.get("valor",0)), data.get("motivo",""), data.get("operador",""),
-        data.get("operador_id"), data.get("senha","")))
+        data.get("operador_id"), data.get("senha",""), data.get("gerente_pin_id"), data.get("pin","")))
 
 @pdv_bp.route('/venda', methods=['POST'])
 def pdv_venda():
@@ -98,7 +173,9 @@ def pdv_venda():
         cliente_id=data.get("cliente_id"),
         operador=data.get("operador",""),
         operador_id=data.get("operador_id"),
-        desconto=float(data.get("desconto",0))
+        desconto=float(data.get("desconto",0)),
+        gerente_pin_id=data.get("gerente_pin_id"),
+        pin=data.get("pin","")
     ))
 
 @pdv_bp.route('/orcamento', methods=['POST'])
@@ -134,6 +211,16 @@ def pdv_cupom(id):
     try: return jsonify(run_async(_go()))
     except Exception as e: return jsonify({"error": str(e)})
 
+# ponytail: sangrias/suprimentos/caixas ja tem rotas dedicadas com senha +
+# role gerencial via _exigir_operador (e agora alcada de aprovacao para
+# sangria) — o CRUD generico abaixo NAO pode tocar nelas, senao vira uma
+# porta lateral que contorna toda a validacao.
+TABELAS_BLOQUEADAS = {"caixas", "sangrias", "suprimentos"}
+# operadores precisa de CRUD (cadastrar/editar funcionarios), mas protegido
+# pela sessao RBAC principal (nao pelo sistema de senha interno do PDV).
+TABELAS_SO_RBAC = {"operadores"}
+
+
 @pdv_bp.route('/<tabela>', methods=['GET'])
 def pdv_list(tabela):
     from core.pdv import list as pl, _list_filtro, TABLES
@@ -146,6 +233,13 @@ def pdv_list(tabela):
 def pdv_create(tabela):
     from core.pdv import create as pc, TABLES
     if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
+    if tabela in TABELAS_BLOQUEADAS:
+        return jsonify({"error": f"Use a rota dedicada para '{tabela}' — este CRUD generico nao valida operador/senha"}), 403
+    if tabela in TABELAS_SO_RBAC:
+        from core.rbac import requer_permissao
+        @requer_permissao("configuracoes.editar")
+        def _go(): return jsonify(pc(tabela, request.json or {}))
+        return _go()
     return jsonify(pc(tabela, request.json or {}))
 
 @pdv_bp.route('/<tabela>/<int:id>', methods=['GET'])
@@ -158,10 +252,24 @@ def pdv_get(tabela, id):
 def pdv_update(tabela, id):
     from core.pdv import update as pu, TABLES
     if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
+    if tabela in TABELAS_BLOQUEADAS:
+        return jsonify({"error": f"Use a rota dedicada para '{tabela}' — este CRUD generico nao valida operador/senha"}), 403
+    if tabela in TABELAS_SO_RBAC:
+        from core.rbac import requer_permissao
+        @requer_permissao("configuracoes.editar")
+        def _go(): return jsonify(pu(tabela, id, request.json or {}))
+        return _go()
     return jsonify(pu(tabela, id, request.json or {}))
 
 @pdv_bp.route('/<tabela>/<int:id>', methods=['DELETE'])
 def pdv_delete(tabela, id):
     from core.pdv import delete as pd, TABLES
     if tabela not in TABLES: return jsonify({"error":"Tabela invalida"}), 404
+    if tabela in TABELAS_BLOQUEADAS:
+        return jsonify({"error": f"Use a rota dedicada para '{tabela}' — este CRUD generico nao valida operador/senha"}), 403
+    if tabela in TABELAS_SO_RBAC:
+        from core.rbac import requer_permissao
+        @requer_permissao("configuracoes.editar")
+        def _go(): return jsonify(pd(tabela, id))
+        return _go()
     return jsonify(pd(tabela, id))

@@ -84,6 +84,70 @@ def verificar_operador(operador_id: int, senha: str = "") -> dict:
     try: return run_async(_go())
     except Exception as e: return {"error": str(e)}
 
+
+def definir_pin(operador_id: int, pin: str) -> dict:
+    """Define/atualiza o PIN numerico de um operador (tipicamente Gerente/Admin)."""
+    if not pin or not pin.isdigit() or not (4 <= len(pin) <= 6):
+        return {"error": "PIN deve ter de 4 a 6 digitos numericos"}
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow("SELECT id FROM pdv_operadores WHERE id = $1 AND ativo = TRUE", operador_id)
+        if not row:
+            return {"error": "Operador nao encontrado ou inativo"}
+        salt, pin_hash = _hash_senha(pin)
+        await db.execute("UPDATE pdv_operadores SET pin_hash = $1 WHERE id = $2", f"{salt}:{pin_hash}", operador_id)
+        return {"ok": True}
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
+
+
+def verificar_pin_gerencial(gerente_id: int, pin: str, roles_permitidas: set = None) -> dict:
+    """Valida que gerente_id e' um operador ativo, com role permitida, e que o
+    PIN informado bate com o PIN cadastrado — usado quando um operador comum
+    esta operando o PDV e chama um gerente para autorizar uma acao sensivel
+    sem precisar fazer logout/login completo."""
+    if not gerente_id:
+        return {"error": "gerente_id obrigatorio"}
+    if not pin:
+        return {"error": "PIN obrigatorio"}
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow("SELECT * FROM pdv_operadores WHERE id = $1 AND ativo = TRUE", gerente_id)
+        if not row:
+            return {"error": "Operador nao encontrado ou inativo"}
+        if roles_permitidas and row["role"] not in roles_permitidas:
+            return {"error": f"PIN de autorizacao restrito a: {', '.join(sorted(roles_permitidas))}"}
+        stored = row.get("pin_hash") or ""
+        if not stored:
+            return {"error": "Operador sem PIN cadastrado — defina um PIN em Cadastros > Operadores"}
+        parts = stored.split(":", 1)
+        if len(parts) != 2:
+            return {"error": "Hash de PIN invalido"}
+        salt, hs = parts
+        valido, _ = _verificar_senha(pin, salt, hs)
+        if not valido:
+            return {"error": "PIN incorreto"}
+        return {"ok": True, "id": row["id"], "nome": row["nome"], "role": row["role"]}
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
+
+
+def _autorizar_gerencial(operador_id: int = None, senha: str = "", gerente_pin_id: int = None,
+                          pin: str = "", roles_permitidas: set = None) -> dict:
+    """Autoriza uma acao sensivel de duas formas: (1) o proprio operador logado
+    ja tem a role exigida e informa sua senha normal, OU (2) um operador comum
+    esta operando e um gerente autoriza via PIN numerico curto (gerente_pin_id
+    + pin) sem precisar fazer logout/login. Retorna dict de erro, ou o dict
+    do autorizador (id/nome/role) se autorizado."""
+    if gerente_pin_id and pin:
+        return verificar_pin_gerencial(gerente_pin_id, pin, roles_permitidas)
+    v = verificar_operador(operador_id, senha)
+    if v.get("error"): return v
+    if roles_permitidas and v.get("role") not in roles_permitidas:
+        return {"error": f"Operacao restrita a: {', '.join(sorted(roles_permitidas))}"}
+    return v
+
+
 def _ensure_tables():
     async def _go():
         db = await get_db()
@@ -93,6 +157,17 @@ def _ensure_tables():
             status VARCHAR(20) DEFAULT 'aberto', data_abertura TIMESTAMP DEFAULT NOW(),
             data_fechamento TIMESTAMP, observacoes TEXT
         )""")
+        # Diferenca (quebra de caixa) — antes so' era calculada e devolvida na
+        # resposta HTTP do fechamento, nunca persistida; sem isso nao ha
+        # historico consultavel de quebras recorrentes por operador/loja.
+        try: await db.execute("ALTER TABLE pdv_caixas ADD COLUMN IF NOT EXISTS diferenca DECIMAL(12,2)")
+        except Exception as e: pass
+        try: await db.execute("ALTER TABLE pdv_caixas ADD COLUMN IF NOT EXISTS operador_fechamento VARCHAR(100)")
+        except Exception as e: pass
+        # loja_id tambem e' adicionado por core.entidades (migracao incremental) —
+        # IF NOT EXISTS torna essa duplicidade segura independente da ordem de import.
+        try: await db.execute("ALTER TABLE pdv_caixas ADD COLUMN IF NOT EXISTS loja_id INT REFERENCES lojas(id)")
+        except Exception as e: pass
         await db.execute("""CREATE TABLE IF NOT EXISTS pdv_vendas (
             id SERIAL PRIMARY KEY, caixa_id INT REFERENCES pdv_caixas(id),
             numero VARCHAR(30), cliente VARCHAR(100), cliente_id INT,
@@ -138,6 +213,12 @@ def _ensure_tables():
         try: await db.execute("ALTER TABLE pdv_operadores ADD COLUMN IF NOT EXISTS desconto_maximo_percent DECIMAL(5,2) DEFAULT 0")
         except Exception as e: pass
         try: await db.execute("ALTER TABLE pdv_operadores ALTER COLUMN senha TYPE VARCHAR(200)")
+        except Exception as e: pass
+        # PIN numerico curto (4-6 digitos), separado da senha de login — usado
+        # para um operador comum "chamar o gerente" e autorizar uma acao
+        # sensivel (cancelamento, devolucao, sangria, desconto acima do limite)
+        # sem precisar fazer logout/login completo no meio do atendimento.
+        try: await db.execute("ALTER TABLE pdv_operadores ADD COLUMN IF NOT EXISTS pin_hash VARCHAR(200)")
         except Exception as e: pass
         await db.execute("""CREATE TABLE IF NOT EXISTS pdv_turnos (
             id SERIAL PRIMARY KEY, caixa_id INT REFERENCES pdv_caixas(id),
@@ -203,7 +284,12 @@ def _get(t: str, id: int) -> dict:
     except Exception as e: return {"error": str(e)}
 
 def _create(t: str, d: dict) -> dict:
-    keys = list(d.keys()); vals = list(d.values())
+    # ponytail: NAO usar list(...) aqui — este modulo define uma funcao
+    # `list(t)` no nivel de modulo (linha ~246) que sombreia o builtin para
+    # QUALQUER funcao neste arquivo (resolucao de nomes e' por escopo do
+    # modulo, nao por ordem de definicao). list(d.keys()) chamaria
+    # list(t: str) com um dict_keys, quebrando com TypeError.
+    keys = [*d.keys()]; vals = [*d.values()]
     ph = ", ".join(f"${i+1}" for i in range(len(keys)))
     cols = ", ".join(keys)
     async def _go():
@@ -215,7 +301,7 @@ def _create(t: str, d: dict) -> dict:
 
 def _update(t: str, id: int, d: dict) -> dict:
     sets = ", ".join(f"{k} = ${i+1}" for i, k in enumerate(d.keys()))
-    vals = list(d.values()) + [id]
+    vals = [*d.values(), id]  # ver nota em _create sobre o shadowing de list()
     async def _go():
         db = await get_db()
         row = await db.fetchrow(f"UPDATE {t} SET {sets} WHERE id = ${len(vals)} RETURNING *", *vals)
@@ -271,9 +357,11 @@ def abrir_caixa(operador: str, saldo_inicial: float = 0, operador_id: int = None
     if erro: return erro
     return create("caixas", {"operador": operador, "saldo_inicial": saldo_inicial, "status": "aberto", "data_abertura": hoje()})
 
-def fechar_caixa(caixa_id: int, saldo_final: float, operador_id: int = None, senha: str = "") -> dict:
-    erro = _exigir_operador(operador_id, senha, _ROLES_GERENCIAIS)
-    if erro: return erro
+def fechar_caixa(caixa_id: int, saldo_final: float, operador_id: int = None, senha: str = "",
+                  gerente_pin_id: int = None, pin: str = "") -> dict:
+    fechador = _autorizar_gerencial(operador_id, senha, gerente_pin_id, pin, _ROLES_GERENCIAIS)
+    if fechador.get("error"): return fechador
+    nome_fechador = fechador.get("nome", "")
     async def _go():
         db = await get_db()
         total_vendas = await db.fetchval("SELECT COALESCE(SUM(total),0) FROM pdv_vendas WHERE caixa_id = $1 AND status = 'finalizada'", caixa_id)
@@ -285,10 +373,21 @@ def fechar_caixa(caixa_id: int, saldo_final: float, operador_id: int = None, sen
             JOIN pdv_vendas v ON v.id = p.venda_id
             WHERE v.caixa_id = $1 AND v.status = 'finalizada' AND p.forma = 'dinheiro'
         """, caixa_id)
-        row = await db.fetchrow("""UPDATE pdv_caixas SET status='fechado', saldo_final=$1, data_fechamento=NOW()
-            WHERE id=$2 RETURNING *""", saldo_final, caixa_id)
-        saldo_inicial = float(row["saldo_inicial"] if row else 0)
+        # Segregacao de funcao: quem fecha nao deveria ser o unico operador que
+        # vendeu no turno — so' avisa (nao bloqueia, lojas pequenas podem ter
+        # so' 1-2 pessoas por turno).
+        operadores_venda = await db.fetch(
+            "SELECT DISTINCT operador FROM pdv_vendas WHERE caixa_id = $1 AND status = 'finalizada'", caixa_id)
+        nomes_vendedores = {r["operador"] for r in operadores_venda if r["operador"]}
+        aviso_segregacao = bool(nome_fechador) and nomes_vendedores == {nome_fechador}
+
+        saldo_inicial_row = await db.fetchval("SELECT saldo_inicial FROM pdv_caixas WHERE id = $1", caixa_id)
+        saldo_inicial = float(saldo_inicial_row or 0)
         saldo_esperado_cash = saldo_inicial + float(vendas_dinheiro or 0) - float(sangrias or 0) + float(suprimentos or 0)
+        diferenca = round(float(saldo_final) - saldo_esperado_cash, 2)
+        row = await db.fetchrow("""UPDATE pdv_caixas SET status='fechado', saldo_final=$1, diferenca=$2,
+            operador_fechamento=$3, data_fechamento=NOW() WHERE id=$4 RETURNING *""",
+            saldo_final, diferenca, nome_fechador, caixa_id)
         return {
             "caixa": dict(row) if row else {},
             "total_vendas": float(total_vendas or 0),
@@ -296,7 +395,8 @@ def fechar_caixa(caixa_id: int, saldo_final: float, operador_id: int = None, sen
             "sangrias": float(sangrias or 0),
             "suprimentos": float(suprimentos or 0),
             "saldo_esperado_cash": round(saldo_esperado_cash, 2),
-            "diferenca": round(float(saldo_final) - saldo_esperado_cash, 2),
+            "diferenca": diferenca,
+            "aviso_segregacao": aviso_segregacao,
         }
     try:
         result = run_async(_go())
@@ -306,6 +406,37 @@ def fechar_caixa(caixa_id: int, saldo_final: float, operador_id: int = None, sen
         except Exception as e: pass
         return result
     except Exception as e: return {"error": str(e)}
+
+
+def historico_quebras(loja_id: int = None, operador: str = "", dias: int = 90) -> list:
+    """Historico de quebra de caixa (diferenca) por fechamento, agregavel no
+    frontend por operador_fechamento/loja_id — sem isso, uma quebra pequena
+    recorrente do mesmo operador passa despercebida (cada fechamento e' visto
+    isoladamente)."""
+    _ensure_tables()
+    async def _go():
+        db = await get_db()
+        where = ["status = 'fechado'", f"data_fechamento >= NOW() - INTERVAL '{int(dias)} days'"]
+        params = []
+        if loja_id:
+            where.append(f"loja_id = ${len(params) + 1}")
+            params.append(loja_id)
+        if operador:
+            where.append(f"operador_fechamento = ${len(params) + 1}")
+            params.append(operador)
+        sql_where = " AND ".join(where)
+        rows = await db.fetch(f"""
+            SELECT id, numero, operador_fechamento, loja_id, saldo_inicial, saldo_final,
+                   diferenca, data_abertura, data_fechamento
+            FROM pdv_caixas
+            WHERE {sql_where}
+            ORDER BY data_fechamento DESC LIMIT 200
+        """, *params)
+        return [dict(r, saldo_inicial=float(r["saldo_inicial"] or 0), saldo_final=float(r["saldo_final"] or 0),
+                     diferenca=float(r["diferenca"]) if r["diferenca"] is not None else 0.0)
+                for r in rows]
+    try: return run_async(_go())
+    except Exception as e: return []
 
 def resumo_fechamento(caixa_id: int) -> dict:
     """Retorna quebra do caixa: saldo inicial, vendas por forma, sangrias, suprimentos, saldo esperado."""
@@ -387,9 +518,11 @@ def buscar_clientes(q: str, limit: int = 10) -> list:
     try: return run_async(_go())
     except Exception as e: return []
 
-def cancelar_venda(venda_id: int, motivo: str = "", operador: str = "", operador_id: int = None, senha: str = "") -> dict:
-    erro = _exigir_operador(operador_id, senha)
-    if erro: return erro
+def cancelar_venda(venda_id: int, motivo: str = "", operador: str = "", operador_id: int = None, senha: str = "",
+                    gerente_pin_id: int = None, pin: str = "") -> dict:
+    autorizador = _autorizar_gerencial(operador_id, senha, gerente_pin_id, pin, _ROLES_GERENCIAIS)
+    if autorizador.get("error"): return autorizador
+    operador_registro = autorizador.get("nome") or operador
     async def _go():
         db = await get_db()
         venda = await db.fetchrow("SELECT * FROM pdv_vendas WHERE id = $1", venda_id)
@@ -398,15 +531,20 @@ def cancelar_venda(venda_id: int, motivo: str = "", operador: str = "", operador
         await db.execute("UPDATE pdv_vendas SET status = 'cancelada', observacoes = $2 WHERE id = $1", venda_id, f"Cancelada: {motivo}" if motivo else "Cancelada")
         # Registrar devolucao
         await db.execute("INSERT INTO pdv_devolucoes (venda_id, motivo, valor, operador) VALUES ($1,$2,$3,$4)",
-            venda_id, motivo, float(venda["total"] or 0), operador)
+            venda_id, motivo, float(venda["total"] or 0), operador_registro)
         return {"success": True, "venda_id": venda_id}
     try: return run_async(_go())
     except Exception as e: return {"error": str(e)}
 
-def devolver_item_venda(item_id: int, quantidade: float, motivo: str = "", operador: str = "", operador_id: int = None, senha: str = "") -> dict:
-    """Devolucao parcial: remove qtd de um item da venda, ajusta total, registra devolucao."""
-    erro = _exigir_operador(operador_id, senha)
-    if erro: return erro
+def devolver_item_venda(item_id: int, quantidade: float, motivo: str = "", operador: str = "", operador_id: int = None, senha: str = "",
+                         gerente_pin_id: int = None, pin: str = "") -> dict:
+    """Devolucao parcial: remove qtd de um item da venda, ajusta total, registra devolucao.
+    Exige autorizacao gerencial (senha do proprio gerente logado, ou PIN de um
+    gerente chamado ao caixa) — cancelamento/devolucao e' forma comum de
+    fraude ("desconta" a venda depois que o cliente ja pagou e saiu)."""
+    autorizador = _autorizar_gerencial(operador_id, senha, gerente_pin_id, pin, _ROLES_GERENCIAIS)
+    if autorizador.get("error"): return autorizador
+    operador_registro = autorizador.get("nome") or operador
     if quantidade is None or quantidade <= 0:
         return {"error": "Quantidade a devolver deve ser maior que zero"}
     async def _go():
@@ -432,7 +570,7 @@ def devolver_item_venda(item_id: int, quantidade: float, motivo: str = "", opera
         await db.execute("UPDATE pdv_vendas SET total = GREATEST(0, total - $1) WHERE id = $2", valor_devolvido, item["venda_id"])
         await db.execute("INSERT INTO pdv_devolucoes (venda_id, motivo, valor, operador) VALUES ($1,$2,$3,$4)",
             item["venda_id"], f"Item #{item_id}: {motivo}" if motivo else f"Devolucao parcial item #{item_id}",
-            valor_devolvido, operador)
+            valor_devolvido, operador_registro)
         return {"success": True, "item_id": item_id, "quantidade_devolvida": quantidade, "valor_devolvido": valor_devolvido}
     try: return run_async(_go())
     except Exception as e: return {"error": str(e)}
@@ -454,29 +592,61 @@ def historico_vendas(caixa_id: int = None, data_inicio: str = None, data_fim: st
     try: return run_async(_go())
     except Exception as e: return []
 
-def sangria(caixa_id: int, valor: float, motivo: str, operador: str, operador_id: int = None, senha: str = "") -> dict:
-    erro = _exigir_operador(operador_id, senha, _ROLES_GERENCIAIS)
-    if erro: return erro
+def _aplicar_sangria(caixa_id: int, valor: float, motivo: str, operador: str) -> dict:
+    """Aplica a sangria diretamente, sem checar alcada — usado pela sangria
+    livre (abaixo do limite) e por core.pdv_aprovacoes.aprovar() apos
+    aprovacao gerencial de uma sangria acima do limite."""
     return create("sangrias", {"caixa_id": caixa_id, "valor": valor, "motivo": motivo, "operador": operador})
 
-def suprimento(caixa_id: int, valor: float, motivo: str, operador: str, operador_id: int = None, senha: str = "") -> dict:
-    erro = _exigir_operador(operador_id, senha, _ROLES_GERENCIAIS)
-    if erro: return erro
-    return create("suprimentos", {"caixa_id": caixa_id, "valor": valor, "motivo": motivo, "operador": operador})
 
-def realizar_venda(caixa_id: int, itens: list, pagamentos: list, cliente="", cliente_id=None, operador="", operador_id=None, desconto=0.0) -> dict:
+def sangria(caixa_id: int, valor: float, motivo: str, operador: str, operador_id: int = None, senha: str = "",
+            gerente_pin_id: int = None, pin: str = "") -> dict:
+    v = _autorizar_gerencial(operador_id, senha, gerente_pin_id, pin, _ROLES_GERENCIAIS)
+    if v.get("error"): return v
+    from core.pdv_aprovacoes import MOTIVOS_SANGRIA, precisa_aprovacao, solicitar as solicitar_aprovacao
+    if motivo not in MOTIVOS_SANGRIA:
+        return {"error": f"Motivo invalido. Use um de: {', '.join(MOTIVOS_SANGRIA)}"}
+    nome_operador = v.get("nome") or operador
+    if precisa_aprovacao(valor):
+        return solicitar_aprovacao(caixa_id, valor, motivo, v.get("id"), nome_operador)
+    return _aplicar_sangria(caixa_id, valor, motivo, nome_operador)
+
+def suprimento(caixa_id: int, valor: float, motivo: str, operador: str, operador_id: int = None, senha: str = "",
+               gerente_pin_id: int = None, pin: str = "") -> dict:
+    v = _autorizar_gerencial(operador_id, senha, gerente_pin_id, pin, _ROLES_GERENCIAIS)
+    if v.get("error"): return v
+    return create("suprimentos", {"caixa_id": caixa_id, "valor": valor, "motivo": motivo, "operador": v.get("nome") or operador})
+
+def realizar_venda(caixa_id: int, itens: list, pagamentos: list, cliente="", cliente_id=None, operador="", operador_id=None,
+                    desconto=0.0, gerente_pin_id: int = None, pin: str = "") -> dict:
     total_itens = sum((i.get("quantidade",1) or 1) * (i.get("valor_unitario",0) or 0) - (i.get("desconto",0) or 0) for i in itens)
     total = round(total_itens - desconto, 2)
 
-    # validar desconto maximo do operador (total)
-    if operador_id and desconto > 0 and total_itens > 0:
+    # validar desconto maximo do operador — total da venda E por item individual.
+    # so' validar o total agregado permitia burlar o limite concentrando o
+    # desconto inteiro em um unico item (o desconto por item nunca era checado).
+    # Um gerente pode autorizar via PIN um desconto acima do limite do operador
+    # (gerente_pin_id + pin), sem precisar o operador fazer logout/login.
+    if operador_id:
         op = _get("pdv_operadores", operador_id)
-        if op and not op.get("error"):
-            max_pct = float(op.get("desconto_maximo_percent") or 0)
-            if max_pct > 0:
-                pct_desconto = (desconto / total_itens) * 100
-                if pct_desconto > max_pct:
-                    return {"error": f"Desconto maximo permitido: {max_pct:.1f}% (tentativa: {pct_desconto:.1f}%)"}
+        max_pct = float(op.get("desconto_maximo_percent") or 0) if op and not op.get("error") else 0
+        if max_pct > 0:
+            autorizado_por_gerente = False
+            if gerente_pin_id and pin:
+                v = verificar_pin_gerencial(gerente_pin_id, pin, _ROLES_GERENCIAIS)
+                autorizado_por_gerente = not v.get("error")
+            if not autorizado_por_gerente:
+                if desconto > 0 and total_itens > 0:
+                    pct_desconto = (desconto / total_itens) * 100
+                    if pct_desconto > max_pct:
+                        return {"error": f"Desconto maximo permitido: {max_pct:.1f}% (tentativa: {pct_desconto:.1f}%)"}
+                for item in itens:
+                    item_desconto = item.get("desconto", 0) or 0
+                    subtotal_item = (item.get("quantidade", 1) or 1) * (item.get("valor_unitario", 0) or 0)
+                    if item_desconto > 0 and subtotal_item > 0:
+                        pct_item = (item_desconto / subtotal_item) * 100
+                        if pct_item > max_pct:
+                            return {"error": f"Desconto maximo permitido: {max_pct:.1f}% (item '{item.get('descricao','')}' com {pct_item:.1f}%)"}
 
     # ponytail: transacao atomica — se item/pgto falhar, venda inteira rollback
     async def _go():
@@ -512,6 +682,41 @@ def realizar_venda(caixa_id: int, itens: list, pagamentos: list, cliente="", cli
             }), daemon=True).start()
         except Exception: pass
     return result
+
+def relatorio_descontos_por_operador(dias: int = 30) -> list:
+    """Quanto cada operador desconta e quao perto do proprio limite maximo
+    fica — desconto proximo do teto e' uma forma comum de fraude (vender por
+    menos para um conhecido, dividir o troco com o cliente)."""
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch(f"""
+            SELECT v.operador,
+                   COUNT(*) AS qtd_vendas,
+                   SUM(v.total + v.desconto) AS subtotal_bruto,
+                   SUM(v.desconto) AS desconto_total
+            FROM pdv_vendas v
+            WHERE v.status = 'finalizada' AND v.data >= NOW() - INTERVAL '{int(dias)} days'
+                AND v.operador IS NOT NULL AND v.operador != ''
+            GROUP BY v.operador
+        """)
+        out = []
+        for r in rows:
+            bruto = float(r["subtotal_bruto"] or 0)
+            desc = float(r["desconto_total"] or 0)
+            pct_medio = round((desc / bruto * 100) if bruto > 0 else 0, 2)
+            op_row = await db.fetchrow("SELECT desconto_maximo_percent FROM pdv_operadores WHERE nome = $1", r["operador"])
+            limite = float(op_row["desconto_maximo_percent"] or 0) if op_row else 0
+            out.append({
+                "operador": r["operador"], "qtd_vendas": r["qtd_vendas"],
+                "desconto_total": desc, "pct_medio_desconto": pct_medio,
+                "limite_desconto_pct": limite,
+                "proximo_do_limite": limite > 0 and pct_medio >= limite * 0.8,
+            })
+        out.sort(key=lambda x: x["pct_medio_desconto"], reverse=True)
+        return out
+    try: return run_async(_go())
+    except Exception as e: return []
+
 
 def dashboard() -> dict:
     async def _go():

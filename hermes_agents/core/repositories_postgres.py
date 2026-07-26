@@ -180,11 +180,12 @@ class PostgresFinanceiroRepository(FinanceiroRepository):
                 frete = await db.fetchval("SELECT COALESCE(SUM(frete),0) FROM vendas_pedidos WHERE loja_id = $1 AND data >= CURRENT_DATE - $2 AND status != 'cancelado'", lid, dias)
                 custos = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM producao_custos WHERE loja_id = $1 AND data >= CURRENT_DATE - $2", lid, dias)
                 qtd = await db.fetchval("SELECT COUNT(*) FROM vendas_pedidos WHERE loja_id = $1 AND data >= CURRENT_DATE - $2 AND status != 'cancelado'", lid, dias)
+                qtd_pdv = await db.fetchval("SELECT COUNT(*) FROM pdv_vendas v JOIN pdv_caixas c ON c.id = v.caixa_id WHERE c.loja_id = $1 AND DATE(v.data) >= CURRENT_DATE - $2 AND v.status = 'finalizada'", lid, dias)
                 resultado.append(ReceitaLoja(
                     loja_id=lid, loja_nome=loja["nome"],
                     receita_online=float(rec_online or 0), receita_pdv=float(rec_pdv or 0),
                     frete=float(frete or 0), custos_producao=float(custos or 0),
-                    qtd_vendas=int(qtd or 0),
+                    qtd_vendas=int(qtd or 0), qtd_vendas_pdv=int(qtd_pdv or 0),
                 ))
             resultado.sort(key=lambda x: (x.receita_online + x.receita_pdv), reverse=True)
             return resultado

@@ -137,6 +137,7 @@ class ReceitaLoja:
     frete: float = 0.0
     custos_producao: float = 0.0
     qtd_vendas: int = 0
+    qtd_vendas_pdv: int = 0
 
 class FinanceiroRepository(ABC):
     """Acesso a dados financeiros agregados por loja."""

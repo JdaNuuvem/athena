@@ -401,3 +401,63 @@ def sugestao_rotacao() -> list:
         return await _legacy_sugestao_rotacao(db)
     try: return run_async(_go())
     except Exception as e: return []
+
+
+def _ensure_sugestoes_rotacao_table():
+    async def _go():
+        db = await get_db()
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS estoque_sugestoes_rotacao (
+                id SERIAL PRIMARY KEY,
+                sku VARCHAR(50), nome VARCHAR(300),
+                loja_excesso VARCHAR(50), qtd_excesso DECIMAL(12,3),
+                loja_escassez VARCHAR(50), qtd_escassez DECIMAL(12,3),
+                sugerir_transferir DECIMAL(12,3),
+                gerado_em TIMESTAMP DEFAULT NOW()
+            )
+        """)
+    try: run_async(_go())
+    except Exception as e: log(AGENT, f"Erro tabela sugestoes rotacao: {e}")
+
+
+def persistir_sugestoes_rotacao() -> dict:
+    """Recalcula sugestao_rotacao() e persiste, substituindo as anteriores —
+    antes era so' um GET recalculado sob demanda; agora fica pronto quando o
+    gerente abre a tela, e dispara webhook se houver algum configurado.
+    Chamado pelo job diario em core/scheduler.py."""
+    _ensure_sugestoes_rotacao_table()
+    sugestoes = sugestao_rotacao()
+    async def _go():
+        db = await get_db()
+        await db.execute("DELETE FROM estoque_sugestoes_rotacao")
+        for s in sugestoes:
+            await db.execute("""
+                INSERT INTO estoque_sugestoes_rotacao
+                    (sku, nome, loja_excesso, qtd_excesso, loja_escassez, qtd_escassez, sugerir_transferir)
+                VALUES ($1,$2,$3,$4,$5,$6,$7)
+            """, s["sku"], s["nome"], s["loja_excesso"], s["qtd_excesso"],
+                s["loja_escassez"], s["qtd_escassez"], s["sugerir_transferir"])
+    try:
+        run_async(_go())
+    except Exception as e:
+        log(AGENT, f"Erro ao persistir sugestoes rotacao: {e}")
+        return {"total": 0, "erro": str(e)}
+    if sugestoes:
+        try:
+            from core.automacoes import disparar_webhooks
+            disparar_webhooks("rotacao_sugerida", {"total": str(len(sugestoes))})
+        except Exception:
+            pass
+    return {"total": len(sugestoes)}
+
+
+def sugestoes_rotacao_persistidas() -> list:
+    """Le as sugestoes ja calculadas pelo job diario, sem recalcular na hora."""
+    _ensure_sugestoes_rotacao_table()
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch("SELECT * FROM estoque_sugestoes_rotacao ORDER BY qtd_excesso DESC")
+        return [dict(r, qtd_excesso=float(r["qtd_excesso"] or 0), qtd_escassez=float(r["qtd_escassez"] or 0),
+                     sugerir_transferir=float(r["sugerir_transferir"] or 0)) for r in rows]
+    try: return run_async(_go())
+    except Exception as e: return []

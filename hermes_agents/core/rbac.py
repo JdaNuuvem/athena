@@ -121,7 +121,7 @@ def _ensure_tables():
                 ("Admin", "Acesso total ao sistema", None),
                 ("Financeiro", "Financeiro e relatorios", ["dashboard.ver","produtos.ver","vendas.ver","financeiro.ver","financeiro.criar","financeiro.editar","financeiro.excluir","financeiro.aprovar","financeiro.exportar","fiscal.ver","fiscal.criar","fiscal.editar","fiscal.excluir","fiscal.aprovar","relatorios.ver","relatorios.exportar","crm.ver","compras.ver","compras.aprovar","bi.ver","bi.exportar"]),
                 ("Operador Loja", "PDV e vendas basicas", ["dashboard.ver","pdv.ver","pdv.operar","pdv.criar","produtos.ver","estoque.ver","vendas.ver","vendas.criar","atendimento.ver","atendimento.criar","crm.ver","crm.criar"]),
-                ("Gerente", "Gestao de loja", ["dashboard.ver","cadastros.ver","cadastros.criar","cadastros.editar","produtos.ver","produtos.criar","produtos.editar","estoque.ver","estoque.criar","estoque.editar","estoque.aprovar","compras.ver","compras.criar","compras.editar","compras.aprovar","vendas.ver","vendas.criar","vendas.editar","vendas.aprovar","pdv.ver","pdv.operar","pdv.criar","financeiro.ver","crm.ver","crm.criar","crm.editar","atendimento.ver","atendimento.criar","atendimento.editar","relatorios.ver","relatorios.exportar"]),
+                ("Gerente", "Gestao de loja", ["dashboard.ver","cadastros.ver","cadastros.criar","cadastros.editar","produtos.ver","produtos.criar","produtos.editar","estoque.ver","estoque.criar","estoque.editar","estoque.aprovar","compras.ver","compras.criar","compras.editar","compras.aprovar","vendas.ver","vendas.criar","vendas.editar","vendas.aprovar","pdv.ver","pdv.operar","pdv.criar","pdv.aprovar","financeiro.ver","crm.ver","crm.criar","crm.editar","atendimento.ver","atendimento.criar","atendimento.editar","relatorios.ver","relatorios.exportar"]),
             ]
             for nome, desc, perms in roles:
                 row = await db.fetchrow("INSERT INTO rbac_roles (nome,descricao) VALUES ($1,$2) RETURNING id", nome, desc)
@@ -135,18 +135,19 @@ def _ensure_tables():
                         p_row = await db.fetchrow("SELECT id FROM rbac_permissoes WHERE codigo=$1", codigo)
                         if p_row:
                             await db.execute("INSERT INTO rbac_role_permissoes (role_id,permissao_id) VALUES ($1,$2)", role_id, p_row["id"])
-        # Fix-up idempotente: garante estoque.aprovar no role Gerente mesmo em
-        # bancos onde o seed de roles ja rodou antes dessa permissao existir
+        # Fix-up idempotente: garante permissoes novas no role Gerente mesmo em
+        # bancos onde o seed de roles ja rodou antes delas existirem
         # (o bloco acima so' roda "if count_r == 0", nao repete em bancos existentes).
-        try:
-            gerente = await db.fetchrow("SELECT id FROM rbac_roles WHERE nome = 'Gerente'")
-            perm = await db.fetchrow("SELECT id FROM rbac_permissoes WHERE codigo = 'estoque.aprovar'")
-            if gerente and perm:
-                await db.execute(
-                    "INSERT INTO rbac_role_permissoes (role_id,permissao_id) VALUES ($1,$2) ON CONFLICT DO NOTHING",
-                    gerente["id"], perm["id"])
-        except Exception as e:
-            log(AGENT, f"Fix-up estoque.aprovar falhou: {e}")
+        for codigo_permissao in ("estoque.aprovar", "pdv.aprovar"):
+            try:
+                gerente = await db.fetchrow("SELECT id FROM rbac_roles WHERE nome = 'Gerente'")
+                perm = await db.fetchrow("SELECT id FROM rbac_permissoes WHERE codigo = $1", codigo_permissao)
+                if gerente and perm:
+                    await db.execute(
+                        "INSERT INTO rbac_role_permissoes (role_id,permissao_id) VALUES ($1,$2) ON CONFLICT DO NOTHING",
+                        gerente["id"], perm["id"])
+            except Exception as e:
+                log(AGENT, f"Fix-up {codigo_permissao} falhou: {e}")
 
         # Seed usuarios padrao (senhas via env vars, sem fallback hardcoded)
         count_u = await db.fetchval("SELECT COUNT(*) FROM rbac_usuarios")

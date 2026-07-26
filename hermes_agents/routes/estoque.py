@@ -366,9 +366,16 @@ def estoque_relatorio_discrepancias():
 
 @estoque_bp.route('/sugestao-rotacao', methods=['GET'])
 def estoque_sugestao_rotacao():
-    """Sugere transferencias de estoque entre lojas com desbalanceamento."""
+    """Sugere transferencias de estoque entre lojas com desbalanceamento (recalcula na hora)."""
     from core.estoque import sugestao_rotacao
     return jsonify({"data": sugestao_rotacao()})
+
+
+@estoque_bp.route('/sugestao-rotacao/persistidas', methods=['GET'])
+def estoque_sugestao_rotacao_persistidas():
+    """Le as sugestoes ja calculadas pelo job diario (nao recalcula na hora)."""
+    from core.estoque import sugestoes_rotacao_persistidas
+    return jsonify({"data": sugestoes_rotacao_persistidas()})
 
 
 @estoque_bp.route('/ratear', methods=['POST'])

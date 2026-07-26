@@ -320,25 +320,55 @@ def dre_por_loja(dias: int = 30) -> list:
         return _dre_via_query(dias, comissao_pct)
 
 
+def _dre_com_extras(base: list, dias: int) -> list:
+    """Enriquece o DRE por loja com quebra de caixa acumulada e discrepancia
+    de estoque — visao unificada por loja, sem precisar abrir varias telas
+    para achar onde o processo de uma loja esta pior."""
+    try:
+        from core.pdv import historico_quebras
+        from core.estoque_relatorios import por_loja as discrepancias_por_loja
+        quebras = historico_quebras(dias=dias)
+        discrepancias = {d["loja"]: d for d in discrepancias_por_loja(dias)}
+        quebra_por_loja = {}
+        for q in quebras:
+            lid = q.get("loja_id")
+            if lid is None: continue
+            quebra_por_loja[lid] = quebra_por_loja.get(lid, 0) + float(q.get("diferenca") or 0)
+        for item in base:
+            item["quebra_caixa_acumulada"] = round(quebra_por_loja.get(item["loja_id"], 0), 2)
+            disc = discrepancias.get(item["loja_nome"], {})
+            item["discrepancia_unidades_falta"] = disc.get("unidades_falta_contagem", 0)
+    except Exception:
+        for item in base:
+            item.setdefault("quebra_caixa_acumulada", 0)
+            item.setdefault("discrepancia_unidades_falta", 0)
+    return base
+
+
 def _dre_via_repo(repo, dias: int, comissao_pct: float) -> list:
     async def _go():
         rows = await repo.listar_receita_por_loja(dias)
         resultado = []
         for r in rows:
             receita = r.receita_online + r.receita_pdv
-            comissao_valor = round(receita * comissao_pct / 100, 2)
+            # comissao de marketplace incide so' sobre receita online — vendas
+            # da loja fisica (PDV) nao pagam comissao de Shopee/Bling.
+            comissao_valor = round(r.receita_online * comissao_pct / 100, 2)
             lucro = round(receita - comissao_valor - r.frete - r.custos_producao, 2)
             margem_pct = round((lucro / receita * 100) if receita > 0 else 0, 1)
+            qtd_total = r.qtd_vendas + r.qtd_vendas_pdv
+            ticket_medio = round(receita / qtd_total, 2) if qtd_total > 0 else 0
             resultado.append({
                 "loja_id": r.loja_id, "loja_nome": r.loja_nome,
-                "receita": receita, "qtd_vendas": r.qtd_vendas,
+                "receita": receita, "receita_online": r.receita_online, "receita_pdv": r.receita_pdv,
+                "qtd_vendas": qtd_total, "ticket_medio": ticket_medio,
                 "comissao_pct": comissao_pct, "comissao_valor": comissao_valor,
                 "frete": r.frete, "custos_producao": r.custos_producao,
                 "lucro": lucro, "margem_pct": margem_pct,
                 "periodo_dias": dias,
             })
         resultado.sort(key=lambda x: x["lucro"], reverse=True)
-        return resultado
+        return _dre_com_extras(resultado, dias)
     try: return run_async(_go())
     except Exception as e: return []
 
@@ -367,15 +397,21 @@ def _dre_via_query(dias: int, comissao_pct: float) -> list:
 
             frete = float((await db.fetchval("SELECT COALESCE(SUM(frete),0) FROM vendas_pedidos WHERE loja_id = $1 AND data >= CURRENT_DATE - $2 AND status != 'cancelado'", lid, dias)) or 0)
             custos = float((await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM producao_custos WHERE loja_id = $1 AND data >= CURRENT_DATE - $2", lid, dias)) or 0)
-            qtd_vendas = int((await db.fetchval("SELECT COUNT(*) FROM vendas_pedidos WHERE loja_id = $1 AND data >= CURRENT_DATE - $2 AND status != 'cancelado'", lid, dias)) or 0)
+            qtd_online = int((await db.fetchval("SELECT COUNT(*) FROM vendas_pedidos WHERE loja_id = $1 AND data >= CURRENT_DATE - $2 AND status != 'cancelado'", lid, dias)) or 0)
+            qtd_pdv = int((await db.fetchval("SELECT COUNT(*) FROM pdv_vendas v JOIN pdv_caixas c ON c.id = v.caixa_id WHERE c.loja_id = $1 AND DATE(v.data) >= CURRENT_DATE - $2 AND v.status = 'finalizada'", lid, dias)) or 0)
+            qtd_vendas = qtd_online + qtd_pdv
 
-            comissao_valor = round(receita * comissao_pct / 100, 2)
+            # comissao de marketplace incide so' sobre receita online — vendas
+            # da loja fisica (PDV) nao pagam comissao de Shopee/Bling.
+            comissao_valor = round(float(rec_online or 0) * comissao_pct / 100, 2)
             lucro = round(receita - comissao_valor - frete - custos, 2)
             margem_pct = round((lucro / receita * 100) if receita > 0 else 0, 1)
+            ticket_medio = round(receita / qtd_vendas, 2) if qtd_vendas > 0 else 0
 
             resultado.append({
                 "loja_id": lid, "loja_nome": loja["nome"],
-                "receita": receita, "qtd_vendas": qtd_vendas,
+                "receita": receita, "receita_online": float(rec_online or 0), "receita_pdv": float(rec_pdv or 0),
+                "qtd_vendas": qtd_vendas, "ticket_medio": ticket_medio,
                 "comissao_pct": comissao_pct, "comissao_valor": comissao_valor,
                 "frete": frete, "custos_producao": custos,
                 "lucro": lucro, "margem_pct": margem_pct,
@@ -384,6 +420,6 @@ def _dre_via_query(dias: int, comissao_pct: float) -> list:
 
         # ordenar por lucro descendente
         resultado.sort(key=lambda x: x["lucro"], reverse=True)
-        return resultado
+        return _dre_com_extras(resultado, dias)
     try: return run_async(_go())
     except Exception as e: return []
