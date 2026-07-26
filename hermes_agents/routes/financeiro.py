@@ -54,13 +54,18 @@ def fin_update(tabela, id):
 
 @financeiro_bp.route("/<tabela>/<int:id>", methods=["DELETE"])
 def fin_delete(tabela, id):
-    from core.financeiro import delete as fin_delete_fn, FIN_TABLES
+    from core.financeiro import get as fin_get_fn, delete as fin_delete_fn, FIN_TABLES
     if tabela not in FIN_TABLES:
         return jsonify({"error": "Tabela invalida"}), 404
 
     @requer_permissao("financeiro.excluir")
     def _go():
-        return jsonify(fin_delete_fn(tabela, id))
+        from core.seguranca import auditar_exclusao
+        dados_antes = fin_get_fn(tabela, id)
+        resultado = fin_delete_fn(tabela, id)
+        if not resultado.get("error"):
+            auditar_exclusao("financeiro", tabela, id, dados_antes if not dados_antes.get("error") else None)
+        return jsonify(resultado)
     return _go()
 
 

@@ -53,6 +53,18 @@ def auditar(acao: str, modulo: str = "", entidade: str = "", entidade_id: int = 
     try: return run_async(_go())
     except Exception as e: log(AGENT, f"Erro auditar: {e}"); return None
 
+def auditar_exclusao(modulo: str, entidade: str, entidade_id: int, dados_antes: dict = None) -> int:
+    """Registra no audit_log uma exclusao, identificando o usuario real da
+    request atual (nao um texto livre) — usado pelas rotas DELETE dos modulos
+    de CRUD generico (financeiro, compras, rh, fiscal), que antes apagavam
+    registros sem deixar nenhum rastro de quem fez o que."""
+    from core.rbac import usuario_atual_da_request
+    from flask import request
+    usuario = usuario_atual_da_request()
+    return auditar("excluir", modulo, entidade, entidade_id, dados_antes=dados_antes,
+                    user_id=usuario.get("user_id"), email=usuario.get("email"),
+                    ip=request.remote_addr or "", user_agent=request.headers.get("User-Agent", ""))
+
 def listar_auditoria(modulo: str = "", email: str = "", entidade: str = "", limit: int = 100) -> list:
     async def _go():
         db = await get_db()

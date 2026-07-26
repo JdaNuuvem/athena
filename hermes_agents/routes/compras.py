@@ -44,10 +44,15 @@ def compras_update(tabela, id):
 
 @compras_bp.route("/<tabela>/<int:id>", methods=["DELETE"])
 def compras_delete(tabela, id):
-    from core.compras import delete as cd, TABLES
+    from core.compras import get as cg, delete as cd, TABLES
+    from core.seguranca import auditar_exclusao
     if tabela not in TABLES:
         return jsonify({"error": "Tabela invalida"}), 404
-    return jsonify(cd(tabela, id))
+    dados_antes = cg(tabela, id)
+    resultado = cd(tabela, id)
+    if not resultado.get("error"):
+        auditar_exclusao("compras", tabela, id, dados_antes if not dados_antes.get("error") else None)
+    return jsonify(resultado)
 
 
 @compras_bp.route("/solicitacoes/<int:id>/aprovar", methods=["POST"])

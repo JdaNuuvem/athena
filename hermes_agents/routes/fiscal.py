@@ -85,10 +85,15 @@ def fiscal_update(tabela, id):
 
 @fiscal_bp.route("/<tabela>/<int:id>", methods=["DELETE"])
 def fiscal_delete(tabela, id):
-    from core.fiscal import delete as fd, TABLES
+    from core.fiscal import get as fg, delete as fd, TABLES
+    from core.seguranca import auditar_exclusao
     if tabela not in TABLES:
         return jsonify({"error": "Tabela invalida"}), 404
-    return jsonify(fd(tabela, id))
+    dados_antes = fg(tabela, id)
+    resultado = fd(tabela, id)
+    if not resultado.get("error"):
+        auditar_exclusao("fiscal", tabela, id, dados_antes if not dados_antes.get("error") else None)
+    return jsonify(resultado)
 
 
 @fiscal_bp.route("/tributos/calcular/<int:nota_id>", methods=["GET"])

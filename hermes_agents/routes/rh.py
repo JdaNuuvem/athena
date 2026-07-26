@@ -104,10 +104,15 @@ def rh_update(tabela, id):
 
 @rh_bp.route("/<tabela>/<int:id>", methods=["DELETE"])
 def rh_delete(tabela, id):
-    from core.rh import delete as rh_delete_fn, RH_TABLES
+    from core.rh import get as rh_get_fn, delete as rh_delete_fn, RH_TABLES
+    from core.seguranca import auditar_exclusao
     if tabela not in RH_TABLES:
         return jsonify({"error": "Tabela invalida"}), 404
-    return jsonify(rh_delete_fn(tabela, id))
+    dados_antes = rh_get_fn(tabela, id)
+    resultado = rh_delete_fn(tabela, id)
+    if not resultado.get("error"):
+        auditar_exclusao("rh", tabela, id, dados_antes if not dados_antes.get("error") else None)
+    return jsonify(resultado)
 
 
 @rh_bp.route("/ponto/data/<data>", methods=["GET"])
