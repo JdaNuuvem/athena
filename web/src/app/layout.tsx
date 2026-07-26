@@ -38,10 +38,16 @@ const NAV_PERMS: Record<string, string> = {
   "/lojas": "cadastros:view",
 };
 
-const NAV_ITEMS = [
+// store: "fisica" | "virtual" marca um item (ou child) como exclusivo desse
+// tipo de loja — some do menu quando uma loja do OUTRO tipo esta selecionada.
+// Sem "store" = universal, sempre visivel independente da loja selecionada.
+type NavChild = { href: string; label: string; store?: "fisica" | "virtual" };
+type NavItem = { href: string; label: string; icon: string; store?: "fisica" | "virtual"; children?: NavChild[] };
+
+const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
   {
-    href: "/integracoes", label: "Shopee", icon: "bling",
+    href: "/integracoes", label: "Shopee", icon: "bling", store: "virtual",
     children: [
       { href: "/integracoes/shopee", label: "Config & Lojas" },
       { href: "/integracoes/shopee/dashboard", label: "Dashboard" },
@@ -60,18 +66,18 @@ const NAV_ITEMS = [
     href: "/estoque", label: "Estoque", icon: "estoque",
     children: [
       { href: "/estoque", label: "Visão Geral" },
-      { href: "/estoque/entrada", label: "Entrada (Scanner)" },
-      { href: "/estoque/saida", label: "Saída" },
-      { href: "/estoque/transferencias", label: "Transferências" },
-      { href: "/estoque/aprovacoes", label: "Aprovações" },
-      { href: "/estoque/contagem", label: "Contagem Cíclica" },
+      { href: "/estoque/entrada", label: "Entrada (Scanner)", store: "fisica" },
+      { href: "/estoque/saida", label: "Saída", store: "fisica" },
+      { href: "/estoque/transferencias", label: "Transferências", store: "fisica" },
+      { href: "/estoque/aprovacoes", label: "Aprovações", store: "fisica" },
+      { href: "/estoque/contagem", label: "Contagem Cíclica", store: "fisica" },
       { href: "/estoque/discrepancias", label: "Discrepâncias" },
-      { href: "/estoque/rotacao", label: "Rotação" },
+      { href: "/estoque/rotacao", label: "Rotação", store: "fisica" },
     ],
   },
   { href: "/compras", label: "Compras", icon: "compras" },
   { href: "/vendas", label: "Vendas", icon: "vendas" },
-  { href: "/pdv", label: "PDV", icon: "pdv" },
+  { href: "/pdv", label: "PDV", icon: "pdv", store: "fisica" },
   { href: "/financeiro", label: "Financeiro", icon: "financeiro" },
   { href: "/fiscal", label: "Fiscal", icon: "fiscal" },
   { href: "/crm", label: "CRM", icon: "crm" },
@@ -93,12 +99,25 @@ const NAV_ITEMS = [
   { href: "/config", label: "Configurações", icon: "cadastros" },
 ];
 
+// null (loja "todas", ou sem tipo definido) mostra tudo. Fisica esconde itens
+// marcados "virtual"; Virtual esconde itens marcados "fisica".
+function filtrarNavPorTipoLoja(items: NavItem[], tipo: "fisica" | "virtual" | null): NavItem[] {
+  if (!tipo) return items;
+  return items
+    .filter(item => !item.store || item.store === tipo)
+    .map(item => item.children
+      ? { ...item, children: item.children.filter(c => !c.store || c.store === tipo) }
+      : item)
+    .filter(item => !item.children || item.children.length > 0);
+}
+
 function Sidebar() {
   const { user, hasPermission, logout } = useAuth();
-  const { lojaId, lojas, setLojaId } = useStore();
+  const { lojaId, lojas, setLojaId, tipoLojaSelecionada } = useStore();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
   const pathname = usePathname();
+  const navItems = filtrarNavPorTipoLoja(NAV_ITEMS, tipoLojaSelecionada);
 
   return (
     <aside aria-label="Navegação principal" className={[
@@ -123,7 +142,7 @@ function Sidebar() {
       </div>
 
       <nav className="flex-1 p-2 space-y-1 overflow-y-auto" role="navigation">
-        {NAV_ITEMS.map((item) => {
+        {navItems.map((item) => {
           const active = pathname?.startsWith(item.href);
           const hasChildren = item.children && item.children.length > 0;
           const isExpanded = expandedMenu === item.href;

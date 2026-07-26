@@ -13,11 +13,12 @@ def listar_lojas_manage():
 def criar_loja_manage():
     data = request.json or {}
     nome = (data.get("nome") or "").strip()
+    tipo = data.get("tipo", "fisica")
     if not nome:
         return jsonify({"error": "Nome e obrigatorio"}), 400
     result = None
     from core.lojas import criar as criar_loja_fn
-    result = criar_loja_fn(nome)
+    result = criar_loja_fn(nome, tipo=tipo)
     return jsonify({"loja": result}) if result else jsonify({"error": "Erro ao criar"}), 500
 
 
@@ -27,10 +28,11 @@ def atualizar_loja_manage(id):
     nome = (data.get("nome") or "").strip()
     markup = data.get("shopee_markup_pct")
     grupos = data.get("grupos_publicacao")
+    tipo = data.get("tipo")
     if not nome:
         return jsonify({"error": "Nome e obrigatorio"}), 400
     from core.lojas import atualizar as atualizar_loja_fn
-    ok = atualizar_loja_fn(id, nome, shopee_markup_pct=markup, grupos_publicacao=grupos)
+    ok = atualizar_loja_fn(id, nome, shopee_markup_pct=markup, grupos_publicacao=grupos, tipo=tipo)
     return jsonify({"success": ok}) if ok else jsonify({"error": "Loja nao encontrada"}), 404
 
 

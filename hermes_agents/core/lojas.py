@@ -15,6 +15,11 @@ def _ensure_table():
                 ativa BOOLEAN DEFAULT TRUE, created_at TIMESTAMP DEFAULT NOW()
             )
         """)
+        # fisica (PDV/estoque/caixa fisico) ou virtual (marketplace/Shopee) —
+        # usado pelo frontend para mostrar so' os utilitarios relevantes no
+        # menu quando essa loja especifica esta selecionada.
+        try: await db.execute("ALTER TABLE lojas ADD COLUMN IF NOT EXISTS tipo VARCHAR(10) DEFAULT 'fisica'")
+        except Exception as e: pass
         count = await db.fetchval("SELECT COUNT(*) FROM lojas")
         if count == 0:
             try:
@@ -50,21 +55,23 @@ def listar() -> list:
     _ensure_table()
     async def _go():
         db = await get_db()
-        rows = await db.fetch("SELECT id, nome, ativa, created_at, bling_id FROM lojas ORDER BY id")
+        rows = await db.fetch("SELECT id, nome, ativa, created_at, bling_id, tipo FROM lojas ORDER BY id")
         return [dict(r) for r in rows]
     try: return run_async(_go())
     except Exception as e: log(AGENT, f"Erro listar: {e}"); return []
 
-def criar(nome: str):
+def criar(nome: str, tipo: str = "fisica"):
     _ensure_table()
+    if tipo not in ("fisica", "virtual"):
+        tipo = "fisica"
     async def _go():
         db = await get_db()
-        row = await db.fetchrow("INSERT INTO lojas (nome) VALUES ($1) RETURNING id, nome, ativa", nome)
+        row = await db.fetchrow("INSERT INTO lojas (nome, tipo) VALUES ($1, $2) RETURNING id, nome, ativa, tipo", nome, tipo)
         return dict(row) if row else None
     try: return run_async(_go())
     except Exception as e: log(AGENT, f"Erro criar: {e}"); return None
 
-def atualizar(id_loja: int, nome: str, shopee_markup_pct: float = None, grupos_publicacao: str = None) -> bool:
+def atualizar(id_loja: int, nome: str, shopee_markup_pct: float = None, grupos_publicacao: str = None, tipo: str = None) -> bool:
     _ensure_table()
     async def _go():
         db = await get_db()
@@ -73,6 +80,8 @@ def atualizar(id_loja: int, nome: str, shopee_markup_pct: float = None, grupos_p
             await db.execute("UPDATE lojas SET shopee_markup_pct = $1 WHERE id = $2", float(shopee_markup_pct), id_loja)
         if grupos_publicacao is not None:
             await db.execute("UPDATE lojas SET grupos_publicacao = $1 WHERE id = $2", grupos_publicacao.strip(), id_loja)
+        if tipo in ("fisica", "virtual"):
+            await db.execute("UPDATE lojas SET tipo = $1 WHERE id = $2", tipo, id_loja)
         return r != "UPDATE 0"
     try: return run_async(_go())
     except Exception as e: log(AGENT, f"Erro atualizar: {e}"); return False

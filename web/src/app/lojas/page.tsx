@@ -5,13 +5,13 @@ import { api } from "@/lib/api";
 import StatusBadge from "@/app/_components/StatusBadge";
 import LoadingState from "@/app/_components/LoadingState";
 
-interface Loja { id: number; nome: string; ativa: boolean; bling_id?: number; bling_descricao?: string; shopee_markup_pct?: number; }
+interface Loja { id: number; nome: string; ativa: boolean; bling_id?: number; bling_descricao?: string; shopee_markup_pct?: number; tipo?: "fisica" | "virtual"; }
 
 export default function LojasPage() {
   const [lojas, setLojas] = useState<Loja[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [modal, setModal] = useState<{ open: boolean; nome: string; markup: number; grupos: string; editId?: number }>({ open: false, nome: "", markup: 100, grupos: "" });
+  const [modal, setModal] = useState<{ open: boolean; nome: string; markup: number; grupos: string; tipo: "fisica" | "virtual"; editId?: number }>({ open: false, nome: "", markup: 100, grupos: "", tipo: "fisica" });
 
   const carregar = () => {
     api.lojasManage()
@@ -24,9 +24,9 @@ export default function LojasPage() {
   const salvar = async () => {
     const nome = modal.nome.trim();
     if (!nome) return;
-    if (modal.editId) await api.lojasAtualizar(modal.editId, nome, modal.markup, modal.grupos || undefined);
-    else await api.lojasCriar(nome);
-    setModal({ open: false, nome: "", markup: 100, grupos: "" });
+    if (modal.editId) await api.lojasAtualizar(modal.editId, nome, modal.markup, modal.grupos || undefined, modal.tipo);
+    else await api.lojasCriar(nome, modal.tipo);
+    setModal({ open: false, nome: "", markup: 100, grupos: "", tipo: "fisica" });
     carregar();
   };
 
@@ -62,7 +62,7 @@ export default function LojasPage() {
             {syncing ? "Sincronizando..." : "Sync Bling"}
           </button>
           <button
-            onClick={() => setModal({ open: true, nome: "", markup: 100, grupos: "" })}
+            onClick={() => setModal({ open: true, nome: "", markup: 100, grupos: "", tipo: "fisica" })}
             className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1.5 rounded-lg"
           >
             + Nova Loja
@@ -76,7 +76,12 @@ export default function LojasPage() {
             <div key={l.id} className="bg-neutral-800 border border-neutral-700 rounded-lg p-4 space-y-2">
               <div className="flex justify-between items-start">
                 <h3 className="text-sm font-semibold text-neutral-200">{l.nome}</h3>
-                <StatusBadge label={l.ativa ? "Ativa" : "Inativa"} variant={l.ativa ? "success" : "neutral"} />
+                <div className="flex gap-1 items-center">
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${l.tipo === "virtual" ? "bg-purple-900/40 text-purple-400" : "bg-sky-900/40 text-sky-400"}`}>
+                    {l.tipo === "virtual" ? "Virtual" : "Física"}
+                  </span>
+                  <StatusBadge label={l.ativa ? "Ativa" : "Inativa"} variant={l.ativa ? "success" : "neutral"} />
+                </div>
               </div>
               <p className="text-[10px] text-neutral-600">ID: {l.id}{l.bling_id ? ` · Bling #${l.bling_id}` : ""}</p>
               {l.shopee_markup_pct && l.shopee_markup_pct !== 100 && (
@@ -84,7 +89,7 @@ export default function LojasPage() {
               )}
               <div className="flex gap-2">
                 <button
-                  onClick={() => setModal({ open: true, nome: l.nome, markup: l.shopee_markup_pct || 100, grupos: (l as any).grupos_publicacao || "", editId: l.id })}
+                  onClick={() => setModal({ open: true, nome: l.nome, markup: l.shopee_markup_pct || 100, grupos: (l as any).grupos_publicacao || "", tipo: l.tipo || "fisica", editId: l.id })}
                   className="text-xs text-indigo-400 hover:text-indigo-300"
                 >Editar</button>
                 <button
@@ -99,7 +104,7 @@ export default function LojasPage() {
       )}
 
       {modal.open && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setModal({ open: false, nome: "", markup: 100, grupos: "" })}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setModal({ open: false, nome: "", markup: 100, grupos: "", tipo: "fisica" })}>
           <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-6 w-[350px]" onClick={e => e.stopPropagation()}>
             <h3 className="text-sm font-semibold text-neutral-200 mb-4">{modal.editId ? "Editar Loja" : "Nova Loja"}</h3>
             <input
@@ -111,6 +116,18 @@ export default function LojasPage() {
               autoFocus
               onKeyDown={e => e.key === "Enter" && salvar()}
             />
+            <div className="mb-4">
+              <label className="text-xs text-neutral-400 block mb-1">Tipo de loja:</label>
+              <select
+                value={modal.tipo}
+                onChange={e => setModal(p => ({ ...p, tipo: e.target.value as "fisica" | "virtual" }))}
+                className="w-full bg-neutral-700 border border-neutral-600 rounded px-3 py-2 text-xs text-neutral-200 focus:outline-none focus:border-indigo-500"
+              >
+                <option value="fisica">Física (PDV, caixa, estoque)</option>
+                <option value="virtual">Virtual (marketplace/Shopee)</option>
+              </select>
+              <p className="text-[10px] text-neutral-600 mt-1">Define quais utilitários aparecem no menu quando esta loja está selecionada.</p>
+            </div>
             <div className="flex items-center gap-2 mb-4">
               <label className="text-xs text-neutral-400">Shopee Markup:</label>
               <input
@@ -129,7 +146,7 @@ export default function LojasPage() {
               <p className="text-[10px] text-neutral-600 mt-1">Vazio = todos. Preenchido = só produtos com grupo correspondente.</p>
             </div>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setModal({ open: false, nome: "", markup: 100, grupos: "" })} className="text-xs px-3 py-1.5 rounded-lg text-neutral-400 hover:text-neutral-200">Cancelar</button>
+              <button onClick={() => setModal({ open: false, nome: "", markup: 100, grupos: "", tipo: "fisica" })} className="text-xs px-3 py-1.5 rounded-lg text-neutral-400 hover:text-neutral-200">Cancelar</button>
               <button onClick={salvar} className="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white">Salvar</button>
             </div>
           </div>

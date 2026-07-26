@@ -8,18 +8,22 @@ export interface LojaInfo {
   nome: string;
   ativa: boolean;
   bling_id?: number | null;
+  tipo?: "fisica" | "virtual";
 }
 
 interface StoreContextValue {
   lojaId: string;
   lojas: LojaInfo[];
   setLojaId: (id: string) => void;
+  /** Tipo da loja atualmente selecionada — null quando "todas" ou loja sem tipo definido */
+  tipoLojaSelecionada: "fisica" | "virtual" | null;
 }
 
 const StoreContext = createContext<StoreContextValue>({
   lojaId: "todas",
   lojas: [],
   setLojaId: () => {},
+  tipoLojaSelecionada: null,
 });
 
 export function StoreProvider({ children }: { children: ReactNode }) {
@@ -56,8 +60,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("loja-changed", handler);
   }, []);
 
+  const tipoLojaSelecionada: "fisica" | "virtual" | null =
+    lojaId === "todas" ? null : (lojas.find(l => String(l.id) === lojaId)?.tipo ?? null);
+
   return (
-    <StoreContext.Provider value={{ lojaId, lojas, setLojaId: handleSetLoja }}>
+    <StoreContext.Provider value={{ lojaId, lojas, setLojaId: handleSetLoja, tipoLojaSelecionada }}>
       {children}
     </StoreContext.Provider>
   );
