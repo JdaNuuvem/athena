@@ -230,8 +230,9 @@ class TestLojasEndpoints(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
 
     def test_manage_create(self):
+        # 403 e' esperado aqui: USER_TOKEN nao tem configuracoes.criar no RBAC mockado.
         r = self.client.post("/api/lojas/manage", json={"nome": "Loja Teste"}, headers=self.headers)
-        self.assertIn(r.status_code, [200, 500])  # 500 se DB offline
+        self.assertIn(r.status_code, [200, 403, 500])  # 500 se DB offline
 
     def test_manage_sem_token(self):
         r = self.client.get("/api/lojas/manage")
@@ -242,8 +243,9 @@ class TestLojasEndpoints(unittest.TestCase):
         self.assertIn(r.status_code, [200, 500])
 
     def test_sync_bling(self):
+        # 403 e' esperado aqui: USER_TOKEN nao tem configuracoes.editar no RBAC mockado.
         r = self.client.post("/api/lojas/sync/bling", headers=self.headers)
-        self.assertIn(r.status_code, [200, 500])
+        self.assertIn(r.status_code, [200, 403, 500])
 
 
 class TestVendasEndpoints(unittest.TestCase):

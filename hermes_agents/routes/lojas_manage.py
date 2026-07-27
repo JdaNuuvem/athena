@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+from core.rbac import requer_permissao
 
 lojas_bp = Blueprint("lojas_manage", __name__, url_prefix="/api/lojas")
 
@@ -16,10 +17,13 @@ def criar_loja_manage():
     tipo = data.get("tipo", "fisica")
     if not nome:
         return jsonify({"error": "Nome e obrigatorio"}), 400
-    result = None
-    from core.lojas import criar as criar_loja_fn
-    result = criar_loja_fn(nome, tipo=tipo)
-    return jsonify({"loja": result}) if result else jsonify({"error": "Erro ao criar"}), 500
+
+    @requer_permissao("configuracoes.criar")
+    def _go():
+        from core.lojas import criar as criar_loja_fn
+        result = criar_loja_fn(nome, tipo=tipo)
+        return jsonify({"loja": result}) if result else (jsonify({"error": "Erro ao criar"}), 500)
+    return _go()
 
 
 @lojas_bp.route("/manage/<int:id>", methods=["PUT"])
@@ -31,22 +35,37 @@ def atualizar_loja_manage(id):
     tipo = data.get("tipo")
     if not nome:
         return jsonify({"error": "Nome e obrigatorio"}), 400
-    from core.lojas import atualizar as atualizar_loja_fn
-    ok = atualizar_loja_fn(id, nome, shopee_markup_pct=markup, grupos_publicacao=grupos, tipo=tipo)
-    return jsonify({"success": ok}) if ok else jsonify({"error": "Loja nao encontrada"}), 404
+
+    @requer_permissao("configuracoes.editar")
+    def _go():
+        from core.lojas import atualizar as atualizar_loja_fn
+        ok = atualizar_loja_fn(id, nome, shopee_markup_pct=markup, grupos_publicacao=grupos, tipo=tipo)
+        return jsonify({"success": ok}) if ok else (jsonify({"error": "Loja nao encontrada"}), 404)
+    return _go()
 
 
 @lojas_bp.route("/manage/<int:id>", methods=["DELETE"])
 def deletar_loja_manage(id):
-    from core.lojas import deletar as deletar_loja_fn
-    ok = deletar_loja_fn(id)
-    return jsonify({"success": ok}) if ok else jsonify({"error": "Loja nao encontrada"}), 404
+    @requer_permissao("configuracoes.excluir")
+    def _go():
+        from core.lojas import listar as listar_lojas_fn, deletar as deletar_loja_fn
+        from core.seguranca import auditar_exclusao
+        dados_antes = next((l for l in listar_lojas_fn() if l.get("id") == id), None)
+        ok = deletar_loja_fn(id)
+        if not ok:
+            return jsonify({"error": "Loja nao encontrada"}), 404
+        auditar_exclusao("lojas", "manage", id, dados_antes)
+        return jsonify({"success": True})
+    return _go()
 
 
 @lojas_bp.route("/sync/bling", methods=["POST"])
 def lojas_sync_bling():
-    from core.lojas import sincronizar_bling
-    return jsonify(sincronizar_bling())
+    @requer_permissao("configuracoes.editar")
+    def _go():
+        from core.lojas import sincronizar_bling
+        return jsonify(sincronizar_bling())
+    return _go()
 
 
 @lojas_bp.route("/deposito-map", methods=["GET"])
