@@ -65,7 +65,8 @@ def auditar_exclusao(modulo: str, entidade: str, entidade_id: int, dados_antes: 
                     user_id=usuario.get("user_id"), email=usuario.get("email"),
                     ip=request.remote_addr or "", user_agent=request.headers.get("User-Agent", ""))
 
-def listar_auditoria(modulo: str = "", email: str = "", entidade: str = "", limit: int = 100) -> list:
+def listar_auditoria(modulo: str = "", email: str = "", entidade: str = "", limit: int = 100,
+                      acao: str = "", data_inicio: str = "", data_fim: str = "") -> list:
     async def _go():
         db = await get_db()
         where = []; params = []; p = 0
@@ -75,10 +76,24 @@ def listar_auditoria(modulo: str = "", email: str = "", entidade: str = "", limi
             p += 1; where.append(f"email ILIKE ${p}"); params.append(f"%{email}%")
         if entidade:
             p += 1; where.append(f"entidade = ${p}"); params.append(entidade)
+        if acao:
+            p += 1; where.append(f"acao = ${p}"); params.append(acao)
+        if data_inicio:
+            p += 1; where.append(f"created_at >= ${p}::date"); params.append(data_inicio)
+        if data_fim:
+            p += 1; where.append(f"created_at < (${p}::date + interval '1 day')"); params.append(data_fim)
         clause = " AND ".join(where) if where else "1=1"
         p += 1
         rows = await db.fetch(f"SELECT * FROM audit_log WHERE {clause} ORDER BY created_at DESC LIMIT ${p}", *params, limit)
         return [dict(r) for r in rows]
+    try: return run_async(_go())
+    except Exception as e: return []
+
+def modulos_auditados() -> list:
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch("SELECT DISTINCT modulo FROM audit_log WHERE modulo IS NOT NULL AND modulo != '' ORDER BY modulo")
+        return [r["modulo"] for r in rows]
     try: return run_async(_go())
     except Exception as e: return []
 

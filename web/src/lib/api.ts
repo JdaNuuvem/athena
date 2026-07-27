@@ -476,6 +476,21 @@ export const api = {
   finDelete: (tabela: string, id: number) => request<{ success: boolean }>(`/api/financeiro/${tabela}/${id}`, { method: "DELETE" }),
   finFluxoResumo: (dias?: number) => request<{ resumo: Record<string, number>; diario: unknown[] }>(`/api/financeiro/fluxo_caixa/resumo${dias ? "?dias=" + dias : ""}`),
   finDREResumo: (mes?: string) => request<{ receitas: number; despesas: number; resultado: number; lucro: boolean; items: unknown[] }>(`/api/financeiro/dre/resumo${mes ? "/" + mes : ""}`),
+
+  // Auditoria
+  auditoriaList: (filtros: { modulo?: string; email?: string; entidade?: string; acao?: string; data_inicio?: string; data_fim?: string; limit?: number }) => {
+    const q = new URLSearchParams();
+    Object.entries(filtros).forEach(([k, v]) => { if (v) q.set(k, String(v)); });
+    return request<{ auditoria: Record<string, unknown>[] }>(`/api/auditoria${q.toString() ? "?" + q : ""}`);
+  },
+  auditoriaModulos: () => request<{ modulos: string[] }>("/api/auditoria/modulos"),
+
+  // RBAC — PIN / cracha (autorizacao gerencial fora do PDV)
+  rbacListUsuarios: () => request<{ usuarios: { id: number; nome: string; email: string; role_id: number | null; ativo: boolean }[] }>("/api/rbac/usuarios"),
+  rbacDefinirPin: (id: number, pin: string) => request<{ ok?: boolean; error?: string }>(`/api/rbac/usuarios/${id}/pin`, { method: "PUT", body: JSON.stringify({ pin }) }),
+  rbacGerarCodigoBarras: (id: number) => request<{ ok?: boolean; codigo_barras?: string; error?: string }>(`/api/rbac/usuarios/${id}/codigo-barras`, { method: "POST" }),
+  rbacAutorizar: (payload: { permissao: string; usuario_pin_id?: number | null; pin?: string; codigo_barras?: string }) =>
+    request<{ ok?: boolean; id?: number; nome?: string; error?: string }>("/api/rbac/autorizar", { method: "POST", body: JSON.stringify(payload) }),
 };
 
 // Types — SSOT re-exports from lib/types/domain (removes duplicate definitions)

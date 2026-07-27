@@ -4,6 +4,25 @@ from core.rbac import requer_permissao, usuario_atual_da_request, usuario_tem_pe
 financeiro_bp = Blueprint("financeiro", __name__, url_prefix="/api/financeiro")
 
 
+def _resolver_aprovador(data: dict, usuario: dict) -> tuple:
+    """Quem grava como aprovador de um pagamento acima do limite: o proprio
+    usuario logado (se ja tem financeiro.aprovar) ou, senao, um gerente
+    identificado por PIN/cracha que tenha essa permissao — mesmo padrao de
+    autorizacao gerencial ja usado no PDV, aplicado ao financeiro."""
+    aprovador_id, aprovador_nome = usuario["user_id"], usuario["nome"]
+    tem_aprovar = usuario_tem_permissao("financeiro.aprovar")
+    if not tem_aprovar and (data.get("usuario_pin_id") or data.get("codigo_barras")):
+        from core.rbac import autorizar_com_permissao
+        auth = autorizar_com_permissao(
+            "financeiro.aprovar", data.get("usuario_pin_id"),
+            str(data.get("pin", "")), str(data.get("codigo_barras", "")),
+        )
+        if not auth.get("error"):
+            tem_aprovar = True
+            aprovador_id, aprovador_nome = auth["id"], auth["nome"]
+    return aprovador_id, aprovador_nome, tem_aprovar
+
+
 @financeiro_bp.route("/<tabela>", methods=["GET"])
 def fin_list(tabela):
     from core.financeiro import list as fin_list_fn, FIN_TABLES
@@ -24,8 +43,8 @@ def fin_create(tabela):
     @requer_permissao("financeiro.criar")
     def _go():
         usuario = usuario_atual_da_request()
-        tem_aprovar = usuario_tem_permissao("financeiro.aprovar")
-        return jsonify(criar_pagamento(tabela, data, usuario["user_id"], usuario["nome"], tem_aprovar))
+        aprovador_id, aprovador_nome, tem_aprovar = _resolver_aprovador(data, usuario)
+        return jsonify(criar_pagamento(tabela, data, aprovador_id, aprovador_nome, tem_aprovar))
     return _go()
 
 
@@ -47,8 +66,8 @@ def fin_update(tabela, id):
     @requer_permissao("financeiro.editar")
     def _go():
         usuario = usuario_atual_da_request()
-        tem_aprovar = usuario_tem_permissao("financeiro.aprovar")
-        return jsonify(atualizar_pagamento(tabela, id, data, usuario["user_id"], usuario["nome"], tem_aprovar))
+        aprovador_id, aprovador_nome, tem_aprovar = _resolver_aprovador(data, usuario)
+        return jsonify(atualizar_pagamento(tabela, id, data, aprovador_id, aprovador_nome, tem_aprovar))
     return _go()
 
 

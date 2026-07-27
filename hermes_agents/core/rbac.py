@@ -3,7 +3,7 @@ from core import get_db, run_async, log, hoje
 from functools import wraps
 from flask import request, jsonify
 from datetime import datetime, timedelta, timezone
-import hashlib, os as _os, jwt as _jwt
+import hashlib, hmac, os as _os, jwt as _jwt
 
 AGENT = "RBAC Core"
 
@@ -104,6 +104,13 @@ def _ensure_tables():
             role_id INT REFERENCES rbac_roles(id), ativo BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT NOW()
         )""")
+        # ponytail: PIN/cracha para autorizacao gerencial fora do PDV (ex: aprovar
+        # pagamento grande no financeiro sem precisar trocar de sessao) — mesmo
+        # padrao ja usado em pdv_operadores, aplicado aos usuarios do RBAC principal.
+        try: await db.execute("ALTER TABLE rbac_usuarios ADD COLUMN IF NOT EXISTS pin_hash VARCHAR(200)")
+        except Exception: pass
+        try: await db.execute("ALTER TABLE rbac_usuarios ADD COLUMN IF NOT EXISTS codigo_barras_hash VARCHAR(200)")
+        except Exception: pass
         # Seed permissoes
         count = await db.fetchval("SELECT COUNT(*) FROM rbac_permissoes")
         if count == 0:
@@ -206,6 +213,115 @@ def autenticar(email: str, senha: str) -> dict:
     try: return run_async(_go())
     except Exception as e: return {"error": str(e)}
 
+# ── PIN / crachá (autorização gerencial fora do PDV) ──
+# ponytail: mesmo padrão scrypt já usado em pdv_operadores (core/pdv.py) — aqui
+# aplicado aos usuários do RBAC principal, para permitir que um gerente autorize
+# uma ação sensível (ex: aprovar pagamento grande) sem precisar trocar de sessão.
+
+_SCRYPT_PARAMS = dict(n=2**14, r=8, p=1, dklen=32)
+
+def _hash_secreto(valor: str, salt: str = None) -> tuple:
+    if salt is None:
+        salt = _os.urandom(16).hex()
+    h = hashlib.scrypt(valor.encode(), salt=bytes.fromhex(salt), **_SCRYPT_PARAMS).hex()
+    return salt, h
+
+def _verificar_secreto(valor: str, salt: str, hash_armazenado: str) -> bool:
+    candidato = hashlib.scrypt(valor.encode(), salt=bytes.fromhex(salt), **_SCRYPT_PARAMS).hex()
+    return hmac.compare_digest(candidato, hash_armazenado)
+
+def definir_pin(user_id: int, pin: str) -> dict:
+    if not pin or not pin.isdigit() or not (4 <= len(pin) <= 6):
+        return {"error": "PIN deve ter de 4 a 6 digitos numericos"}
+    salt, h = _hash_secreto(pin)
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow("UPDATE rbac_usuarios SET pin_hash=$1 WHERE id=$2 AND ativo=TRUE RETURNING id", f"{salt}:{h}", user_id)
+        return dict(row) if row else None
+    try:
+        r = run_async(_go())
+        return {"ok": True} if r else {"error": "Usuario nao encontrado ou inativo"}
+    except Exception as e:
+        return {"error": str(e)}
+
+def gerar_codigo_barras_usuario(user_id: int) -> dict:
+    """Gera um codigo novo (cracha fisico) para o usuario — o codigo em texto
+    so' e' devolvido nesta chamada, para imprimir na hora; depois so' o hash fica salvo."""
+    async def _existe():
+        db = await get_db()
+        return await db.fetchrow("SELECT id FROM rbac_usuarios WHERE id=$1 AND ativo=TRUE", user_id)
+    try:
+        if not run_async(_existe()):
+            return {"error": "Usuario nao encontrado ou inativo"}
+    except Exception as e:
+        return {"error": str(e)}
+    codigo = _os.urandom(8).hex().upper()
+    salt, h = _hash_secreto(codigo)
+    async def _go():
+        db = await get_db()
+        await db.execute("UPDATE rbac_usuarios SET codigo_barras_hash=$1 WHERE id=$2", f"{salt}:{h}", user_id)
+    try:
+        run_async(_go())
+        return {"ok": True, "codigo_barras": codigo}
+    except Exception as e:
+        return {"error": str(e)}
+
+def verificar_pin_usuario(user_id: int, pin: str, permissao_necessaria: str = "") -> dict:
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow("SELECT * FROM rbac_usuarios WHERE id=$1 AND ativo=TRUE", user_id)
+        return dict(row) if row else None
+    try:
+        row = run_async(_go())
+    except Exception as e:
+        return {"error": str(e)}
+    if not row:
+        return {"error": "Usuario nao encontrado"}
+    stored = row.get("pin_hash") or ""
+    parts = stored.split(":", 1)
+    if len(parts) != 2:
+        return {"error": "Usuario sem PIN cadastrado"}
+    salt, h = parts
+    if not _verificar_secreto(pin, salt, h):
+        return {"error": "PIN incorreto"}
+    if permissao_necessaria and permissao_necessaria not in get_permissoes_por_usuario(user_id):
+        return {"error": f"Usuario nao tem a permissao {permissao_necessaria}"}
+    return {"ok": True, "id": row["id"], "nome": row["nome"]}
+
+def verificar_codigo_barras_usuario(codigo: str, permissao_necessaria: str = "") -> dict:
+    if not codigo:
+        return {"error": "codigo de barras obrigatorio"}
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch("SELECT * FROM rbac_usuarios WHERE ativo=TRUE AND codigo_barras_hash IS NOT NULL")
+        return [dict(r) for r in rows]
+    try:
+        candidatos = run_async(_go())
+    except Exception as e:
+        return {"error": str(e)}
+    for row in candidatos:
+        stored = row.get("codigo_barras_hash") or ""
+        parts = stored.split(":", 1)
+        if len(parts) != 2:
+            continue
+        salt, h = parts
+        if _verificar_secreto(codigo, salt, h):
+            if permissao_necessaria and permissao_necessaria not in get_permissoes_por_usuario(row["id"]):
+                return {"error": f"Usuario nao tem a permissao {permissao_necessaria}"}
+            return {"ok": True, "id": row["id"], "nome": row["nome"]}
+    return {"error": "Codigo de barras nao reconhecido"}
+
+def autorizar_com_permissao(permissao: str, usuario_pin_id: int = None, pin: str = "", codigo_barras: str = "") -> dict:
+    """Autorizacao gerencial generica (fora do PDV): o codigo de barras
+    identifica automaticamente quem tem a permissao pedida; o PIN exige que o
+    usuario/gerente ja tenha sido selecionado na tela (mesma logica do PDV,
+    aplicada aos usuarios do RBAC principal)."""
+    if codigo_barras:
+        return verificar_codigo_barras_usuario(codigo_barras, permissao)
+    if usuario_pin_id and pin:
+        return verificar_pin_usuario(usuario_pin_id, pin, permissao)
+    return {"error": "Informe PIN ou codigo de barras"}
+
 def get_permissoes_por_usuario(user_id: int) -> list:
     async def _go():
         db = await get_db()
@@ -228,7 +344,14 @@ def _list(t, order="id DESC", limit=500):
 
 def list_roles(): return _list("rbac_roles")
 def list_permissoes(): return _list("rbac_permissoes")
-def list_usuarios(): return _list("rbac_usuarios")
+
+# campos que nunca devem sair pela API — nao ha motivo legitimo para o
+# frontend ler hash de senha/PIN/cracha de volta (mesmo padrao aplicado a
+# cad_usuarios em core/cadastros.py).
+_CAMPOS_SENSIVEIS_USUARIO = {"password_hash", "pin_hash", "codigo_barras_hash"}
+
+def list_usuarios():
+    return [{k: v for k, v in u.items() if k not in _CAMPOS_SENSIVEIS_USUARIO} for u in _list("rbac_usuarios")]
 
 def criar_role(nome: str, descricao: str = "", permissoes: list = None) -> dict:
     async def _go():

@@ -56,7 +56,17 @@ def seg_auditoria():
     modulo = request.args.get("modulo", "")
     email = request.args.get("email", "")
     entidade = request.args.get("entidade", "")
-    return jsonify({"auditoria": listar_auditoria(modulo, email, entidade)})
+    acao = request.args.get("acao", "")
+    data_inicio = request.args.get("data_inicio", "")
+    data_fim = request.args.get("data_fim", "")
+    limit = request.args.get("limit", 100, type=int)
+    return jsonify({"auditoria": listar_auditoria(modulo, email, entidade, limit, acao, data_inicio, data_fim)})
+
+
+@seguranca_bp.route("/api/auditoria/modulos", methods=["GET"])
+def seg_auditoria_modulos():
+    from core.seguranca import modulos_auditados
+    return jsonify({"modulos": modulos_auditados()})
 
 
 @seguranca_bp.route("/api/logs", methods=["GET"])

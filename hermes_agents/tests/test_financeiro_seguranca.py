@@ -150,5 +150,65 @@ class TestFinanceiroAlcadaPagamento(unittest.TestCase):
         mock_update.assert_called_once()
 
 
+class TestFinanceiroAlcadaPorPinOuCracha(unittest.TestCase):
+    """Quem esta logado nao precisa ter financeiro.aprovar — um gerente pode
+    autorizar via PIN ou cracha, igual ja acontece no PDV."""
+
+    def setUp(self):
+        self._env_patch = patch.dict(os.environ, {"ATHENA_TOKEN": _TEST_TOKEN})
+        self._env_patch.start()
+        self.client = _app()
+
+    def tearDown(self):
+        self._env_patch.stop()
+
+    def test_pin_de_gerente_com_aprovar_libera_pagamento_alto(self):
+        token = rbac.gerar_token_sessao(7, "op@x.com", "Financeiro")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=["financeiro.criar"]), \
+             patch("core.rbac.verificar_pin_usuario", return_value={"ok": True, "id": 9, "nome": "Gerente Fulano"}), \
+             patch("core.financeiro.create", return_value={"id": 1}) as mock_create:
+            r = self.client.post(
+                "/api/financeiro/contas_pagar",
+                json={"fornecedor": "X", "valor": 9000, "status": "pago", "usuario_pin_id": 9, "pin": "1234"},
+                headers=headers,
+            )
+        self.assertEqual(r.status_code, 200)
+        mock_create.assert_called_once()
+        _, dados_enviados = mock_create.call_args[0]
+        self.assertEqual(dados_enviados["aprovado_por"], "Gerente Fulano")
+        self.assertEqual(dados_enviados["aprovado_por_id"], 9)
+
+    def test_pin_incorreto_nao_libera(self):
+        token = rbac.gerar_token_sessao(7, "op@x.com", "Financeiro")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=["financeiro.criar"]), \
+             patch("core.rbac.verificar_pin_usuario", return_value={"error": "PIN incorreto"}), \
+             patch("core.financeiro.create") as mock_create:
+            r = self.client.post(
+                "/api/financeiro/contas_pagar",
+                json={"fornecedor": "X", "valor": 9000, "status": "pago", "usuario_pin_id": 9, "pin": "0000"},
+                headers=headers,
+            )
+        data = r.get_json()
+        self.assertIn("error", data)
+        mock_create.assert_not_called()
+
+    def test_cracha_identifica_gerente_automaticamente(self):
+        token = rbac.gerar_token_sessao(7, "op@x.com", "Financeiro")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=["financeiro.criar"]), \
+             patch("core.rbac.verificar_codigo_barras_usuario", return_value={"ok": True, "id": 12, "nome": "Diretora X"}), \
+             patch("core.financeiro.create", return_value={"id": 1}) as mock_create:
+            r = self.client.post(
+                "/api/financeiro/contas_pagar",
+                json={"fornecedor": "X", "valor": 9000, "status": "pago", "codigo_barras": "ABC123"},
+                headers=headers,
+            )
+        self.assertEqual(r.status_code, 200)
+        _, dados_enviados = mock_create.call_args[0]
+        self.assertEqual(dados_enviados["aprovado_por"], "Diretora X")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
