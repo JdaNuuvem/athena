@@ -72,5 +72,68 @@ class TestComprasAprovarRBAC(unittest.TestCase):
         mock_aprovar.assert_called_once()
 
 
+class TestComprasCRUDExigePermissao(unittest.TestCase):
+    """CRUD generico de compras (create/update/delete) antes nao checava
+    nenhuma permissao — qualquer usuario autenticado podia criar, editar ou
+    excluir fornecedores, pedidos, cotacoes etc."""
+
+    def setUp(self):
+        self._env_patch = patch.dict(os.environ, {"ATHENA_TOKEN": _TEST_TOKEN})
+        self._env_patch.start()
+        app = Flask(__name__)
+        app.config["TESTING"] = True
+        app.register_blueprint(compras_bp)
+        self.client = app.test_client()
+
+    def tearDown(self):
+        self._env_patch.stop()
+
+    def test_criar_sem_permissao_nega(self):
+        token = rbac.gerar_token_sessao(7, "op@x.com", "Operador Loja")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=["pdv.operar"]), \
+             patch("core.compras.create") as mock_create:
+            r = self.client.post("/api/compras/fornecedores", json={"nome": "X"}, headers=headers)
+        self.assertEqual(r.status_code, 403)
+        mock_create.assert_not_called()
+
+    def test_criar_com_permissao_libera(self):
+        token = rbac.gerar_token_sessao(9, "gerente@x.com", "Gerente")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=["compras.criar"]), \
+             patch("core.compras.create", return_value={"id": 1}) as mock_create:
+            r = self.client.post("/api/compras/fornecedores", json={"nome": "X"}, headers=headers)
+        self.assertEqual(r.status_code, 200)
+        mock_create.assert_called_once()
+
+    def test_editar_sem_permissao_nega(self):
+        token = rbac.gerar_token_sessao(7, "op@x.com", "Operador Loja")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=["compras.criar"]), \
+             patch("core.compras.update") as mock_update:
+            r = self.client.put("/api/compras/fornecedores/1", json={"nome": "Y"}, headers=headers)
+        self.assertEqual(r.status_code, 403)
+        mock_update.assert_not_called()
+
+    def test_excluir_sem_permissao_nega(self):
+        token = rbac.gerar_token_sessao(7, "op@x.com", "Operador Loja")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=["compras.criar", "compras.editar"]), \
+             patch("core.compras.delete") as mock_delete:
+            r = self.client.delete("/api/compras/fornecedores/1", headers=headers)
+        self.assertEqual(r.status_code, 403)
+        mock_delete.assert_not_called()
+
+    def test_excluir_com_permissao_libera(self):
+        token = rbac.gerar_token_sessao(9, "gerente@x.com", "Gerente")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=["compras.excluir"]), \
+             patch("core.compras.get", return_value={"id": 1, "nome": "X"}), \
+             patch("core.compras.delete", return_value={"success": True}) as mock_delete:
+            r = self.client.delete("/api/compras/fornecedores/1", headers=headers)
+        self.assertEqual(r.status_code, 200)
+        mock_delete.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

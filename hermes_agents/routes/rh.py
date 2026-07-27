@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+from core.rbac import requer_permissao
 
 rh_bp = Blueprint("rh", __name__, url_prefix="/api/rh")
 
@@ -12,20 +13,28 @@ def rh_vale_list():
 @rh_bp.route("/vale", methods=["POST"])
 def rh_vale_create():
     data = request.json or {}
-    from core.rh import criar_vale
-    return jsonify(criar_vale(
-        int(data.get("funcionario_id", 0)),
-        data.get("nome", ""),
-        float(data.get("valor", 0)),
-        data.get("motivo", "")
-    ))
+
+    @requer_permissao("rh.criar")
+    def _go():
+        from core.rh import criar_vale
+        return jsonify(criar_vale(
+            int(data.get("funcionario_id", 0)),
+            data.get("nome", ""),
+            float(data.get("valor", 0)),
+            data.get("motivo", "")
+        ))
+    return _go()
 
 
 @rh_bp.route("/vale/<int:id>", methods=["PUT"])
 def rh_vale_update(id):
     data = request.json or {}
-    from core.rh import atualizar_vale
-    return jsonify(atualizar_vale(id, data.get("status", "")))
+
+    @requer_permissao("rh.editar")
+    def _go():
+        from core.rh import atualizar_vale
+        return jsonify(atualizar_vale(id, data.get("status", "")))
+    return _go()
 
 
 @rh_bp.route("/comissoes", methods=["GET"])
@@ -37,22 +46,30 @@ def rh_comissoes_list():
 @rh_bp.route("/comissoes", methods=["POST"])
 def rh_comissoes_create():
     data = request.json or {}
-    from core.rh import criar_comissao
-    return jsonify(criar_comissao(
-        int(data.get("vendedor_id", 0)),
-        data.get("nome", ""),
-        data.get("mes", ""),
-        float(data.get("total_vendas", 0)),
-        float(data.get("comissao_pct", 0)),
-        float(data.get("total_comissoes", 0))
-    ))
+
+    @requer_permissao("rh.criar")
+    def _go():
+        from core.rh import criar_comissao
+        return jsonify(criar_comissao(
+            int(data.get("vendedor_id", 0)),
+            data.get("nome", ""),
+            data.get("mes", ""),
+            float(data.get("total_vendas", 0)),
+            float(data.get("comissao_pct", 0)),
+            float(data.get("total_comissoes", 0))
+        ))
+    return _go()
 
 
 @rh_bp.route("/comissoes/<int:id>", methods=["PUT"])
 def rh_comissoes_update(id):
     data = request.json or {}
-    from core.rh import atualizar_comissao
-    return jsonify(atualizar_comissao(id, data.get("status", "")))
+
+    @requer_permissao("rh.editar")
+    def _go():
+        from core.rh import atualizar_comissao
+        return jsonify(atualizar_comissao(id, data.get("status", "")))
+    return _go()
 
 
 @rh_bp.route("/dashboard", methods=["GET"])
@@ -82,7 +99,11 @@ def rh_create(tabela):
     data = request.json or {}
     if not data:
         return jsonify({"error": "Dados obrigatorios"}), 400
-    return jsonify(rh_create_fn(tabela, data))
+
+    @requer_permissao("rh.criar")
+    def _go():
+        return jsonify(rh_create_fn(tabela, data))
+    return _go()
 
 
 @rh_bp.route("/<tabela>/<int:id>", methods=["GET"])
@@ -99,20 +120,28 @@ def rh_update(tabela, id):
     if tabela not in RH_TABLES:
         return jsonify({"error": "Tabela invalida"}), 404
     data = request.json or {}
-    return jsonify(rh_update_fn(tabela, id, data))
+
+    @requer_permissao("rh.editar")
+    def _go():
+        return jsonify(rh_update_fn(tabela, id, data))
+    return _go()
 
 
 @rh_bp.route("/<tabela>/<int:id>", methods=["DELETE"])
 def rh_delete(tabela, id):
     from core.rh import get as rh_get_fn, delete as rh_delete_fn, RH_TABLES
-    from core.seguranca import auditar_exclusao
     if tabela not in RH_TABLES:
         return jsonify({"error": "Tabela invalida"}), 404
-    dados_antes = rh_get_fn(tabela, id)
-    resultado = rh_delete_fn(tabela, id)
-    if not resultado.get("error"):
-        auditar_exclusao("rh", tabela, id, dados_antes if not dados_antes.get("error") else None)
-    return jsonify(resultado)
+
+    @requer_permissao("rh.excluir")
+    def _go():
+        from core.seguranca import auditar_exclusao
+        dados_antes = rh_get_fn(tabela, id)
+        resultado = rh_delete_fn(tabela, id)
+        if not resultado.get("error"):
+            auditar_exclusao("rh", tabela, id, dados_antes if not dados_antes.get("error") else None)
+        return jsonify(resultado)
+    return _go()
 
 
 @rh_bp.route("/ponto/data/<data>", methods=["GET"])

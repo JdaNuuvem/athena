@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+from core.rbac import requer_permissao
 
 compras_bp = Blueprint("compras", __name__, url_prefix="/api/compras")
 
@@ -23,7 +24,11 @@ def compras_create(tabela):
     if tabela not in TABLES:
         return jsonify({"error": "Tabela invalida"}), 404
     data = request.json or {}
-    return jsonify(cc(tabela, data))
+
+    @requer_permissao("compras.criar")
+    def _go():
+        return jsonify(cc(tabela, data))
+    return _go()
 
 
 @compras_bp.route("/<tabela>/<int:id>", methods=["GET"])
@@ -39,26 +44,35 @@ def compras_update(tabela, id):
     from core.compras import update as cu, TABLES
     if tabela not in TABLES:
         return jsonify({"error": "Tabela invalida"}), 404
-    return jsonify(cu(tabela, id, request.json or {}))
+    data = request.json or {}
+
+    @requer_permissao("compras.editar")
+    def _go():
+        return jsonify(cu(tabela, id, data))
+    return _go()
 
 
 @compras_bp.route("/<tabela>/<int:id>", methods=["DELETE"])
 def compras_delete(tabela, id):
     from core.compras import get as cg, delete as cd, TABLES
-    from core.seguranca import auditar_exclusao
     if tabela not in TABLES:
         return jsonify({"error": "Tabela invalida"}), 404
-    dados_antes = cg(tabela, id)
-    resultado = cd(tabela, id)
-    if not resultado.get("error"):
-        auditar_exclusao("compras", tabela, id, dados_antes if not dados_antes.get("error") else None)
-    return jsonify(resultado)
+
+    @requer_permissao("compras.excluir")
+    def _go():
+        from core.seguranca import auditar_exclusao
+        dados_antes = cg(tabela, id)
+        resultado = cd(tabela, id)
+        if not resultado.get("error"):
+            auditar_exclusao("compras", tabela, id, dados_antes if not dados_antes.get("error") else None)
+        return jsonify(resultado)
+    return _go()
 
 
 @compras_bp.route("/solicitacoes/<int:id>/aprovar", methods=["POST"])
 def compras_aprovar(id):
     from core.compras import aprovar_solicitacao
-    from core.rbac import requer_permissao, usuario_atual_da_request
+    from core.rbac import usuario_atual_da_request
 
     @requer_permissao("compras.aprovar")
     def _go():

@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from core import run_async, get_db
+from core.rbac import requer_permissao
 
 fiscal_bp = Blueprint("fiscal", __name__, url_prefix="/api/fiscal")
 
@@ -64,7 +65,12 @@ def fiscal_create(tabela):
     from core.fiscal import create as fc, TABLES
     if tabela not in TABLES:
         return jsonify({"error": "Tabela invalida"}), 404
-    return jsonify(fc(tabela, request.json or {}))
+    data = request.json or {}
+
+    @requer_permissao("fiscal.criar")
+    def _go():
+        return jsonify(fc(tabela, data))
+    return _go()
 
 
 @fiscal_bp.route("/<tabela>/<int:id>", methods=["GET"])
@@ -80,20 +86,29 @@ def fiscal_update(tabela, id):
     from core.fiscal import update as fu, TABLES
     if tabela not in TABLES:
         return jsonify({"error": "Tabela invalida"}), 404
-    return jsonify(fu(tabela, id, request.json or {}))
+    data = request.json or {}
+
+    @requer_permissao("fiscal.editar")
+    def _go():
+        return jsonify(fu(tabela, id, data))
+    return _go()
 
 
 @fiscal_bp.route("/<tabela>/<int:id>", methods=["DELETE"])
 def fiscal_delete(tabela, id):
     from core.fiscal import get as fg, delete as fd, TABLES
-    from core.seguranca import auditar_exclusao
     if tabela not in TABLES:
         return jsonify({"error": "Tabela invalida"}), 404
-    dados_antes = fg(tabela, id)
-    resultado = fd(tabela, id)
-    if not resultado.get("error"):
-        auditar_exclusao("fiscal", tabela, id, dados_antes if not dados_antes.get("error") else None)
-    return jsonify(resultado)
+
+    @requer_permissao("fiscal.excluir")
+    def _go():
+        from core.seguranca import auditar_exclusao
+        dados_antes = fg(tabela, id)
+        resultado = fd(tabela, id)
+        if not resultado.get("error"):
+            auditar_exclusao("fiscal", tabela, id, dados_antes if not dados_antes.get("error") else None)
+        return jsonify(resultado)
+    return _go()
 
 
 @fiscal_bp.route("/tributos/calcular/<int:nota_id>", methods=["GET"])
