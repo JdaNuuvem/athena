@@ -36,6 +36,7 @@ const NAV_PERMS: Record<string, string> = {
   "/hermes": "agents:view",
   "/roles": "roles:view",
   "/lojas": "cadastros:view",
+  "/seguranca": "security:view",
 };
 
 // store: "fisica" | "virtual" marca um item (ou child) como exclusivo desse
@@ -104,6 +105,15 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/integracoes/bling", label: "Bling", icon: "bling" },
   { href: "/hermes", label: "Hermes", icon: "agents" },
   { href: "/roles", label: "Cargos", icon: "cadastros" },
+  {
+    href: "/seguranca", label: "Segurança", icon: "cadastros",
+    children: [
+      { href: "/seguranca/auditoria", label: "Auditoria" },
+      { href: "/seguranca/logs", label: "Logs" },
+      { href: "/seguranca/historico", label: "Histórico" },
+      { href: "/seguranca/rbac", label: "RBAC" },
+    ],
+  },
   { href: "/config", label: "Configurações", icon: "cadastros" },
 ];
 
