@@ -259,8 +259,9 @@ class TestVendasEndpoints(unittest.TestCase):
         self.assertIsNotNone(data)
 
     def test_criar_pedido(self):
+        # 403 e' esperado aqui: USER_TOKEN nao tem vendas.criar no RBAC mockado.
         r = self.client.post("/api/vendas/pedido", json={"cliente_id": 1, "itens": []}, headers=self.headers)
-        self.assertIn(r.status_code, [200, 400, 500])
+        self.assertIn(r.status_code, [200, 400, 403, 500])
 
     def test_list(self):
         r = self.client.get("/api/vendas/pedidos", headers=self.headers)

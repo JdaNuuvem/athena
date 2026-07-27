@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+from core.rbac import requer_permissao, usuario_atual_da_request
 
 vendas_bp = Blueprint("vendas", __name__, url_prefix="/api/vendas")
 
@@ -29,7 +30,12 @@ def vendas_create(tabela):
     from core.vendas import create as vc, TABLES
     if tabela not in TABLES:
         return jsonify({"error": "Tabela invalida"}), 404
-    return jsonify(vc(tabela, request.json or {}))
+    data = request.json or {}
+
+    @requer_permissao("vendas.criar")
+    def _go():
+        return jsonify(vc(tabela, data))
+    return _go()
 
 
 @vendas_bp.route("/<tabela>/<int:id>", methods=["GET"])
@@ -45,32 +51,50 @@ def vendas_update(tabela, id):
     from core.vendas import update as vu, TABLES
     if tabela not in TABLES:
         return jsonify({"error": "Tabela invalida"}), 404
-    return jsonify(vu(tabela, id, request.json or {}))
+    data = request.json or {}
+
+    @requer_permissao("vendas.editar")
+    def _go():
+        return jsonify(vu(tabela, id, data))
+    return _go()
 
 
 @vendas_bp.route("/<tabela>/<int:id>", methods=["DELETE"])
 def vendas_delete(tabela, id):
-    from core.vendas import delete as vd, TABLES
+    from core.vendas import get as vg, delete as vd, TABLES
     if tabela not in TABLES:
         return jsonify({"error": "Tabela invalida"}), 404
-    return jsonify(vd(tabela, id))
+
+    @requer_permissao("vendas.excluir")
+    def _go():
+        from core.seguranca import auditar_exclusao
+        dados_antes = vg(tabela, id)
+        resultado = vd(tabela, id)
+        if not resultado.get("error"):
+            auditar_exclusao("vendas", tabela, id, dados_antes if not dados_antes.get("error") else None)
+        return jsonify(resultado)
+    return _go()
 
 
 @vendas_bp.route("/pedido", methods=["POST"])
 def vendas_criar_pedido():
     data = request.json or {}
-    from core.vendas import criar_pedido
-    return jsonify(criar_pedido(
-        cliente=data.get("cliente", ""),
-        itens=data.get("itens", []),
-        pagamentos=data.get("pagamentos", []),
-        desconto=float(data.get("desconto", 0)),
-        frete=float(data.get("frete", 0)),
-        vendedor=data.get("vendedor", ""),
-        marketplace=data.get("marketplace", "manual"),
-        loja_id=data.get("loja_id"),
-        observacoes=data.get("observacoes", ""),
-    ))
+
+    @requer_permissao("vendas.criar")
+    def _go():
+        from core.vendas import criar_pedido
+        return jsonify(criar_pedido(
+            cliente=data.get("cliente", ""),
+            itens=data.get("itens", []),
+            pagamentos=data.get("pagamentos", []),
+            desconto=float(data.get("desconto", 0)),
+            frete=float(data.get("frete", 0)),
+            vendedor=data.get("vendedor", ""),
+            marketplace=data.get("marketplace", "manual"),
+            loja_id=data.get("loja_id"),
+            observacoes=data.get("observacoes", ""),
+        ))
+    return _go()
 
 
 @vendas_bp.route("/pedido/<int:id>", methods=["GET"])
@@ -82,8 +106,13 @@ def vendas_detalhe_pedido(id):
 @vendas_bp.route("/pedido/<int:id>/status", methods=["PUT"])
 def vendas_atualizar_status(id):
     data = request.json or {}
-    from core.vendas import atualizar_status
-    return jsonify(atualizar_status(id, data.get("status", ""), data.get("usuario", "")))
+
+    @requer_permissao("vendas.editar")
+    def _go():
+        from core.vendas import atualizar_status
+        usuario = usuario_atual_da_request()
+        return jsonify(atualizar_status(id, data.get("status", ""), usuario["nome"]))
+    return _go()
 
 
 @vendas_bp.route("/sync/bling", methods=["POST"])
