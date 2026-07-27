@@ -1,0 +1,110 @@
+Open Platform
+Documentation
+Support Center
+Announcement
+Console
+English
+Log In
+Tables of Contents
+Getting Started
+>
+Introduction
+What is Shopee Open Platform?
+Benefits of using Shopee Open API?
+Who can access Shopee Open Platform?
+API integration overview
+Getting Started
+Introduction
+Developer account registration
+App management
+API calls
+Push Mechanism notifications
+Authorization and Authentication
+Sandbox Testing V2
+Service Partner Program
+V2.0 API Call Flow
+CNSC API Integration Guide
+KRSC API Integration Guide
+V2.0 Data Definition
+Requesting Access to Sensitive Data
+TW New Developer Audit
+API Best Practices
+Guidelines for Creating Product
+Product creation preparation
+Creating product
+Creating global product
+Publishing global product
+Variant management
+Product base info management
+Stock & Price Management
+Order Management
+First Mile Binding
+Return Refund Management
+SIP best practices
+Shopee On-Platform Ads API Guide
+Shopee Xpress - Package-free Integration Guide
+API de Cotação (Logística do Vendedor)
+Shopee Entrega Direta
+AUTO PARTS: COMPATIBILIDADE DE AUTOPEÇAS
+Brazil Open API Best Practice
+Passo a Passo Logistica API
+Ferramenta de Log da Open Platform
+Passo a passo para subir a NF-e através da OpenAPI
+APIs de orders
+Como criar conta na Open Platform e solicitar um perfil de desenvolvedor
+Open API auth call | Fluxo autorização
+Fulfilled by Shopee (BR)
+Quotation API (Entrega Expressa) Developer Guide
+Novo na Open Platform? Veja por onde começar as configurações e desenvolvimento
+Instant Mart Integration Guide
+Livestream API Integration Guide
+Shopee AMS API Integration Guide
+Shopee Video API Integration Guide
+Brand Portal Service API Integration Guide
+Terms of Use
+Terms of Service
+Data Protection Policy
+Platform Partner Rules
+TW Developer Screening
+Chatbot Terms of Service
+Introduction
+Last Updated: 2024-11-11
+Language Supported: English / 简体中文 / 繁體中文 / Português (Brasil) / ไทย
+What is Shopee Open Platform?
+Created to support developers serving Shopee sellers with different ecommerce needs, Shopee Open Platform is your go-to source of Open APIs and services.
+Powerful APIs: Get access to a wide range of Open APIs with Shopee Open Platform, including those for orders, products, marketing and more. By tapping on Open API and push notification services released by Shopee, you can create customized software services to satisfy common seller needs such as order fulfillment, product optimization, shop promotion and more.
+Comprehensive developer services: Enjoy end-to-end developer support at the stages of onboarding, APP development, APP testing, APP release, and APP maintenance. You can find tools for efficiency within the Shopee Open Platform to:
+Manage your APPs
+Access Open API testing tools, test accounts and sandbox testing environments
+Get important information such as the latest news (Announcement page), Open API articles (Documentation), answers to your queries (Support Center), and also search for articles.
+Benefits of using Shopee Open API?
+Shopee Open API provides sellers with quick and easy access to important shop data for selling on Shopee. This includes information for product, order, and campaign management, amongst others. Available in all markets, Shopee Open Platform allows you to integrate a single set of Open APIs even if you sell or support sellers in more than one market.
+Who can access Shopee Open Platform?
+Shopee Open Platform, specifically the Shopee Open Platform Console, caters to 2 types of developers, providing the most suitable solutions for each’s business needs:
+Software service providers: We offer a comprehensive range of Open APIs that cover all of Shopee’s key ecommerce processes for software businesses. By leveraging on Shopee Open Platform, you’ll be able to deliver a variety of APPs to meet sellers’ needs for shop operations, marketing, and more.
+Sellers with software development capabilities: If you’re a seller who wants to develop software tailored to your business needs, integrate your systems with Shopee’s to discover untapped potential in the areas of operations optimization and data management.
+API integration overview
+Here’s a quick look at the steps you can take to get familiar with API integration on Shopee Open Platform before going live with your App:
+User Guide
+Developer Guide
+API reference
+Push Mechanism
+Shopee Open Platform Data Protection Policy
+Shopee Markets
+Service Market
+Seller Education Hub (Singapore)
+Seller Education Hub (Malaysia)
+Seller Education Hub (Thailand)
+Seller Education Hub (Vietnam)
+Seller Education Hub (Indonesia)
+Seller Education Hub (Philippines)
+Seller Education Hub (Brazil)
+Seller Education Hub (Japan)
+Seller Education Hub (Korea)
+Seller Education Hub (Hongkong)
+虾皮卖家学习中心
+Support
+Announcement
+FAQ
+Raise Ticket
+Copyright @ Shopee 2025

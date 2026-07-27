@@ -1,6 +1,0 @@
-export * from './domain/entities'
-export * from './domain/value-objects'
-export * from './domain/repositories'
-export * from './infrastructure/persistence'
-export * from './application/services'
-export * from './application/use-cases'

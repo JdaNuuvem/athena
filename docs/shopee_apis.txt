@@ -1,0 +1,267 @@
+
+
+=== PRODUCTS ===
+
+V2.0 Tables of Contents
+- > v2.product.get_item_list
+Request
+Request Address
+Common Request Parameters
+Request Parameters
+Request Example
+Response
+Response Parameters
+Response Example
+Error Codes
+Error Example
+API Permissions
+API Tools
+get_open_campaign_added_product
+get_open_campaign_not_added_product
+batch_add_products_to_open_campaign
+add_all_products_to_open_campaign
+get_auto_add_new_product_toggle_status
+update_auto_add_new_product_setting
+batch_edit_products_open_campaign_setting
+edit_all_products_open_campaign_setting
+batch_remove_products_open_campaign_setting
+remove_all_products_open_campaign_setting
+get_open_campaign_batch_task_result
+get_optimization_suggestion_product
+batch_get_products_suggested_rate
+get_shop_suggested_rate
+get_targeted_campaign_addable_product_list
+get_recommended_affiliate_list
+get_managed_affiliate_list
+query_affiliate_list
+create_new_targeted_campaign
+get_targeted_campaign_list
+get_targeted_campaign_settings
+update_basic_info_of_targeted_campaign
+edit_product_list_of_targeted_campaign
+edit_affiliate_list_of_targeted_campaign
+terminate_targeted_campaign
+get_performance_data_update_time
+get_shop_performance
+get_product_performance
+get_affiliate_performance
+get_content_performance
+get_campaign_key_metrics_performance
+get_open_campaign_performance
+get_targeted_campaign_performance
+get_conversion_report
+get_validation_list
+get_validation_report
+get_cover_list
+edit_video_info
+post_video
+get_video_list
+get_video_detail
+delete_video
+get_overview_performance
+get_metric_trend
+get_user_demographics
+get_video_performance_list
+
+
+=== STOCK_UPDATE ===
+
+V2.0 Tables of Contents
+- > v2.product.update_stock
+Request
+Request Address
+Common Request Parameters
+Request Parameters
+Request Example
+Response
+Response Parameters
+Response Example
+Error Codes
+Error Example
+API Permissions
+API Tools
+get_open_campaign_added_product
+get_open_campaign_not_added_product
+batch_add_products_to_open_campaign
+add_all_products_to_open_campaign
+get_auto_add_new_product_toggle_status
+update_auto_add_new_product_setting
+batch_edit_products_open_campaign_setting
+edit_all_products_open_campaign_setting
+batch_remove_products_open_campaign_setting
+remove_all_products_open_campaign_setting
+get_open_campaign_batch_task_result
+get_optimization_suggestion_product
+batch_get_products_suggested_rate
+get_shop_suggested_rate
+get_targeted_campaign_addable_product_list
+get_recommended_affiliate_list
+get_managed_affiliate_list
+query_affiliate_list
+create_new_targeted_campaign
+get_targeted_campaign_list
+get_targeted_campaign_settings
+update_basic_info_of_targeted_campaign
+edit_product_list_of_targeted_campaign
+edit_affiliate_list_of_targeted_campaign
+terminate_targeted_campaign
+get_performance_data_update_time
+get_shop_performance
+get_product_performance
+get_affiliate_performance
+get_content_performance
+get_campaign_key_metrics_performance
+get_open_campaign_performance
+get_targeted_campaign_performance
+get_conversion_report
+get_validation_list
+get_validation_report
+get_cover_list
+edit_video_info
+post_video
+get_video_list
+get_video_detail
+delete_video
+get_overview_performance
+get_metric_trend
+get_user_demographics
+get_video_performance_list
+
+
+=== ORDERS ===
+
+V2.0 Tables of Contents
+Merchant > v2.order.get_order_list
+Request
+Request Address
+Common Request Parameters
+Request Parameters
+Request Example
+Response
+Response Parameters
+Response Example
+Error Codes
+Error Example
+API Permissions
+API Tools
+get_open_campaign_added_product
+get_open_campaign_not_added_product
+batch_add_products_to_open_campaign
+add_all_products_to_open_campaign
+get_auto_add_new_product_toggle_status
+update_auto_add_new_product_setting
+batch_edit_products_open_campaign_setting
+edit_all_products_open_campaign_setting
+batch_remove_products_open_campaign_setting
+remove_all_products_open_campaign_setting
+get_open_campaign_batch_task_result
+get_optimization_suggestion_product
+batch_get_products_suggested_rate
+get_shop_suggested_rate
+get_targeted_campaign_addable_product_list
+get_recommended_affiliate_list
+get_managed_affiliate_list
+query_affiliate_list
+create_new_targeted_campaign
+get_targeted_campaign_list
+get_targeted_campaign_settings
+update_basic_info_of_targeted_campaign
+edit_product_list_of_targeted_campaign
+edit_affiliate_list_of_targeted_campaign
+terminate_targeted_campaign
+get_performance_data_update_time
+get_shop_performance
+get_product_performance
+get_affiliate_performance
+get_content_performance
+get_campaign_key_metrics_performance
+get_open_campaign_performance
+get_targeted_campaign_performance
+get_conversion_report
+get_validation_list
+get_validation_report
+get_cover_list
+edit_video_info
+post_video
+get_video_list
+get_video_detail
+delete_video
+get_overview_performance
+get_metric_trend
+get_user_demographics
+get_video_performance_list
+
+
+=== SHOP_INFO ===
+
+V2.0 Tables of Contents
+Order > v2.shop.get_shop_info
+Request
+Request Address
+Common Request Parameters
+Request Parameters
+Request Example
+Response
+Response Parameters
+Response Example
+Error Codes
+Error Example
+API Permissions
+API Tools
+get_open_campaign_added_product
+get_open_campaign_not_added_product
+batch_add_products_to_open_campaign
+add_all_products_to_open_campaign
+get_auto_add_new_product_toggle_status
+update_auto_add_new_product_setting
+batch_edit_products_open_campaign_setting
+edit_all_products_open_campaign_setting
+batch_remove_products_open_campaign_setting
+remove_all_products_open_campaign_setting
+get_open_campaign_batch_task_result
+get_optimization_suggestion_product
+batch_get_products_suggested_rate
+get_shop_suggested_rate
+get_targeted_campaign_addable_product_list
+get_recommended_affiliate_list
+get_managed_affiliate_list
+query_affiliate_list
+create_new_targeted_campaign
+get_targeted_campaign_list
+get_targeted_campaign_settings
+update_basic_info_of_targeted_campaign
+edit_product_list_of_targeted_campaign
+edit_affiliate_list_of_targeted_campaign
+terminate_targeted_campaign
+get_performance_data_update_time
+get_shop_performance
+get_product_performance
+get_affiliate_performance
+get_content_performance
+get_campaign_key_metrics_performance
+get_open_campaign_performance
+get_targeted_campaign_performance
+get_conversion_report
+get_validation_list
+get_validation_report
+get_cover_list
+edit_video_info
+post_video
+get_video_list
+get_video_detail
+delete_video
+get_overview_performance
+get_metric_trend
+get_user_demographics
+get_video_performance_list
+
+
+=== MERCHANT ERROR: Page.goto: Timeout 15000ms exceeded.
+Call log:
+  - navigating to "https://open.shopee.com/documents/v2/v2.merchant.get_shop_list_by_merchant?module=123&type=1", waiting until "load"
+ ===
+
+
+
+=== LOGISTICS ===
+

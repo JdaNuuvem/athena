@@ -17,6 +17,9 @@ graphify-out/
 # Scripts de debug/deploy soltos na raiz (nao sao parte do codigo do projeto)
 /_*.py
 
+# Scripts de debug/deploy soltos, agora organizados em /scripts
+/scripts/*.py
+
 # Arquivos-lixo (sobras de redirecionamento de shell por engano)
 /1
 /data
@@ -34,7 +37,22 @@ graphify-out/
 /hermes_agents/dict
 /"shopee
 /web/,-
-athena/
+/'
+/([])
+/0
+/1
+/3
+/bool
+/conversao
+/deve
+/dict
+/list
+/max_pct
+/s.id
+/str
+/Operadores
+/CURRENT_DATE
+/NOW()
 
 # hermes_agents/dashboard/ (export estatico do Next.js) e' 100% gerado pelo
 # Dockerfile a cada build (npm run build com NEXT_STATIC_EXPORT=true dentro
