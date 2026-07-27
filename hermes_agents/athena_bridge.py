@@ -216,6 +216,7 @@ from routes.lojas_manage import lojas_bp as lojas_manage_bp
 from routes.rh import rh_bp
 from routes.cadastros import cadastros_bp
 from routes.financeiro import financeiro_bp
+from routes.bi import bi_bp
 app.register_blueprint(bling_bp)
 app.register_blueprint(integrations_bp)
 app.register_blueprint(webhook_bp)
@@ -241,6 +242,7 @@ app.register_blueprint(lojas_manage_bp)
 app.register_blueprint(rh_bp)
 app.register_blueprint(cadastros_bp)
 app.register_blueprint(financeiro_bp)
+app.register_blueprint(bi_bp)
 
 # ponytail: importar aqui garante que catalogo_produtos (SSOT) exista antes de
 # qualquer sync/listagem â€” sincronizar_produtos()/listar_produtos() fazem SQL
