@@ -1,54 +1,58 @@
 #!/usr/bin/env python3
 """
 Testes de integração para Fase 0 + Fase 1 - Fundação de Acesso e Núcleo Multiloja.
-"""
-from werkzeug.security import generate_password_hash
 
+ponytail: este teste importava routes.auth (USUARIOS/JWT_SECRET) — um
+blueprint inteiro (login + /api/me proprios, com seu esquema de permissoes
+"ver_lojas"/"ver_estoque" etc) que nunca foi registrado em athena_bridge.py
+e por isso nunca rodou de verdade; o /api/auth/login e /api/me reais sao os
+definidos diretamente em athena_bridge.py, com o esquema de permissoes do
+RBAC (core/rbac.py, codigos "modulo.acao"). routes/auth.py foi removido por
+ser codigo morto; este teste foi reescrito para validar o login/permissoes
+que realmente rodam em producao.
+"""
 TEST_PASSWORD = "senha-teste-123"
 
-import sys
+import os
 from core import log
 
 
 def test_auth_jwt_login_and_me():
-    """Testa que o login emite um JWT por usuário e /api/me devolve o papel real."""
+    """Testa que o login master (ATHENA_ADMIN_EMAIL/ATHENA_ADMIN_PW) emite um
+    JWT valido e que /api/me devolve o papel e as permissoes reais."""
     log("TEST", "Testando login JWT e /api/me...")
+    os.environ["ATHENA_ADMIN_EMAIL"] = "admin@teste.local"
+    os.environ["ATHENA_ADMIN_PW"] = TEST_PASSWORD
     from athena_bridge import app
-    from routes.auth import USUARIOS
+    from core.rbac import verificar_token_sessao
     import jwt
-
-    # Setup test user with known password
-    USUARIOS["admin"] = {
-        "hash": generate_password_hash(TEST_PASSWORD),
-        "role": "admin",
-        "name": "Admin",
-    }
 
     client = app.test_client()
 
-    resp = client.post("/api/auth/login", json={"username": "admin", "password": TEST_PASSWORD})
+    resp = client.post("/api/auth/login", json={"email": "admin@teste.local", "password": TEST_PASSWORD})
     assert resp.status_code == 200, f"Login deve retornar 200: {resp.get_json()}"
     body = resp.get_json()
     assert body["role"] == "admin", f"Role deve ser admin: {body}"
     token = body["token"]
     log("TEST", f"✅ Login emitiu token para role={body['role']}")
 
-    # Verify token is a JWT (not a static API_TOKEN)
+    # Verify token is a real signed JWT (nao um token estatico)
+    payload = verificar_token_sessao(token)
+    assert payload is not None, "Token deve ser um JWT valido e assinado"
+    assert payload["role"] == "admin", "Token role deve ser admin"
+    log("TEST", f"✅ Token é um JWT válido com role: {payload['role']}")
+
     try:
-        from routes.auth import JWT_SECRET
-        decoded = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-        assert decoded["role"] == "admin", "Token role deve ser admin"
-        log("TEST", f"✅ Token é um JWT válido com role: {decoded['role']}")
-    except jwt.InvalidSignatureError:
-        raise AssertionError("Token não é um JWT válido (signature inválida)")
-    except Exception as e:
-        raise AssertionError(f"Token não é um JWT válido: {e}")
+        jwt.decode(token + "adulterado", "chave-errada", algorithms=["HS256"])
+        raise AssertionError("Token adulterado nao deveria decodificar")
+    except jwt.PyJWTError:
+        pass
 
     resp_me = client.get("/api/me", headers={"Authorization": f"Bearer {token}"})
     assert resp_me.status_code == 200, f"/api/me deve retornar 200: {resp_me.get_json()}"
     me = resp_me.get_json()
     assert me["role"] == "admin", f"/api/me deve refletir role do token: {me}"
-    assert "ver_lojas" in me["permissoes"], f"Admin deve ter ver_lojas: {me}"
+    assert me["permissoes"] == ["*"], f"Login master deve ter todas as permissoes: {me}"
     log("TEST", f"✅ /api/me devolveu permissoes: {me['permissoes']}")
 
     resp_no_token = client.get("/api/me")
