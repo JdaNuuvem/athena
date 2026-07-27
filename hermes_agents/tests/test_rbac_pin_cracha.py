@@ -53,12 +53,55 @@ class TestVerificarPinUsuario(unittest.TestCase):
 
     def test_pin_incorreto_nega(self):
         salt, h = rbac._hash_secreto("1234")
-        with patch("core.rbac.get_db") as mock_get_db:
+        with patch("core.rbac.get_db") as mock_get_db, \
+             patch("core.rbac._pin_bloqueado", return_value=False), \
+             patch("core.rbac._registrar_tentativa_pin"):
             db = AsyncMock()
             db.fetchrow.return_value = {"id": 9, "nome": "Gerente Fulano", "pin_hash": f"{salt}:{h}"}
             mock_get_db.return_value = db
             r = rbac.verificar_pin_usuario(9, "0000", "financeiro.aprovar")
         self.assertIn("error", r)
+
+    def test_usuario_inexistente_devolve_erro_generico_igual_ao_pin_errado(self):
+        """Nao pode diferenciar 'usuario nao existe' de 'PIN errado' — vira
+        oraculo de enumeracao de usuario para quem tenta ids ao acaso."""
+        with patch("core.rbac.get_db") as mock_get_db, \
+             patch("core.rbac._pin_bloqueado", return_value=False), \
+             patch("core.rbac._registrar_tentativa_pin"):
+            db = AsyncMock()
+            db.fetchrow.return_value = None
+            mock_get_db.return_value = db
+            r_inexistente = rbac.verificar_pin_usuario(999, "1234")
+        salt, h = rbac._hash_secreto("1234")
+        with patch("core.rbac.get_db") as mock_get_db, \
+             patch("core.rbac._pin_bloqueado", return_value=False), \
+             patch("core.rbac._registrar_tentativa_pin"):
+            db = AsyncMock()
+            db.fetchrow.return_value = {"id": 9, "nome": "X", "pin_hash": f"{salt}:{h}"}
+            mock_get_db.return_value = db
+            r_pin_errado = rbac.verificar_pin_usuario(9, "0000")
+        self.assertEqual(r_inexistente["error"], r_pin_errado["error"])
+
+    def test_usuario_bloqueado_nega_mesmo_com_pin_correto(self):
+        salt, h = rbac._hash_secreto("1234")
+        with patch("core.rbac.get_db") as mock_get_db, \
+             patch("core.rbac._pin_bloqueado", return_value=True):
+            db = AsyncMock()
+            db.fetchrow.return_value = {"id": 9, "nome": "X", "pin_hash": f"{salt}:{h}"}
+            mock_get_db.return_value = db
+            r = rbac.verificar_pin_usuario(9, "1234")
+        self.assertIn("error", r)
+
+    def test_tentativas_erradas_repetidas_bloqueiam_usuario(self):
+        """Sem esse limite, /api/rbac/autorizar seria um oraculo de forca
+        bruta contra o PIN (so' 10 mil combinacoes possiveis em 4 digitos)."""
+        with patch("core.rbac.get_db") as mock_get_db:
+            db = AsyncMock()
+            db.fetchrow.return_value = {"tentativas": rbac._PIN_MAX_TENTATIVAS - 1}
+            mock_get_db.return_value = db
+            rbac._registrar_tentativa_pin(9, sucesso=False)
+        args = db.execute.call_args[0]
+        self.assertIn("INTERVAL", args[0])
 
     def test_pin_correto_sem_permissao_nega(self):
         salt, h = rbac._hash_secreto("1234")

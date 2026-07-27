@@ -111,6 +111,13 @@ def _ensure_tables():
         except Exception: pass
         try: await db.execute("ALTER TABLE rbac_usuarios ADD COLUMN IF NOT EXISTS codigo_barras_hash VARCHAR(200)")
         except Exception: pass
+        # ponytail: PIN tem so' 4-6 digitos (10 mil a 1 milhao de combinacoes) —
+        # sem bloqueio por tentativas, /api/rbac/autorizar vira um oraculo de
+        # forca bruta contra qualquer usuario alvo. Cracha nao precisa disso
+        # (segredo de 64 bits gerado aleatoriamente, forca bruta inviavel).
+        await db.execute("""CREATE TABLE IF NOT EXISTS rbac_autorizacao_tentativas (
+            user_id INT PRIMARY KEY, tentativas INT DEFAULT 0, bloqueado_ate TIMESTAMP
+        )""")
         # Seed permissoes
         count = await db.fetchval("SELECT COUNT(*) FROM rbac_permissoes")
         if count == 0:
@@ -266,7 +273,51 @@ def gerar_codigo_barras_usuario(user_id: int) -> dict:
     except Exception as e:
         return {"error": str(e)}
 
+_PIN_ERRO_GENERICO = "PIN invalido"
+_PIN_MAX_TENTATIVAS = 5
+_PIN_BLOQUEIO_MINUTOS = 15
+
+def _pin_bloqueado(user_id: int) -> bool:
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow("SELECT bloqueado_ate FROM rbac_autorizacao_tentativas WHERE user_id=$1", user_id)
+        return dict(row) if row else None
+    try:
+        row = run_async(_go())
+    except Exception:
+        return False
+    if not row or not row.get("bloqueado_ate"):
+        return False
+    from datetime import datetime, timezone
+    bloqueado_ate = row["bloqueado_ate"]
+    if bloqueado_ate.tzinfo is None:
+        bloqueado_ate = bloqueado_ate.replace(tzinfo=timezone.utc)
+    return bloqueado_ate > datetime.now(timezone.utc)
+
+def _registrar_tentativa_pin(user_id: int, sucesso: bool):
+    async def _go():
+        db = await get_db()
+        if sucesso:
+            await db.execute("DELETE FROM rbac_autorizacao_tentativas WHERE user_id=$1", user_id)
+            return
+        row = await db.fetchrow("SELECT tentativas FROM rbac_autorizacao_tentativas WHERE user_id=$1", user_id)
+        tentativas = (row["tentativas"] if row else 0) + 1
+        bloqueio_sql = f"NOW() + INTERVAL '{_PIN_BLOQUEIO_MINUTOS} minutes'" if tentativas >= _PIN_MAX_TENTATIVAS else "NULL"
+        await db.execute(f"""
+            INSERT INTO rbac_autorizacao_tentativas (user_id, tentativas, bloqueado_ate)
+            VALUES ($1, $2, {bloqueio_sql})
+            ON CONFLICT (user_id) DO UPDATE SET tentativas = $2, bloqueado_ate = {bloqueio_sql}
+        """, user_id, tentativas)
+    try: run_async(_go())
+    except Exception as e: log(AGENT, f"Erro ao registrar tentativa de PIN: {e}")
+
 def verificar_pin_usuario(user_id: int, pin: str, permissao_necessaria: str = "") -> dict:
+    """Mensagem de erro sempre generica (nunca diferencia 'nao encontrado' de
+    'PIN errado') para nao virar oraculo de enumeracao de usuario; bloqueia
+    apos varias tentativas erradas seguidas para o mesmo user_id, ja que um
+    PIN de 4-6 digitos e' forca-bruteavel sem esse limite."""
+    if _pin_bloqueado(user_id):
+        return {"error": "Muitas tentativas — tente novamente em alguns minutos"}
     async def _go():
         db = await get_db()
         row = await db.fetchrow("SELECT * FROM rbac_usuarios WHERE id=$1 AND ativo=TRUE", user_id)
@@ -275,17 +326,17 @@ def verificar_pin_usuario(user_id: int, pin: str, permissao_necessaria: str = ""
         row = run_async(_go())
     except Exception as e:
         return {"error": str(e)}
-    if not row:
-        return {"error": "Usuario nao encontrado"}
-    stored = row.get("pin_hash") or ""
-    parts = stored.split(":", 1)
-    if len(parts) != 2:
-        return {"error": "Usuario sem PIN cadastrado"}
-    salt, h = parts
-    if not _verificar_secreto(pin, salt, h):
-        return {"error": "PIN incorreto"}
+    valido = False
+    if row:
+        stored = row.get("pin_hash") or ""
+        parts = stored.split(":", 1)
+        if len(parts) == 2:
+            valido = _verificar_secreto(pin, parts[0], parts[1])
+    _registrar_tentativa_pin(user_id, valido)
+    if not valido:
+        return {"error": _PIN_ERRO_GENERICO}
     if permissao_necessaria and permissao_necessaria not in get_permissoes_por_usuario(user_id):
-        return {"error": f"Usuario nao tem a permissao {permissao_necessaria}"}
+        return {"error": _PIN_ERRO_GENERICO}
     return {"ok": True, "id": row["id"], "nome": row["nome"]}
 
 def verificar_codigo_barras_usuario(codigo: str, permissao_necessaria: str = "") -> dict:
@@ -307,7 +358,7 @@ def verificar_codigo_barras_usuario(codigo: str, permissao_necessaria: str = "")
         salt, h = parts
         if _verificar_secreto(codigo, salt, h):
             if permissao_necessaria and permissao_necessaria not in get_permissoes_por_usuario(row["id"]):
-                return {"error": f"Usuario nao tem a permissao {permissao_necessaria}"}
+                return {"error": "Codigo de barras nao autorizado para esta operacao"}
             return {"ok": True, "id": row["id"], "nome": row["nome"]}
     return {"error": "Codigo de barras nao reconhecido"}
 
