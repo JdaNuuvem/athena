@@ -179,7 +179,14 @@ export default function BlingConfigTab() {
             {notificacoes.map((n: any, i) => (
               <div key={n.id || i} className="flex items-center justify-between p-2 border-b border-neutral-700/50 text-xs">
                 <span className="text-neutral-300">{n.mensagem || n.descricao || `Notificação #${n.id}`}</span>
-                <button onClick={async () => { try { await confirmarLeituraNotificacao(n.id); carregar(); } catch {} }}
+                <button onClick={async () => {
+                  try {
+                    await confirmarLeituraNotificacao(n.id);
+                    carregar();
+                  } catch {
+                    setErro("Erro ao marcar notificação como lida — tente novamente.");
+                  }
+                }}
                   className="text-indigo-400 hover:text-indigo-300">Marcar lida</button>
               </div>
             ))}

@@ -14,6 +14,8 @@ export default function ReceberTab() {
   const [criando, setCriando] = useState(false);
   const [novaConta, setNovaConta] = useState({ cliente: "", descricao: "", valor: "", vencimento: "", forma_pagamento: "boleto" });
   const [erro, setErro] = useState("");
+  const [erroLista, setErroLista] = useState("");
+  const [marcandoId, setMarcandoId] = useState<number | null>(null);
 
   const load = () => { api.finList("contas_receber").then((r) => setData((r.data || []) as Conta[])).catch(() => {}).finally(() => setLoading(false)); };
   useEffect(() => { load(); }, []);
@@ -43,10 +45,17 @@ export default function ReceberTab() {
   };
 
   const marcarRecebido = async (c: Conta) => {
+    setErroLista("");
+    setMarcandoId(c.id);
     try {
-      await api.finUpdate("contas_receber", c.id, { status: "pago", data_recebimento: new Date().toISOString().slice(0, 10) });
+      const r = await api.finUpdate("contas_receber", c.id, { status: "pago", data_recebimento: new Date().toISOString().slice(0, 10) });
+      if ((r as { error?: string }).error) { setErroLista((r as { error?: string }).error || "Erro ao marcar como recebido"); return; }
       load();
-    } catch {}
+    } catch {
+      setErroLista("Erro ao marcar como recebido — tente novamente.");
+    } finally {
+      setMarcandoId(null);
+    }
   };
 
   return (
@@ -54,6 +63,7 @@ export default function ReceberTab() {
       <div className="flex items-center gap-3">
         <button onClick={abrirCriar} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1.5 rounded-lg transition-colors">+ Nova Conta</button>
       </div>
+      {erroLista && <div className="text-red-400 text-xs bg-red-950/40 border border-red-900/50 rounded-lg px-3 py-2">{erroLista}</div>}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[{ label: "Total Pendente", v: data.filter(c => c.status !== "pago").reduce((s, c) => s + c.valor, 0), c: "text-amber-400" }, { label: "Total Recebido", v: data.filter(c => c.status === "pago").reduce((s, c) => s + c.valor, 0), c: "text-emerald-400" }, { label: "Vencidas", v: data.filter(c => c.status === "atrasado").length, c: "text-red-400" }, { label: "Total", v: data.length, c: "text-neutral-200" }].map((c) => (
           <div key={c.label} className="bg-neutral-800 border border-neutral-700 rounded-lg p-3"><p className="text-[10px] text-neutral-500">{c.label}</p><p className={`text-sm font-semibold mt-0.5 ${c.c}`}>{c.label === "Vencidas" || c.label === "Total" ? c.v : fmt(c.v)}</p></div>
@@ -64,7 +74,12 @@ export default function ReceberTab() {
           <tbody>{data.map((c) => {
             const sc = c.status === "pago" ? "bg-emerald-500/20 text-emerald-400" : c.status === "atrasado" ? "bg-red-500/20 text-red-400" : "bg-amber-500/20 text-amber-400";
             return <tr key={c.id} className="border-b border-neutral-700/50 hover:bg-neutral-700/30 text-neutral-300"><td className="px-4 py-2.5">{c.cliente}</td><td className="px-4 py-2.5">{c.descricao}</td><td className="px-4 py-2.5">{fmt(c.valor)}</td><td className="px-4 py-2.5">{c.vencimento ? new Date(c.vencimento + "T00:00:00").toLocaleDateString("pt-BR") : "—"}</td><td className="px-4 py-2.5">{c.forma_pagamento}</td><td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded text-[10px] ${sc}`}>{c.status}</span></td>
-              <td className="px-4 py-2.5">{c.status !== "pago" && <button onClick={() => marcarRecebido(c)} className="text-indigo-400 hover:text-indigo-300 text-[11px]">Marcar como recebido</button>}</td>
+              <td className="px-4 py-2.5">{c.status !== "pago" && (
+                <button onClick={() => marcarRecebido(c)} disabled={marcandoId === c.id}
+                  className="text-indigo-400 hover:text-indigo-300 text-[11px] disabled:opacity-50">
+                  {marcandoId === c.id ? "Marcando..." : "Marcar como recebido"}
+                </button>
+              )}</td>
             </tr>;
           })}</tbody>
         </table></div>
