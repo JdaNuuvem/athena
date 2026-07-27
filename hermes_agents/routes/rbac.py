@@ -6,8 +6,8 @@ rbac_bp = Blueprint("rbac", __name__, url_prefix="/api/rbac")
 
 @rbac_bp.route("/roles", methods=["GET"])
 def rbac_list_roles():
-    from core.rbac import list_roles
-    return jsonify({"roles": list_roles()})
+    from core.rbac import list_roles_com_permissoes
+    return jsonify({"roles": list_roles_com_permissoes()})
 
 
 @rbac_bp.route("/roles", methods=["POST"])

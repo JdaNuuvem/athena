@@ -81,6 +81,40 @@ ACOES_PADRAO = [
     ("excluir", "Excluir"), ("aprovar", "Aprovar"), ("exportar", "Exportar"),
 ]
 
+# Papeis alem dos 4 originais (Admin/Financeiro/Operador Loja/Gerente),
+# cobrindo as funcoes reais do negocio (fabrica + 5 lojas + marketplace).
+# Criados via fix-up idempotente em _ensure_tables — nao apagam nem duplicam
+# papeis existentes, so' adicionam os que ainda nao existem pelo nome.
+ROLES_EXTRAS = [
+    ("Estoquista", "Controle de estoque fisico da loja",
+     ["dashboard.ver", "produtos.ver", "estoque.ver", "estoque.criar", "estoque.editar", "compras.ver", "pdv.ver"]),
+    ("Comprador", "Compra de fornecedores e manutencao de estoque da loja",
+     ["dashboard.ver", "cadastros.ver", "produtos.ver", "produtos.criar", "produtos.editar",
+      "compras.ver", "compras.criar", "compras.editar", "compras.aprovar",
+      "estoque.ver", "estoque.criar", "estoque.editar", "relatorios.ver"]),
+    ("Contador", "Compliance fiscal e contabil",
+     ["dashboard.ver", "fiscal.ver", "fiscal.criar", "fiscal.editar", "fiscal.exportar",
+      "financeiro.ver", "financeiro.exportar", "relatorios.ver", "relatorios.exportar", "bi.ver"]),
+    ("RH", "Gestao de pessoal",
+     ["dashboard.ver", "rh.ver", "rh.criar", "rh.editar", "rh.excluir", "documentos.ver", "documentos.criar", "cadastros.ver"]),
+    ("Administracao", "Back-office administrativo e financeiro operacional",
+     ["dashboard.ver", "financeiro.ver", "financeiro.criar", "financeiro.editar", "financeiro.aprovar",
+      "cadastros.ver", "cadastros.criar", "cadastros.editar", "rh.ver",
+      "documentos.ver", "documentos.criar", "compras.ver", "compras.aprovar",
+      "relatorios.ver", "relatorios.exportar"]),
+    ("Producao", "Chao de fabrica: ordens, apontamento e maquinas",
+     ["dashboard.ver", "producao.ver", "producao.criar", "producao.editar", "estoque.ver"]),
+    ("E-commerce", "Marketplaces, precos e catalogo online",
+     ["dashboard.ver", "produtos.ver", "produtos.editar", "vendas.ver", "bling.sincronizar", "relatorios.ver"]),
+    ("Atendimento", "SAC e relacionamento com cliente",
+     ["dashboard.ver", "atendimento.ver", "atendimento.criar", "atendimento.editar", "crm.ver", "crm.criar"]),
+    ("Diretor", "Visao executiva — leitura ampla, sem operacao do dia a dia",
+     ["dashboard.ver", "cadastros.ver", "produtos.ver", "estoque.ver", "compras.ver", "vendas.ver",
+      "pdv.ver", "financeiro.ver", "fiscal.ver", "crm.ver", "atendimento.ver", "producao.ver",
+      "rh.ver", "bi.ver", "bi.exportar", "documentos.ver", "automacoes.ver",
+      "relatorios.ver", "relatorios.exportar", "configuracoes.ver"]),
+]
+
 def _ensure_tables():
     async def _go():
         db = await get_db()
@@ -162,6 +196,32 @@ def _ensure_tables():
                         gerente["id"], perm["id"])
             except Exception as e:
                 log(AGENT, f"Fix-up {codigo_permissao} falhou: {e}")
+
+        # Fix-up idempotente: renomeia "Operador Loja" para "Vendedor" (nome
+        # real usado no negocio) preservando permissoes e usuarios ja
+        # atribuidos, e cria os papeis novos (ROLES_EXTRAS) que ainda nao
+        # existirem pelo nome.
+        try:
+            op_loja = await db.fetchrow("SELECT id FROM rbac_roles WHERE nome = 'Operador Loja'")
+            vendedor_ja_existe = await db.fetchrow("SELECT id FROM rbac_roles WHERE nome = 'Vendedor'")
+            if op_loja and not vendedor_ja_existe:
+                await db.execute("UPDATE rbac_roles SET nome = 'Vendedor' WHERE id = $1", op_loja["id"])
+        except Exception as e:
+            log(AGENT, f"Renomear Operador Loja -> Vendedor falhou: {e}")
+
+        for nome_role, desc_role, perms_role in ROLES_EXTRAS:
+            try:
+                existente = await db.fetchrow("SELECT id FROM rbac_roles WHERE nome = $1", nome_role)
+                if existente:
+                    continue
+                row = await db.fetchrow("INSERT INTO rbac_roles (nome, descricao) VALUES ($1,$2) RETURNING id", nome_role, desc_role)
+                role_id = row["id"]
+                for codigo in perms_role:
+                    p_row = await db.fetchrow("SELECT id FROM rbac_permissoes WHERE codigo=$1", codigo)
+                    if p_row:
+                        await db.execute("INSERT INTO rbac_role_permissoes (role_id,permissao_id) VALUES ($1,$2) ON CONFLICT DO NOTHING", role_id, p_row["id"])
+            except Exception as e:
+                log(AGENT, f"Fix-up role {nome_role} falhou: {e}")
 
         # Seed usuarios padrao (senhas via env vars, sem fallback hardcoded)
         count_u = await db.fetchval("SELECT COUNT(*) FROM rbac_usuarios")
@@ -395,6 +455,23 @@ def _list(t, order="id DESC", limit=500):
 
 def list_roles(): return _list("rbac_roles")
 def list_permissoes(): return _list("rbac_permissoes")
+
+def list_roles_com_permissoes() -> list:
+    """Igual list_roles(), mas com os codigos de permissao de cada papel
+    embutidos — usado pela tela de Cargos para mostrar/editar o que cada
+    papel pode fazer sem uma chamada extra por papel."""
+    async def _go():
+        db = await get_db()
+        roles = await db.fetch("SELECT * FROM rbac_roles ORDER BY id")
+        resultado = []
+        for r in roles:
+            perms = await db.fetch(
+                "SELECT p.codigo FROM rbac_role_permissoes rp JOIN rbac_permissoes p ON p.id = rp.permissao_id WHERE rp.role_id = $1 ORDER BY p.codigo",
+                r["id"])
+            resultado.append({**dict(r), "permissoes": [p["codigo"] for p in perms]})
+        return resultado
+    try: return run_async(_go())
+    except Exception as e: return []
 
 # campos que nunca devem sair pela API — nao ha motivo legitimo para o
 # frontend ler hash de senha/PIN/cracha de volta (mesmo padrao aplicado a
