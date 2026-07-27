@@ -59,16 +59,16 @@ export const api = {
       body: JSON.stringify({ email, password }),
     }),
 
-  me: () => request<{ id: string; name: string; role: string; roles: string[]; permissions: string[] }>("/api/auth/me"),
-
-  // RBAC
-  roles: () => request<{ roles: Array<{ id: string; name: string; description: string | null; active: boolean; isSystem: boolean; permissionCodes: string[]; createdAt: string }> }>("/api/roles"),
-  permissions: () => request<{ permissions: Array<{ id: string; code: string; module: string; action: string; description: string | null }> }>("/api/permissions"),
-  rolesUpdatePermissions: (roleId: string, permissionIds: string[]) =>
-    request<{ roleId: string; permissionCodes: string[] }>(`/api/roles/${roleId}/permissions`, {
-      method: "PUT",
-      body: JSON.stringify({ permissionIds }),
-    }),
+  // RBAC — papeis (cargos) e permissoes
+  roles: () => request<{ roles: Array<{ id: number; nome: string; descricao: string | null; created_at: string; permissoes: string[] }> }>("/api/rbac/roles"),
+  permissions: () => request<{ permissoes: Array<{ id: number; codigo: string; modulo: string; acao: string; descricao: string | null }> }>("/api/rbac/permissoes"),
+  roleCreate: (nome: string, descricao: string, permissoes: string[]) =>
+    request<{ id?: number; error?: string }>("/api/rbac/roles", { method: "POST", body: JSON.stringify({ nome, descricao, permissoes }) }),
+  roleUpdate: (roleId: number, nome: string, descricao: string) =>
+    request<{ id?: number; error?: string }>(`/api/rbac/roles/${roleId}`, { method: "PUT", body: JSON.stringify({ nome, descricao }) }),
+  roleDelete: (roleId: number) => request<{ success?: boolean; error?: string }>(`/api/rbac/roles/${roleId}`, { method: "DELETE" }),
+  rolesUpdatePermissions: (roleId: number, permissoes: string[]) =>
+    request<{ id?: number; error?: string }>(`/api/rbac/roles/${roleId}`, { method: "PUT", body: JSON.stringify({ permissoes }) }),
 
   // Health
   health: () => request<{ status: string; agents: Record<string, number>; infrastructure: Record<string, { connected: boolean }> }>("/api/health"),
@@ -485,8 +485,12 @@ export const api = {
   },
   auditoriaModulos: () => request<{ modulos: string[] }>("/api/auditoria/modulos"),
 
-  // RBAC — PIN / cracha (autorizacao gerencial fora do PDV)
+  // RBAC — usuarios (contas) e PIN / cracha (autorizacao gerencial fora do PDV)
   rbacListUsuarios: () => request<{ usuarios: { id: number; nome: string; email: string; role_id: number | null; ativo: boolean }[] }>("/api/rbac/usuarios"),
+  rbacCreateUsuario: (nome: string, email: string, senha: string, role: string) =>
+    request<{ id?: number; error?: string }>("/api/rbac/usuarios", { method: "POST", body: JSON.stringify({ nome, email, senha, role }) }),
+  rbacUpdateUsuario: (id: number, dados: { nome?: string; role?: string; ativo?: boolean }) =>
+    request<{ id?: number; error?: string }>(`/api/rbac/usuarios/${id}`, { method: "PUT", body: JSON.stringify(dados) }),
   rbacDefinirPin: (id: number, pin: string) => request<{ ok?: boolean; error?: string }>(`/api/rbac/usuarios/${id}/pin`, { method: "PUT", body: JSON.stringify({ pin }) }),
   rbacGerarCodigoBarras: (id: number) => request<{ ok?: boolean; codigo_barras?: string; error?: string }>(`/api/rbac/usuarios/${id}/codigo-barras`, { method: "POST" }),
   rbacAutorizar: (payload: { permissao: string; usuario_pin_id?: number | null; pin?: string; codigo_barras?: string }) =>
