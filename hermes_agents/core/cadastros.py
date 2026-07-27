@@ -283,10 +283,21 @@ ALL_TABLES = list(TABLES_MAP.keys()) + EXTRA_TABLES
 def _resolve(tabela: str) -> str:
     return TABLES_MAP.get(tabela) or EXTRA_MAP.get(tabela) or f"cad_{tabela}"
 
-def list(tabela: str): return _list(_resolve(tabela))
-def get(tabela: str, id: int): return _get(_resolve(tabela), id)
-def create(tabela: str, data: dict): return _create(_resolve(tabela), data)
-def update(tabela: str, id: int, data: dict): return _update(_resolve(tabela), id, data)
+# campos que nunca devem sair pela API generica, mesmo para quem tem
+# permissao de leitura na tabela — nao ha motivo legitimo para o frontend
+# ler hash de senha de volta.
+_CAMPOS_SENSIVEIS = {"usuarios": {"senha_hash"}}
+
+def _sem_campos_sensiveis(tabela: str, registro):
+    campos = _CAMPOS_SENSIVEIS.get(tabela)
+    if not campos or not isinstance(registro, dict):
+        return registro
+    return {k: v for k, v in registro.items() if k not in campos}
+
+def list(tabela: str): return [_sem_campos_sensiveis(tabela, r) for r in _list(_resolve(tabela))]
+def get(tabela: str, id: int): return _sem_campos_sensiveis(tabela, _get(_resolve(tabela), id))
+def create(tabela: str, data: dict): return _sem_campos_sensiveis(tabela, _create(_resolve(tabela), data))
+def update(tabela: str, id: int, data: dict): return _sem_campos_sensiveis(tabela, _update(_resolve(tabela), id, data))
 def delete(tabela: str, id: int): return _delete(_resolve(tabela), id)
 
 # ── Queries especiais ──
