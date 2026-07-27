@@ -138,7 +138,7 @@ def _ensure_tables():
         # Fix-up idempotente: garante permissoes novas no role Gerente mesmo em
         # bancos onde o seed de roles ja rodou antes delas existirem
         # (o bloco acima so' roda "if count_r == 0", nao repete em bancos existentes).
-        for codigo_permissao in ("estoque.aprovar", "pdv.aprovar", "compras.excluir", "rh.ver", "rh.criar", "rh.editar", "cadastros.excluir", "vendas.excluir"):
+        for codigo_permissao in ("estoque.aprovar", "pdv.aprovar", "compras.excluir", "rh.ver", "rh.criar", "rh.editar", "cadastros.excluir", "vendas.excluir", "crm.excluir"):
             try:
                 gerente = await db.fetchrow("SELECT id FROM rbac_roles WHERE nome = 'Gerente'")
                 perm = await db.fetchrow("SELECT id FROM rbac_permissoes WHERE codigo = $1", codigo_permissao)

@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+from core.rbac import requer_permissao
 
 crm_bp = Blueprint("crm", __name__, url_prefix="/api/crm")
 
@@ -12,7 +13,11 @@ def crm_funil():
 @crm_bp.route("/importar-bling", methods=["POST"])
 def crm_importar_bling():
     from core.crm import importar_contatos_bling
-    return jsonify(importar_contatos_bling())
+
+    @requer_permissao("crm.criar")
+    def _go():
+        return jsonify(importar_contatos_bling())
+    return _go()
 
 
 @crm_bp.route("/<tabela>", methods=["GET"])
@@ -31,7 +36,11 @@ def crm_create(tabela):
     data = request.json or {}
     if not data:
         return jsonify({"error": "Dados obrigatorios"}), 400
-    return jsonify(crm_create_fn(tabela, data))
+
+    @requer_permissao("crm.criar")
+    def _go():
+        return jsonify(crm_create_fn(tabela, data))
+    return _go()
 
 
 @crm_bp.route("/<tabela>/<int:id>", methods=["GET"])
@@ -48,12 +57,25 @@ def crm_update(tabela, id):
     if tabela not in CRM_TABLES:
         return jsonify({"error": "Tabela invalida"}), 404
     data = request.json or {}
-    return jsonify(crm_update_fn(tabela, id, data))
+
+    @requer_permissao("crm.editar")
+    def _go():
+        return jsonify(crm_update_fn(tabela, id, data))
+    return _go()
 
 
 @crm_bp.route("/<tabela>/<int:id>", methods=["DELETE"])
 def crm_delete(tabela, id):
-    from core.crm import delete as crm_delete_fn, CRM_TABLES
+    from core.crm import get as crm_get_fn, delete as crm_delete_fn, CRM_TABLES
     if tabela not in CRM_TABLES:
         return jsonify({"error": "Tabela invalida"}), 404
-    return jsonify(crm_delete_fn(tabela, id))
+
+    @requer_permissao("crm.excluir")
+    def _go():
+        from core.seguranca import auditar_exclusao
+        dados_antes = crm_get_fn(tabela, id)
+        resultado = crm_delete_fn(tabela, id)
+        if not resultado.get("error"):
+            auditar_exclusao("crm", tabela, id, dados_antes if not dados_antes.get("error") else None)
+        return jsonify(resultado)
+    return _go()
