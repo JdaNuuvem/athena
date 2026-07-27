@@ -2,6 +2,15 @@
 AG-01: Caçador de Produtos
 Pesquisa diariamente marketplaces em busca de produtos em alta,
 com baixa concorrência, que a fábrica consegue produzir.
+
+STATUS ATUAL (ver FONTE_DADOS_STATUS abaixo): 100% simulado. Todo produto e
+toda tendencia devolvidos vem de config/produtos.json e config/tendencias.json
+— nao ha nenhuma chamada real a Shopee/Mercado Livre/Amazon/Temu/TikTok Shop,
+Google Trends ou Pinterest. O modo "api" (CACADOR_FONTE=api) existe como
+intencao futura, mas nao esta implementado para nenhuma fonte; setar essa
+variavel so' faz log de aviso e cai de volta no simulado — nao ha
+diferenca de comportamento hoje. Cada registro devolvido carrega
+"fonte_dados": "simulada" explicitamente por isso.
 """
 import sys, json, os
 from pathlib import Path
@@ -31,6 +40,32 @@ FONTES_TENDENCIAS = ["google_trends", "pinterest"]
 # Fonte de dados: "simulada" (JSON config) ou "api" (APIs reais)
 FONTE_DADOS = os.getenv("CACADOR_FONTE", "simulada")
 
+# Status real por fonte — nenhuma tem integracao "api" implementada hoje.
+# Atualizar aqui quando (e se) uma fonte especifica ganhar integracao real.
+FONTE_DADOS_STATUS = {
+    "shopee": "simulada", "mercado_livre": "simulada", "amazon": "simulada",
+    "temu": "simulada", "tiktok_shop": "simulada",
+    "google_trends": "simulada", "pinterest": "simulada",
+}
+
+def status_fonte_dados() -> dict:
+    """Resumo do que e' real vs. simulado neste agente — para expor num
+    dashboard/relatorio sem precisar ler o codigo-fonte."""
+    return {
+        "modo_configurado": FONTE_DADOS,
+        "fontes": dict(FONTE_DADOS_STATUS),
+        "aviso": "100% simulado hoje — nenhuma fonte tem integracao real implementada.",
+    }
+
+def _avisar_modo_api_nao_implementado(fonte: str):
+    from core.seguranca import syslog
+    msg = f"AG-01: CACADOR_FONTE=api configurado, mas '{fonte}' nao tem integracao real implementada — usando dado simulado."
+    log(AGENT, f"⚠ {msg}")
+    try:
+        syslog("WARN", "ag_01_cacador", msg, data={"fonte": fonte})
+    except Exception:
+        pass
+
 def _carregar_produtos() -> dict:
     """Carrega catálogo simulado do JSON de configuração."""
     path = CONFIG_DIR / "produtos.json"
@@ -52,11 +87,12 @@ def pesquisar_marketplace(marketplace: str, categoria: str = "casa_e_decoracao")
     """
     log(AGENT, f"Pesquisando {marketplace} > {categoria}...")
 
-    if FONTE_DADOS == "simulada":
-        return PRODUTOS_CONFIG.get(marketplace, [])
-    # ponytail: placeholder para modo api, integrar com APIs reais quando tokens configurados
-    log(AGENT, f"⚠ Modo API ainda não implementado para {marketplace}, usando dados simulados")
-    return PRODUTOS_CONFIG.get(marketplace, [])
+    if FONTE_DADOS != "simulada":
+        _avisar_modo_api_nao_implementado(marketplace)
+    produtos = PRODUTOS_CONFIG.get(marketplace, [])
+    for p in produtos:
+        p["fonte_dados"] = "simulada"
+    return produtos
 
 # ---------------------------------------------------------------------------
 # Coleta de tendências
@@ -66,14 +102,12 @@ def coletar_tendencias() -> list:
     """Coleta tendências do Google Trends e Pinterest."""
     log(AGENT, "Coletando tendências...")
 
-    if FONTE_DADOS == "simulada":
-        path = CONFIG_DIR / "tendencias.json"
-        tendencias = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
-    else:
-        # ponytail: placeholder, trocar por pytrends / pinterest API
-        log(AGENT, "⚠ Modo API ainda não implementado para tendências, usando dados simulados")
-        path = CONFIG_DIR / "tendencias.json"
-        tendencias = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+    if FONTE_DADOS != "simulada":
+        _avisar_modo_api_nao_implementado("google_trends/pinterest")
+    path = CONFIG_DIR / "tendencias.json"
+    tendencias = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+    for t in tendencias:
+        t["fonte_dados"] = "simulada"
 
     async def _save():
         db = await get_db()
@@ -142,6 +176,7 @@ def analisar_viabilidade(produto: dict) -> dict:
         "tendencia": "estavel",
         "score_final": min(score, 100),
         "status": "analisar",
+        "fonte_dados": produto.get("fonte_dados", "simulada"),
     }
 
 # ---------------------------------------------------------------------------
