@@ -15,6 +15,9 @@ patcher = patch("asyncpg.create_pool", side_effect=_mp)
 patcher.start()
 
 import core.chat as chat
+from flask import Flask
+from routes.chat import chat_bp
+import core.rbac as rbac
 
 
 class TestChatConversas(unittest.TestCase):
@@ -67,6 +70,66 @@ class TestChatPonteTicket(unittest.TestCase):
             resultado = chat.criar_conversa_ticket(7)
         self.assertEqual(resultado["id"], 42)
         mock_obter.assert_called_once_with(42)
+
+
+def _app():
+    app = Flask(__name__)
+    app.config["TESTING"] = True
+    app.register_blueprint(chat_bp)
+    return app.test_client()
+
+
+class TestChatRotasPermissao(unittest.TestCase):
+    def setUp(self):
+        self.client = _app()
+
+    def test_listar_mensagens_nao_participante_nega(self):
+        with patch.dict(os.environ, {"ATHENA_JWT_SECRET": "test-secret-key"}):
+            token = rbac.gerar_token_sessao(11, "u@x.com", "Vendedor")
+            headers = {"Authorization": f"Bearer {token}"}
+            with patch("routes.chat.usuario_e_participante", return_value=False):
+                r = self.client.get("/api/chat/conversas/5/mensagens", headers=headers)
+            self.assertEqual(r.status_code, 403)
+
+    def test_listar_mensagens_participante_libera(self):
+        with patch.dict(os.environ, {"ATHENA_JWT_SECRET": "test-secret-key"}):
+            token = rbac.gerar_token_sessao(11, "u@x.com", "Vendedor")
+            headers = {"Authorization": f"Bearer {token}"}
+            with patch("routes.chat.usuario_e_participante", return_value=True), \
+                 patch("routes.chat.listar_mensagens", return_value=[{"id": 1, "texto": "oi"}]) as mock_listar:
+                r = self.client.get("/api/chat/conversas/5/mensagens", headers=headers)
+            self.assertEqual(r.status_code, 200)
+            mock_listar.assert_called_once()
+
+    def test_enviar_mensagem_nao_participante_nega(self):
+        with patch.dict(os.environ, {"ATHENA_JWT_SECRET": "test-secret-key"}):
+            token = rbac.gerar_token_sessao(11, "u@x.com", "Vendedor")
+            headers = {"Authorization": f"Bearer {token}"}
+            with patch("routes.chat.usuario_e_participante", return_value=False), \
+                 patch("routes.chat.enviar_mensagem") as mock_enviar:
+                r = self.client.post("/api/chat/conversas/5/mensagens", json={"texto": "oi"}, headers=headers)
+            self.assertEqual(r.status_code, 403)
+            mock_enviar.assert_not_called()
+
+    def test_adicionar_participante_exige_papel_admin(self):
+        with patch.dict(os.environ, {"ATHENA_JWT_SECRET": "test-secret-key"}):
+            token = rbac.gerar_token_sessao(11, "u@x.com", "Vendedor")
+            headers = {"Authorization": f"Bearer {token}"}
+            with patch("routes.chat.papel_do_usuario", return_value="membro"), \
+                 patch("routes.chat.adicionar_participante") as mock_add:
+                r = self.client.post("/api/chat/conversas/5/participantes", json={"user_id": 9}, headers=headers)
+            self.assertEqual(r.status_code, 403)
+            mock_add.assert_not_called()
+
+    def test_adicionar_participante_owner_libera(self):
+        with patch.dict(os.environ, {"ATHENA_JWT_SECRET": "test-secret-key"}):
+            token = rbac.gerar_token_sessao(11, "u@x.com", "Vendedor")
+            headers = {"Authorization": f"Bearer {token}"}
+            with patch("routes.chat.papel_do_usuario", return_value="owner"), \
+                 patch("routes.chat.adicionar_participante", return_value={"conversa_id": 5, "user_id": 9}) as mock_add:
+                r = self.client.post("/api/chat/conversas/5/participantes", json={"user_id": 9}, headers=headers)
+            self.assertEqual(r.status_code, 200)
+            mock_add.assert_called_once()
 
 
 if __name__ == "__main__":
