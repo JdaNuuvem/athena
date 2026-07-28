@@ -62,8 +62,8 @@ Duas funções novas, internas, por trás das quais tudo passa a operar:
 
 - `entrada` → `mover_saldo(tipo_origem=None, tipo_destino='disponivel', tipo_movimento=motivo mapeado)`
 - `saida` → `mover_saldo(tipo_origem='disponivel', tipo_destino=None, ...)`
-- `transferir` → continua instantâneo (sem estado pendente, comportamento atual preservado — quem precisa do estado `transito`/aprovação é o fluxo separado de `estoque_transferencias.py`, tratado no próximo item). Duas chamadas: `mover_saldo(origem, tipo_origem='disponivel', tipo_destino=None, tipo_movimento='transferencia_saida')` (débito puro na origem) depois `mover_saldo(destino, tipo_origem=None, tipo_destino='disponivel', tipo_movimento='transferencia_recebida')` (crédito puro no destino). Nunca passa pelo bucket `transito` — esse é exclusivo do fluxo com aprovação.
-- `ratear` → uma chamada `mover_saldo` por loja de destino, tipo_movimento='ajuste' com motivo descritivo (comportamento equivalente ao atual).
+- `transferir` → continua instantâneo (sem estado pendente, comportamento atual preservado — quem precisa do estado `transito`/aprovação é o fluxo separado de `estoque_transferencias.py`, tratado no próximo item). As duas pernas (`tipo_movimento='transferencia_saida'` débito puro na origem, depois `'transferencia_recebida'` crédito puro no destino) rodam na **mesma transação**, via `_mover_saldo_async(conn, ...)` — se a segunda falhar, a primeira sofre ROLLBACK. Nunca passa pelo bucket `transito` — esse é exclusivo do fluxo com aprovação.
+- `ratear` → **set absoluto** por loja, não crédito. O código pré-existente fazia `ON CONFLICT (sku, loja) DO UPDATE SET quantidade = $3`; um crédito (`mover_saldo` com `tipo_origem=None`) NÃO é equivalente — rodar o mesmo rateio duas vezes dobraria o estoque. Cada loja passa por `ajustar_absoluto_async(conn, ...)`, que lê o `disponivel` atual e aplica só o delta (`tipo_movimento='ajuste'`), preservando a idempotência da semântica original. Todas as lojas do rateio compartilham uma única conexão/transação.
 
 ## Corrige `estoque_transferencias.py`
 

@@ -6,7 +6,7 @@ from urllib.parse import urlencode
 
 from core import log, run_async, get_db
 from core.config import get_config, set_config
-from core.estoque import ajustar_absoluto
+from core.estoque import ajustar_absoluto, ajustar_absoluto_async
 
 AGENT = "Bling ERP v3"
 
@@ -746,7 +746,14 @@ def processar_evento_webhook(evento: str, payload: dict) -> dict:
                 row = await db.fetchrow("SELECT nome FROM lojas WHERE bling_id = $1", id_deposito)
                 if row: loja_nome = row["nome"]
             except: pass
-            resultado = ajustar_absoluto(sku, loja_nome, saldo, "ajuste_inventario")
+            # review #6: versao async-native — a sincrona aqui dentro faria
+            # run_async abrir um event loop novo por webhook e vazar um pool
+            # asyncpg (2-10 conexoes) que nunca e' fechado.
+            from core.estoque_saldos import _ensure_async as _ensure_saldos_async
+            await _ensure_saldos_async()
+            async with db.acquire() as conn:
+                async with conn.transaction():
+                    resultado = await ajustar_absoluto_async(conn, sku, loja_nome, saldo, "ajuste_inventario")
             if resultado.get("erro"):
                 log(AGENT, f"sync_bling: erro ao ajustar {sku}/{loja_nome} para {saldo}: {resultado['erro']}")
 

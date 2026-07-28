@@ -1,6 +1,10 @@
 """Estoque por loja — CRUD local + movimentacoes + Bling sync."""
 from core import get_db, run_async, log
-from core.estoque_saldos import mover_saldo, saldo as _saldo_bucket
+from core.estoque_saldos import (
+    mover_saldo, saldo as saldo_bucket,
+    _mover_saldo_async, _saldo_async, _ensure_async as _ensure_saldos_async,
+    SaldoError,
+)
 
 AGENT = "Estoque"
 
@@ -108,38 +112,116 @@ def saida(sku: str, loja: str, quantidade: float, motivo: str = "",
             "anterior": o["anterior"], "atual": o["atual"]}
 
 
+async def entrada_async(conn, sku: str, loja: str, quantidade: float, motivo: str = "",
+                        usuario_id: int = None, usuario_nome: str = "",
+                        ip: str = None, dispositivo: str = None) -> dict:
+    """Versao async-native de entrada(): usa a conexao/transacao ja aberta pelo
+    caller. Use em qualquer codigo que ja esteja dentro de um `async def`
+    (core/entidades.py, bling_erp.py, ratear...) — chamar entrada() la dentro
+    faz run_async abrir um event loop novo e vazar um pool asyncpg."""
+    if motivo not in MOTIVOS_ENTRADA:
+        motivo = "outro"
+    tipo_movimento = _MAPA_MOVIMENTO_ENTRADA[motivo]
+    r = await _mover_saldo_async(conn, sku, loja, None, "disponivel", quantidade,
+                                 tipo_movimento, motivo, usuario_id, usuario_nome, ip, dispositivo)
+    if r.get("erro"):
+        return r
+    d = r["saldo_destino"]
+    return {"ok": True, "sku": sku, "loja": loja, "quantidade": quantidade,
+            "anterior": d["anterior"], "atual": d["atual"]}
+
+
+async def saida_async(conn, sku: str, loja: str, quantidade: float, motivo: str = "",
+                      usuario_id: int = None, usuario_nome: str = "",
+                      ip: str = None, dispositivo: str = None) -> dict:
+    """Versao async-native de saida() — ver nota em entrada_async()."""
+    if motivo not in MOTIVOS_SAIDA:
+        return {"erro": f"Motivo invalido. Use um de: {', '.join(MOTIVOS_SAIDA)}"}
+    tipo_movimento = _MAPA_MOVIMENTO_SAIDA[motivo]
+    r = await _mover_saldo_async(conn, sku, loja, "disponivel", None, quantidade,
+                                 tipo_movimento, motivo, usuario_id, usuario_nome, ip, dispositivo)
+    if r.get("erro"):
+        return r
+    o = r["saldo_origem"]
+    return {"ok": True, "sku": sku, "loja": loja, "quantidade": quantidade,
+            "anterior": o["anterior"], "atual": o["atual"]}
+
+
+async def ajustar_absoluto_async(conn, sku: str, loja: str, quantidade_absoluta: float,
+                                 motivo: str = "ajuste_inventario",
+                                 usuario_id: int = None, usuario_nome: str = "",
+                                 ip: str = None, dispositivo: str = None) -> dict:
+    """Versao async-native de ajustar_absoluto() — ver nota em entrada_async()."""
+    atual = await _saldo_async(conn, sku, loja, "disponivel")
+    delta = round(float(quantidade_absoluta) - atual, 3)
+    if delta == 0:
+        return {"ok": True, "sku": sku, "loja": loja, "quantidade": quantidade_absoluta,
+                "anterior": atual, "atual": atual, "sem_alteracao": True}
+    if delta > 0:
+        return await entrada_async(conn, sku, loja, delta, motivo, usuario_id, usuario_nome, ip, dispositivo)
+    return await saida_async(conn, sku, loja, abs(delta), motivo, usuario_id, usuario_nome, ip, dispositivo)
+
+
 def transferir(sku: str, origem: str, destino: str, quantidade: float, motivo: str = "",
                usuario_id: int = None, usuario_nome: str = "",
                ip: str = None, dispositivo: str = None) -> dict:
     """Transferencia instantanea, sem aprovacao/estado pendente — nao passa
     pelo bucket 'transito' (esse e' exclusivo do fluxo com aprovacao em
-    core/estoque_transferencias.py)."""
-    r1 = mover_saldo(sku, origem, "disponivel", None, quantidade, "transferencia_saida", motivo,
-                      usuario_id, usuario_nome, ip, dispositivo)
-    if r1.get("erro"):
-        return {"erro": r1["erro"] if "insuficiente" in r1.get("erro", "") else f"Saldo insuficiente na origem: {r1['erro']}"}
-    r2 = mover_saldo(sku, destino, None, "disponivel", quantidade, "transferencia_recebida", motivo,
-                      usuario_id, usuario_nome, ip, dispositivo)
-    if r2.get("erro"):
-        return r2
-    return {"ok": True, "sku": sku, "origem": origem, "destino": destino,
-            "quantidade": quantidade,
-            "saldo_origem": r1["saldo_origem"]["atual"], "saldo_destino": r2["saldo_destino"]["atual"]}
+    core/estoque_transferencias.py).
+
+    Atomica (fix review final #7): as duas pernas (debito da origem + credito
+    do destino) rodam na MESMA transacao. Antes eram dois mover_saldo()
+    independentes — se a segunda falhasse, a origem ficava debitada sem
+    ninguem creditado (perda silenciosa de estoque)."""
+    async def _go():
+        await _ensure_saldos_async()
+        db = await get_db()
+        async with db.acquire() as conn:
+            async with conn.transaction():
+                r1 = await _mover_saldo_async(conn, sku, origem, "disponivel", None, quantidade,
+                                              "transferencia_saida", motivo,
+                                              usuario_id, usuario_nome, ip, dispositivo)
+                if r1.get("erro"):
+                    # Nada escrito ainda — pode retornar sem precisar de rollback.
+                    return {"erro": r1["erro"] if "insuficiente" in r1["erro"]
+                            else f"Saldo insuficiente na origem: {r1['erro']}"}
+                r2 = await _mover_saldo_async(conn, sku, destino, None, "disponivel", quantidade,
+                                              "transferencia_recebida", motivo,
+                                              usuario_id, usuario_nome, ip, dispositivo)
+                if r2.get("erro"):
+                    # Perna 1 ja escreveu: precisa levantar pra abortar a transacao.
+                    raise SaldoError(r2["erro"])
+                return {"ok": True, "sku": sku, "origem": origem, "destino": destino,
+                        "quantidade": quantidade,
+                        "saldo_origem": r1["saldo_origem"]["atual"],
+                        "saldo_destino": r2["saldo_destino"]["atual"]}
+    try:
+        return run_async(_go())
+    except SaldoError as e:
+        return {"erro": str(e)}
+    except Exception as e:
+        return {"erro": str(e)}
 
 
 def ajustar_absoluto(sku: str, loja: str, quantidade_absoluta: float, motivo: str = "ajuste_inventario",
                       usuario_id: int = None, usuario_nome: str = "",
                       ip: str = None, dispositivo: str = None) -> dict:
     """Para integracoes que mandam o valor final, nao um delta (Bling, PUT manual
-    de loja). Calcula o delta contra o disponivel atual e aplica como entrada/saida."""
-    atual = _saldo_bucket(sku, loja, "disponivel")
-    delta = round(float(quantidade_absoluta) - atual, 3)
-    if delta == 0:
-        return {"ok": True, "sku": sku, "loja": loja, "quantidade": quantidade_absoluta,
-                "anterior": atual, "atual": atual, "sem_alteracao": True}
-    if delta > 0:
-        return entrada(sku, loja, delta, motivo, usuario_id, usuario_nome, ip, dispositivo)
-    return saida(sku, loja, abs(delta), motivo, usuario_id, usuario_nome, ip, dispositivo)
+    de loja). Calcula o delta contra o disponivel atual e aplica como entrada/saida.
+    Leitura e escrita na MESMA transacao — antes eram duas chamadas separadas
+    (saldo() + entrada()), o que abria janela de corrida entre ler o atual e
+    gravar o delta."""
+    async def _go():
+        await _ensure_saldos_async()
+        db = await get_db()
+        async with db.acquire() as conn:
+            async with conn.transaction():
+                return await ajustar_absoluto_async(conn, sku, loja, quantidade_absoluta, motivo,
+                                                    usuario_id, usuario_nome, ip, dispositivo)
+    try:
+        return run_async(_go())
+    except Exception as e:
+        return {"erro": str(e)}
 
 
 def movimentacoes(sku: str = "", loja: str = "", limite: int = 50) -> list:
@@ -173,6 +255,7 @@ def ratear(sku: str, total: float, modo: str = "igual", lojas: list = None,
            periodo_dias: int = 30, percentuais: dict = None) -> dict:
     percentuais = percentuais or {}
     async def _go():
+        await _ensure_saldos_async()
         db = await get_db()
         if lojas:
             lojas_validas = [l for l in lojas if l.strip()]
@@ -225,13 +308,23 @@ def ratear(sku: str, total: float, modo: str = "igual", lojas: list = None,
             pcts[lojas_validas[0]] = round(pcts.get(lojas_validas[0], 0) + (100 - soma), 4)
         resultados = []
         distribuido = 0
-        for i, loja in enumerate(lojas_validas):
-            qtd = round(total * pcts[loja] / 100, 3)
-            if i == n - 1:
-                qtd = round(total - distribuido, 3)
-            distribuido += qtd
-            mover_saldo(sku, loja, None, "disponivel", qtd, "ajuste", f"rateio {modo}: {pcts[loja]}%")
-            resultados.append({"loja": loja, "quantidade": qtd, "percentual": pcts[loja]})
+        # Fix review final #3: rateio e' um SET ABSOLUTO, nao um credito. O
+        # codigo pre-existente fazia `ON CONFLICT DO UPDATE SET quantidade =
+        # $3`; rodar o mesmo rateio duas vezes tem que dar o mesmo estado
+        # final, nao o dobro. Fix #6: tudo numa conexao/transacao so' —
+        # chamar as versoes sincronas aqui dentro vazava um pool asyncpg por
+        # loja.
+        async with db.acquire() as conn:
+            async with conn.transaction():
+                for i, loja in enumerate(lojas_validas):
+                    qtd = round(total * pcts[loja] / 100, 3)
+                    if i == n - 1:
+                        qtd = round(total - distribuido, 3)
+                    distribuido += qtd
+                    r = await ajustar_absoluto_async(conn, sku, loja, qtd, "ajuste_inventario")
+                    if r.get("erro"):
+                        raise SaldoError(f"{loja}: {r['erro']}")
+                    resultados.append({"loja": loja, "quantidade": qtd, "percentual": pcts[loja]})
         return {"ok": True, "sku": sku, "total": total, "modo": modo,
                 "lojas": resultados, "percentuais": pcts}
     try:

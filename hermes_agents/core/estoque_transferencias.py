@@ -12,7 +12,9 @@ transferencia so pode ser rejeitada a partir de pendente_aprovacao, estado em
 que a origem nunca chegou a ser debitada."""
 from core import get_db, run_async, log
 from core.estoque import MOTIVOS_TRANSFERENCIA, LIMITE_APROVACAO_UNIDADES
-from core.estoque_saldos import mover_saldo
+from core.estoque_saldos import (
+    mover_saldo, _mover_saldo_async, _ensure_async as _ensure_saldos_async, SaldoError,
+)
 
 AGENT = "Estoque Transferencias"
 
@@ -173,28 +175,44 @@ def confirmar(transferencia_id: int, confirmador_id: int, confirmador_nome: str,
     if row["status"] != "em_transito":
         return {"erro": f"transferencia nao esta em transito (status: {row['status']})"}
 
-    r1 = mover_saldo(row["sku"], row["loja_origem"], "transito", None, quantidade_recebida,
-                      "transferencia_recebida", row["motivo"], confirmador_id, confirmador_nome, ip, dispositivo)
-    if r1.get("erro"):
-        return {"erro": r1["erro"]}
-    r2 = mover_saldo(row["sku"], row["loja_destino"], None, "disponivel", quantidade_recebida,
-                      "transferencia_recebida", row["motivo"], confirmador_id, confirmador_nome, ip, dispositivo)
-    if r2.get("erro"):
-        return {"erro": r2["erro"]}
-
     discrepancia = abs(float(quantidade_recebida) - float(row["quantidade_solicitada"])) > 0.001
     status_final = "com_discrepancia" if discrepancia else "confirmada"
-    async def _marcar():
+
+    # Fix review final #7: as duas pernas (baixa do 'transito' da origem +
+    # credito no 'disponivel' do destino) E a mudanca de status rodam na MESMA
+    # transacao. Antes eram tres operacoes independentes: se a segunda perna
+    # falhasse, o estoque sumia do transito sem chegar no destino e a
+    # transferencia continuava 'em_transito' — um retry debitava o transito de
+    # novo (perda dupla).
+    async def _confirmar():
+        await _ensure_saldos_async()
         db = await get_db()
-        await db.execute("""
-            UPDATE estoque_transferencias SET status = $1, quantidade_recebida = $2,
-                usuario_confirmador_id = $3, usuario_confirmador_nome = $4, confirmado_em = NOW()
-            WHERE id = $5
-        """, status_final, quantidade_recebida, confirmador_id, confirmador_nome, transferencia_id)
+        async with db.acquire() as conn:
+            async with conn.transaction():
+                r1 = await _mover_saldo_async(
+                    conn, row["sku"], row["loja_origem"], "transito", None, quantidade_recebida,
+                    "transferencia_recebida", row["motivo"], confirmador_id, confirmador_nome, ip, dispositivo)
+                if r1.get("erro"):
+                    return {"erro": r1["erro"]}  # nada escrito ainda
+                r2 = await _mover_saldo_async(
+                    conn, row["sku"], row["loja_destino"], None, "disponivel", quantidade_recebida,
+                    "transferencia_recebida", row["motivo"], confirmador_id, confirmador_nome, ip, dispositivo)
+                if r2.get("erro"):
+                    raise SaldoError(r2["erro"])
+                await conn.execute("""
+                    UPDATE estoque_transferencias SET status = $1, quantidade_recebida = $2,
+                        usuario_confirmador_id = $3, usuario_confirmador_nome = $4, confirmado_em = NOW()
+                    WHERE id = $5
+                """, status_final, quantidade_recebida, confirmador_id, confirmador_nome, transferencia_id)
+                return {"ok": True}
     try:
-        run_async(_marcar())
+        r = run_async(_confirmar())
+    except SaldoError as e:
+        return {"erro": str(e)}
     except Exception as e:
         return {"erro": str(e)}
+    if r.get("erro"):
+        return {"erro": r["erro"]}
     return {"ok": True, "transferencia_id": transferencia_id, "status": status_final,
             "quantidade_solicitada": float(row["quantidade_solicitada"]),
             "quantidade_recebida": float(quantidade_recebida), "discrepancia": discrepancia}

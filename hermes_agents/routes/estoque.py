@@ -81,15 +81,29 @@ def atualizar_estoque_loja():
     sync_bling = str(dados.get("sync_bling", "1")) == "1"
     if not sku or not loja_nome or quantidade is None:
         return jsonify({"erro": "sku, loja e quantidade obrigatorios"}), 400
-    usuario = usuario_atual_da_request()
-    ip, dispositivo = _origem_requisicao()
-    resultado = ajustar_absoluto(sku, loja_nome, float(quantidade), "ajuste_inventario",
-                                  usuario["user_id"], usuario["nome"], ip, dispositivo)
+    # A alteracao de saldo e o sync com marketplaces sao tratados em blocos
+    # separados de proposito: um erro de sync NAO pode parecer com um erro de
+    # saldo pro cliente — o ajuste ja foi commitado nesse ponto (review #4).
+    try:
+        usuario = usuario_atual_da_request()
+        ip, dispositivo = _origem_requisicao()
+        resultado = ajustar_absoluto(sku, loja_nome, float(quantidade), "ajuste_inventario",
+                                      usuario["user_id"], usuario["nome"], ip, dispositivo)
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
     if resultado.get("erro"):
         return jsonify(resultado), 500
     if sync_bling:
-        from core.estoque import sync_para_bling
-        resultado["bling_sync"] = sync_para_bling(loja_nome, sku, float(quantidade))
+        # `core.estoque.sync_para_bling` nunca existiu (ImportError em toda PUT
+        # normal, ja que sync_bling default e' "1"). A funcao real e'
+        # bling_erp.sincronizar_estoque_para_bling(sku, loja, quantidade) —
+        # note tambem a ordem dos argumentos, que estava trocada na chamada
+        # antiga.
+        try:
+            from bling_erp import sincronizar_estoque_para_bling
+            resultado["bling_sync"] = sincronizar_estoque_para_bling(sku, loja_nome, float(quantidade))
+        except Exception as e:
+            resultado["bling_sync"] = {"erro": str(e)}
     try:
         from shopee import sincronizar_estoque_todas_lojas_automatico
         Thread(target=lambda: sincronizar_estoque_todas_lojas_automatico(sku, float(quantidade)), daemon=True).start()
@@ -100,17 +114,20 @@ def atualizar_estoque_loja():
 
 @estoque_bp.route('/sync/processar', methods=['POST'])
 def processar_fila_estoque():
-    """Processa fila de sync pendente (retry offline)."""
-    from core.estoque import processar_fila_sync
-    limite = request.args.get("limite", 50, type=int)
-    return jsonify(processar_fila_sync(limite))
+    """Fila de sync offline nunca foi implementada — `core.estoque.processar_fila_sync`
+    nao existe (e nunca existiu; o endpoint quebrava com ImportError/500 HTML).
+    Responde 501 explicito ate que a fila seja implementada de fato.
+    TODO(follow-up): implementar fila de retry de sync de estoque."""
+    return jsonify({"erro": "fila de sync de estoque nao implementada",
+                    "detalhe": "endpoint reservado; nenhuma fila offline existe hoje"}), 501
 
 
 @estoque_bp.route('/sync/status/<sku>', methods=['GET'])
 def status_sync_sku(sku):
-    """Status de sync para um SKU."""
-    from core.estoque import status_sync_sku
-    return jsonify(status_sync_sku(sku))
+    """Idem processar_fila_estoque: `core.estoque.status_sync_sku` nao existe.
+    TODO(follow-up): expor status real quando a fila de sync existir."""
+    return jsonify({"sku": sku, "erro": "status de sync de estoque nao implementado",
+                    "detalhe": "endpoint reservado; nenhuma fila offline existe hoje"}), 501
 
 
 @estoque_bp.route('/buscar-codigo', methods=['GET'])

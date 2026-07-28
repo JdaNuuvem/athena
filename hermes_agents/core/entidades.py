@@ -234,23 +234,36 @@ def ao_faturar_pedido(pedido_id: int) -> dict:
         # 5) Baixar estoque
         try:
             itens = await db.fetch("SELECT * FROM vendas_itens WHERE pedido_id = $1", pedido_id)
-            erro_estoque = None
+            # review #8: era uma unica string sobrescrita — num pedido de 10
+            # linhas com falha na 2 e na 5, so' sobrava a da 5. Agora acumula
+            # todas, com o SKU de cada uma.
+            from core.estoque_saldos import _ensure_async as _ensure_saldos_async
+            await _ensure_saldos_async()
+            erros_estoque = []
             for item in itens:
                 item = dict(item)
                 sku = item.get("sku","")
                 qtd = float(item.get("quantidade",0) or 0)
                 if sku and qtd > 0:
-                    from core.estoque import saida as _estoque_saida
-                    res = _estoque_saida(sku, LOJA_PRINCIPAL, qtd, "uso_interno")
+                    # review #6: usa a versao async-native com a conexao deste
+                    # mesmo loop; a versao sincrona aqui dentro faria run_async
+                    # abrir um loop novo por linha e vazar um pool asyncpg.
+                    from core.estoque import saida_async as _estoque_saida_async
+                    async with db.acquire() as conn:
+                        async with conn.transaction():
+                            res = await _estoque_saida_async(conn, sku, LOJA_PRINCIPAL, qtd, "uso_interno")
                     if res.get("erro"):
-                        erro_estoque = res["erro"]
+                        erros_estoque.append({"sku": sku, "erro": res["erro"]})
                         continue
                     # Atualizar catalogo FK
                     from core.catalogo import buscar_por_sku_ou_criar
                     pid = buscar_por_sku_ou_criar(sku, item.get("descricao",""))
                     if pid:
                         await db.execute("UPDATE vendas_itens SET produto_id = $1 WHERE id = $2", pid, item["id"])
-            resultados["estoque"] = f"erro: {erro_estoque}" if erro_estoque else "baixado"
+            resultados["estoque"] = (f"erro: {len(erros_estoque)} item(ns) falharam"
+                                     if erros_estoque else "baixado")
+            if erros_estoque:
+                resultados["estoque_erros"] = erros_estoque
         except Exception as e: resultados["estoque"] = f"erro: {e}"
         # 7) Gerar conta a receber (se pagamento a prazo)
         try:
@@ -296,22 +309,29 @@ def ao_receber_compra(recebimento_id: int) -> dict:
         resultados = {}
         # 10) Entrada no estoque
         try:
-            erro_estoque = None
+            from core.estoque_saldos import _ensure_async as _ensure_saldos_async
+            await _ensure_saldos_async()
+            erros_estoque = []  # review #8: acumula por SKU em vez de sobrescrever
             for item in itens:
                 item = dict(item)
                 sku = item.get("produto_codigo","")
                 qtd = float(item.get("quantidade",0) or 0)
                 if sku and qtd > 0:
-                    from core.estoque import entrada as _estoque_entrada
-                    res = _estoque_entrada(sku, LOJA_PRINCIPAL, qtd, "compra_fornecedor")
+                    from core.estoque import entrada_async as _estoque_entrada_async
+                    async with db.acquire() as conn:  # review #6
+                        async with conn.transaction():
+                            res = await _estoque_entrada_async(conn, sku, LOJA_PRINCIPAL, qtd, "compra_fornecedor")
                     if res.get("erro"):
-                        erro_estoque = res["erro"]
+                        erros_estoque.append({"sku": sku, "erro": res["erro"]})
                         continue
                     from core.catalogo import buscar_por_sku_ou_criar
                     pid_cat = buscar_por_sku_ou_criar(sku, item.get("descricao",""))
                     if pid_cat:
                         await db.execute("UPDATE compras_itens SET produto_id = $1 WHERE id = $2", pid_cat, item["id"])
-            resultados["estoque"] = f"erro: {erro_estoque}" if erro_estoque else "entrada"
+            resultados["estoque"] = (f"erro: {len(erros_estoque)} item(ns) falharam"
+                                     if erros_estoque else "entrada")
+            if erros_estoque:
+                resultados["estoque_erros"] = erros_estoque
         except Exception as e: resultados["estoque"] = f"erro: {e}"
         # 12) Contas a pagar
         try:
@@ -344,10 +364,15 @@ def ao_finalizar_producao(op_id: int) -> dict:
             sku = op["produto_codigo"]
             qtd = float(op["quantidade"] or 0)
             if sku and qtd > 0:
-                from core.estoque import entrada as _estoque_entrada
-                res = _estoque_entrada(sku, LOJA_PRODUCAO, qtd, "producao_interna")
+                from core.estoque import entrada_async as _estoque_entrada_async
+                from core.estoque_saldos import _ensure_async as _ensure_saldos_async
+                await _ensure_saldos_async()
+                async with db.acquire() as conn:  # review #6
+                    async with conn.transaction():
+                        res = await _estoque_entrada_async(conn, sku, LOJA_PRODUCAO, qtd, "producao_interna")
                 if res.get("erro"):
                     resultados["estoque_acabado"] = f"erro: {res['erro']}"
+                    resultados["estoque_acabado_erros"] = [{"sku": sku, "erro": res["erro"]}]
                 else:
                     from core.catalogo import buscar_por_sku_ou_criar
                     pid = buscar_por_sku_ou_criar(sku, op.get("descricao",""))
@@ -358,17 +383,24 @@ def ao_finalizar_producao(op_id: int) -> dict:
         # 12) Baixa de componentes do BOM
         try:
             bom = await db.fetch("SELECT * FROM producao_bom WHERE op_id = $1", op_id)
-            erro_componentes = None
+            from core.estoque_saldos import _ensure_async as _ensure_saldos_async
+            await _ensure_saldos_async()
+            erros_componentes = []  # review #8: acumula por SKU em vez de sobrescrever
             for comp in bom:
                 comp = dict(comp)
                 csku = comp["componente_codigo"]
                 cqtd = float(comp["quantidade"] or 0)
                 if csku and cqtd > 0:
-                    from core.estoque import saida as _estoque_saida
-                    res = _estoque_saida(csku, LOJA_PRODUCAO, cqtd, "uso_interno")
+                    from core.estoque import saida_async as _estoque_saida_async
+                    async with db.acquire() as conn:  # review #6
+                        async with conn.transaction():
+                            res = await _estoque_saida_async(conn, csku, LOJA_PRODUCAO, cqtd, "uso_interno")
                     if res.get("erro"):
-                        erro_componentes = res["erro"]
-            resultados["consumo_componentes"] = f"erro: {erro_componentes}" if erro_componentes else "baixado"
+                        erros_componentes.append({"sku": csku, "erro": res["erro"]})
+            resultados["consumo_componentes"] = (f"erro: {len(erros_componentes)} componente(s) falharam"
+                                                 if erros_componentes else "baixado")
+            if erros_componentes:
+                resultados["consumo_componentes_erros"] = erros_componentes
         except Exception as e: resultados["consumo_componentes"] = f"erro: {e}"
         # 13) Custos no financeiro
         try:
