@@ -303,7 +303,7 @@ def ao_receber_compra(recebimento_id: int) -> dict:
                 qtd = float(item.get("quantidade",0) or 0)
                 if sku and qtd > 0:
                     from core.estoque import entrada as _estoque_entrada
-                    res = _estoque_entrada(sku, LOJA_PRINCIPAL, qtd, "producao_interna")
+                    res = _estoque_entrada(sku, LOJA_PRINCIPAL, qtd, "compra_fornecedor")
                     if res.get("erro"):
                         erro_estoque = res["erro"]
                         continue
