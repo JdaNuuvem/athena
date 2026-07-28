@@ -18,6 +18,7 @@ export default function ChatPage() {
   const [mensagens, setMensagens] = useState<MensagemChat[]>([]);
   const [threadAberta, setThreadAberta] = useState<MensagemChat | null>(null);
   const [digitandoUserId, setDigitandoUserId] = useState<number | null>(null);
+  const [presencas, setPresencas] = useState<Record<number, string>>({});
 
   const carregarConversas = useCallback(() => {
     api.chat.listarConversas().then((r) => setConversas(r.data)).catch(() => {});
@@ -39,6 +40,15 @@ export default function ChatPage() {
           setMensagens((atual) => [...atual, mensagem]);
         }
         carregarConversas();
+      }
+      if (evento.evento === "presenca_atualizada") {
+        setPresencas((atual) => ({ ...atual, [evento.user_id as number]: evento.status as string }));
+      }
+      if (evento.evento === "mensagem_editada" || evento.evento === "mensagem_excluida") {
+        const mensagem = evento.mensagem as MensagemChat;
+        if (conversaSelecionada && mensagem.conversa_id === conversaSelecionada.id) {
+          setMensagens((atual) => atual.map((m) => (m.id === mensagem.id ? mensagem : m)));
+        }
       }
       if (evento.evento === "usuario_digitando" && conversaSelecionada && evento.conversa_id === conversaSelecionada.id) {
         setDigitandoUserId(evento.user_id as number);
@@ -78,6 +88,7 @@ export default function ChatPage() {
         conversas={conversas}
         conversaSelecionadaId={conversaSelecionada?.id ?? null}
         onSelecionar={selecionarConversa}
+        presencas={presencas}
       />
       {conversaSelecionada ? (
         <MensagensPainel

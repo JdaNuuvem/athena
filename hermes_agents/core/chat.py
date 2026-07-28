@@ -77,6 +77,21 @@ def _ensure_tables():
                 await db.execute(
                     "INSERT INTO chat_conversas (tipo, nome, departamento) VALUES ('canal_departamento', $1, $2)",
                     f"#{depto}", depto)
+        # Backfill idempotente: tickets criados antes deste deploy nunca passaram
+        # por criar_conversa_ticket e ficariam invisiveis no hub do chat.
+        try:
+            import core.atendimento  # noqa: F401 — garante que atend_tickets ja existe
+            tickets_sem_conversa = await db.fetch("""
+                SELECT id FROM atend_tickets t
+                WHERE NOT EXISTS (SELECT 1 FROM chat_conversas c WHERE c.tipo='ticket' AND c.ticket_ref_id=t.id)
+            """)
+            for row in tickets_sem_conversa:
+                await db.execute(
+                    "INSERT INTO chat_conversas (tipo, ticket_ref_id) VALUES ('ticket', $1) "
+                    "ON CONFLICT (ticket_ref_id) WHERE tipo='ticket' DO NOTHING",
+                    row["id"])
+        except Exception as e:
+            log(AGENT, f"Backfill de conversas-ticket falhou (provavelmente atend_tickets ainda nao existe): {e}")
     try:
         run_async(_go())
         log(AGENT, "Chat tables seeded")
@@ -154,6 +169,12 @@ def _obter_conversa(conversa_id: int):
         return dict(row) if row else None
     try: return run_async(_go())
     except Exception: return None
+
+
+def obter_conversa(conversa_id: int):
+    """Wrapper publico de _obter_conversa — rotas REST precisam consultar o tipo
+    da conversa para decidir a origem das mensagens (chat_mensagens vs atend_mensagens)."""
+    return _obter_conversa(conversa_id)
 
 
 def participantes_ids(conversa_id: int) -> list:
@@ -381,7 +402,8 @@ def obter_anexo(anexo_id: int) -> dict:
 def conversa_do_anexo(anexo_id: int):
     async def _go():
         db = await get_db()
-        row = await db.fetchrow("SELECT conversa_id FROM chat_mensagens WHERE anexo_id=$1", anexo_id)
+        row = await db.fetchrow(
+            "SELECT conversa_id FROM chat_mensagens WHERE anexo_id=$1 ORDER BY id ASC LIMIT 1", anexo_id)
         return row["conversa_id"] if row else None
     try: return run_async(_go())
     except Exception: return None

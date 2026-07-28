@@ -4,10 +4,24 @@ from flask import request
 from flask_sock import Sock
 
 from core.rbac import verificar_token_sessao
-from core.chat import enviar_mensagem, participantes_ids, atualizar_presenca, marcar_lido
+from core.chat import (
+    enviar_mensagem, participantes_ids, atualizar_presenca, marcar_lido,
+    obter_anexo, listar_conversas_usuario,
+)
 from core.chat_ws import registrar_conexao, remover_conexao, broadcast_para_participantes, enviar_para_usuario
 
 sock = Sock()
+
+
+def _notificar_presenca(user_id: int, status: str) -> None:
+    """Avisa todo mundo que compartilha alguma conversa com este usuario que ele
+    ficou online/offline — sem isso o indicador de presenca nunca aparece."""
+    notificados = set()
+    for conversa in listar_conversas_usuario(user_id):
+        for outro_id in participantes_ids(conversa["id"]):
+            if outro_id != user_id and outro_id not in notificados:
+                enviar_para_usuario(outro_id, {"evento": "presenca_atualizada", "user_id": user_id, "status": status})
+                notificados.add(outro_id)
 
 
 def init_sock(app):
@@ -23,6 +37,7 @@ def init_sock(app):
         user_id = int(payload["user_id"])
         registrar_conexao(user_id, ws)
         atualizar_presenca(user_id, "online")
+        _notificar_presenca(user_id, "online")
         try:
             while True:
                 raw = ws.receive()
@@ -36,6 +51,7 @@ def init_sock(app):
         finally:
             remover_conexao(user_id, ws)
             atualizar_presenca(user_id, "offline")
+            _notificar_presenca(user_id, "offline")
 
 
 def _processar_evento(user_id: int, dados: dict) -> None:
@@ -44,6 +60,11 @@ def _processar_evento(user_id: int, dados: dict) -> None:
         conversa_id = dados.get("conversa_id")
         if user_id not in participantes_ids(conversa_id):
             return
+        anexo_id = dados.get("anexo_id")
+        if anexo_id:
+            anexo = obter_anexo(int(anexo_id))
+            if anexo.get("error") or anexo.get("enviado_por") != user_id:
+                return
         mensagem = enviar_mensagem(conversa_id, user_id, dados.get("texto", ""),
                                     dados.get("anexo_id"), dados.get("thread_pai_id"))
         if not mensagem.get("error"):

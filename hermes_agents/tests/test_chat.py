@@ -132,6 +132,86 @@ class TestChatRotasPermissao(unittest.TestCase):
             mock_add.assert_called_once()
 
 
+class TestChatAnexoDono(unittest.TestCase):
+    def setUp(self):
+        self.client = _app()
+
+    def test_enviar_mensagem_com_anexo_de_outro_usuario_nega(self):
+        with patch.dict(os.environ, {"ATHENA_JWT_SECRET": "test-secret-key"}):
+            token = rbac.gerar_token_sessao(11, "u@x.com", "Vendedor")
+            headers = {"Authorization": f"Bearer {token}"}
+            with patch("routes.chat.usuario_e_participante", return_value=True), \
+                 patch("routes.chat.obter_anexo", return_value={"id": 3, "enviado_por": 99}) as mock_anexo, \
+                 patch("routes.chat.enviar_mensagem") as mock_enviar:
+                r = self.client.post("/api/chat/conversas/5/mensagens",
+                                     json={"texto": "oi", "anexo_id": 3}, headers=headers)
+            self.assertEqual(r.status_code, 403)
+            mock_anexo.assert_called_once_with(3)
+            mock_enviar.assert_not_called()
+
+    def test_enviar_mensagem_com_anexo_proprio_libera(self):
+        with patch.dict(os.environ, {"ATHENA_JWT_SECRET": "test-secret-key"}):
+            token = rbac.gerar_token_sessao(11, "u@x.com", "Vendedor")
+            headers = {"Authorization": f"Bearer {token}"}
+            with patch("routes.chat.usuario_e_participante", return_value=True), \
+                 patch("routes.chat.obter_anexo", return_value={"id": 3, "enviado_por": 11}), \
+                 patch("routes.chat.obter_conversa", return_value={"id": 5, "tipo": "grupo"}), \
+                 patch("routes.chat.enviar_mensagem", return_value={"id": 1, "conversa_id": 5}) as mock_enviar, \
+                 patch("routes.chat.broadcast_para_participantes"):
+                r = self.client.post("/api/chat/conversas/5/mensagens",
+                                     json={"texto": "oi", "anexo_id": 3}, headers=headers)
+            self.assertEqual(r.status_code, 200)
+            mock_enviar.assert_called_once()
+
+
+class TestChatRotasTicket(unittest.TestCase):
+    """Conversa tipo 'ticket' le/escreve em atend_mensagens, nunca em chat_mensagens."""
+
+    def setUp(self):
+        self.client = _app()
+
+    def _headers(self):
+        token = rbac.gerar_token_sessao(11, "u@x.com", "Atendente")
+        return {"Authorization": f"Bearer {token}"}
+
+    def test_listar_mensagens_ticket_usa_atend_mensagens(self):
+        with patch.dict(os.environ, {"ATHENA_JWT_SECRET": "test-secret-key"}):
+            headers = self._headers()
+            with patch("routes.chat.usuario_e_participante", return_value=True), \
+                 patch("routes.chat.obter_conversa", return_value={"id": 5, "tipo": "ticket", "ticket_ref_id": 77}), \
+                 patch("core.atendimento.listar_mensagens_ticket",
+                       return_value=[{"id": 1, "conteudo": "oi", "enviado_em": None}]) as mock_ticket, \
+                 patch("routes.chat.listar_mensagens") as mock_interno:
+                r = self.client.get("/api/chat/conversas/5/mensagens", headers=headers)
+            self.assertEqual(r.status_code, 200)
+            mock_ticket.assert_called_once_with(77)
+            mock_interno.assert_not_called()
+            corpo = r.get_json()["data"]
+            self.assertEqual(corpo[0]["texto"], "oi")
+            self.assertEqual(corpo[0]["conversa_id"], 5)
+            self.assertIsNone(corpo[0]["remetente_id"])
+
+    def test_enviar_mensagem_ticket_grava_em_atend_mensagens(self):
+        with patch.dict(os.environ, {"ATHENA_JWT_SECRET": "test-secret-key"}):
+            headers = self._headers()
+            with patch("routes.chat.usuario_e_participante", return_value=True), \
+                 patch("routes.chat.obter_conversa", return_value={"id": 5, "tipo": "ticket", "ticket_ref_id": 77}), \
+                 patch("core.atendimento.adicionar_mensagem",
+                       return_value={"id": 9, "conteudo": "resposta", "enviado_em": None}) as mock_add, \
+                 patch("routes.chat.enviar_mensagem") as mock_enviar, \
+                 patch("routes.chat.broadcast_para_participantes") as mock_broadcast:
+                r = self.client.post("/api/chat/conversas/5/mensagens",
+                                     json={"texto": "resposta"}, headers=headers)
+            self.assertEqual(r.status_code, 200)
+            mock_enviar.assert_not_called()
+            mock_add.assert_called_once()
+            self.assertEqual(mock_add.call_args[0][0], 77)
+            self.assertEqual(mock_add.call_args[0][2], "resposta")
+            mock_broadcast.assert_called_once()
+            self.assertEqual(mock_broadcast.call_args[0][1]["evento"], "nova_mensagem")
+            self.assertEqual(r.get_json()["texto"], "resposta")
+
+
 class TestChatWebsocketBroadcastIsolamento(unittest.TestCase):
     def test_broadcast_so_alcanca_participantes(self):
         from core.chat_ws import broadcast_para_participantes, registrar_conexao, remover_conexao
@@ -156,6 +236,22 @@ class TestChatWebsocketBroadcastIsolamento(unittest.TestCase):
         uids_notificados = [uid for uid, _ in enviados]
         self.assertIn(1, uids_notificados)
         self.assertNotIn(2, uids_notificados)
+
+
+class TestChatPresencaBroadcast(unittest.TestCase):
+    def test_notificar_presenca_alcanca_participantes_sem_repetir_nem_o_proprio(self):
+        import routes.chat_ws as chat_ws
+
+        participantes = {10: [1, 2], 20: [1, 3]}
+        with patch("routes.chat_ws.listar_conversas_usuario", return_value=[{"id": 10}, {"id": 20}]), \
+             patch("routes.chat_ws.participantes_ids", side_effect=lambda cid: participantes[cid]), \
+             patch("routes.chat_ws.enviar_para_usuario") as mock_enviar:
+            chat_ws._notificar_presenca(1, "online")
+
+        destinos = [c[0][0] for c in mock_enviar.call_args_list]
+        self.assertEqual(sorted(destinos), [2, 3])          # dedup + nao notifica a si mesmo
+        self.assertEqual(mock_enviar.call_args_list[0][0][1],
+                         {"evento": "presenca_atualizada", "user_id": 1, "status": "online"})
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ from core.chat import (
     listar_mensagens, enviar_mensagem, editar_mensagem, excluir_mensagem,
     marcar_lido, adicionar_participante, remover_participante, papel_do_usuario,
     usuario_e_participante, buscar_mensagens, listar_canais_departamento,
-    salvar_anexo, obter_anexo, conversa_do_anexo,
+    salvar_anexo, obter_anexo, conversa_do_anexo, obter_conversa,
 )
 from core.chat_ws import broadcast_para_participantes
 
@@ -20,6 +20,21 @@ TAMANHO_MAXIMO_BYTES = 25 * 1024 * 1024
 
 def _serializar(mensagem: dict) -> dict:
     return {k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in mensagem.items()}
+
+
+def _adaptar_mensagem_ticket(m: dict, conversa_id: int) -> dict:
+    """atend_mensagens -> shape de MensagemChat esperado pelo frontend.
+
+    Limitacao conhecida e aceita nesta fase: atend_mensagens guarda o remetente
+    como texto livre (nome/telefone do cliente ou nome do atendente), nao como
+    id do RBAC. Por isso remetente_id fica None e a UI renderiza toda mensagem
+    de ticket como 'recebida', mesmo quando foi o agente que respondeu."""
+    return {
+        "id": m["id"], "conversa_id": conversa_id, "thread_pai_id": None,
+        "remetente_id": None, "texto": m.get("conteudo"),
+        "anexo_id": None, "created_at": m.get("enviado_em"),
+        "editado_em": None, "excluido_em": None,
+    }
 
 
 @chat_bp.route("/conversas", methods=["GET"])
@@ -57,6 +72,11 @@ def chat_listar_mensagens(conversa_id):
     user_id = usuario.get("user_id")
     if not user_id or not usuario_e_participante(conversa_id, int(user_id)):
         return jsonify({"error": "Permissao negada"}), 403
+    conversa = obter_conversa(conversa_id)
+    if conversa and conversa.get("tipo") == "ticket":
+        from core.atendimento import listar_mensagens_ticket
+        mensagens = listar_mensagens_ticket(conversa["ticket_ref_id"])
+        return jsonify({"data": [_adaptar_mensagem_ticket(m, conversa_id) for m in mensagens]})
     antes_de = request.args.get("antes_de")
     return jsonify({"data": listar_mensagens(conversa_id, antes_de)})
 
@@ -68,6 +88,22 @@ def chat_enviar_mensagem(conversa_id):
     if not user_id or not usuario_e_participante(conversa_id, int(user_id)):
         return jsonify({"error": "Permissao negada"}), 403
     data = request.json or {}
+    anexo_id = data.get("anexo_id")
+    if anexo_id:
+        anexo = obter_anexo(int(anexo_id))
+        if anexo.get("error") or anexo.get("enviado_por") != int(user_id):
+            return jsonify({"error": "Anexo invalido"}), 403
+    conversa = obter_conversa(conversa_id)
+    if conversa and conversa.get("tipo") == "ticket":
+        from core.atendimento import adicionar_mensagem
+        criada = adicionar_mensagem(conversa["ticket_ref_id"],
+                                    usuario.get("nome") or usuario.get("email"),
+                                    data.get("texto", ""), "texto")
+        if criada.get("error"):
+            return jsonify(criada)
+        mensagem = _adaptar_mensagem_ticket(criada, conversa_id)
+        broadcast_para_participantes(conversa_id, {"evento": "nova_mensagem", "mensagem": _serializar(mensagem)})
+        return jsonify(mensagem)
     mensagem = enviar_mensagem(conversa_id, int(user_id), data.get("texto", ""),
                                 data.get("anexo_id"), data.get("thread_pai_id"))
     if not mensagem.get("error"):

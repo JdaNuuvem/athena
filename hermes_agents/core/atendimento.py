@@ -156,6 +156,17 @@ def adicionar_mensagem(ticket_id: int, remetente: str, conteudo: str, tipo="text
             })
     return mensagem
 
+def listar_mensagens_ticket(ticket_id: int) -> list:
+    """Mensagens de UM ticket, em ordem cronologica — usado pela ponte do chat
+    interno (conversa tipo 'ticket' le/escreve em atend_mensagens, nao em
+    chat_mensagens)."""
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch("SELECT * FROM atend_mensagens WHERE ticket_id=$1 ORDER BY enviado_em ASC", ticket_id)
+        return [dict(r) for r in rows]
+    try: return run_async(_go())
+    except Exception as e: log(AGENT, f"listar_mensagens_ticket: {e}"); return []
+
 def fechar_ticket(ticket_id: int) -> dict:
     return update("tickets", ticket_id, {"status": "fechado", "data_fechamento": hoje()})
 
