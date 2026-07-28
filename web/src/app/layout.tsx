@@ -61,7 +61,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   { href: "/cadastros", label: "Cadastros", icon: "cadastros" },
   { href: "/lojas", label: "Lojas", icon: "pdv" },
-  { href: "/atendimento/chat", label: "Chat", icon: "atendimento" },
+  { href: "/chat", label: "Chat", icon: "atendimento" },
   { href: "/produtos", label: "Produtos", icon: "produtos" },
   {
     href: "/estoque", label: "Estoque", icon: "estoque",
