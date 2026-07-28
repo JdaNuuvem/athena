@@ -66,6 +66,10 @@ def _ensure_tables():
             status VARCHAR(20) DEFAULT 'offline',
             last_seen TIMESTAMP
         )""")
+        await db.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS chat_conversas_ticket_unico
+            ON chat_conversas (ticket_ref_id) WHERE tipo = 'ticket'
+        """)
         for depto in DEPARTAMENTOS_CANAL:
             existente = await db.fetchrow(
                 "SELECT id FROM chat_conversas WHERE tipo='canal_departamento' AND departamento=$1", depto)
@@ -418,14 +422,19 @@ def conversa_id_do_ticket(ticket_id: int):
 def criar_conversa_ticket(ticket_id: int, criado_por: int = None) -> dict:
     """Cria (ou retorna) a conversa de chat vinculada a um ticket de atendimento —
     ponte sem migrar dado: a mensagem em si continua em atend_mensagens."""
-    existente_id = conversa_id_do_ticket(ticket_id)
-    if existente_id:
-        return _obter_conversa(existente_id)
     async def _go():
         db = await get_db()
         row = await db.fetchrow(
-            "INSERT INTO chat_conversas (tipo, ticket_ref_id, criado_por) VALUES ('ticket', $1, $2) RETURNING *",
+            "INSERT INTO chat_conversas (tipo, ticket_ref_id, criado_por) VALUES ('ticket', $1, $2) "
+            "ON CONFLICT (ticket_ref_id) WHERE tipo = 'ticket' DO NOTHING RETURNING *",
             ticket_id, criado_por)
-        return dict(row)
-    try: return run_async(_go())
-    except Exception as e: return {"error": str(e)}
+        return dict(row) if row else None
+    try:
+        criada = run_async(_go())
+    except Exception as e:
+        return {"error": str(e)}
+    if criada:
+        return criada
+    # Perdeu a corrida (outra chamada concorrente ja inseriu) — busca a existente.
+    existente_id = conversa_id_do_ticket(ticket_id)
+    return _obter_conversa(existente_id) if existente_id else {"error": "conversa nao encontrada apos conflito"}
