@@ -221,6 +221,25 @@ class TestProdutosLoja(unittest.IsolatedAsyncioTestCase):
         self.assertIn("nome_mestre", row)
         self.assertIn("imagens", row)
 
+    async def test_replicar_para_lojas_nao_copia_operacional(self):
+        from core.produtos_loja import criar, replicar_para_lojas, obter
+        criar("Loja A", "SKU1", produto_mestre_sku="SKU1")
+        r = replicar_para_lojas("Loja A", "SKU1", ["Loja B", "Loja C"])
+        self.assertTrue(r.get("ok"))
+        self.assertEqual(set(r["criados"]), {"Loja B", "Loja C"})
+        destino = obter("Loja B", "SKU1")
+        self.assertIsNone(destino.get("preco_custo"))
+        self.assertIsNone(destino.get("preco_venda"))
+        self.assertIsNone(destino.get("fornecedor_id"))
+
+    async def test_replicar_pula_loja_ja_existente(self):
+        from core.produtos_loja import criar, replicar_para_lojas
+        criar("Loja A", "SKU1", produto_mestre_sku="SKU1")
+        criar("Loja B", "SKU1", produto_mestre_sku="SKU1")
+        r = replicar_para_lojas("Loja A", "SKU1", ["Loja B", "Loja C"])
+        self.assertEqual(r["ja_existentes"], ["Loja B"])
+        self.assertEqual(r["criados"], ["Loja C"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -173,3 +173,28 @@ def excluir(loja: str, sku: str) -> dict:
         return {"erro": "produto_loja nao encontrado"}
     auditar_exclusao("produtos_loja", "produtos_loja", resultado["id"])
     return {"ok": True}
+
+
+def replicar_para_lojas(loja_origem: str, sku: str, lojas_destino: list[str],
+                         usuario_id: int = None, usuario_nome: str = "") -> dict:
+    """Cria produtos_loja em cada loja destino vinculados ao mesmo mestre da
+    origem. NUNCA copia estoque, preco, fornecedor, promocao, localizacao,
+    historico — cada linha nasce vazia nesses campos (cadastro manual
+    depois). Dados cadastrais (nome/descricao/categoria/marca/imagens/
+    atributos/tributacao) nao sao copiados porque vem do join com
+    catalogo_produtos via produto_mestre_sku, nao de uma copia fisica."""
+    origem = obter(loja_origem, sku)
+    if not origem:
+        return {"erro": f"produto_loja de origem nao encontrado: {loja_origem}/{sku}"}
+    mestre_sku = origem.get("produto_mestre_sku")
+
+    criados, ja_existentes = [], []
+    for loja_destino in lojas_destino:
+        if obter(loja_destino, sku):
+            ja_existentes.append(loja_destino)
+            continue
+        r = criar(loja_destino, sku, produto_mestre_sku=mestre_sku,
+                   usuario_id=usuario_id, usuario_nome=usuario_nome)
+        if r.get("ok"):
+            criados.append(loja_destino)
+    return {"ok": True, "criados": criados, "ja_existentes": ja_existentes}
