@@ -292,6 +292,22 @@ export const api = {
       body: JSON.stringify(dados),
     }),
 
+  listarMarcas: () => request<{ data: { id: number; nome: string }[] }>("/api/produtos/marcas"),
+  criarMarca: (nome: string) =>
+    request<{ id: number; nome: string; error?: string }>("/api/produtos/marcas", {
+      method: "POST", body: JSON.stringify({ nome }),
+    }),
+  listarFabricantes: () => request<{ data: { id: number; nome: string }[] }>("/api/produtos/fabricantes"),
+  criarFabricante: (nome: string) =>
+    request<{ id: number; nome: string; error?: string }>("/api/produtos/fabricantes", {
+      method: "POST", body: JSON.stringify({ nome }),
+    }),
+  listarCategoriasProduto: () => request<{ data: { id: number; nome: string; categoria_pai_id: number | null }[] }>("/api/produtos/categorias"),
+  criarCategoriaProduto: (nome: string) =>
+    request<{ id: number; nome: string; error?: string }>("/api/produtos/categorias", {
+      method: "POST", body: JSON.stringify({ nome }),
+    }),
+
   // Estoque — entrada via scanner de codigo de barras
   estoqueBuscarCodigo: (codigo: string) =>
     request<{ sku: string; descricao: string; codigo_barras: string | null; estoque_total: number; erro?: string }>(
