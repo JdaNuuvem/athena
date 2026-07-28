@@ -188,7 +188,7 @@ def replicar_para_lojas(loja_origem: str, sku: str, lojas_destino: list[str],
         return {"erro": f"produto_loja de origem nao encontrado: {loja_origem}/{sku}"}
     mestre_sku = origem.get("produto_mestre_sku")
 
-    criados, ja_existentes = [], []
+    criados, ja_existentes, erros = [], [], []
     for loja_destino in lojas_destino:
         if obter(loja_destino, sku):
             ja_existentes.append(loja_destino)
@@ -197,4 +197,6 @@ def replicar_para_lojas(loja_origem: str, sku: str, lojas_destino: list[str],
                    usuario_id=usuario_id, usuario_nome=usuario_nome)
         if r.get("ok"):
             criados.append(loja_destino)
-    return {"ok": True, "criados": criados, "ja_existentes": ja_existentes}
+        else:
+            erros.append({"loja": loja_destino, "erro": r.get("erro", "erro desconhecido")})
+    return {"ok": True, "criados": criados, "ja_existentes": ja_existentes, "erros": erros}

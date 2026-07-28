@@ -240,6 +240,44 @@ class TestProdutosLoja(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(r["ja_existentes"], ["Loja B"])
         self.assertEqual(r["criados"], ["Loja C"])
 
+    async def test_replicar_origem_nao_existe_retorna_erro(self):
+        from core.produtos_loja import replicar_para_lojas
+        r = replicar_para_lojas("Loja Inexistente", "SKU_NAO_EXISTE", ["Loja B"])
+        self.assertIn("erro", r)
+        self.assertNotIn("ok", r)
+
+    async def test_replicar_lista_vazia_retorna_listas_vazias(self):
+        from core.produtos_loja import criar, replicar_para_lojas
+        criar("Loja A", "SKU1", produto_mestre_sku="SKU1")
+        r = replicar_para_lojas("Loja A", "SKU1", [])
+        self.assertTrue(r.get("ok"))
+        self.assertEqual(r["criados"], [])
+        self.assertEqual(r["ja_existentes"], [])
+        self.assertEqual(r["erros"], [])
+
+    async def test_replicar_captura_erro_de_criar(self):
+        from core.produtos_loja import criar, replicar_para_lojas
+        # Create origin product
+        criar("Loja A", "SKU1", produto_mestre_sku="SKU1")
+
+        # Patch criar to fail for "Loja B" but succeed for others
+        import core.produtos_loja as m
+        original_criar = m.criar
+        def criar_mock_fail_for_b(loja, sku, **kwargs):
+            if loja == "Loja B":
+                return {"erro": "erro simulado na loja B"}
+            return original_criar(loja, sku, **kwargs)
+
+        with patch("core.produtos_loja.criar", side_effect=criar_mock_fail_for_b):
+            r = replicar_para_lojas("Loja A", "SKU1", ["Loja B", "Loja C", "Loja D"])
+
+        self.assertTrue(r.get("ok"))
+        self.assertEqual(r["criados"], ["Loja C", "Loja D"])
+        self.assertEqual(r["ja_existentes"], [])
+        self.assertEqual(len(r["erros"]), 1)
+        self.assertEqual(r["erros"][0]["loja"], "Loja B")
+        self.assertIn("erro simulado na loja B", r["erros"][0]["erro"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
