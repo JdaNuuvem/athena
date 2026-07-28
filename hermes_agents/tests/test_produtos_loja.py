@@ -20,8 +20,16 @@ class FakeDBProdutosLoja:
             row = self.linhas.get((loja, sku))
             return row["id"] if row else None
         if "SELECT COUNT(*) FROM produtos_loja" in q:
+            # Mirror core.produtos_loja.listar_por_loja(): a query de COUNT(*)
+            # usa o mesmo sql_where da query principal, entao quando ha busca
+            # ela tambem filtra o COUNT (nao so' a pagina de resultados).
             loja = params[0]
-            return sum(1 for (l, _), r in self.linhas.items() if l == loja)
+            busca = params[1] if len(params) > 1 else None
+            rows = [r for (l, _), r in self.linhas.items() if l == loja]
+            if busca and busca.strip("%"):
+                termo = busca.strip("%").lower()
+                rows = [r for r in rows if termo in r.get("sku", "").lower()]
+            return len(rows)
         return None
 
     async def fetchrow(self, query, *params):
@@ -188,15 +196,29 @@ class TestProdutosLoja(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(r["pagina"], 1)
 
     async def test_listar_por_loja_pagination_page2(self):
+        # ponytail: nao afirma qual SKU especifico cai na pagina 2 — a ordem
+        # real vem de "ORDER BY pl.updated_at DESC, pl.id DESC" (ver Important
+        # 5 da revisao final), que o FakeDB nao simula (ele so' preserva a
+        # ordem de insercao do dict). Afirmar um SKU fixo aqui so' acertaria
+        # por coincidencia da ordem de insercao do teste, nao porque reflete
+        # o comportamento real do ORDER BY contra um Postgres de verdade.
+        # Em vez disso, verificamos a invariante que de fato importa: as duas
+        # paginas juntas cobrem todos os SKUs, sem duplicatas.
         from core.produtos_loja import criar, listar_por_loja
         criar("Loja A", "SKU1")
         criar("Loja A", "SKU2")
         criar("Loja A", "SKU3")
-        r = listar_por_loja("Loja A", pagina=2, por_pagina=2)
-        self.assertEqual(r["total"], 3)
-        self.assertEqual(len(r["produtos"]), 1)
-        self.assertEqual(r["pagina"], 2)
-        self.assertEqual(r["produtos"][0]["sku"], "SKU3")
+        pagina1 = listar_por_loja("Loja A", pagina=1, por_pagina=2)
+        pagina2 = listar_por_loja("Loja A", pagina=2, por_pagina=2)
+        self.assertEqual(pagina2["total"], 3)
+        self.assertEqual(len(pagina2["produtos"]), 1)
+        self.assertEqual(pagina2["pagina"], 2)
+        skus_pagina1 = {p["sku"] for p in pagina1["produtos"]}
+        skus_pagina2 = {p["sku"] for p in pagina2["produtos"]}
+        self.assertEqual(len(skus_pagina1), 2)
+        self.assertEqual(len(skus_pagina2), 1)
+        self.assertEqual(skus_pagina1 | skus_pagina2, {"SKU1", "SKU2", "SKU3"})
+        self.assertEqual(skus_pagina1 & skus_pagina2, set())
 
     async def test_listar_por_loja_busca_search(self):
         from core.produtos_loja import criar, listar_por_loja
@@ -204,7 +226,7 @@ class TestProdutosLoja(unittest.IsolatedAsyncioTestCase):
         criar("Loja A", "SKU2")
         criar("Loja A", "ABC123")
         r = listar_por_loja("Loja A", busca="SKU")
-        self.assertEqual(r["total"], 3)
+        self.assertEqual(r["total"], 2)
         self.assertEqual(len(r["produtos"]), 2)
         skus = [p["sku"] for p in r["produtos"]]
         self.assertIn("SKU1", skus)
@@ -290,6 +312,55 @@ class TestProdutosLoja(unittest.IsolatedAsyncioTestCase):
         criar("Loja A", "SKU1", produto_mestre_sku="SKU1")
         r = sincronizar_do_mestre("Loja A", "SKU1", ["preco_custo"])
         self.assertIn("erro", r)
+
+
+class TestResolverNomeLoja(unittest.IsolatedAsyncioTestCase):
+    """Testa a traducao id-numerico -> nome de loja no limite HTTP
+    (routes/produtos_loja.py:_resolver_nome_loja) — Critical 1 da revisao
+    final. produtos_loja.loja precisa guardar o NOME da loja (mesma
+    convencao de estoque_lojas/pdv/entidades.py), mas o frontend manda o id
+    numerico da loja selecionada no seletor global; sem essa traducao o
+    LEFT JOIN com estoque_lojas em listar_por_loja() nunca bate.
+
+    ponytail: nao reusa FakeDBProdutosLoja (ela simula a tabela produtos_loja,
+    nao a tabela lojas usada por esse lookup) — um fake minimo dedicado a
+    "SELECT nome FROM lojas WHERE id = $1" e' mais simples e mais fiel do que
+    forcar a fake existente a cobrir uma query completamente diferente."""
+
+    class FakeDBLojas:
+        def __init__(self, id_para_nome):
+            self.id_para_nome = id_para_nome
+
+        async def fetchval(self, query, *params):
+            if "SELECT nome FROM lojas WHERE id" in " ".join(query.split()):
+                return self.id_para_nome.get(params[0])
+            return None
+
+    def setUp(self):
+        self.fake = self.FakeDBLojas({7: "Loja Centro"})
+        async def _get_db(_fake=self.fake):
+            return _fake
+        self.patch_db = patch("routes.produtos_loja.get_db", side_effect=_get_db)
+        self.patch_db.start()
+
+    def tearDown(self):
+        self.patch_db.stop()
+
+    async def test_id_numerico_e_traduzido_para_nome(self):
+        from routes.produtos_loja import _resolver_nome_loja
+        self.assertEqual(_resolver_nome_loja("7"), "Loja Centro")
+
+    async def test_nome_ja_passa_direto(self):
+        from routes.produtos_loja import _resolver_nome_loja
+        self.assertEqual(_resolver_nome_loja("Loja Centro"), "Loja Centro")
+
+    async def test_id_inexistente_faz_fallback_para_string_original(self):
+        from routes.produtos_loja import _resolver_nome_loja
+        self.assertEqual(_resolver_nome_loja("999"), "999")
+
+    async def test_string_vazia_passa_direto(self):
+        from routes.produtos_loja import _resolver_nome_loja
+        self.assertEqual(_resolver_nome_loja(""), "")
 
 
 if __name__ == "__main__":

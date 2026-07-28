@@ -1,7 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { listarProdutosLoja, atualizarProdutoLoja, type ProdutoLojaRow } from "@/lib/api";
+import {
+  listarProdutosLoja, atualizarProdutoLoja, criarProdutoLoja, estoqueAtualizar,
+  type ProdutoLojaRow,
+} from "@/lib/api";
 import { Can } from "@/lib/auth";
 import { useStore } from "@/lib/store-context";
 import ReplicarModal from "./_components/ReplicarModal";
@@ -24,9 +27,14 @@ const EMPTY_EDIT: EditFields = {
   localizacao_fisica: "",
 };
 
-function fmtMoeda(v: number | null) {
-  if (v === null || v === undefined) return "—";
-  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+// ponytail: campos DECIMAL vem serializados como string no JSON do backend
+// (ver ProdutoLojaRow em lib/api.ts) — sempre passar por Number(...) antes de
+// formatar ou comparar, senao toLocaleString e comparacoes numericas quebram
+// silenciosamente (coercao de string funciona por acaso em alguns casos, mas
+// nao e' o mesmo que um number de verdade).
+function fmtMoeda(v: number | string | null) {
+  if (v === null || v === undefined || v === "") return "—";
+  return Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 export default function EstoqueLojasPage() {
@@ -46,7 +54,12 @@ export default function EstoqueLojasPage() {
 
   const [editing, setEditing] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<EditFields>(EMPTY_EDIT);
+  const [editQty, setEditQty] = useState("");
   const [replicando, setReplicando] = useState<ProdutoLojaRow | null>(null);
+
+  const [novoSku, setNovoSku] = useState("");
+  const [novoMestreSku, setNovoMestreSku] = useState("");
+  const [criando, setCriando] = useState(false);
 
   const [lojaFilter, setLojaFilter] = useState(() => {
     if (typeof window === "undefined") return "";
@@ -97,11 +110,13 @@ export default function EstoqueLojasPage() {
       estoque_maximo: row.estoque_maximo != null ? String(row.estoque_maximo) : "",
       localizacao_fisica: row.localizacao_fisica ?? "",
     });
+    setEditQty(row.estoque_atual != null ? String(row.estoque_atual) : "0");
   };
 
   const cancelEdit = () => {
     setEditing(null);
     setEditForm(EMPTY_EDIT);
+    setEditQty("");
   };
 
   const salvarEdicao = async (row: ProdutoLojaRow) => {
@@ -119,10 +134,23 @@ export default function EstoqueLojasPage() {
         setErro(r.erro);
         return;
       }
+      // Quantidade de estoque nao vive em produtos_loja — e' estoque_lojas,
+      // atualizada por endpoint separado (loja aqui ja e' o NOME da loja,
+      // que e' a convencao usada tanto por produtos_loja.loja quanto por
+      // estoque_lojas.loja — ver Critical 1 da revisao final).
+      const novaQtd = editQty === "" ? null : Number(editQty);
+      if (novaQtd !== null && novaQtd !== Number(row.estoque_atual)) {
+        const rEstoque = await estoqueAtualizar(row.sku, row.loja, novaQtd);
+        if (rEstoque.erro) {
+          setErro(rEstoque.erro);
+          return;
+        }
+      }
       setOkMsg(`Dados de ${row.sku} atualizados`);
       setTimeout(() => setOkMsg(null), 2500);
       setEditing(null);
       setEditForm(EMPTY_EDIT);
+      setEditQty("");
       load(busca, pagina);
     } catch (e: unknown) {
       setErro(e instanceof Error ? e.message : "Erro ao salvar");
@@ -132,6 +160,33 @@ export default function EstoqueLojasPage() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     load(busca, 1);
+  };
+
+  const adicionarProduto = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!novoSku.trim() || !lojaFilter) return;
+    setCriando(true);
+    setErro(null);
+    try {
+      const r = await criarProdutoLoja({
+        loja: lojaFilter,
+        sku: novoSku.trim(),
+        produto_mestre_sku: novoMestreSku.trim() || undefined,
+      });
+      if (r.erro) {
+        setErro(r.erro);
+        return;
+      }
+      setOkMsg(`Produto ${novoSku.trim()} adicionado a esta loja`);
+      setTimeout(() => setOkMsg(null), 2500);
+      setNovoSku("");
+      setNovoMestreSku("");
+      load(busca, pagina);
+    } catch (e: unknown) {
+      setErro(e instanceof Error ? e.message : "Erro ao adicionar produto");
+    } finally {
+      setCriando(false);
+    }
   };
 
   const totalPaginas = Math.max(1, Math.ceil(total / POR_PAGINA));
@@ -168,6 +223,42 @@ export default function EstoqueLojasPage() {
           Buscar
         </button>
       </form>
+
+      {lojaFilter && (
+        <Can permission="produtos.editar">
+          <form onSubmit={adicionarProduto} className="flex gap-2 max-w-lg items-end">
+            <div>
+              <label htmlFor="novoSku" className="block text-[11px] text-neutral-500 mb-1">SKU</label>
+              <input
+                id="novoSku"
+                type="text"
+                value={novoSku}
+                onChange={(e) => setNovoSku(e.target.value)}
+                placeholder="SKU do produto"
+                className="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label htmlFor="novoMestreSku" className="block text-[11px] text-neutral-500 mb-1">SKU do catálogo mestre (opcional)</label>
+              <input
+                id="novoMestreSku"
+                type="text"
+                value={novoMestreSku}
+                onChange={(e) => setNovoMestreSku(e.target.value)}
+                placeholder="Vincular ao mestre"
+                className="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={criando || !novoSku.trim()}
+              className="bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white px-4 py-2 rounded-lg text-sm transition-colors"
+            >
+              {criando ? "Adicionando..." : "Adicionar produto a esta loja"}
+            </button>
+          </form>
+        </Can>
+      )}
 
       {!lojaFilter ? (
         <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-8 text-center text-neutral-500 text-xs">
@@ -206,11 +297,25 @@ export default function EstoqueLojasPage() {
                       <td className="px-4 py-2.5 font-mono text-xs text-neutral-500">{r.sku}</td>
                       <td className="px-4 py-2.5 text-neutral-300 max-w-64 truncate">{r.nome_override || r.nome_mestre || "—"}</td>
                       <td className="px-4 py-2.5 text-right">
-                        <span className={`font-mono numeric font-medium ${
-                          r.estoque_atual <= 0 ? "text-red-400" : r.estoque_atual < 10 ? "text-amber-400" : "text-emerald-400"
-                        }`}>
-                          {r.estoque_atual.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                        </span>
+                        {isEditing ? (
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={editQty}
+                            onChange={(e) => setEditQty(e.target.value)}
+                            className="w-20 bg-neutral-800 border border-indigo-600 rounded px-2 py-0.5 text-sm text-right text-neutral-200 focus:outline-none"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") salvarEdicao(r);
+                              if (e.key === "Escape") cancelEdit();
+                            }}
+                          />
+                        ) : (
+                          <span className={`font-mono numeric font-medium ${
+                            Number(r.estoque_atual) <= 0 ? "text-red-400" : Number(r.estoque_atual) < 10 ? "text-amber-400" : "text-emerald-400"
+                          }`}>
+                            {Number(r.estoque_atual).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-2.5 text-right">
                         {isEditing ? (
@@ -278,7 +383,7 @@ export default function EstoqueLojasPage() {
                             }}
                           />
                         ) : (
-                          <span className="text-neutral-500">{r.estoque_minimo ?? "—"}</span>
+                          <span className="text-neutral-500">{r.estoque_minimo != null ? Number(r.estoque_minimo) : "—"}</span>
                         )}
                       </td>
                       <td className="px-4 py-2.5 text-right">
@@ -295,7 +400,7 @@ export default function EstoqueLojasPage() {
                             }}
                           />
                         ) : (
-                          <span className="text-neutral-500">{r.estoque_maximo ?? "—"}</span>
+                          <span className="text-neutral-500">{r.estoque_maximo != null ? Number(r.estoque_maximo) : "—"}</span>
                         )}
                       </td>
                       <td className="px-4 py-2.5 text-left">
@@ -322,10 +427,10 @@ export default function EstoqueLojasPage() {
                           </div>
                         ) : (
                           <div className="flex gap-2 justify-center">
-                            <Can permission="ver_estoque">
+                            <Can permission="produtos.editar">
                               <button onClick={() => startEdit(r)} className="text-indigo-400 hover:text-indigo-300 text-xs">Editar</button>
                             </Can>
-                            <Can permission="ver_estoque">
+                            <Can permission="produtos.editar">
                               <button onClick={() => setReplicando(r)} className="text-neutral-400 hover:text-neutral-300 text-xs">Replicar</button>
                             </Can>
                           </div>

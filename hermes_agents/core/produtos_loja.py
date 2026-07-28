@@ -128,7 +128,7 @@ def listar_por_loja(loja: str, busca: str = "", pagina: int = 1, por_pagina: int
                 LEFT JOIN catalogo_produtos c ON c.sku = pl.produto_mestre_sku
                 LEFT JOIN estoque_lojas el ON el.sku = pl.sku AND el.loja = pl.loja
                 WHERE {sql_where}
-                ORDER BY pl.updated_at DESC
+                ORDER BY pl.updated_at DESC, pl.id DESC
                 LIMIT ${len(params)+1} OFFSET ${len(params)+2}""",
             *params_pag)
         return {"produtos": [dict(r) for r in rows], "total": total, "pagina": pagina}

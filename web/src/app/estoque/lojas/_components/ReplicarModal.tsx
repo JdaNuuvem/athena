@@ -45,8 +45,8 @@ export default function ReplicarModal({
       <div className="bg-neutral-900 border border-neutral-700 rounded-lg p-5 w-full max-w-sm">
         <h3 className="text-sm font-semibold mb-1">Replicar {sku} para outras lojas</h3>
         <p className="text-[11px] text-neutral-500 mb-3">
-          Copia só dados cadastrais (nome, descrição, categoria, marca, imagens, atributos, tributação).
-          Nunca copia estoque, preço, fornecedor, promoção, localização ou histórico.
+          Vincula ao mesmo produto do catálogo mestre — os dados cadastrais são herdados via
+          vínculo, não copiados. Nunca copia estoque, preço, fornecedor, promoção ou localização.
         </p>
         <div className="space-y-1 max-h-48 overflow-y-auto mb-3">
           {destinos.length === 0 ? (
