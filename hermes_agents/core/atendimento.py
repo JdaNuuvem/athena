@@ -131,16 +131,30 @@ def criar_ticket(cliente: str, assunto: str, canal="whatsapp", prioridade="norma
     try: sla_data = run_async(_go())
     except Exception as e: sla_data = {"sla_vencimento": None, "tempo_resposta_min": None}
 
-    return create("tickets", {
+    ticket = create("tickets", {
         "cliente": cliente, "assunto": assunto, "canal": canal,
         "prioridade": prioridade, "status": "aberto", "data_abertura": hoje(),
         "sla_vencimento": sla_data["sla_vencimento"],
         "tempo_resposta_min": sla_data["tempo_resposta_min"],
     })
+    if not ticket.get("error"):
+        from core.chat import criar_conversa_ticket
+        criar_conversa_ticket(ticket["id"])
+    return ticket
 
 def adicionar_mensagem(ticket_id: int, remetente: str, conteudo: str, tipo="texto") -> dict:
-    return create("mensagens", {"ticket_id": ticket_id, "remetente": remetente,
+    mensagem = create("mensagens", {"ticket_id": ticket_id, "remetente": remetente,
         "conteudo": conteudo, "tipo": tipo, "enviado_em": hoje()})
+    if not mensagem.get("error"):
+        from core.chat import conversa_id_do_ticket
+        from core.chat_ws import broadcast_para_participantes
+        conversa_id = conversa_id_do_ticket(ticket_id)
+        if conversa_id:
+            broadcast_para_participantes(conversa_id, {
+                "evento": "nova_mensagem", "ticket_id": ticket_id,
+                "mensagem": {k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in mensagem.items()},
+            })
+    return mensagem
 
 def fechar_ticket(ticket_id: int) -> dict:
     return update("tickets", ticket_id, {"status": "fechado", "data_fechamento": hoje()})

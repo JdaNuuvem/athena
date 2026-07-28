@@ -2,7 +2,13 @@
 (mensagens, sessoes, canais, sla, kb) antes nao checavam nenhuma permissao."""
 import sys, os, unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch, AsyncMock, MagicMock
+
+# Import core.chat so it's available for patching
+try:
+    import core.chat
+except Exception:
+    pass
 
 _TEST_TOKEN = "test-master-token-32-bytes-long!!"
 
@@ -83,6 +89,16 @@ class TestAtendimentoExigePermissao(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         mock_delete.assert_called_once()
         mock_audit.assert_called_once_with("atendimento", "tickets", 1, {"id": 1, "cliente": "X"})
+
+    def test_criar_ticket_cria_conversa_ponte_no_chat(self):
+        with patch("core.atendimento.create", return_value={"id": 55}), \
+             patch("core.atendimento.run_async", return_value={"sla_vencimento": None, "tempo_resposta_min": None}), \
+             patch("core.chat.criar_conversa_ticket") as mock_ponte:
+            from core.atendimento import criar_ticket
+            resultado = criar_ticket("Cliente X", "Duvida sobre pedido")
+            # Verify the ticket was created
+            assert resultado == {"id": 55}
+        mock_ponte.assert_called_once_with(55)
 
 
 if __name__ == "__main__":
