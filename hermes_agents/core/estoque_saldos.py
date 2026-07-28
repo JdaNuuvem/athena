@@ -106,7 +106,8 @@ def saldo(sku: str, loja: str, tipo: str = "disponivel") -> float:
         return float(v or 0)
     try:
         return run_async(_go())
-    except Exception:
+    except Exception as e:
+        log(AGENT, f"Erro ao consultar saldo({sku}, {loja}, {tipo}): {e}")
         return 0.0
 
 
@@ -133,47 +134,49 @@ def mover_saldo(sku: str, loja: str, tipo_origem, tipo_destino, quantidade: floa
         db = await get_db()
         resultado = {"ok": True, "sku": sku, "loja": loja, "quantidade": quantidade}
 
-        if tipo_origem is not None:
-            atual = await db.fetchval(
-                "SELECT quantidade FROM estoque_saldos WHERE sku = $1 AND loja = $2 AND tipo = $3",
-                sku, loja, tipo_origem)
-            atual = float(atual or 0)
-            if atual < quantidade:
-                return {"erro": f"Saldo insuficiente em '{tipo_origem}' ({atual} disponivel, {quantidade} solicitado)"}
-            nova_origem = atual - quantidade
-            await db.execute("""
-                INSERT INTO estoque_saldos (sku, loja, tipo, quantidade, data_atualizacao)
-                VALUES ($1, $2, $3, $4, NOW())
-                ON CONFLICT (sku, loja, tipo) DO UPDATE SET quantidade = $4, data_atualizacao = NOW()
-            """, sku, loja, tipo_origem, nova_origem)
-            await db.execute("""
-                INSERT INTO estoque_movimentacoes
-                    (sku, loja, tipo, quantidade, motivo, usuario_id, usuario_nome,
-                     tipo_saldo, saldo_anterior, saldo_posterior, ip, dispositivo)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-            """, sku, loja, tipo_movimento, quantidade, motivo, usuario_id, usuario_nome,
-                tipo_origem, atual, nova_origem, ip, dispositivo)
-            resultado["saldo_origem"] = {"tipo": tipo_origem, "anterior": atual, "atual": nova_origem}
+        async with db.acquire() as conn:
+            async with conn.transaction():
+                if tipo_origem is not None:
+                    atual = await conn.fetchval(
+                        "SELECT quantidade FROM estoque_saldos WHERE sku = $1 AND loja = $2 AND tipo = $3 FOR UPDATE",
+                        sku, loja, tipo_origem)
+                    atual = float(atual or 0)
+                    if atual < quantidade:
+                        return {"erro": f"Saldo insuficiente em '{tipo_origem}' ({atual} disponivel, {quantidade} solicitado)"}
+                    nova_origem = atual - quantidade
+                    await conn.execute("""
+                        INSERT INTO estoque_saldos (sku, loja, tipo, quantidade, data_atualizacao)
+                        VALUES ($1, $2, $3, $4, NOW())
+                        ON CONFLICT (sku, loja, tipo) DO UPDATE SET quantidade = $4, data_atualizacao = NOW()
+                    """, sku, loja, tipo_origem, nova_origem)
+                    await conn.execute("""
+                        INSERT INTO estoque_movimentacoes
+                            (sku, loja, tipo, quantidade, motivo, usuario_id, usuario_nome,
+                             tipo_saldo, saldo_anterior, saldo_posterior, ip, dispositivo)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                    """, sku, loja, tipo_movimento, quantidade, motivo, usuario_id, usuario_nome,
+                        tipo_origem, atual, nova_origem, ip, dispositivo)
+                    resultado["saldo_origem"] = {"tipo": tipo_origem, "anterior": atual, "atual": nova_origem}
 
-        if tipo_destino is not None:
-            atual_d = await db.fetchval(
-                "SELECT quantidade FROM estoque_saldos WHERE sku = $1 AND loja = $2 AND tipo = $3",
-                sku, loja, tipo_destino)
-            atual_d = float(atual_d or 0)
-            nova_destino = atual_d + quantidade
-            await db.execute("""
-                INSERT INTO estoque_saldos (sku, loja, tipo, quantidade, data_atualizacao)
-                VALUES ($1, $2, $3, $4, NOW())
-                ON CONFLICT (sku, loja, tipo) DO UPDATE SET quantidade = $4, data_atualizacao = NOW()
-            """, sku, loja, tipo_destino, nova_destino)
-            await db.execute("""
-                INSERT INTO estoque_movimentacoes
-                    (sku, loja, tipo, quantidade, motivo, usuario_id, usuario_nome,
-                     tipo_saldo, saldo_anterior, saldo_posterior, ip, dispositivo)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-            """, sku, loja, tipo_movimento, quantidade, motivo, usuario_id, usuario_nome,
-                tipo_destino, atual_d, nova_destino, ip, dispositivo)
-            resultado["saldo_destino"] = {"tipo": tipo_destino, "anterior": atual_d, "atual": nova_destino}
+                if tipo_destino is not None:
+                    atual_d = await conn.fetchval(
+                        "SELECT quantidade FROM estoque_saldos WHERE sku = $1 AND loja = $2 AND tipo = $3",
+                        sku, loja, tipo_destino)
+                    atual_d = float(atual_d or 0)
+                    nova_destino = atual_d + quantidade
+                    await conn.execute("""
+                        INSERT INTO estoque_saldos (sku, loja, tipo, quantidade, data_atualizacao)
+                        VALUES ($1, $2, $3, $4, NOW())
+                        ON CONFLICT (sku, loja, tipo) DO UPDATE SET quantidade = $4, data_atualizacao = NOW()
+                    """, sku, loja, tipo_destino, nova_destino)
+                    await conn.execute("""
+                        INSERT INTO estoque_movimentacoes
+                            (sku, loja, tipo, quantidade, motivo, usuario_id, usuario_nome,
+                             tipo_saldo, saldo_anterior, saldo_posterior, ip, dispositivo)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                    """, sku, loja, tipo_movimento, quantidade, motivo, usuario_id, usuario_nome,
+                        tipo_destino, atual_d, nova_destino, ip, dispositivo)
+                    resultado["saldo_destino"] = {"tipo": tipo_destino, "anterior": atual_d, "atual": nova_destino}
 
         return resultado
     try:

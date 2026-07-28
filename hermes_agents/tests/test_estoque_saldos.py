@@ -42,6 +42,49 @@ class FakeDBSaldos:
             return self.saldos.get((sku, loja, tipo))
         return None
 
+    def acquire(self):
+        return _FakeAcquireCtx(self)
+
+
+class _FakeTransactionCtx:
+    """No-op transaction context manager — a real Postgres transaction isn't
+    meaningful over the in-memory fake, so this just supports `async with`."""
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
+class _FakeAcquireCtx:
+    """Fake `async with db.acquire() as conn:` — yields the same FakeDBSaldos
+    instance (it already implements execute/fetchval against the same dicts),
+    plus a `.transaction()` no-op."""
+
+    def __init__(self, fake):
+        self._fake = fake
+
+    async def __aenter__(self):
+        return _FakeConn(self._fake)
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
+class _FakeConn:
+    def __init__(self, fake):
+        self._fake = fake
+
+    def transaction(self):
+        return _FakeTransactionCtx()
+
+    async def execute(self, query, *params):
+        return await self._fake.execute(query, *params)
+
+    async def fetchval(self, query, *params):
+        return await self._fake.fetchval(query, *params)
+
 
 class TestMoverSaldo(unittest.IsolatedAsyncioTestCase):
 
@@ -78,6 +121,20 @@ class TestMoverSaldo(unittest.IsolatedAsyncioTestCase):
         r = mover_saldo("SKU1", "Loja A", "disponivel", None, 5, "perda", "quebra")
         self.assertIn("erro", r)
         self.assertEqual(self.fake.saldos[("SKU1", "Loja A", "disponivel")], 3)
+        self.assertEqual(len(self.fake.movimentacoes), 0)
+
+    async def test_transferencia_com_saldo_insuficiente_nao_grava_nenhum_lado(self):
+        """Regression pra fix #1/#2: numa transferencia (origem+destino), se a
+        origem nao tem saldo suficiente, a funcao deve retornar erro sem
+        escrever nada em nenhum dos dois lados nem em movimentacoes — a
+        checagem+escrita da origem e a escrita da destino agora vivem na
+        mesma transacao, entao um erro na origem nao pode deixar rastro."""
+        from core.estoque_saldos import mover_saldo
+        self.fake.set_saldo("SKU1", "Loja A", "disponivel", 3)
+        r = mover_saldo("SKU1", "Loja A", "disponivel", "transito", 10, "transferencia_saida", "reposicao_entre_lojas")
+        self.assertIn("erro", r)
+        self.assertEqual(self.fake.saldos[("SKU1", "Loja A", "disponivel")], 3)
+        self.assertNotIn(("SKU1", "Loja A", "transito"), self.fake.saldos)
         self.assertEqual(len(self.fake.movimentacoes), 0)
 
     async def test_transferencia_disponivel_para_transito(self):
