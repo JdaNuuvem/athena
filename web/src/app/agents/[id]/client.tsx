@@ -32,7 +32,7 @@ export default function AgentClientPage() {
     if (!input.trim()) return;
     setResponse("Processando...");
     try {
-      const r = await api.hermesChat(input);
+      const r = await api.chat(input);
       setResponse(r.resposta);
     } catch (err) {
       setResponse(String(err));
