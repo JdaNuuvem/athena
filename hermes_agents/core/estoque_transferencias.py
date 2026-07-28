@@ -1,12 +1,18 @@
 """Transferencia de estoque entre lojas — fluxo com alcada de aprovacao (>10un)
 e confirmacao obrigatoria de quem recebe (protege contra extravio/erro no caminho).
 
-Estados: pendente_aprovacao -> aprovada -> em_transito -> confirmada | com_discrepancia
+Estados: pendente_aprovacao -> em_transito -> confirmada | com_discrepancia
                             -> rejeitada
 Se a quantidade solicitada estiver dentro do limite livre, pula direto para
-em_transito (debita a origem na hora, sem esperar aprovacao de gerente)."""
+em_transito (debita a origem, via bucket 'transito', na hora, sem esperar
+aprovacao de gerente). Quando exige aprovacao, NENHUM saldo se move em
+solicitar() — o debito disponivel->transito so acontece em aprovar(). Isso
+elimina por construcao o bug antigo de "rejeitar nao devolvia saldo": uma
+transferencia so pode ser rejeitada a partir de pendente_aprovacao, estado em
+que a origem nunca chegou a ser debitada."""
 from core import get_db, run_async, log
 from core.estoque import MOTIVOS_TRANSFERENCIA, LIMITE_APROVACAO_UNIDADES
+from core.estoque_saldos import mover_saldo
 
 AGENT = "Estoque Transferencias"
 
@@ -43,131 +49,155 @@ def _ensure():
         log(AGENT, f"Erro tabela: {e}")
 
 
-async def _debitar_origem(db, sku, origem, quantidade):
-    await db.execute(
-        "UPDATE estoque_lojas SET quantidade = quantidade - $1, data_atualizacao = NOW() WHERE sku = $2 AND loja = $3",
-        quantidade, sku, origem)
-
-
-async def _creditar_destino(db, sku, destino, quantidade):
-    await db.execute("""
-        INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao)
-        VALUES ($1, $2, $3, NOW())
-        ON CONFLICT (sku, loja) DO UPDATE SET quantidade = estoque_lojas.quantidade + $3, data_atualizacao = NOW()
-    """, sku, destino, quantidade)
-
-
 def solicitar(sku: str, origem: str, destino: str, quantidade: float, motivo: str,
-              usuario_id: int = None, usuario_nome: str = "") -> dict:
+              usuario_id: int = None, usuario_nome: str = "",
+              ip: str = None, dispositivo: str = None) -> dict:
     _ensure()
     if motivo not in MOTIVOS_TRANSFERENCIA:
         return {"erro": f"Motivo invalido. Use um de: {', '.join(MOTIVOS_TRANSFERENCIA)}"}
     if origem == destino:
         return {"erro": "Loja de origem e destino nao podem ser iguais"}
     precisa_aprovacao = quantidade > LIMITE_APROVACAO_UNIDADES
+    status_inicial = "pendente_aprovacao" if precisa_aprovacao else "em_transito"
+
+    if not precisa_aprovacao:
+        r = mover_saldo(sku, origem, "disponivel", "transito", quantidade,
+                         "transferencia_saida", motivo, usuario_id, usuario_nome, ip, dispositivo)
+        if r.get("erro"):
+            return {"erro": r["erro"]}
+
     async def _go():
         db = await get_db()
-        saldo_origem = await db.fetchval(
-            "SELECT quantidade FROM estoque_lojas WHERE sku = $1 AND loja = $2", sku, origem)
-        saldo_origem = float(saldo_origem or 0)
-        if saldo_origem < quantidade:
-            return {"erro": f"Saldo insuficiente na origem ({saldo_origem} em {origem})"}
-
-        status_inicial = "pendente_aprovacao" if precisa_aprovacao else "em_transito"
         row = await db.fetchrow("""
             INSERT INTO estoque_transferencias
                 (sku, loja_origem, loja_destino, quantidade_solicitada, motivo, status,
-                 usuario_solicitante_id, usuario_solicitante_nome, aprovado_em)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CASE WHEN $6 = 'em_transito' THEN NOW() END)
-            RETURNING id
+                 usuario_solicitante_id, usuario_solicitante_nome)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id
         """, sku, origem, destino, quantidade, motivo, status_inicial, usuario_id, usuario_nome)
-        transferencia_id = row["id"]
-        if not precisa_aprovacao:
-            await _debitar_origem(db, sku, origem, quantidade)
-        return {"transferencia_id": transferencia_id, "status": status_inicial,
-                "pendente_aprovacao": precisa_aprovacao, "sku": sku,
-                "origem": origem, "destino": destino, "quantidade": quantidade}
+        return row["id"]
     try:
-        return run_async(_go())
+        transferencia_id = run_async(_go())
     except Exception as e:
         return {"erro": str(e)}
+    return {"transferencia_id": transferencia_id, "status": status_inicial,
+            "pendente_aprovacao": precisa_aprovacao, "sku": sku,
+            "origem": origem, "destino": destino, "quantidade": quantidade}
 
 
-def aprovar(transferencia_id: int, aprovador_id: int, aprovador_nome: str) -> dict:
+def aprovar(transferencia_id: int, aprovador_id: int, aprovador_nome: str,
+            ip: str = None, dispositivo: str = None) -> dict:
+    """Libera uma transferencia pendente_aprovacao para em_transito. So aqui
+    e' que o debito disponivel->transito acontece quando a transferencia
+    precisou de alcada (ver nota de modulo)."""
     _ensure()
-    async def _go():
+    async def _buscar():
         db = await get_db()
-        row = await db.fetchrow("SELECT * FROM estoque_transferencias WHERE id = $1", transferencia_id)
-        if not row:
-            return {"erro": "transferencia nao encontrada"}
-        if row["status"] != "pendente_aprovacao":
-            return {"erro": f"transferencia ja resolvida (status: {row['status']})"}
-        saldo_origem = await db.fetchval(
-            "SELECT quantidade FROM estoque_lojas WHERE sku = $1 AND loja = $2", row["sku"], row["loja_origem"])
-        saldo_origem = float(saldo_origem or 0)
-        if saldo_origem < float(row["quantidade_solicitada"]):
-            return {"erro": f"Saldo insuficiente na origem no momento da aprovacao ({saldo_origem} em {row['loja_origem']})"}
-        await _debitar_origem(db, row["sku"], row["loja_origem"], float(row["quantidade_solicitada"]))
+        return await db.fetchrow("SELECT * FROM estoque_transferencias WHERE id = $1", transferencia_id)
+    try:
+        row = run_async(_buscar())
+    except Exception as e:
+        return {"erro": str(e)}
+    if not row:
+        return {"erro": "transferencia nao encontrada"}
+    if row["status"] != "pendente_aprovacao":
+        return {"erro": f"transferencia ja resolvida (status: {row['status']})"}
+
+    r = mover_saldo(row["sku"], row["loja_origem"], "disponivel", "transito",
+                     float(row["quantidade_solicitada"]), "transferencia_saida", row["motivo"],
+                     aprovador_id, aprovador_nome, ip, dispositivo)
+    if r.get("erro"):
+        return {"erro": r["erro"]}
+
+    async def _marcar():
+        db = await get_db()
         await db.execute("""
             UPDATE estoque_transferencias SET status = 'em_transito',
                 usuario_aprovador_id = $1, usuario_aprovador_nome = $2, aprovado_em = NOW()
             WHERE id = $3
         """, aprovador_id, aprovador_nome, transferencia_id)
-        return {"ok": True, "transferencia_id": transferencia_id, "status": "em_transito"}
     try:
-        return run_async(_go())
+        run_async(_marcar())
     except Exception as e:
         return {"erro": str(e)}
+    return {"ok": True, "transferencia_id": transferencia_id, "status": "em_transito"}
 
 
-def rejeitar(transferencia_id: int, aprovador_id: int, aprovador_nome: str, motivo_rejeicao: str = "") -> dict:
+def rejeitar(transferencia_id: int, aprovador_id: int, aprovador_nome: str, motivo_rejeicao: str = "",
+             ip: str = None, dispositivo: str = None) -> dict:
+    """Rejeitar so e' valido a partir de pendente_aprovacao — estado em que a
+    origem nunca foi debitada (ver nota de modulo). Por isso nao ha saldo
+    para devolver aqui; nao precisa chamar mover_saldo. ip/dispositivo
+    aceitos por simetria com as outras acoes de alcada (Task 2/3), sem uso
+    hoje pois esta acao nao move saldo nem grava ledger."""
     _ensure()
-    async def _go():
+    async def _buscar():
         db = await get_db()
-        row = await db.fetchrow("SELECT status FROM estoque_transferencias WHERE id = $1", transferencia_id)
-        if not row:
-            return {"erro": "transferencia nao encontrada"}
-        if row["status"] != "pendente_aprovacao":
-            return {"erro": f"transferencia ja resolvida (status: {row['status']})"}
+        return await db.fetchrow("SELECT status FROM estoque_transferencias WHERE id = $1", transferencia_id)
+    try:
+        row = run_async(_buscar())
+    except Exception as e:
+        return {"erro": str(e)}
+    if not row:
+        return {"erro": "transferencia nao encontrada"}
+    if row["status"] != "pendente_aprovacao":
+        return {"erro": f"transferencia ja resolvida (status: {row['status']})"}
+    async def _marcar():
+        db = await get_db()
         await db.execute("""
             UPDATE estoque_transferencias SET status = 'rejeitada',
                 usuario_aprovador_id = $1, usuario_aprovador_nome = $2, motivo_rejeicao = $3
             WHERE id = $4
         """, aprovador_id, aprovador_nome, motivo_rejeicao, transferencia_id)
-        return {"ok": True, "transferencia_id": transferencia_id, "status": "rejeitada"}
     try:
-        return run_async(_go())
+        run_async(_marcar())
     except Exception as e:
         return {"erro": str(e)}
+    return {"ok": True, "transferencia_id": transferencia_id, "status": "rejeitada"}
 
 
-def confirmar(transferencia_id: int, confirmador_id: int, confirmador_nome: str, quantidade_recebida: float) -> dict:
+def confirmar(transferencia_id: int, confirmador_id: int, confirmador_nome: str, quantidade_recebida: float,
+              ip: str = None, dispositivo: str = None) -> dict:
     """Loja destino confirma o recebimento fisico. Credita a quantidade REALMENTE
     recebida (protege contra extravio/erro no caminho) — se diferente do
     solicitado, marca como discrepancia em vez de silenciosamente igualar."""
     _ensure()
-    async def _go():
+    async def _buscar():
         db = await get_db()
-        row = await db.fetchrow("SELECT * FROM estoque_transferencias WHERE id = $1", transferencia_id)
-        if not row:
-            return {"erro": "transferencia nao encontrada"}
-        if row["status"] != "em_transito":
-            return {"erro": f"transferencia nao esta em transito (status: {row['status']})"}
-        await _creditar_destino(db, row["sku"], row["loja_destino"], quantidade_recebida)
-        discrepancia = abs(float(quantidade_recebida) - float(row["quantidade_solicitada"])) > 0.001
-        status_final = "com_discrepancia" if discrepancia else "confirmada"
+        return await db.fetchrow("SELECT * FROM estoque_transferencias WHERE id = $1", transferencia_id)
+    try:
+        row = run_async(_buscar())
+    except Exception as e:
+        return {"erro": str(e)}
+    if not row:
+        return {"erro": "transferencia nao encontrada"}
+    if row["status"] != "em_transito":
+        return {"erro": f"transferencia nao esta em transito (status: {row['status']})"}
+
+    r1 = mover_saldo(row["sku"], row["loja_origem"], "transito", None, quantidade_recebida,
+                      "transferencia_recebida", row["motivo"], confirmador_id, confirmador_nome, ip, dispositivo)
+    if r1.get("erro"):
+        return {"erro": r1["erro"]}
+    r2 = mover_saldo(row["sku"], row["loja_destino"], None, "disponivel", quantidade_recebida,
+                      "transferencia_recebida", row["motivo"], confirmador_id, confirmador_nome, ip, dispositivo)
+    if r2.get("erro"):
+        return {"erro": r2["erro"]}
+
+    discrepancia = abs(float(quantidade_recebida) - float(row["quantidade_solicitada"])) > 0.001
+    status_final = "com_discrepancia" if discrepancia else "confirmada"
+    async def _marcar():
+        db = await get_db()
         await db.execute("""
             UPDATE estoque_transferencias SET status = $1, quantidade_recebida = $2,
                 usuario_confirmador_id = $3, usuario_confirmador_nome = $4, confirmado_em = NOW()
             WHERE id = $5
         """, status_final, quantidade_recebida, confirmador_id, confirmador_nome, transferencia_id)
-        return {"ok": True, "transferencia_id": transferencia_id, "status": status_final,
-                "quantidade_solicitada": float(row["quantidade_solicitada"]),
-                "quantidade_recebida": float(quantidade_recebida), "discrepancia": discrepancia}
     try:
-        return run_async(_go())
+        run_async(_marcar())
     except Exception as e:
         return {"erro": str(e)}
+    return {"ok": True, "transferencia_id": transferencia_id, "status": status_final,
+            "quantidade_solicitada": float(row["quantidade_solicitada"]),
+            "quantidade_recebida": float(quantidade_recebida), "discrepancia": discrepancia}
 
 
 def listar(status: str = "", loja: str = "") -> list:

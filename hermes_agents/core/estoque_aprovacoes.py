@@ -40,7 +40,12 @@ def precisa_aprovacao(quantidade: float) -> bool:
 
 
 def solicitar(sku: str, loja: str, quantidade: float, motivo: str,
-              usuario_id: int = None, usuario_nome: str = "") -> dict:
+              usuario_id: int = None, usuario_nome: str = "",
+              ip: str = None, dispositivo: str = None) -> dict:
+    """ip/dispositivo aceitos por simetria com as demais acoes de alcada —
+    solicitar() hoje so grava a pendencia em estoque_aprovacoes (sem tocar
+    saldo/ledger), entao os parametros ficam sem uso ate uma fase futura que
+    passe a auditar tambem a solicitacao."""
     _ensure()
     if motivo not in MOTIVOS_SAIDA:
         return {"erro": f"Motivo invalido. Use um de: {', '.join(MOTIVOS_SAIDA)}"}
@@ -64,7 +69,8 @@ def solicitar(sku: str, loja: str, quantidade: float, motivo: str,
         return {"erro": str(e)}
 
 
-def aprovar(aprovacao_id: int, aprovador_id: int, aprovador_nome: str) -> dict:
+def aprovar(aprovacao_id: int, aprovador_id: int, aprovador_nome: str,
+            ip: str = None, dispositivo: str = None) -> dict:
     _ensure()
     async def _go():
         db = await get_db()
@@ -80,7 +86,8 @@ def aprovar(aprovacao_id: int, aprovador_id: int, aprovador_nome: str) -> dict:
 
     resultado = _aplicar_saida(
         pendencia["sku"], pendencia["loja"], float(pendencia["quantidade"]), pendencia["motivo"],
-        usuario_id=pendencia["usuario_solicitante_id"], usuario_nome=pendencia["usuario_solicitante_nome"])
+        usuario_id=pendencia["usuario_solicitante_id"], usuario_nome=pendencia["usuario_solicitante_nome"],
+        ip=ip, dispositivo=dispositivo)
     if resultado.get("erro"):
         return resultado
 

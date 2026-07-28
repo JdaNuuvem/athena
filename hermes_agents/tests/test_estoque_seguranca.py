@@ -24,6 +24,11 @@ class FakeDB:
         self.estoque[(sku, loja)] = qtd
         self.saldos[(sku, loja, "disponivel")] = qtd
 
+    def set_saldo(self, sku, loja, tipo="disponivel", qtd=0):
+        self.saldos[(sku, loja, tipo)] = qtd
+        if tipo == "disponivel":
+            self.estoque[(sku, loja)] = qtd
+
     def acquire(self):
         return _FakeAcquireCtx(self)
 
@@ -236,11 +241,12 @@ class TestFluxoEstoqueSeguranca(unittest.IsolatedAsyncioTestCase):
 
     async def test_transferencia_pequena_debita_origem_fica_em_transito(self):
         from core.estoque_transferencias import solicitar
-        self.fake.set_estoque("SKU1", "Loja A", 50)
+        self.fake.set_saldo("SKU1", "Loja A", "disponivel", 50)
         r = solicitar("SKU1", "Loja A", "Loja B", 5, "reposicao_entre_lojas", usuario_id=1, usuario_nome="op")
         self.assertEqual(r["status"], "em_transito")
         self.assertFalse(r["pendente_aprovacao"])
-        self.assertEqual(self.fake.estoque[("SKU1", "Loja A")], 45)  # ja debitou origem
+        self.assertEqual(self.fake.saldos[("SKU1", "Loja A", "disponivel")], 45)
+        self.assertEqual(self.fake.saldos[("SKU1", "Loja A", "transito")], 5)
 
     async def test_transferencia_grande_fica_pendente_aprovacao(self):
         from core.estoque_transferencias import solicitar
@@ -248,6 +254,34 @@ class TestFluxoEstoqueSeguranca(unittest.IsolatedAsyncioTestCase):
         r = solicitar("SKU1", "Loja A", "Loja B", 20, "reposicao_entre_lojas", usuario_id=1, usuario_nome="op")
         self.assertEqual(r["status"], "pendente_aprovacao")
         self.assertEqual(self.fake.estoque[("SKU1", "Loja A")], 50)  # nao debitou ainda
+
+    async def test_transferencia_grande_pendente_nao_debita_nada_ainda(self):
+        from core.estoque_transferencias import solicitar
+        self.fake.set_saldo("SKU1", "Loja A", "disponivel", 50)
+        r = solicitar("SKU1", "Loja A", "Loja B", 20, "reposicao_entre_lojas", usuario_id=1, usuario_nome="op")
+        self.assertEqual(r["status"], "pendente_aprovacao")
+        self.assertEqual(self.fake.saldos[("SKU1", "Loja A", "disponivel")], 50)  # nao debitou - so' debita ao aprovar
+        self.assertEqual(self.fake.saldos.get(("SKU1", "Loja A", "transito")), None)
+
+    async def test_aprovar_transferencia_pendente_debita_disponivel_credita_transito(self):
+        from core.estoque_transferencias import solicitar, aprovar
+        self.fake.set_saldo("SKU1", "Loja A", "disponivel", 50)
+        r = solicitar("SKU1", "Loja A", "Loja B", 20, "reposicao_entre_lojas", usuario_id=1, usuario_nome="op")
+        tid = r["transferencia_id"]
+        r2 = aprovar(tid, aprovador_id=9, aprovador_nome="gerente")
+        self.assertTrue(r2.get("ok"))
+        self.assertEqual(self.fake.saldos[("SKU1", "Loja A", "disponivel")], 30)
+        self.assertEqual(self.fake.saldos[("SKU1", "Loja A", "transito")], 20)
+
+    async def test_confirmar_transferencia_debita_transito_origem_credita_disponivel_destino(self):
+        from core.estoque_transferencias import solicitar, confirmar
+        self.fake.set_saldo("SKU1", "Loja A", "disponivel", 50)
+        r = solicitar("SKU1", "Loja A", "Loja B", 5, "reposicao_entre_lojas", usuario_id=1, usuario_nome="op")
+        tid = r["transferencia_id"]
+        r2 = confirmar(tid, confirmador_id=2, confirmador_nome="loja_b_op", quantidade_recebida=5)
+        self.assertEqual(r2["status"], "confirmada")
+        self.assertEqual(self.fake.saldos[("SKU1", "Loja A", "transito")], 0)
+        self.assertEqual(self.fake.saldos[("SKU1", "Loja B", "disponivel")], 5)
 
     async def test_confirmar_transferencia_credita_destino(self):
         from core.estoque_transferencias import solicitar, confirmar
