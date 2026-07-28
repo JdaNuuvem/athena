@@ -1,5 +1,6 @@
 """Rotas REST do Chat Interno — /api/chat/*"""
 import os, time
+from werkzeug.utils import secure_filename
 from flask import Blueprint, request, jsonify, send_file
 from core.rbac import usuario_atual_da_request
 from core.chat import (
@@ -82,8 +83,9 @@ def chat_editar_mensagem(mensagem_id):
         return jsonify({"error": "Nao autenticado"}), 401
     data = request.json or {}
     mensagem = editar_mensagem(mensagem_id, int(user_id), data.get("texto", ""))
-    if not mensagem.get("error"):
-        broadcast_para_participantes(mensagem["conversa_id"], {"evento": "mensagem_editada", "mensagem": _serializar(mensagem)})
+    if mensagem.get("error"):
+        return jsonify(mensagem), 403
+    broadcast_para_participantes(mensagem["conversa_id"], {"evento": "mensagem_editada", "mensagem": _serializar(mensagem)})
     return jsonify(mensagem)
 
 
@@ -94,8 +96,9 @@ def chat_excluir_mensagem(mensagem_id):
     if not user_id:
         return jsonify({"error": "Nao autenticado"}), 401
     mensagem = excluir_mensagem(mensagem_id, int(user_id))
-    if not mensagem.get("error"):
-        broadcast_para_participantes(mensagem["conversa_id"], {"evento": "mensagem_excluida", "mensagem": _serializar(mensagem)})
+    if mensagem.get("error"):
+        return jsonify(mensagem), 403
+    broadcast_para_participantes(mensagem["conversa_id"], {"evento": "mensagem_excluida", "mensagem": _serializar(mensagem)})
     return jsonify(mensagem)
 
 
@@ -105,6 +108,8 @@ def chat_upload_anexo():
     user_id = usuario.get("user_id")
     if not user_id:
         return jsonify({"error": "Nao autenticado"}), 401
+    if request.content_length and request.content_length > TAMANHO_MAXIMO_BYTES:
+        return jsonify({"error": "Arquivo maior que 25MB"}), 413
     arquivo = request.files.get("arquivo")
     if not arquivo:
         return jsonify({"error": "arquivo obrigatorio"}), 400
@@ -112,8 +117,12 @@ def chat_upload_anexo():
     if len(conteudo) > TAMANHO_MAXIMO_BYTES:
         return jsonify({"error": "Arquivo maior que 25MB"}), 413
     os.makedirs(UPLOAD_DIR, exist_ok=True)
-    nome_seguro = f"{int(user_id)}_{int(time.time() * 1000)}_{arquivo.filename}"
-    with open(os.path.join(UPLOAD_DIR, nome_seguro), "wb") as f:
+    nome_base = secure_filename(arquivo.filename) or "upload.bin"
+    nome_seguro = f"{int(user_id)}_{int(time.time() * 1000)}_{nome_base}"
+    caminho_completo = os.path.realpath(os.path.join(UPLOAD_DIR, nome_seguro))
+    if not caminho_completo.startswith(os.path.realpath(UPLOAD_DIR) + os.sep):
+        return jsonify({"error": "nome de arquivo invalido"}), 400
+    with open(caminho_completo, "wb") as f:
         f.write(conteudo)
     return jsonify(salvar_anexo(arquivo.filename, arquivo.mimetype, len(conteudo), nome_seguro, int(user_id)))
 
@@ -130,7 +139,10 @@ def chat_download_anexo(anexo_id):
     anexo = obter_anexo(anexo_id)
     if anexo.get("error"):
         return jsonify(anexo), 404
-    return send_file(os.path.join(UPLOAD_DIR, anexo["storage_path"]), download_name=anexo["nome_arquivo"])
+    caminho_completo = os.path.realpath(os.path.join(UPLOAD_DIR, anexo["storage_path"]))
+    if not caminho_completo.startswith(os.path.realpath(UPLOAD_DIR) + os.sep):
+        return jsonify({"error": "anexo invalido"}), 400
+    return send_file(caminho_completo, download_name=anexo["nome_arquivo"], as_attachment=True, mimetype="application/octet-stream")
 
 
 @chat_bp.route("/conversas/<int:conversa_id>/participantes", methods=["POST"])
