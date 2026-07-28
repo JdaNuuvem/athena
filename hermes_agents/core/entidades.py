@@ -234,18 +234,23 @@ def ao_faturar_pedido(pedido_id: int) -> dict:
         # 5) Baixar estoque
         try:
             itens = await db.fetch("SELECT * FROM vendas_itens WHERE pedido_id = $1", pedido_id)
+            erro_estoque = None
             for item in itens:
                 item = dict(item)
                 sku = item.get("sku","")
                 qtd = float(item.get("quantidade",0) or 0)
                 if sku and qtd > 0:
-                    await db.execute(f"INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao) VALUES ($1, '{LOJA_PRINCIPAL}', -$2, NOW()) ON CONFLICT (sku, loja) DO UPDATE SET quantidade = estoque_lojas.quantidade - $2, data_atualizacao = NOW()", sku, qtd)
+                    from core.estoque import saida as _estoque_saida
+                    res = _estoque_saida(sku, LOJA_PRINCIPAL, qtd, "uso_interno")
+                    if res.get("erro"):
+                        erro_estoque = res["erro"]
+                        continue
                     # Atualizar catalogo FK
                     from core.catalogo import buscar_por_sku_ou_criar
                     pid = buscar_por_sku_ou_criar(sku, item.get("descricao",""))
                     if pid:
                         await db.execute("UPDATE vendas_itens SET produto_id = $1 WHERE id = $2", pid, item["id"])
-            resultados["estoque"] = "baixado"
+            resultados["estoque"] = f"erro: {erro_estoque}" if erro_estoque else "baixado"
         except Exception as e: resultados["estoque"] = f"erro: {e}"
         # 7) Gerar conta a receber (se pagamento a prazo)
         try:
@@ -291,17 +296,22 @@ def ao_receber_compra(recebimento_id: int) -> dict:
         resultados = {}
         # 10) Entrada no estoque
         try:
+            erro_estoque = None
             for item in itens:
                 item = dict(item)
                 sku = item.get("produto_codigo","")
                 qtd = float(item.get("quantidade",0) or 0)
                 if sku and qtd > 0:
-                    await db.execute(f"INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao) VALUES ($1, '{LOJA_PRINCIPAL}', $2, NOW()) ON CONFLICT (sku, loja) DO UPDATE SET quantidade = estoque_lojas.quantidade + $2, data_atualizacao = NOW()", sku, qtd)
+                    from core.estoque import entrada as _estoque_entrada
+                    res = _estoque_entrada(sku, LOJA_PRINCIPAL, qtd, "producao_interna")
+                    if res.get("erro"):
+                        erro_estoque = res["erro"]
+                        continue
                     from core.catalogo import buscar_por_sku_ou_criar
                     pid_cat = buscar_por_sku_ou_criar(sku, item.get("descricao",""))
                     if pid_cat:
                         await db.execute("UPDATE compras_itens SET produto_id = $1 WHERE id = $2", pid_cat, item["id"])
-            resultados["estoque"] = "entrada"
+            resultados["estoque"] = f"erro: {erro_estoque}" if erro_estoque else "entrada"
         except Exception as e: resultados["estoque"] = f"erro: {e}"
         # 12) Contas a pagar
         try:
@@ -334,23 +344,31 @@ def ao_finalizar_producao(op_id: int) -> dict:
             sku = op["produto_codigo"]
             qtd = float(op["quantidade"] or 0)
             if sku and qtd > 0:
-                await db.execute(f"INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao) VALUES ($1, '{LOJA_PRODUCAO}', $2, NOW()) ON CONFLICT (sku, loja) DO UPDATE SET quantidade = estoque_lojas.quantidade + $2, data_atualizacao = NOW()", sku, qtd)
-                from core.catalogo import buscar_por_sku_ou_criar
-                pid = buscar_por_sku_ou_criar(sku, op.get("descricao",""))
-                if pid:
-                    await db.execute("UPDATE producao_ops SET produto_id = $1 WHERE id = $2", pid, op_id)
-            resultados["estoque_acabado"] = "entrada"
+                from core.estoque import entrada as _estoque_entrada
+                res = _estoque_entrada(sku, LOJA_PRODUCAO, qtd, "producao_interna")
+                if res.get("erro"):
+                    resultados["estoque_acabado"] = f"erro: {res['erro']}"
+                else:
+                    from core.catalogo import buscar_por_sku_ou_criar
+                    pid = buscar_por_sku_ou_criar(sku, op.get("descricao",""))
+                    if pid:
+                        await db.execute("UPDATE producao_ops SET produto_id = $1 WHERE id = $2", pid, op_id)
+                    resultados["estoque_acabado"] = "entrada"
         except Exception as e: resultados["estoque_acabado"] = f"erro: {e}"
         # 12) Baixa de componentes do BOM
         try:
             bom = await db.fetch("SELECT * FROM producao_bom WHERE op_id = $1", op_id)
+            erro_componentes = None
             for comp in bom:
                 comp = dict(comp)
                 csku = comp["componente_codigo"]
                 cqtd = float(comp["quantidade"] or 0)
                 if csku and cqtd > 0:
-                    await db.execute(f"INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao) VALUES ($1, '{LOJA_PRODUCAO}', -$2, NOW()) ON CONFLICT (sku, loja) DO UPDATE SET quantidade = estoque_lojas.quantidade - $2, data_atualizacao = NOW()", csku, cqtd)
-            resultados["consumo_componentes"] = "baixado"
+                    from core.estoque import saida as _estoque_saida
+                    res = _estoque_saida(csku, LOJA_PRODUCAO, cqtd, "uso_interno")
+                    if res.get("erro"):
+                        erro_componentes = res["erro"]
+            resultados["consumo_componentes"] = f"erro: {erro_componentes}" if erro_componentes else "baixado"
         except Exception as e: resultados["consumo_componentes"] = f"erro: {e}"
         # 13) Custos no financeiro
         try:
