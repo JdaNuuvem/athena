@@ -40,7 +40,15 @@ class FakeDBProdutosLoja:
             row = self.linhas.get((loja, sku))
             if not row:
                 return None
-            row.update({"preco_custo": params[2]} if len(params) == 3 else {})
+            # Apply all editable field updates from params[2:]
+            campo_nomes = ["preco_custo", "preco_venda", "promocao_ativa", "promocao_preco",
+                          "promocao_inicio", "promocao_fim", "comissao_pct", "fornecedor_id",
+                          "deposito", "localizacao_fisica", "estoque_minimo", "estoque_maximo",
+                          "observacoes_internas", "produto_mestre_sku", "codigo_interno",
+                          "codigo_barras_override", "nome_override", "status"]
+            for i, val in enumerate(params[2:]):
+                if i < len(campo_nomes):
+                    row[campo_nomes[i]] = val
             return row
         if q.startswith("DELETE FROM produtos_loja"):
             loja, sku = params
@@ -117,6 +125,28 @@ class TestProdutosLoja(unittest.IsolatedAsyncioTestCase):
         criar("Loja A", "SKU1")
         r = atualizar("Loja A", "SKU1", campo_invalido="x")
         self.assertIn("erro", r)
+
+    async def test_listar_por_loja(self):
+        from core.produtos_loja import criar, listar_por_loja
+        criar("Loja A", "SKU1", produto_mestre_sku="SKU1")
+        criar("Loja A", "SKU2", produto_mestre_sku="SKU2")
+        criar("Loja B", "SKU1", produto_mestre_sku="SKU1")
+        r = listar_por_loja("Loja A")
+        self.assertEqual(r["total"], 2)
+        self.assertEqual(len(r["produtos"]), 2)
+        self.assertEqual(r["pagina"], 1)
+        skus = [p["sku"] for p in r["produtos"]]
+        self.assertIn("SKU1", skus)
+        self.assertIn("SKU2", skus)
+
+    async def test_atualizar_sucesso(self):
+        from core.produtos_loja import criar, atualizar
+        criar("Loja A", "SKU1", preco_custo=50.00)
+        r = atualizar("Loja A", "SKU1", preco_custo=99.90, preco_venda=150.00)
+        self.assertTrue(r.get("ok"))
+        self.assertEqual(r["preco_custo"], 99.90)
+        self.assertEqual(r["preco_venda"], 150.00)
+        self.assertEqual(r["sku"], "SKU1")
 
 
 if __name__ == "__main__":

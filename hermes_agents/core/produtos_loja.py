@@ -67,19 +67,24 @@ def criar(loja: str, sku: str, produto_mestre_sku: str = None, **campos) -> dict
     extras = {k: v for k, v in campos.items() if k in CAMPOS_EDITAVEIS}
 
     async def _go():
-        db = await get_db()
-        existente = await db.fetchval(
-            "SELECT id FROM produtos_loja WHERE loja = $1 AND sku = $2", loja, sku)
-        if existente:
-            return {"erro": f"ja existe produto_loja para sku={sku} na loja={loja}"}
-        colunas = ["loja", "sku", "produto_mestre_sku"] + list(extras.keys())
-        valores = [loja, sku, produto_mestre_sku] + list(extras.values())
-        placeholders = ", ".join(f"${i+1}" for i in range(len(valores)))
-        row = await db.fetchrow(
-            f"INSERT INTO produtos_loja ({', '.join(colunas)}) VALUES ({placeholders}) "
-            f"RETURNING id, loja, sku, produto_mestre_sku",
-            *valores)
-        return dict(row)
+        try:
+            db = await get_db()
+            existente = await db.fetchval(
+                "SELECT id FROM produtos_loja WHERE loja = $1 AND sku = $2", loja, sku)
+            if existente:
+                return {"erro": f"ja existe produto_loja para sku={sku} na loja={loja}"}
+            colunas = ["loja", "sku", "produto_mestre_sku"] + list(extras.keys())
+            valores = [loja, sku, produto_mestre_sku] + list(extras.values())
+            placeholders = ", ".join(f"${i+1}" for i in range(len(valores)))
+            row = await db.fetchrow(
+                f"INSERT INTO produtos_loja ({', '.join(colunas)}) VALUES ({placeholders}) "
+                f"RETURNING id, loja, sku, produto_mestre_sku",
+                *valores)
+            return dict(row)
+        except Exception as e:
+            if "unique" in str(e).lower():
+                return {"erro": f"ja existe produto_loja para sku={sku} na loja={loja}"}
+            return {"erro": str(e)}
 
     resultado = run_async(_go())
     if resultado.get("erro"):
