@@ -1,5 +1,6 @@
 """Estoque por loja — CRUD local + movimentacoes + Bling sync."""
 from core import get_db, run_async, log
+from core.estoque_saldos import mover_saldo, saldo as _saldo_bucket
 
 AGENT = "Estoque"
 
@@ -15,34 +16,24 @@ MOTIVOS_ENTRADA = ["compra_fornecedor", "devolucao_cliente", "producao_interna",
 MOTIVOS_SAIDA = ["quebra", "perda", "devolucao_fornecedor", "uso_interno", "furto_identificado", "ajuste_inventario", "outro"]
 MOTIVOS_TRANSFERENCIA = ["reposicao_entre_lojas", "redistribuicao_estoque_parado", "solicitacao_loja_destino", "outro"]
 
-_ok = False
-
-def _ensure():
-    global _ok
-    if _ok: return
-    async def _go():
-        db = await get_db()
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS estoque_movimentacoes (
-                id SERIAL PRIMARY KEY,
-                sku VARCHAR(50) NOT NULL,
-                loja VARCHAR(50) NOT NULL,
-                tipo VARCHAR(20) NOT NULL,
-                quantidade DECIMAL(12,3) NOT NULL,
-                loja_relacionada VARCHAR(50),
-                motivo VARCHAR(200),
-                data TIMESTAMP DEFAULT NOW()
-            )
-        """)
-        # Rastreabilidade — quem fez a movimentacao (sem isso, nao ha
-        # responsabilizacao individual em caso de perda/roubo de estoque).
-        await db.execute("ALTER TABLE estoque_movimentacoes ADD COLUMN IF NOT EXISTS usuario_id INT")
-        await db.execute("ALTER TABLE estoque_movimentacoes ADD COLUMN IF NOT EXISTS usuario_nome VARCHAR(100)")
-    try:
-        run_async(_go())
-        _ok = True
-    except Exception as e:
-        log(AGENT, f"Erro tabela: {e}")
+# Mapeia os motivos de negocio (lista fechada acima) para o tipo_movimento
+# do ledger segregado (core/estoque_saldos.TIPOS_MOVIMENTO).
+_MAPA_MOVIMENTO_ENTRADA = {
+    "compra_fornecedor": "compra",
+    "devolucao_cliente": "devolucao",
+    "producao_interna": "recebimento",
+    "ajuste_inventario": "ajuste",
+    "outro": "ajuste",
+}
+_MAPA_MOVIMENTO_SAIDA = {
+    "quebra": "perda",
+    "perda": "perda",
+    "devolucao_fornecedor": "devolucao",
+    "uso_interno": "ajuste",
+    "furto_identificado": "roubo",
+    "ajuste_inventario": "ajuste",
+    "outro": "ajuste",
+}
 
 
 def _where_loja_param(loja: str) -> tuple:
@@ -84,132 +75,74 @@ def listar(loja: str = "", busca: str = "", pagina: int = 1, por_pagina: int = 3
         return {"erro": str(e), "estoque": [], "total": 0}
 
 
-def atualizar(sku: str, loja_nome: str, quantidade: float, sync_bling: bool = True) -> dict:
-    if quantidade < 0:
-        return {"erro": "quantidade nao pode ser negativa"}
-    async def _go():
-        db = await get_db()
-        await db.execute("""
-            INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao)
-            VALUES ($1, $2, $3, NOW())
-            ON CONFLICT (sku, loja) DO UPDATE SET quantidade = $3, data_atualizacao = NOW()
-        """, sku, loja_nome, quantidade)
-        await db.execute("""
-            INSERT INTO catalogo_produtos (sku, descricao) VALUES ($1, $1)
-            ON CONFLICT (sku) DO NOTHING
-        """, sku)
-    try:
-        run_async(_go())
-        result = {"ok": True, "sku": sku, "loja": loja_nome, "quantidade": quantidade}
-        if sync_bling:
-            from bling_erp import sincronizar_estoque_para_bling
-            result["bling_sync"] = sincronizar_estoque_para_bling(sku, loja_nome, quantidade)
-        return result
-    except Exception as e:
-        return {"erro": str(e)}
-
-
 def entrada(sku: str, loja: str, quantidade: float, motivo: str = "",
-            usuario_id: int = None, usuario_nome: str = "") -> dict:
-    _ensure()
+            usuario_id: int = None, usuario_nome: str = "",
+            ip: str = None, dispositivo: str = None) -> dict:
     if motivo not in MOTIVOS_ENTRADA:
         motivo = "outro"
-    async def _go():
-        db = await get_db()
-        atual = await db.fetchval(
-            "SELECT quantidade FROM estoque_lojas WHERE sku = $1 AND loja = $2", sku, loja)
-        atual = float(atual or 0)
-        nova = atual + quantidade
-        await db.execute("""
-            INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao)
-            VALUES ($1, $2, $3, NOW())
-            ON CONFLICT (sku, loja) DO UPDATE SET quantidade = $3, data_atualizacao = NOW()
-        """, sku, loja, nova)
-        await db.execute("""
-            INSERT INTO estoque_movimentacoes (sku, loja, tipo, quantidade, motivo, usuario_id, usuario_nome)
-            VALUES ($1, $2, 'entrada', $3, $4, $5, $6)
-        """, sku, loja, quantidade, motivo, usuario_id, usuario_nome)
-        return {"ok": True, "sku": sku, "loja": loja, "quantidade": quantidade,
-                "anterior": atual, "atual": nova}
-    try:
-        return run_async(_go())
-    except Exception as e:
-        return {"erro": str(e)}
+    tipo_movimento = _MAPA_MOVIMENTO_ENTRADA[motivo]
+    r = mover_saldo(sku, loja, None, "disponivel", quantidade, tipo_movimento, motivo,
+                     usuario_id, usuario_nome, ip, dispositivo)
+    if r.get("erro"):
+        return r
+    d = r["saldo_destino"]
+    return {"ok": True, "sku": sku, "loja": loja, "quantidade": quantidade,
+            "anterior": d["anterior"], "atual": d["atual"]}
 
 
 def saida(sku: str, loja: str, quantidade: float, motivo: str = "",
-          usuario_id: int = None, usuario_nome: str = "") -> dict:
+          usuario_id: int = None, usuario_nome: str = "",
+          ip: str = None, dispositivo: str = None) -> dict:
     """Aplica a saida diretamente. Nao decide alcada de aprovacao — quem chama
     (routes/estoque.py ou core/estoque_aprovacoes.py) decide se a quantidade
     exige aprovacao antes de chegar aqui."""
-    _ensure()
     if motivo not in MOTIVOS_SAIDA:
         return {"erro": f"Motivo invalido. Use um de: {', '.join(MOTIVOS_SAIDA)}"}
-    async def _go():
-        db = await get_db()
-        atual = await db.fetchval(
-            "SELECT quantidade FROM estoque_lojas WHERE sku = $1 AND loja = $2", sku, loja)
-        atual = float(atual or 0)
-        if atual < quantidade:
-            return {"erro": f"Saldo insuficiente ({atual} disponivel, {quantidade} solicitado)"}
-        nova = atual - quantidade
-        await db.execute(
-            "UPDATE estoque_lojas SET quantidade = $1, data_atualizacao = NOW() WHERE sku = $2 AND loja = $3",
-            nova, sku, loja)
-        await db.execute("""
-            INSERT INTO estoque_movimentacoes (sku, loja, tipo, quantidade, motivo, usuario_id, usuario_nome)
-            VALUES ($1, $2, 'saida', $3, $4, $5, $6)
-        """, sku, loja, quantidade, motivo, usuario_id, usuario_nome)
-        return {"ok": True, "sku": sku, "loja": loja, "quantidade": quantidade,
-                "anterior": atual, "atual": nova}
-    try:
-        return run_async(_go())
-    except Exception as e:
-        return {"erro": str(e)}
+    tipo_movimento = _MAPA_MOVIMENTO_SAIDA[motivo]
+    r = mover_saldo(sku, loja, "disponivel", None, quantidade, tipo_movimento, motivo,
+                     usuario_id, usuario_nome, ip, dispositivo)
+    if r.get("erro"):
+        return r
+    o = r["saldo_origem"]
+    return {"ok": True, "sku": sku, "loja": loja, "quantidade": quantidade,
+            "anterior": o["anterior"], "atual": o["atual"]}
 
 
-def transferir(sku: str, origem: str, destino: str, quantidade: float, motivo: str = "") -> dict:
-    _ensure()
-    async def _go():
-        db = await get_db()
-        saldo_origem = await db.fetchval(
-            "SELECT quantidade FROM estoque_lojas WHERE sku = $1 AND loja = $2", sku, origem)
-        saldo_origem = float(saldo_origem or 0)
-        if saldo_origem < quantidade:
-            return {"erro": f"Saldo insuficiente na origem ({saldo_origem} em {origem})"}
-        saldo_destino = await db.fetchval(
-            "SELECT quantidade FROM estoque_lojas WHERE sku = $1 AND loja = $2", sku, destino)
-        saldo_destino = float(saldo_destino or 0)
+def transferir(sku: str, origem: str, destino: str, quantidade: float, motivo: str = "",
+               usuario_id: int = None, usuario_nome: str = "",
+               ip: str = None, dispositivo: str = None) -> dict:
+    """Transferencia instantanea, sem aprovacao/estado pendente — nao passa
+    pelo bucket 'transito' (esse e' exclusivo do fluxo com aprovacao em
+    core/estoque_transferencias.py)."""
+    r1 = mover_saldo(sku, origem, "disponivel", None, quantidade, "transferencia_saida", motivo,
+                      usuario_id, usuario_nome, ip, dispositivo)
+    if r1.get("erro"):
+        return {"erro": r1["erro"] if "insuficiente" in r1.get("erro", "") else f"Saldo insuficiente na origem: {r1['erro']}"}
+    r2 = mover_saldo(sku, destino, None, "disponivel", quantidade, "transferencia_recebida", motivo,
+                      usuario_id, usuario_nome, ip, dispositivo)
+    if r2.get("erro"):
+        return r2
+    return {"ok": True, "sku": sku, "origem": origem, "destino": destino,
+            "quantidade": quantidade,
+            "saldo_origem": r1["saldo_origem"]["atual"], "saldo_destino": r2["saldo_destino"]["atual"]}
 
-        await db.execute(
-            "UPDATE estoque_lojas SET quantidade = $1, data_atualizacao = NOW() WHERE sku = $2 AND loja = $3",
-            saldo_origem - quantidade, sku, origem)
-        await db.execute("""
-            INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao)
-            VALUES ($1, $2, $3, NOW())
-            ON CONFLICT (sku, loja) DO UPDATE SET quantidade = estoque_lojas.quantidade + $3, data_atualizacao = NOW()
-        """, sku, destino, quantidade)
 
-        await db.execute("""
-            INSERT INTO estoque_movimentacoes (sku, loja, tipo, quantidade, loja_relacionada, motivo)
-            VALUES ($1, $2, 'transferencia_origem', $3, $4, $5)
-        """, sku, origem, quantidade, destino, motivo)
-        await db.execute("""
-            INSERT INTO estoque_movimentacoes (sku, loja, tipo, quantidade, loja_relacionada, motivo)
-            VALUES ($1, $2, 'transferencia_destino', $3, $4, $5)
-        """, sku, destino, quantidade, origem, motivo)
-
-        return {"ok": True, "sku": sku, "origem": origem, "destino": destino,
-                "quantidade": quantidade, "saldo_origem": saldo_origem - quantidade,
-                "saldo_destino": saldo_destino + quantidade}
-    try:
-        return run_async(_go())
-    except Exception as e:
-        return {"erro": str(e)}
+def ajustar_absoluto(sku: str, loja: str, quantidade_absoluta: float, motivo: str = "ajuste_inventario",
+                      usuario_id: int = None, usuario_nome: str = "",
+                      ip: str = None, dispositivo: str = None) -> dict:
+    """Para integracoes que mandam o valor final, nao um delta (Bling, PUT manual
+    de loja). Calcula o delta contra o disponivel atual e aplica como entrada/saida."""
+    atual = _saldo_bucket(sku, loja, "disponivel")
+    delta = round(float(quantidade_absoluta) - atual, 3)
+    if delta == 0:
+        return {"ok": True, "sku": sku, "loja": loja, "quantidade": quantidade_absoluta,
+                "anterior": atual, "atual": atual, "sem_alteracao": True}
+    if delta > 0:
+        return entrada(sku, loja, delta, motivo, usuario_id, usuario_nome, ip, dispositivo)
+    return saida(sku, loja, abs(delta), motivo, usuario_id, usuario_nome, ip, dispositivo)
 
 
 def movimentacoes(sku: str = "", loja: str = "", limite: int = 50) -> list:
-    _ensure()
     async def _go():
         db = await get_db()
         where = ["1=1"]
@@ -238,7 +171,6 @@ def movimentacoes(sku: str = "", loja: str = "", limite: int = 50) -> list:
 
 def ratear(sku: str, total: float, modo: str = "igual", lojas: list = None,
            periodo_dias: int = 30, percentuais: dict = None) -> dict:
-    _ensure()
     percentuais = percentuais or {}
     async def _go():
         db = await get_db()
@@ -298,15 +230,7 @@ def ratear(sku: str, total: float, modo: str = "igual", lojas: list = None,
             if i == n - 1:
                 qtd = round(total - distribuido, 3)
             distribuido += qtd
-            await db.execute("""
-                INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao)
-                VALUES ($1, $2, $3, NOW())
-                ON CONFLICT (sku, loja) DO UPDATE SET quantidade = $3, data_atualizacao = NOW()
-            """, sku, loja, qtd)
-            await db.execute("""
-                INSERT INTO estoque_movimentacoes (sku, loja, tipo, quantidade, motivo)
-                VALUES ($1, $2, 'rateio', $3, $4)
-            """, sku, loja, qtd, f"rateio {modo}: {pcts[loja]}%")
+            mover_saldo(sku, loja, None, "disponivel", qtd, "ajuste", f"rateio {modo}: {pcts[loja]}%")
             resultados.append({"loja": loja, "quantidade": qtd, "percentual": pcts[loja]})
         return {"ok": True, "sku": sku, "total": total, "modo": modo,
                 "lojas": resultados, "percentuais": pcts}
