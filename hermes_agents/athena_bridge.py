@@ -219,6 +219,7 @@ from routes.lojas_integracoes import lojas_integracoes_bp
 from routes.lojas_midia import lojas_midia_bp
 from routes.rh import rh_bp
 from routes.cadastros import cadastros_bp
+from routes.produtos import produtos_bp
 from routes.financeiro import financeiro_bp
 from routes.bi import bi_bp
 app.register_blueprint(bling_bp)
@@ -249,6 +250,7 @@ app.register_blueprint(lojas_integracoes_bp)
 app.register_blueprint(lojas_midia_bp)
 app.register_blueprint(rh_bp)
 app.register_blueprint(cadastros_bp)
+app.register_blueprint(produtos_bp)
 app.register_blueprint(financeiro_bp)
 app.register_blueprint(bi_bp)
 
