@@ -9,9 +9,12 @@ lojas_midia_bp = Blueprint("lojas_midia", __name__, url_prefix="/api/lojas/manag
 
 @lojas_midia_bp.route("/<int:id>/midia", methods=["GET"])
 def listar_midia(id):
-    from core.lojas_midia import listar
-    tipo = request.args.get("tipo")
-    return jsonify({"midia": listar(id, tipo=tipo)})
+    @requer_permissao("configuracoes.editar")
+    def _go():
+        from core.lojas_midia import listar
+        tipo = request.args.get("tipo")
+        return jsonify({"midia": listar(id, tipo=tipo)})
+    return _go()
 
 
 @lojas_midia_bp.route("/<int:id>/midia", methods=["POST"])

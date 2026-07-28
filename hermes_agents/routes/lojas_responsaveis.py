@@ -9,8 +9,11 @@ lojas_responsaveis_bp = Blueprint("lojas_responsaveis", __name__, url_prefix="/a
 
 @lojas_responsaveis_bp.route("/<int:id>/responsaveis", methods=["GET"])
 def listar_responsaveis(id):
-    from core.lojas_responsaveis import listar
-    return jsonify({"responsaveis": listar(id)})
+    @requer_permissao("configuracoes.editar")
+    def _go():
+        from core.lojas_responsaveis import listar
+        return jsonify({"responsaveis": listar(id)})
+    return _go()
 
 
 @lojas_responsaveis_bp.route("/<int:id>/responsaveis", methods=["POST"])
