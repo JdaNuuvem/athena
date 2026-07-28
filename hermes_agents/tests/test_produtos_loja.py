@@ -57,8 +57,37 @@ class FakeDBProdutosLoja:
         return None
 
     async def fetch(self, query, *params):
+        # Extract pagination and search params
+        # params structure: [loja, (optional)busca_pattern, ..., por_pagina, offset]
         loja = params[0]
-        return [r for (l, _), r in self.linhas.items() if l == loja]
+
+        # Check if busca pattern is present (if params length > 1, and not last two which are pagina/offset)
+        busca = None
+        if len(params) > 3:  # loja + busca + por_pagina + offset
+            busca = params[1]
+
+        # Extract pagination params (last two elements)
+        por_pagina = params[-2]
+        offset = params[-1]
+
+        # Filter by loja
+        rows = [dict(r) for (l, _), r in self.linhas.items() if l == loja]
+
+        # Filter by search if present
+        if busca and busca.strip("%"):
+            search_term = busca.strip("%").lower()
+            rows = [r for r in rows if search_term in r.get("sku", "").lower()]
+
+        # Apply offset and limit for pagination
+        paginated = rows[offset:offset + por_pagina]
+
+        # Add join-derived fields
+        for row in paginated:
+            row["estoque_atual"] = 0  # Default stock from estoque_lojas join
+            row["nome_mestre"] = None  # From catalogo_produtos join
+            row["imagens"] = None  # From catalogo_produtos join
+
+        return paginated
 
 
 class TestProdutosLoja(unittest.IsolatedAsyncioTestCase):
@@ -147,6 +176,50 @@ class TestProdutosLoja(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(r["preco_custo"], 99.90)
         self.assertEqual(r["preco_venda"], 150.00)
         self.assertEqual(r["sku"], "SKU1")
+
+    async def test_listar_por_loja_pagination_page1(self):
+        from core.produtos_loja import criar, listar_por_loja
+        criar("Loja A", "SKU1")
+        criar("Loja A", "SKU2")
+        criar("Loja A", "SKU3")
+        r = listar_por_loja("Loja A", pagina=1, por_pagina=2)
+        self.assertEqual(r["total"], 3)
+        self.assertEqual(len(r["produtos"]), 2)
+        self.assertEqual(r["pagina"], 1)
+
+    async def test_listar_por_loja_pagination_page2(self):
+        from core.produtos_loja import criar, listar_por_loja
+        criar("Loja A", "SKU1")
+        criar("Loja A", "SKU2")
+        criar("Loja A", "SKU3")
+        r = listar_por_loja("Loja A", pagina=2, por_pagina=2)
+        self.assertEqual(r["total"], 3)
+        self.assertEqual(len(r["produtos"]), 1)
+        self.assertEqual(r["pagina"], 2)
+        self.assertEqual(r["produtos"][0]["sku"], "SKU3")
+
+    async def test_listar_por_loja_busca_search(self):
+        from core.produtos_loja import criar, listar_por_loja
+        criar("Loja A", "SKU1")
+        criar("Loja A", "SKU2")
+        criar("Loja A", "ABC123")
+        r = listar_por_loja("Loja A", busca="SKU")
+        self.assertEqual(r["total"], 3)
+        self.assertEqual(len(r["produtos"]), 2)
+        skus = [p["sku"] for p in r["produtos"]]
+        self.assertIn("SKU1", skus)
+        self.assertIn("SKU2", skus)
+        self.assertNotIn("ABC123", skus)
+
+    async def test_listar_por_loja_has_join_fields(self):
+        from core.produtos_loja import criar, listar_por_loja
+        criar("Loja A", "SKU1")
+        r = listar_por_loja("Loja A")
+        self.assertEqual(len(r["produtos"]), 1)
+        row = r["produtos"][0]
+        self.assertIn("estoque_atual", row)
+        self.assertIn("nome_mestre", row)
+        self.assertIn("imagens", row)
 
 
 if __name__ == "__main__":
