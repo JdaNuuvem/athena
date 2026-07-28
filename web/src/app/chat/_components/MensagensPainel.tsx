@@ -1,7 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import type { ConversaChat, MensagemChat } from "@/lib/types/chat";
-import { api } from "@/lib/api";
 
 export default function MensagensPainel({
   conversa, mensagens, usuarioIdAtual, digitandoUserId, onEnviar, onAbrirThread, onUpload,
