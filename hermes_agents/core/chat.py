@@ -1,5 +1,5 @@
 """Chat Interno Core — Conversas (DM/Grupo/Canal/Ticket), Mensagens, Anexos, Presenca, Busca"""
-from core import get_db, run_async, log, hoje
+from core import get_db, run_async, log
 from datetime import datetime
 
 AGENT = "Chat Core"
