@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { listarProdutosLoja, atualizarProdutoLoja, type ProdutoLojaRow } from "@/lib/api";
 import { Can } from "@/lib/auth";
+import { useStore } from "@/lib/store-context";
+import ReplicarModal from "./_components/ReplicarModal";
 
 interface EditFields {
   preco_custo: string;
@@ -28,6 +30,7 @@ function fmtMoeda(v: number | null) {
 }
 
 export default function EstoqueLojasPage() {
+  const { lojas } = useStore();
   const [rows, setRows] = useState<ProdutoLojaRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -43,6 +46,7 @@ export default function EstoqueLojasPage() {
 
   const [editing, setEditing] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<EditFields>(EMPTY_EDIT);
+  const [replicando, setReplicando] = useState<ProdutoLojaRow | null>(null);
 
   const [lojaFilter, setLojaFilter] = useState(() => {
     if (typeof window === "undefined") return "";
@@ -317,9 +321,14 @@ export default function EstoqueLojasPage() {
                             <button onClick={cancelEdit} className="text-red-400 hover:text-red-300 text-xs">✗</button>
                           </div>
                         ) : (
-                          <Can permission="ver_estoque">
-                            <button onClick={() => startEdit(r)} className="text-indigo-400 hover:text-indigo-300 text-xs">Editar</button>
-                          </Can>
+                          <div className="flex gap-2 justify-center">
+                            <Can permission="ver_estoque">
+                              <button onClick={() => startEdit(r)} className="text-indigo-400 hover:text-indigo-300 text-xs">Editar</button>
+                            </Can>
+                            <Can permission="ver_estoque">
+                              <button onClick={() => setReplicando(r)} className="text-neutral-400 hover:text-neutral-300 text-xs">Replicar</button>
+                            </Can>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -348,6 +357,16 @@ export default function EstoqueLojasPage() {
           <button disabled={pagina >= totalPaginas} onClick={() => { setPagina(pagina + 1); load(busca, pagina + 1); }}
             className="px-2 py-1 text-xs rounded bg-neutral-800 text-neutral-400 hover:bg-neutral-700 disabled:opacity-30">›</button>
         </div>
+      )}
+
+      {replicando && (
+        <ReplicarModal
+          lojaOrigem={replicando.loja}
+          sku={replicando.sku}
+          lojasDisponiveis={lojas}
+          onClose={() => setReplicando(null)}
+          onDone={() => { setReplicando(null); load(busca, pagina); }}
+        />
       )}
     </div>
   );
