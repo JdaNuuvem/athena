@@ -36,6 +36,9 @@ def _ensure():
                 confirmado_em TIMESTAMP
             )
         """)
+        # Fase 3: colunas aditivas loja_*_id (ver core/catalogo.py::estoque_lojas.loja_id).
+        await db.execute("ALTER TABLE estoque_transferencias ADD COLUMN IF NOT EXISTS loja_origem_id INT REFERENCES lojas(id)")
+        await db.execute("ALTER TABLE estoque_transferencias ADD COLUMN IF NOT EXISTS loja_destino_id INT REFERENCES lojas(id)")
     try:
         run_async(_go())
         _ok = True
@@ -43,18 +46,18 @@ def _ensure():
         log(AGENT, f"Erro tabela: {e}")
 
 
-async def _debitar_origem(db, sku, origem, quantidade):
+async def _debitar_origem(db, sku, origem, quantidade, origem_id=None):
     await db.execute(
-        "UPDATE estoque_lojas SET quantidade = quantidade - $1, data_atualizacao = NOW() WHERE sku = $2 AND loja = $3",
-        quantidade, sku, origem)
+        "UPDATE estoque_lojas SET quantidade = quantidade - $1, loja_id = COALESCE(loja_id, $4), data_atualizacao = NOW() WHERE sku = $2 AND loja = $3",
+        quantidade, sku, origem, origem_id)
 
 
-async def _creditar_destino(db, sku, destino, quantidade):
+async def _creditar_destino(db, sku, destino, quantidade, destino_id=None):
     await db.execute("""
-        INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao)
-        VALUES ($1, $2, $3, NOW())
-        ON CONFLICT (sku, loja) DO UPDATE SET quantidade = estoque_lojas.quantidade + $3, data_atualizacao = NOW()
-    """, sku, destino, quantidade)
+        INSERT INTO estoque_lojas (sku, loja, loja_id, quantidade, data_atualizacao)
+        VALUES ($1, $2, $3, $4, NOW())
+        ON CONFLICT (sku, loja) DO UPDATE SET loja_id = $3, quantidade = estoque_lojas.quantidade + $4, data_atualizacao = NOW()
+    """, sku, destino, destino_id, quantidade)
 
 
 def solicitar(sku: str, origem: str, destino: str, quantidade: float, motivo: str,
@@ -67,6 +70,8 @@ def solicitar(sku: str, origem: str, destino: str, quantidade: float, motivo: st
     precisa_aprovacao = quantidade > LIMITE_APROVACAO_UNIDADES
     async def _go():
         db = await get_db()
+        origem_id = await db.fetchval("SELECT id FROM lojas WHERE nome = $1", origem)
+        destino_id = await db.fetchval("SELECT id FROM lojas WHERE nome = $1", destino)
         saldo_origem = await db.fetchval(
             "SELECT quantidade FROM estoque_lojas WHERE sku = $1 AND loja = $2", sku, origem)
         saldo_origem = float(saldo_origem or 0)
@@ -76,14 +81,14 @@ def solicitar(sku: str, origem: str, destino: str, quantidade: float, motivo: st
         status_inicial = "pendente_aprovacao" if precisa_aprovacao else "em_transito"
         row = await db.fetchrow("""
             INSERT INTO estoque_transferencias
-                (sku, loja_origem, loja_destino, quantidade_solicitada, motivo, status,
+                (sku, loja_origem, loja_destino, loja_origem_id, loja_destino_id, quantidade_solicitada, motivo, status,
                  usuario_solicitante_id, usuario_solicitante_nome, aprovado_em)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CASE WHEN $6 = 'em_transito' THEN NOW() END)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CASE WHEN $8 = 'em_transito' THEN NOW() END)
             RETURNING id
-        """, sku, origem, destino, quantidade, motivo, status_inicial, usuario_id, usuario_nome)
+        """, sku, origem, destino, origem_id, destino_id, quantidade, motivo, status_inicial, usuario_id, usuario_nome)
         transferencia_id = row["id"]
         if not precisa_aprovacao:
-            await _debitar_origem(db, sku, origem, quantidade)
+            await _debitar_origem(db, sku, origem, quantidade, origem_id)
         return {"transferencia_id": transferencia_id, "status": status_inicial,
                 "pendente_aprovacao": precisa_aprovacao, "sku": sku,
                 "origem": origem, "destino": destino, "quantidade": quantidade}
@@ -107,7 +112,7 @@ def aprovar(transferencia_id: int, aprovador_id: int, aprovador_nome: str) -> di
         saldo_origem = float(saldo_origem or 0)
         if saldo_origem < float(row["quantidade_solicitada"]):
             return {"erro": f"Saldo insuficiente na origem no momento da aprovacao ({saldo_origem} em {row['loja_origem']})"}
-        await _debitar_origem(db, row["sku"], row["loja_origem"], float(row["quantidade_solicitada"]))
+        await _debitar_origem(db, row["sku"], row["loja_origem"], float(row["quantidade_solicitada"]), row["loja_origem_id"])
         await db.execute("""
             UPDATE estoque_transferencias SET status = 'em_transito',
                 usuario_aprovador_id = $1, usuario_aprovador_nome = $2, aprovado_em = NOW()
@@ -153,7 +158,7 @@ def confirmar(transferencia_id: int, confirmador_id: int, confirmador_nome: str,
             return {"erro": "transferencia nao encontrada"}
         if row["status"] != "em_transito":
             return {"erro": f"transferencia nao esta em transito (status: {row['status']})"}
-        await _creditar_destino(db, row["sku"], row["loja_destino"], quantidade_recebida)
+        await _creditar_destino(db, row["sku"], row["loja_destino"], quantidade_recebida, row["loja_destino_id"])
         discrepancia = abs(float(quantidade_recebida) - float(row["quantidade_solicitada"])) > 0.001
         status_final = "com_discrepancia" if discrepancia else "confirmada"
         await db.execute("""
@@ -170,7 +175,7 @@ def confirmar(transferencia_id: int, confirmador_id: int, confirmador_nome: str,
         return {"erro": str(e)}
 
 
-def listar(status: str = "", loja: str = "") -> list:
+def listar(status: str = "", loja: str = "", loja_ids: list = None) -> list:
     _ensure()
     async def _go():
         db = await get_db()
@@ -182,6 +187,9 @@ def listar(status: str = "", loja: str = "") -> list:
         if loja:
             where.append(f"(loja_origem = ${len(params) + 1} OR loja_destino = ${len(params) + 1})")
             params.append(loja)
+        elif loja_ids is not None:
+            params.append(loja_ids)
+            where.append(f"(loja_origem_id = ANY(${len(params)}) OR loja_destino_id = ANY(${len(params)}))")
         sql_where = " AND ".join(where)
         rows = await db.fetch(f"""
             SELECT t.*, c.descricao AS produto_nome

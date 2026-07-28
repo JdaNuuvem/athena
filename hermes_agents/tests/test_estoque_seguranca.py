@@ -27,7 +27,11 @@ class FakeDB:
         if "ALTER TABLE" in q or "CREATE TABLE" in q or "CREATE INDEX" in q:
             return "OK"
         if "INSERT INTO estoque_lojas" in q:
-            sku, loja, qtd = params[0], params[1], params[2]
+            # Fase 3: INSERT ganhou a coluna loja_id (sku, loja, loja_id, qtd, ...).
+            if len(params) >= 4:
+                sku, loja, qtd = params[0], params[1], params[3]
+            else:
+                sku, loja, qtd = params[0], params[1], params[2]
             self.estoque[(sku, loja)] = qtd
         elif "UPDATE estoque_lojas SET quantidade = quantidade -" in q:
             qtd, sku, loja = params[0], params[1], params[2]
@@ -86,9 +90,10 @@ class FakeDB:
             (aid,) = params
             return next((a for a in self.aprovacoes if a["id"] == aid), None)
         if "INSERT INTO estoque_transferencias" in q:
-            sku, origem, destino, qtd, motivo, status, uid, uname = params
+            sku, origem, destino, origem_id, destino_id, qtd, motivo, status, uid, uname = params
             row = {"id": len(self.transferencias) + 1, "sku": sku, "loja_origem": origem,
-                   "loja_destino": destino, "quantidade_solicitada": qtd, "motivo": motivo,
+                   "loja_destino": destino, "loja_origem_id": origem_id, "loja_destino_id": destino_id,
+                   "quantidade_solicitada": qtd, "motivo": motivo,
                    "status": status, "usuario_solicitante_id": uid, "usuario_solicitante_nome": uname,
                    "quantidade_recebida": None}
             self.transferencias.append(row)

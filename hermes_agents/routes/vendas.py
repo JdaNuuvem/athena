@@ -13,7 +13,7 @@ def vendas_dashboard():
 
 @vendas_bp.route("/<tabela>", methods=["GET"])
 def vendas_list(tabela):
-    from core.vendas import list as vl, listar_filtrado, TABLES
+    from core.vendas import list as vl, listar_filtrado, listar_pedidos_por_loja, TABLES
     if tabela not in TABLES:
         return jsonify({"error": "Tabela invalida"}), 404
     data_inicio = request.args.get("data_inicio", "")
@@ -22,6 +22,13 @@ def vendas_list(tabela):
     status = request.args.get("status", "")
     if data_inicio or data_fim or dias or status:
         return jsonify(listar_filtrado(tabela, data_inicio, data_fim, dias, status))
+    if tabela == "pedidos":
+        # Fase 4 (RBAC por loja, piloto vendas) — modo suave: sem vinculo em
+        # loja_responsaveis, ve tudo (comportamento de sempre).
+        from core.rbac_lojas import lojas_permitidas
+        permitidas = lojas_permitidas(usuario_atual_da_request().get("user_id"))
+        if permitidas is not None:
+            return jsonify({"data": listar_pedidos_por_loja(permitidas)})
     return jsonify({"data": vl(tabela)})
 
 

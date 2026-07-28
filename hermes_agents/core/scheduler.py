@@ -73,6 +73,13 @@ def _persistir_rotacao_estoque():
         if r.get("total", 0) > 0: log(AGENT, f"Sugestoes de rotacao: {r['total']}")
     except Exception as e: pass
 
+def _reconciliar_loja_id():
+    try:
+        from core.estoque import reconciliar_loja_id
+        r = reconciliar_loja_id()
+        if r.get("ok"): log(AGENT, f"Reconciliacao loja_id: {r['resultado']}")
+    except Exception as e: pass
+
 def _sync_categorias():
     try:
         from bling_erp import listar_categorias, get_access_token
@@ -103,3 +110,4 @@ add_job(_sync_contatos, "bling-contatos", 1800)        # 30 min
 add_job(_sync_cr_cp, "bling-cr-cp", 3600)              # 1 hour
 add_job(_sync_categorias, "bling-categorias", 7200)     # 2 hours
 add_job(_persistir_rotacao_estoque, "estoque-rotacao", 86400)  # daily
+add_job(_reconciliar_loja_id, "estoque-reconciliar-loja-id", 3600)  # 1 hour

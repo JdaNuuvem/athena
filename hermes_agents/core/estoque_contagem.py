@@ -30,6 +30,8 @@ def _ensure():
                 criado_em TIMESTAMP DEFAULT NOW()
             )
         """)
+        # Fase 3: coluna aditiva loja_id (ver core/catalogo.py::estoque_lojas.loja_id).
+        await db.execute("ALTER TABLE estoque_contagens ADD COLUMN IF NOT EXISTS loja_id INT REFERENCES lojas(id)")
     try:
         run_async(_go())
         _ok = True
@@ -104,11 +106,12 @@ def registrar(sku: str, loja: str, quantidade_contada: float,
 
     async def _salvar():
         db = await get_db()
+        loja_id = await db.fetchval("SELECT id FROM lojas WHERE nome = $1", loja)
         await db.execute("""
             INSERT INTO estoque_contagens
-                (sku, loja, quantidade_sistema, quantidade_contada, diferenca, ajuste_status, usuario_id, usuario_nome)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        """, sku, loja, quantidade_sistema, quantidade_contada, diferenca, ajuste_status, usuario_id, usuario_nome)
+                (sku, loja, loja_id, quantidade_sistema, quantidade_contada, diferenca, ajuste_status, usuario_id, usuario_nome)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        """, sku, loja, loja_id, quantidade_sistema, quantidade_contada, diferenca, ajuste_status, usuario_id, usuario_nome)
     try:
         run_async(_salvar())
     except Exception as e:
@@ -121,7 +124,7 @@ def registrar(sku: str, loja: str, quantidade_contada: float,
     }
 
 
-def historico(loja: str = "", limite: int = 50) -> list:
+def historico(loja: str = "", limite: int = 50, loja_ids: list = None) -> list:
     _ensure()
     async def _go():
         db = await get_db()
@@ -130,6 +133,9 @@ def historico(loja: str = "", limite: int = 50) -> list:
         if loja:
             where.append(f"loja = ${len(params) + 1}")
             params.append(loja)
+        elif loja_ids is not None:
+            params.append(loja_ids)
+            where.append(f"loja_id = ANY(${len(params)})")
         sql_where = " AND ".join(where)
         rows = await db.fetch(f"""
             SELECT ec.*, c.descricao AS produto_nome

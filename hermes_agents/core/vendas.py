@@ -25,6 +25,12 @@ def _ensure_tables():
         except Exception as e: pass
         try: await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_vendas_pedidos_shopee_order_sn ON vendas_pedidos (shopee_order_sn) WHERE shopee_order_sn IS NOT NULL")
         except Exception as e: pass
+        # Fase 3: loja_id ja existia como INT solto (sem FK declarada). NOT VALID
+        # nao exige validar o dado historico na hora — so' passa a valer pra
+        # escritas novas. Postgres nao tem "ADD CONSTRAINT IF NOT EXISTS", o
+        # try/except cobre re-execucao em todo boot.
+        try: await db.execute("ALTER TABLE vendas_pedidos ADD CONSTRAINT fk_vendas_pedidos_loja FOREIGN KEY (loja_id) REFERENCES lojas(id) NOT VALID")
+        except Exception as e: pass
         await db.execute("""CREATE TABLE IF NOT EXISTS vendas_itens (
             id SERIAL PRIMARY KEY, pedido_id INT REFERENCES vendas_pedidos(id),
             numero_item INT DEFAULT 1, sku VARCHAR(50), descricao VARCHAR(200),
@@ -133,6 +139,24 @@ def listar_filtrado(tabela: str, data_inicio: str = "", data_fim: str = "", dias
     t = f"vendas_{tabela}"
     field = DATE_FIELDS.get(tabela, "created_at")
     return {"data": _list_filtered(t, field, data_inicio, data_fim, dias, status)}
+
+
+def listar_pedidos_por_loja(loja_ids: list = None, limit: int = 500) -> list:
+    """Fase 4 (RBAC por loja, piloto vendas): so' usada quando o usuario tem
+    restricao de loja (lojas_permitidas() != None) — filtra vendas_pedidos
+    pelas lojas permitidas. Sem restricao, a listagem generica de sempre
+    (list("pedidos")) continua servindo."""
+    async def _go():
+        db = await get_db()
+        if loja_ids is not None:
+            rows = await db.fetch(
+                "SELECT * FROM vendas_pedidos WHERE loja_id = ANY($1) ORDER BY id DESC LIMIT $2",
+                loja_ids, limit)
+        else:
+            rows = await db.fetch("SELECT * FROM vendas_pedidos ORDER BY id DESC LIMIT $1", limit)
+        return [dict(r) for r in rows]
+    try: return run_async(_go())
+    except Exception as e: return []
 
 # ── Operacoes ──
 

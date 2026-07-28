@@ -27,6 +27,8 @@ def _dicts(cur):
 @estoque_bp.route('/lojas', methods=['GET'])
 def estoque_por_loja():
     """Lista estoque por deposito com filtro de loja e busca."""
+    from core.rbac import usuario_atual_da_request
+    from core.rbac_lojas import lojas_permitidas
     loja = request.args.get("loja", "")
     busca = request.args.get("busca", "").strip()
     pagina = request.args.get("pagina", 1, type=int)
@@ -43,6 +45,14 @@ def estoque_por_loja():
             else:
                 where.append("e.loja = %s")
                 params.append(loja)
+        else:
+            # Fase 4 (RBAC por loja, modo suave): so' restringe quando o
+            # usuario tem vinculo ativo em loja_responsaveis. Sem vinculo,
+            # comportamento identico ao de antes (ve tudo).
+            permitidas = lojas_permitidas(usuario_atual_da_request().get("user_id"))
+            if permitidas is not None:
+                where.append("e.loja_id = ANY(%s)")
+                params.append(permitidas)
         if busca:
             where.append("(c.sku ILIKE %s OR c.descricao ILIKE %s)")
             params.extend([f"%{busca}%", f"%{busca}%"])
@@ -78,11 +88,14 @@ def atualizar_estoque_loja():
     try:
         conn = _db_sync()
         cur = conn.cursor()
+        cur.execute("SELECT id FROM lojas WHERE nome = %s", (loja_nome,))
+        loja_id_row = cur.fetchone()
+        loja_id = loja_id_row[0] if loja_id_row else None
         cur.execute("""
-            INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao, sync_status)
-            VALUES (%s, %s, %s, NOW(), 'pendente')
-            ON CONFLICT (sku, loja) DO UPDATE SET quantidade = %s, data_atualizacao = NOW(), sync_status = 'pendente'
-        """, (sku, loja_nome, float(quantidade), float(quantidade)))
+            INSERT INTO estoque_lojas (sku, loja, loja_id, quantidade, data_atualizacao, sync_status)
+            VALUES (%s, %s, %s, %s, NOW(), 'pendente')
+            ON CONFLICT (sku, loja) DO UPDATE SET loja_id = %s, quantidade = %s, data_atualizacao = NOW(), sync_status = 'pendente'
+        """, (sku, loja_nome, loja_id, float(quantidade), loja_id, float(quantidade)))
         cur.close(); conn.close()
         result = {"ok": True, "sku": sku, "loja": loja_nome, "quantidade": quantidade}
         if sync_bling:
@@ -275,9 +288,12 @@ def estoque_transferir():
 @estoque_bp.route('/transferencias', methods=['GET'])
 def estoque_listar_transferencias():
     from core.estoque_transferencias import listar
+    from core.rbac import usuario_atual_da_request
+    from core.rbac_lojas import lojas_permitidas
     status = request.args.get("status", "")
     loja = request.args.get("loja", "")
-    return jsonify({"transferencias": listar(status, loja)})
+    permitidas = None if loja else lojas_permitidas(usuario_atual_da_request().get("user_id"))
+    return jsonify({"transferencias": listar(status, loja, loja_ids=permitidas)})
 
 
 @estoque_bp.route('/transferencias/<int:transferencia_id>/aprovar', methods=['POST'])
@@ -353,8 +369,11 @@ def estoque_contagem_registrar():
 @estoque_bp.route('/contagem/historico', methods=['GET'])
 def estoque_contagem_historico():
     from core.estoque_contagem import historico
+    from core.rbac import usuario_atual_da_request
+    from core.rbac_lojas import lojas_permitidas
     loja = request.args.get("loja", "")
-    return jsonify({"historico": historico(loja)})
+    permitidas = None if loja else lojas_permitidas(usuario_atual_da_request().get("user_id"))
+    return jsonify({"historico": historico(loja, loja_ids=permitidas)})
 
 
 @estoque_bp.route('/relatorio-discrepancias', methods=['GET'])
@@ -402,10 +421,13 @@ def estoque_ratear():
 def estoque_movimentacoes():
     """Lista movimentacoes de estoque."""
     from core.estoque import movimentacoes as est_movs
+    from core.rbac import usuario_atual_da_request
+    from core.rbac_lojas import lojas_permitidas
     sku = request.args.get("sku", "")
     loja = request.args.get("loja", "")
     limite = request.args.get("limite", 50, type=int)
-    return jsonify({"movimentacoes": est_movs(sku, loja, limite)})
+    permitidas = None if loja else lojas_permitidas(usuario_atual_da_request().get("user_id"))
+    return jsonify({"movimentacoes": est_movs(sku, loja, limite, loja_ids=permitidas)})
 
 
 @estoque_bp.route('/lote/<int:lote_id>/concluir', methods=['POST'])

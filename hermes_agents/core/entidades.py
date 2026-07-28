@@ -228,6 +228,7 @@ def ao_faturar_pedido(pedido_id: int) -> dict:
     """Orquestrador: quando um pedido e faturado, dispara todos os eventos downstream."""
     async def _go():
         db = await get_db()
+        _loja_principal_id = await db.fetchval("SELECT id FROM lojas WHERE nome = $1", LOJA_PRINCIPAL)
         pedido = await db.fetchrow("SELECT * FROM vendas_pedidos WHERE id = $1", pedido_id)
         if not pedido: return {"error": "pedido nao encontrado"}
         resultados = {}
@@ -239,7 +240,7 @@ def ao_faturar_pedido(pedido_id: int) -> dict:
                 sku = item.get("sku","")
                 qtd = float(item.get("quantidade",0) or 0)
                 if sku and qtd > 0:
-                    await db.execute(f"INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao) VALUES ($1, '{LOJA_PRINCIPAL}', -$2, NOW()) ON CONFLICT (sku, loja) DO UPDATE SET quantidade = estoque_lojas.quantidade - $2, data_atualizacao = NOW()", sku, qtd)
+                    await db.execute(f"INSERT INTO estoque_lojas (sku, loja, loja_id, quantidade, data_atualizacao) VALUES ($1, '{LOJA_PRINCIPAL}', $2, -$3, NOW()) ON CONFLICT (sku, loja) DO UPDATE SET loja_id = $2, quantidade = estoque_lojas.quantidade - $3, data_atualizacao = NOW()", sku, _loja_principal_id, qtd)
                     # Atualizar catalogo FK
                     from core.catalogo import buscar_por_sku_ou_criar
                     pid = buscar_por_sku_ou_criar(sku, item.get("descricao",""))
@@ -284,6 +285,7 @@ def ao_receber_compra(recebimento_id: int) -> dict:
     """Quando uma compra e recebida: entrada no estoque + contas a pagar."""
     async def _go():
         db = await get_db()
+        _loja_principal_id = await db.fetchval("SELECT id FROM lojas WHERE nome = $1", LOJA_PRINCIPAL)
         rec = await db.fetchrow("SELECT * FROM compras_recebimentos WHERE id = $1", recebimento_id)
         if not rec: return {"error": "recebimento nao encontrado"}
         pid = rec["pedido_id"]
@@ -296,7 +298,7 @@ def ao_receber_compra(recebimento_id: int) -> dict:
                 sku = item.get("produto_codigo","")
                 qtd = float(item.get("quantidade",0) or 0)
                 if sku and qtd > 0:
-                    await db.execute(f"INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao) VALUES ($1, '{LOJA_PRINCIPAL}', $2, NOW()) ON CONFLICT (sku, loja) DO UPDATE SET quantidade = estoque_lojas.quantidade + $2, data_atualizacao = NOW()", sku, qtd)
+                    await db.execute(f"INSERT INTO estoque_lojas (sku, loja, loja_id, quantidade, data_atualizacao) VALUES ($1, '{LOJA_PRINCIPAL}', $2, $3, NOW()) ON CONFLICT (sku, loja) DO UPDATE SET loja_id = $2, quantidade = estoque_lojas.quantidade + $3, data_atualizacao = NOW()", sku, _loja_principal_id, qtd)
                     from core.catalogo import buscar_por_sku_ou_criar
                     pid_cat = buscar_por_sku_ou_criar(sku, item.get("descricao",""))
                     if pid_cat:
@@ -326,6 +328,7 @@ def ao_finalizar_producao(op_id: int) -> dict:
     """Quando uma OP e finalizada: entrada do produto acabado no estoque + baixa de componentes."""
     async def _go():
         db = await get_db()
+        _loja_producao_id = await db.fetchval("SELECT id FROM lojas WHERE nome = $1", LOJA_PRODUCAO)
         op = await db.fetchrow("SELECT * FROM producao_ops WHERE id = $1", op_id)
         if not op: return {"error": "op nao encontrada"}
         resultados = {}
@@ -334,7 +337,7 @@ def ao_finalizar_producao(op_id: int) -> dict:
             sku = op["produto_codigo"]
             qtd = float(op["quantidade"] or 0)
             if sku and qtd > 0:
-                await db.execute(f"INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao) VALUES ($1, '{LOJA_PRODUCAO}', $2, NOW()) ON CONFLICT (sku, loja) DO UPDATE SET quantidade = estoque_lojas.quantidade + $2, data_atualizacao = NOW()", sku, qtd)
+                await db.execute(f"INSERT INTO estoque_lojas (sku, loja, loja_id, quantidade, data_atualizacao) VALUES ($1, '{LOJA_PRODUCAO}', $2, $3, NOW()) ON CONFLICT (sku, loja) DO UPDATE SET loja_id = $2, quantidade = estoque_lojas.quantidade + $3, data_atualizacao = NOW()", sku, _loja_producao_id, qtd)
                 from core.catalogo import buscar_por_sku_ou_criar
                 pid = buscar_por_sku_ou_criar(sku, op.get("descricao",""))
                 if pid:
@@ -349,7 +352,7 @@ def ao_finalizar_producao(op_id: int) -> dict:
                 csku = comp["componente_codigo"]
                 cqtd = float(comp["quantidade"] or 0)
                 if csku and cqtd > 0:
-                    await db.execute(f"INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao) VALUES ($1, '{LOJA_PRODUCAO}', -$2, NOW()) ON CONFLICT (sku, loja) DO UPDATE SET quantidade = estoque_lojas.quantidade - $2, data_atualizacao = NOW()", csku, cqtd)
+                    await db.execute(f"INSERT INTO estoque_lojas (sku, loja, loja_id, quantidade, data_atualizacao) VALUES ($1, '{LOJA_PRODUCAO}', $2, -$3, NOW()) ON CONFLICT (sku, loja) DO UPDATE SET loja_id = $2, quantidade = estoque_lojas.quantidade - $3, data_atualizacao = NOW()", csku, _loja_producao_id, cqtd)
             resultados["consumo_componentes"] = "baixado"
         except Exception as e: resultados["consumo_componentes"] = f"erro: {e}"
         # 13) Custos no financeiro

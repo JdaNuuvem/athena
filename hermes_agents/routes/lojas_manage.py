@@ -24,7 +24,13 @@ def _extrair_campos_gerais(data: dict):
 @lojas_bp.route("/manage", methods=["GET"])
 def listar_lojas_manage():
     from core.lojas import listar as listar_lojas_fn
-    return jsonify({"lojas": listar_lojas_fn()})
+    from core.rbac import usuario_atual_da_request
+    from core.rbac_lojas import lojas_permitidas
+    lojas = listar_lojas_fn()
+    permitidas = lojas_permitidas(usuario_atual_da_request().get("user_id"))
+    if permitidas is not None:
+        lojas = [l for l in lojas if l["id"] in permitidas]
+    return jsonify({"lojas": lojas})
 
 
 @lojas_bp.route("/manage/<int:id>", methods=["GET"])

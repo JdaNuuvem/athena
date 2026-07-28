@@ -464,11 +464,12 @@ def fechar_caixa(caixa_id: int, saldo_final: float, operador_id: int = None, sen
     except Exception as e: return {"error": str(e)}
 
 
-def historico_quebras(loja_id: int = None, operador: str = "", dias: int = 90) -> list:
+def historico_quebras(loja_id: int = None, operador: str = "", dias: int = 90, loja_ids: list = None) -> list:
     """Historico de quebra de caixa (diferenca) por fechamento, agregavel no
     frontend por operador_fechamento/loja_id — sem isso, uma quebra pequena
     recorrente do mesmo operador passa despercebida (cada fechamento e' visto
-    isoladamente)."""
+    isoladamente). loja_ids (Fase 4, RBAC por loja): so' usado quando
+    loja_id nao foi pedido explicitamente — modo suave, nunca bloqueia."""
     _ensure_tables()
     async def _go():
         db = await get_db()
@@ -477,6 +478,9 @@ def historico_quebras(loja_id: int = None, operador: str = "", dias: int = 90) -
         if loja_id:
             where.append(f"loja_id = ${len(params) + 1}")
             params.append(loja_id)
+        elif loja_ids is not None:
+            params.append(loja_ids)
+            where.append(f"loja_id = ANY(${len(params)})")
         if operador:
             where.append(f"operador_fechamento = ${len(params) + 1}")
             params.append(operador)

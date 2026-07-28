@@ -115,10 +115,13 @@ def pdv_relatorio_descontos():
 @pdv_bp.route('/quebras-caixa', methods=['GET'])
 def pdv_quebras_caixa():
     from core.pdv import historico_quebras
+    from core.rbac import usuario_atual_da_request
+    from core.rbac_lojas import lojas_permitidas
     loja_id = request.args.get("loja_id", type=int)
     operador = request.args.get("operador", "")
     dias = request.args.get("dias", 90, type=int)
-    return jsonify({"quebras": historico_quebras(loja_id, operador, dias)})
+    permitidas = None if loja_id else lojas_permitidas(usuario_atual_da_request().get("user_id"))
+    return jsonify({"quebras": historico_quebras(loja_id, operador, dias, loja_ids=permitidas)})
 
 @pdv_bp.route('/sangria/limite', methods=['GET'])
 def pdv_sangria_limite_get():

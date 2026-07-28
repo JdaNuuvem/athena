@@ -21,7 +21,15 @@ def _ensure_tables():
             quantidade DECIMAL(12,3) DEFAULT 0, data_atualizacao TIMESTAMP DEFAULT NOW(),
             UNIQUE (sku, loja)
         )""")
-        
+        # Fase 3 (migracao aditiva loja-texto -> loja_id FK): coluna nova em
+        # paralelo a "loja" (texto), preenchida via dual-write nos novos
+        # inserts/updates e via reconciliacao periodica (core/scheduler.py)
+        # pros caminhos de escrita que nao dao pra tocar (ex: bling_erp.py).
+        # A coluna "loja" (texto) continua sendo a fonte de verdade por ora —
+        # nada e' removido nesta fase.
+        try: await db.execute("ALTER TABLE estoque_lojas ADD COLUMN IF NOT EXISTS loja_id INT REFERENCES lojas(id)")
+        except Exception as e: log(AGENT, f"Erro ALTER estoque_lojas.loja_id: {e}")
+
         # ── Colunas de hierarquia pai/filho ──
         await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS id_bling BIGINT")
         await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS sku_pai VARCHAR(50)")

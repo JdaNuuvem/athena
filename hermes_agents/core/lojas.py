@@ -50,6 +50,33 @@ def _log_erro(onde: str, e: Exception):
     except Exception:
         pass
 
+# Cache simples nome->id, usado pelo dual-write da Fase 3 (migracao aditiva
+# de estoque_lojas/etc de loja-por-texto pra loja_id). Invalidado sempre que
+# uma loja e' criada/renomeada — ver invalidar_cache_loja_id().
+_cache_loja_id: dict = {}
+
+def invalidar_cache_loja_id():
+    _cache_loja_id.clear()
+
+def resolver_loja_id(nome: str):
+    """Resolve o nome de uma loja pro id real — usado pelos write-paths que
+    hoje so' tem o nome em maos (core/estoque.py e afins), pra popular a
+    nova coluna loja_id em paralelo a coluna loja (texto) ja existente."""
+    if not nome:
+        return None
+    if nome in _cache_loja_id:
+        return _cache_loja_id[nome]
+    async def _go():
+        db = await get_db()
+        return await db.fetchval("SELECT id FROM lojas WHERE nome = $1", nome)
+    try:
+        loja_id = run_async(_go())
+    except Exception as e:
+        _log_erro("resolver_loja_id", e)
+        return None
+    _cache_loja_id[nome] = loja_id
+    return loja_id
+
 def _ensure_table():
     global _table_ok
     if _table_ok: return
@@ -127,8 +154,12 @@ def criar(nome: str, tipo: str = "fisica"):
         db = await get_db()
         row = await db.fetchrow("INSERT INTO lojas (nome, tipo) VALUES ($1, $2) RETURNING id, nome, ativa, tipo", nome, tipo)
         return dict(row) if row else None
-    try: return run_async(_go())
-    except Exception as e: _log_erro("criar", e); return {"error": str(e)}
+    try:
+        return run_async(_go())
+    except Exception as e:
+        _log_erro("criar", e); return {"error": str(e)}
+    finally:
+        invalidar_cache_loja_id()
 
 def atualizar(id_loja: int, nome: str, shopee_markup_pct: float = None, grupos_publicacao: str = None, tipo: str = None) -> bool:
     _ensure_table()
@@ -142,8 +173,12 @@ def atualizar(id_loja: int, nome: str, shopee_markup_pct: float = None, grupos_p
         if tipo in TIPOS_VALIDOS:
             await db.execute("UPDATE lojas SET tipo = $1 WHERE id = $2", tipo, id_loja)
         return r != "UPDATE 0"
-    try: return run_async(_go())
-    except Exception as e: _log_erro("atualizar", e); return False
+    try:
+        return run_async(_go())
+    except Exception as e:
+        _log_erro("atualizar", e); return False
+    finally:
+        invalidar_cache_loja_id()
 
 def _update_campos(id_loja: int, campos: dict, whitelist: set) -> bool:
     """Helper generico p/ atualizar um subconjunto de colunas de "lojas" a

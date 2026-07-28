@@ -38,6 +38,8 @@ def _ensure():
         # responsabilizacao individual em caso de perda/roubo de estoque).
         await db.execute("ALTER TABLE estoque_movimentacoes ADD COLUMN IF NOT EXISTS usuario_id INT")
         await db.execute("ALTER TABLE estoque_movimentacoes ADD COLUMN IF NOT EXISTS usuario_nome VARCHAR(100)")
+        # Fase 3: coluna aditiva loja_id (ver core/catalogo.py::estoque_lojas.loja_id).
+        await db.execute("ALTER TABLE estoque_movimentacoes ADD COLUMN IF NOT EXISTS loja_id INT REFERENCES lojas(id)")
     try:
         run_async(_go())
         _ok = True
@@ -51,7 +53,11 @@ def _where_loja_param(loja: str) -> tuple:
         return "e.loja = (SELECT nome FROM lojas WHERE id = $1)", [int(loja)]
     return "e.loja = $1", [loja]
 
-def listar(loja: str = "", busca: str = "", pagina: int = 1, por_pagina: int = 30) -> dict:
+def listar(loja: str = "", busca: str = "", pagina: int = 1, por_pagina: int = 30, loja_ids: list = None) -> dict:
+    """loja_ids (Fase 4, RBAC por loja): quando o pedido nao especifica uma
+    loja exata ("todas"/vazio) e o usuario tem restricao de loja, filtra so'
+    pelas lojas permitidas. Um filtro explicito de loja (id ou nome) sempre
+    tem prioridade — modo suave, nao bloqueia."""
     async def _go():
         db = await get_db()
         where = ["1=1"]
@@ -59,6 +65,9 @@ def listar(loja: str = "", busca: str = "", pagina: int = 1, por_pagina: int = 3
         if loja and loja != "todas":
             w, p = _where_loja_param(loja)
             where.append(w); params.extend(p)
+        elif loja_ids is not None:
+            params.append(loja_ids)
+            where.append(f"e.loja_id = ANY(${len(params)})")
         if busca:
             n = len(params) + 1
             where.append(f"(c.sku ILIKE ${n} OR c.descricao ILIKE ${n + 1})")
@@ -89,11 +98,12 @@ def atualizar(sku: str, loja_nome: str, quantidade: float, sync_bling: bool = Tr
         return {"erro": "quantidade nao pode ser negativa"}
     async def _go():
         db = await get_db()
+        loja_id = await db.fetchval("SELECT id FROM lojas WHERE nome = $1", loja_nome)
         await db.execute("""
-            INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao)
-            VALUES ($1, $2, $3, NOW())
-            ON CONFLICT (sku, loja) DO UPDATE SET quantidade = $3, data_atualizacao = NOW()
-        """, sku, loja_nome, quantidade)
+            INSERT INTO estoque_lojas (sku, loja, loja_id, quantidade, data_atualizacao)
+            VALUES ($1, $2, $3, $4, NOW())
+            ON CONFLICT (sku, loja) DO UPDATE SET loja_id = $3, quantidade = $4, data_atualizacao = NOW()
+        """, sku, loja_nome, loja_id, quantidade)
         await db.execute("""
             INSERT INTO catalogo_produtos (sku, descricao) VALUES ($1, $1)
             ON CONFLICT (sku) DO NOTHING
@@ -116,19 +126,20 @@ def entrada(sku: str, loja: str, quantidade: float, motivo: str = "",
         motivo = "outro"
     async def _go():
         db = await get_db()
+        loja_id = await db.fetchval("SELECT id FROM lojas WHERE nome = $1", loja)
         atual = await db.fetchval(
             "SELECT quantidade FROM estoque_lojas WHERE sku = $1 AND loja = $2", sku, loja)
         atual = float(atual or 0)
         nova = atual + quantidade
         await db.execute("""
-            INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao)
-            VALUES ($1, $2, $3, NOW())
-            ON CONFLICT (sku, loja) DO UPDATE SET quantidade = $3, data_atualizacao = NOW()
-        """, sku, loja, nova)
+            INSERT INTO estoque_lojas (sku, loja, loja_id, quantidade, data_atualizacao)
+            VALUES ($1, $2, $3, $4, NOW())
+            ON CONFLICT (sku, loja) DO UPDATE SET loja_id = $3, quantidade = $4, data_atualizacao = NOW()
+        """, sku, loja, loja_id, nova)
         await db.execute("""
-            INSERT INTO estoque_movimentacoes (sku, loja, tipo, quantidade, motivo, usuario_id, usuario_nome)
-            VALUES ($1, $2, 'entrada', $3, $4, $5, $6)
-        """, sku, loja, quantidade, motivo, usuario_id, usuario_nome)
+            INSERT INTO estoque_movimentacoes (sku, loja, loja_id, tipo, quantidade, motivo, usuario_id, usuario_nome)
+            VALUES ($1, $2, $3, 'entrada', $4, $5, $6, $7)
+        """, sku, loja, loja_id, quantidade, motivo, usuario_id, usuario_nome)
         return {"ok": True, "sku": sku, "loja": loja, "quantidade": quantidade,
                 "anterior": atual, "atual": nova}
     try:
@@ -147,6 +158,7 @@ def saida(sku: str, loja: str, quantidade: float, motivo: str = "",
         return {"erro": f"Motivo invalido. Use um de: {', '.join(MOTIVOS_SAIDA)}"}
     async def _go():
         db = await get_db()
+        loja_id = await db.fetchval("SELECT id FROM lojas WHERE nome = $1", loja)
         atual = await db.fetchval(
             "SELECT quantidade FROM estoque_lojas WHERE sku = $1 AND loja = $2", sku, loja)
         atual = float(atual or 0)
@@ -154,12 +166,12 @@ def saida(sku: str, loja: str, quantidade: float, motivo: str = "",
             return {"erro": f"Saldo insuficiente ({atual} disponivel, {quantidade} solicitado)"}
         nova = atual - quantidade
         await db.execute(
-            "UPDATE estoque_lojas SET quantidade = $1, data_atualizacao = NOW() WHERE sku = $2 AND loja = $3",
-            nova, sku, loja)
+            "UPDATE estoque_lojas SET quantidade = $1, loja_id = COALESCE(loja_id, $4), data_atualizacao = NOW() WHERE sku = $2 AND loja = $3",
+            nova, sku, loja, loja_id)
         await db.execute("""
-            INSERT INTO estoque_movimentacoes (sku, loja, tipo, quantidade, motivo, usuario_id, usuario_nome)
-            VALUES ($1, $2, 'saida', $3, $4, $5, $6)
-        """, sku, loja, quantidade, motivo, usuario_id, usuario_nome)
+            INSERT INTO estoque_movimentacoes (sku, loja, loja_id, tipo, quantidade, motivo, usuario_id, usuario_nome)
+            VALUES ($1, $2, $3, 'saida', $4, $5, $6, $7)
+        """, sku, loja, loja_id, quantidade, motivo, usuario_id, usuario_nome)
         return {"ok": True, "sku": sku, "loja": loja, "quantidade": quantidade,
                 "anterior": atual, "atual": nova}
     try:
@@ -172,6 +184,8 @@ def transferir(sku: str, origem: str, destino: str, quantidade: float, motivo: s
     _ensure()
     async def _go():
         db = await get_db()
+        origem_id = await db.fetchval("SELECT id FROM lojas WHERE nome = $1", origem)
+        destino_id = await db.fetchval("SELECT id FROM lojas WHERE nome = $1", destino)
         saldo_origem = await db.fetchval(
             "SELECT quantidade FROM estoque_lojas WHERE sku = $1 AND loja = $2", sku, origem)
         saldo_origem = float(saldo_origem or 0)
@@ -182,22 +196,22 @@ def transferir(sku: str, origem: str, destino: str, quantidade: float, motivo: s
         saldo_destino = float(saldo_destino or 0)
 
         await db.execute(
-            "UPDATE estoque_lojas SET quantidade = $1, data_atualizacao = NOW() WHERE sku = $2 AND loja = $3",
-            saldo_origem - quantidade, sku, origem)
+            "UPDATE estoque_lojas SET quantidade = $1, loja_id = COALESCE(loja_id, $4), data_atualizacao = NOW() WHERE sku = $2 AND loja = $3",
+            saldo_origem - quantidade, sku, origem, origem_id)
         await db.execute("""
-            INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao)
-            VALUES ($1, $2, $3, NOW())
-            ON CONFLICT (sku, loja) DO UPDATE SET quantidade = estoque_lojas.quantidade + $3, data_atualizacao = NOW()
-        """, sku, destino, quantidade)
+            INSERT INTO estoque_lojas (sku, loja, loja_id, quantidade, data_atualizacao)
+            VALUES ($1, $2, $3, $4, NOW())
+            ON CONFLICT (sku, loja) DO UPDATE SET loja_id = $3, quantidade = estoque_lojas.quantidade + $4, data_atualizacao = NOW()
+        """, sku, destino, destino_id, quantidade)
 
         await db.execute("""
-            INSERT INTO estoque_movimentacoes (sku, loja, tipo, quantidade, loja_relacionada, motivo)
-            VALUES ($1, $2, 'transferencia_origem', $3, $4, $5)
-        """, sku, origem, quantidade, destino, motivo)
+            INSERT INTO estoque_movimentacoes (sku, loja, loja_id, tipo, quantidade, loja_relacionada, motivo)
+            VALUES ($1, $2, $3, 'transferencia_origem', $4, $5, $6)
+        """, sku, origem, origem_id, quantidade, destino, motivo)
         await db.execute("""
-            INSERT INTO estoque_movimentacoes (sku, loja, tipo, quantidade, loja_relacionada, motivo)
-            VALUES ($1, $2, 'transferencia_destino', $3, $4, $5)
-        """, sku, destino, quantidade, origem, motivo)
+            INSERT INTO estoque_movimentacoes (sku, loja, loja_id, tipo, quantidade, loja_relacionada, motivo)
+            VALUES ($1, $2, $3, 'transferencia_destino', $4, $5, $6)
+        """, sku, destino, destino_id, quantidade, origem, motivo)
 
         return {"ok": True, "sku": sku, "origem": origem, "destino": destino,
                 "quantidade": quantidade, "saldo_origem": saldo_origem - quantidade,
@@ -208,7 +222,7 @@ def transferir(sku: str, origem: str, destino: str, quantidade: float, motivo: s
         return {"erro": str(e)}
 
 
-def movimentacoes(sku: str = "", loja: str = "", limite: int = 50) -> list:
+def movimentacoes(sku: str = "", loja: str = "", limite: int = 50, loja_ids: list = None) -> list:
     _ensure()
     async def _go():
         db = await get_db()
@@ -220,6 +234,9 @@ def movimentacoes(sku: str = "", loja: str = "", limite: int = 50) -> list:
         if loja:
             params.append(loja)
             where.append(f"m.loja = ${len(params)}")
+        elif loja_ids is not None:
+            params.append(loja_ids)
+            where.append(f"m.loja_id = ANY(${len(params)})")
         sql_where = " AND ".join(where)
         params.append(int(limite))
         rows = await db.fetch(f"""
@@ -298,15 +315,16 @@ def ratear(sku: str, total: float, modo: str = "igual", lojas: list = None,
             if i == n - 1:
                 qtd = round(total - distribuido, 3)
             distribuido += qtd
+            loja_id = await db.fetchval("SELECT id FROM lojas WHERE nome = $1", loja)
             await db.execute("""
-                INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao)
-                VALUES ($1, $2, $3, NOW())
-                ON CONFLICT (sku, loja) DO UPDATE SET quantidade = $3, data_atualizacao = NOW()
-            """, sku, loja, qtd)
+                INSERT INTO estoque_lojas (sku, loja, loja_id, quantidade, data_atualizacao)
+                VALUES ($1, $2, $3, $4, NOW())
+                ON CONFLICT (sku, loja) DO UPDATE SET loja_id = $3, quantidade = $4, data_atualizacao = NOW()
+            """, sku, loja, loja_id, qtd)
             await db.execute("""
-                INSERT INTO estoque_movimentacoes (sku, loja, tipo, quantidade, motivo)
-                VALUES ($1, $2, 'rateio', $3, $4)
-            """, sku, loja, qtd, f"rateio {modo}: {pcts[loja]}%")
+                INSERT INTO estoque_movimentacoes (sku, loja, loja_id, tipo, quantidade, motivo)
+                VALUES ($1, $2, $3, 'rateio', $4, $5)
+            """, sku, loja, loja_id, qtd, f"rateio {modo}: {pcts[loja]}%")
             resultados.append({"loja": loja, "quantidade": qtd, "percentual": pcts[loja]})
         return {"ok": True, "sku": sku, "total": total, "modo": modo,
                 "lojas": resultados, "percentuais": pcts}
@@ -465,3 +483,42 @@ def sugestoes_rotacao_persistidas() -> list:
                      sugerir_transferir=float(r["sugerir_transferir"] or 0)) for r in rows]
     try: return run_async(_go())
     except Exception as e: return []
+
+
+# ── Fase 3: reconciliacao periodica loja (texto) -> loja_id ──
+
+def reconciliar_loja_id() -> dict:
+    """Preenche loja_id nas linhas que ainda so' tem o nome da loja (coluna
+    texto) — cobre write-paths que nao dao pra dual-write direto (ex: o
+    webhook do Bling em bling_erp.py, fora dos limites de edicao desta
+    sessao). Chamado pelo job diario em core/scheduler.py. Idempotente:
+    so' atualiza linhas com loja_id NULL."""
+    async def _go():
+        db = await get_db()
+        totais = {}
+        totais["estoque_lojas"] = await db.execute("""
+            UPDATE estoque_lojas e SET loja_id = l.id
+            FROM lojas l WHERE l.nome = e.loja AND e.loja_id IS NULL
+        """)
+        totais["estoque_movimentacoes"] = await db.execute("""
+            UPDATE estoque_movimentacoes m SET loja_id = l.id
+            FROM lojas l WHERE l.nome = m.loja AND m.loja_id IS NULL
+        """)
+        totais["estoque_contagens"] = await db.execute("""
+            UPDATE estoque_contagens c SET loja_id = l.id
+            FROM lojas l WHERE l.nome = c.loja AND c.loja_id IS NULL
+        """)
+        totais["estoque_transferencias_origem"] = await db.execute("""
+            UPDATE estoque_transferencias t SET loja_origem_id = l.id
+            FROM lojas l WHERE l.nome = t.loja_origem AND t.loja_origem_id IS NULL
+        """)
+        totais["estoque_transferencias_destino"] = await db.execute("""
+            UPDATE estoque_transferencias t SET loja_destino_id = l.id
+            FROM lojas l WHERE l.nome = t.loja_destino AND t.loja_destino_id IS NULL
+        """)
+        return totais
+    try:
+        return {"ok": True, "resultado": run_async(_go())}
+    except Exception as e:
+        log(AGENT, f"Erro reconciliar_loja_id: {e}")
+        return {"ok": False, "erro": str(e)}
