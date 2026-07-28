@@ -50,6 +50,7 @@ import type {
   BlingWebhook,
   Integration,
 } from "@/lib/types/domain";
+import type { ConversaChat, MensagemChat, AnexoChat } from "@/lib/types/chat";
 
 export const api = {
   // Auth
@@ -385,8 +386,59 @@ export const api = {
   relatorioClientes: (dias: number, lojaId?: string) =>
     request<Record<string, unknown>>(`/api/relatorios/clientes?dias=${dias}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
 
-  // Chat
-  chat: (mensagem: string, user_id?: string, nome?: string) =>
+  // Chat Interno
+  chat: {
+    listarConversas: () => request<{ data: ConversaChat[] }>("/api/chat/conversas"),
+    criarConversaDm: (userId: number) =>
+      request<ConversaChat>("/api/chat/conversas", {
+        method: "POST", body: JSON.stringify({ tipo: "dm", user_id: userId }),
+      }),
+    criarConversaGrupo: (nome: string, descricao: string, participantes: number[], departamento?: string, lojaId?: number) =>
+      request<ConversaChat>("/api/chat/conversas", {
+        method: "POST",
+        body: JSON.stringify({ tipo: "grupo", nome, descricao, participantes, departamento, loja_id: lojaId }),
+      }),
+    listarMensagens: (conversaId: number, antesDe?: string) =>
+      request<{ data: MensagemChat[] }>(
+        `/api/chat/conversas/${conversaId}/mensagens${antesDe ? `?antes_de=${encodeURIComponent(antesDe)}` : ""}`
+      ),
+    enviarMensagem: (conversaId: number, texto: string, anexoId?: number, threadPaiId?: number) =>
+      request<MensagemChat>(`/api/chat/conversas/${conversaId}/mensagens`, {
+        method: "POST", body: JSON.stringify({ texto, anexo_id: anexoId, thread_pai_id: threadPaiId }),
+      }),
+    editarMensagem: (mensagemId: number, texto: string) =>
+      request<MensagemChat>(`/api/chat/mensagens/${mensagemId}`, {
+        method: "PUT", body: JSON.stringify({ texto }),
+      }),
+    excluirMensagem: (mensagemId: number) =>
+      request<MensagemChat>(`/api/chat/mensagens/${mensagemId}`, { method: "DELETE" }),
+    marcarLido: (conversaId: number, ultimaMensagemId: number) =>
+      request<{ success: boolean }>(`/api/chat/conversas/${conversaId}/lido`, {
+        method: "POST", body: JSON.stringify({ ultima_mensagem_id: ultimaMensagemId }),
+      }),
+    buscar: (termo: string) => request<{ data: MensagemChat[] }>(`/api/chat/busca?q=${encodeURIComponent(termo)}`),
+    canaisDepartamento: () => request<{ data: ConversaChat[] }>("/api/chat/canais-departamento"),
+    uploadAnexo: async (arquivo: File): Promise<AnexoChat> => {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      const formData = new FormData();
+      formData.append("arquivo", arquivo);
+      const res = await fetch("/api/chat/anexos", {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: "include",
+        body: formData,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+      return res.json();
+    },
+    urlDownloadAnexo: (anexoId: number) => `/api/chat/anexos/${anexoId}`,
+  },
+
+  // Hermes Chat (legado)
+  hermesChat: (mensagem: string, user_id?: string, nome?: string) =>
     request<{ resposta: string; agente: string; intencao: string }>("/api/hermes/chat", {
       method: "POST",
       body: JSON.stringify({ mensagem, user_id: user_id || "anon", nome: nome || "Visitante" }),
