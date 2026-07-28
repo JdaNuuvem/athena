@@ -1,29 +1,48 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { estoqueLojas, estoqueAtualizar, type EstoqueLojaRow } from "@/lib/api";
+import { listarProdutosLoja, atualizarProdutoLoja, type ProdutoLojaRow } from "@/lib/api";
 import { Can } from "@/lib/auth";
 
-function SyncBadge({ status }: { status?: string }) {
-  if (!status || status === "ok") return <span className="text-[10px] text-emerald-500" title="Sincronizado">✓</span>;
-  if (status === "pendente") return <span className="text-[10px] text-amber-400 animate-pulse" title="Pendente">⏳</span>;
-  return <span className="text-[10px] text-red-400" title="Erro">✗</span>;
+interface EditFields {
+  preco_custo: string;
+  preco_venda: string;
+  fornecedor_id: string;
+  estoque_minimo: string;
+  estoque_maximo: string;
+  localizacao_fisica: string;
+}
+
+const EMPTY_EDIT: EditFields = {
+  preco_custo: "",
+  preco_venda: "",
+  fornecedor_id: "",
+  estoque_minimo: "",
+  estoque_maximo: "",
+  localizacao_fisica: "",
+};
+
+function fmtMoeda(v: number | null) {
+  if (v === null || v === undefined) return "—";
+  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 export default function EstoqueLojasPage() {
-  const [rows, setRows] = useState<EstoqueLojaRow[]>([]);
+  const [rows, setRows] = useState<ProdutoLojaRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
-  const [retrying, setRetrying] = useState(false);
 
-  const [busca, setBusca] = useState("");
+  const [busca, setBusca] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return new URLSearchParams(window.location.search).get("busca") || "";
+  });
   const [pagina, setPagina] = useState(1);
   const POR_PAGINA = 25;
 
   const [editing, setEditing] = useState<number | null>(null);
-  const [editQty, setEditQty] = useState(0);
+  const [editForm, setEditForm] = useState<EditFields>(EMPTY_EDIT);
 
   const [lojaFilter, setLojaFilter] = useState(() => {
     if (typeof window === "undefined") return "";
@@ -32,20 +51,21 @@ export default function EstoqueLojasPage() {
   });
 
   const load = useCallback(async (search?: string, pg?: number) => {
+    if (!lojaFilter) {
+      setRows([]);
+      setTotal(0);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setErro(null);
     try {
       const p = pg ?? 1;
-      const q = new URLSearchParams();
-      if (search) q.set("busca", search);
-      if (lojaFilter) q.set("loja", lojaFilter);
-      q.set("pagina", String(p));
-      q.set("por_pagina", String(POR_PAGINA));
-      const r = await estoqueLojas(q.toString());
-      setRows(r.estoque ?? []);
+      const r = await listarProdutosLoja(lojaFilter, { busca: search, pagina: p, por_pagina: POR_PAGINA });
+      setRows(r.produtos ?? []);
       setTotal(r.total ?? 0);
     } catch (e: unknown) {
-      setErro(e instanceof Error ? e.message : "Erro ao carregar estoque");
+      setErro(e instanceof Error ? e.message : "Erro ao carregar produtos da loja");
     } finally {
       setLoading(false);
     }
@@ -63,39 +83,46 @@ export default function EstoqueLojasPage() {
     return () => window.removeEventListener("loja-changed", handler);
   }, [load, busca]);
 
-  const startEdit = (row: EstoqueLojaRow) => {
+  const startEdit = (row: ProdutoLojaRow) => {
     setEditing(row.id);
-    setEditQty(row.quantidade);
+    setEditForm({
+      preco_custo: row.preco_custo != null ? String(row.preco_custo) : "",
+      preco_venda: row.preco_venda != null ? String(row.preco_venda) : "",
+      fornecedor_id: row.fornecedor_id != null ? String(row.fornecedor_id) : "",
+      estoque_minimo: row.estoque_minimo != null ? String(row.estoque_minimo) : "",
+      estoque_maximo: row.estoque_maximo != null ? String(row.estoque_maximo) : "",
+      localizacao_fisica: row.localizacao_fisica ?? "",
+    });
   };
 
   const cancelEdit = () => {
     setEditing(null);
-    setEditQty(0);
+    setEditForm(EMPTY_EDIT);
   };
 
-  const saveEdit = async (row: EstoqueLojaRow) => {
+  const salvarEdicao = async (row: ProdutoLojaRow) => {
+    const campos: Record<string, unknown> = {
+      preco_custo: editForm.preco_custo === "" ? null : Number(editForm.preco_custo),
+      preco_venda: editForm.preco_venda === "" ? null : Number(editForm.preco_venda),
+      fornecedor_id: editForm.fornecedor_id === "" ? null : Number(editForm.fornecedor_id),
+      estoque_minimo: editForm.estoque_minimo === "" ? null : Number(editForm.estoque_minimo),
+      estoque_maximo: editForm.estoque_maximo === "" ? null : Number(editForm.estoque_maximo),
+      localizacao_fisica: editForm.localizacao_fisica === "" ? null : editForm.localizacao_fisica,
+    };
     try {
-      const r = await estoqueAtualizar(row.sku, row.loja, editQty);
-      setRows(prev => prev.map(r2 => r2.id === row.id ? { ...r2, quantidade: editQty } : r2));
-      let msg = `Estoque de ${row.sku} atualizado`;
-      const bs = (r as Record<string, unknown>).bling_sync as Record<string, unknown> | undefined;
-      if (bs?.error) msg += " (Bling: erro)";
-      else if (bs?.ok) msg += " (Bling: ✓)";
-      setOkMsg(msg);
+      const r = await atualizarProdutoLoja(row.loja, row.sku, campos);
+      if (r.erro) {
+        setErro(r.erro);
+        return;
+      }
+      setOkMsg(`Dados de ${row.sku} atualizados`);
       setTimeout(() => setOkMsg(null), 2500);
+      setEditing(null);
+      setEditForm(EMPTY_EDIT);
+      load(busca, pagina);
     } catch (e: unknown) {
       setErro(e instanceof Error ? e.message : "Erro ao salvar");
     }
-    setEditing(null);
-  };
-
-  const retrySync = async () => {
-    setRetrying(true);
-    try {
-      await fetch("/api/estoque/sync/processar", { method: "POST" });
-    } catch { /* ok */ }
-    setRetrying(false);
-    load(busca, pagina);
   };
 
   const handleSearch = (e: React.FormEvent) => {
@@ -109,19 +136,11 @@ export default function EstoqueLojasPage() {
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-light text-neutral-300">Estoque por Depósito</h1>
+          <h1 className="text-lg font-light text-neutral-300">Produtos por Loja</h1>
           <p className="text-xs text-neutral-500 mt-0.5">
-            {total} registro{total !== 1 ? "s" : ""}
-            {lojaFilter ? ` — filtrado por depósito` : ""}
+            {lojaFilter ? `${total} registro${total !== 1 ? "s" : ""}` : "Selecione uma loja no topo da página"}
           </p>
         </div>
-        <button
-          onClick={retrySync}
-          disabled={retrying}
-          className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"
-        >
-          {retrying ? "Processando..." : "Retry Sync"}
-        </button>
       </div>
 
       {erro && (
@@ -146,11 +165,15 @@ export default function EstoqueLojasPage() {
         </button>
       </form>
 
-      {loading ? (
+      {!lojaFilter ? (
+        <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-8 text-center text-neutral-500 text-xs">
+          Selecione uma loja para ver e editar os produtos.
+        </div>
+      ) : loading ? (
         <div className="text-neutral-500 text-sm">Carregando...</div>
       ) : rows.length === 0 ? (
         <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-8 text-center text-neutral-500 text-xs">
-          Nenhum estoque encontrado{lojaFilter ? " neste depósito" : ""}. Sincronize os depósitos do Bling em{" "}
+          Nenhum produto encontrado nesta loja. Sincronize os produtos em{" "}
           <a href="/lojas" className="text-indigo-400 underline">Lojas</a>.
         </div>
       ) : (
@@ -161,61 +184,147 @@ export default function EstoqueLojasPage() {
                 <tr className="border-b border-neutral-800 text-neutral-500 text-xs uppercase">
                   <th className="text-left px-4 py-3 font-medium">SKU</th>
                   <th className="text-left px-4 py-3 font-medium">Nome</th>
-                  <th className="text-left px-4 py-3 font-medium">Depósito</th>
-                  <th className="text-right px-4 py-3 font-medium w-28">Qtd</th>
-                  <th className="text-right px-4 py-3 font-medium w-48">Atualizado</th>
-                  <th className="text-center px-2 py-3 font-medium w-10">Sync</th>
+                  <th className="text-right px-4 py-3 font-medium w-24">Estoque Atual</th>
+                  <th className="text-right px-4 py-3 font-medium w-28">Preço Custo</th>
+                  <th className="text-right px-4 py-3 font-medium w-28">Preço Venda</th>
+                  <th className="text-right px-4 py-3 font-medium w-24">Fornecedor</th>
+                  <th className="text-right px-4 py-3 font-medium w-20">Estoque Mín</th>
+                  <th className="text-right px-4 py-3 font-medium w-20">Estoque Máx</th>
+                  <th className="text-left px-4 py-3 font-medium w-32">Localização</th>
                   <th className="text-center px-4 py-3 font-medium w-20">Ações</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id} className="border-b border-neutral-800/50 hover:bg-neutral-800/20">
-                    <td className="px-4 py-2.5 font-mono text-xs text-neutral-500">{r.sku}</td>
-                    <td className="px-4 py-2.5 text-neutral-300 max-w-64 truncate">{r.nome}</td>
-                    <td className="px-4 py-2.5 text-neutral-400">{r.loja}</td>
-                    <td className="px-4 py-2.5 text-right">
-                      {editing === r.id ? (
-                        <input
-                          type="number"
-                          step="0.001"
-                          value={editQty}
-                          onChange={(e) => setEditQty(Number(e.target.value))}
-                          className="w-24 bg-neutral-800 border border-indigo-600 rounded px-2 py-0.5 text-sm text-right text-neutral-200 focus:outline-none"
-                          autoFocus
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") saveEdit(r);
-                            if (e.key === "Escape") cancelEdit();
-                          }}
-                        />
-                      ) : (
+                {rows.map((r) => {
+                  const isEditing = editing === r.id;
+                  return (
+                    <tr key={r.id} className="border-b border-neutral-800/50 hover:bg-neutral-800/20">
+                      <td className="px-4 py-2.5 font-mono text-xs text-neutral-500">{r.sku}</td>
+                      <td className="px-4 py-2.5 text-neutral-300 max-w-64 truncate">{r.nome_override || r.nome_mestre || "—"}</td>
+                      <td className="px-4 py-2.5 text-right">
                         <span className={`font-mono numeric font-medium ${
-                          r.quantidade <= 0 ? "text-red-400" : r.quantidade < 10 ? "text-amber-400" : "text-emerald-400"
+                          r.estoque_atual <= 0 ? "text-red-400" : r.estoque_atual < 10 ? "text-amber-400" : "text-emerald-400"
                         }`}>
-                          {r.quantidade.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                          {r.estoque_atual.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                         </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5 text-right text-xs text-neutral-600">
-                      {r.data_atualizacao ? new Date(r.data_atualizacao).toLocaleString("pt-BR") : "—"}
-                    </td>
-                    <td className="px-2 py-2.5 text-center">
-                      <SyncBadge status={r.sync_status} />
-                    </td>
-                    <td className="px-4 py-2.5 text-center">
-                      {editing === r.id ? (
-                        <div className="flex gap-1 justify-center">
-                          <button onClick={() => saveEdit(r)} className="text-emerald-400 hover:text-emerald-300 text-xs">✓</button>
-                          <button onClick={cancelEdit} className="text-red-400 hover:text-red-300 text-xs">✗</button>
-                        </div>
-                      ) : (
-                        <Can permission="ver_estoque">
-                          <button onClick={() => startEdit(r)} className="text-indigo-400 hover:text-indigo-300 text-xs">Editar</button>
-                        </Can>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        {isEditing ? (
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={editForm.preco_custo}
+                            onChange={(e) => setEditForm({ ...editForm, preco_custo: e.target.value })}
+                            className="w-24 bg-neutral-800 border border-indigo-600 rounded px-2 py-0.5 text-sm text-right text-neutral-200 focus:outline-none"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") salvarEdicao(r);
+                              if (e.key === "Escape") cancelEdit();
+                            }}
+                          />
+                        ) : (
+                          <span className="text-neutral-400">{fmtMoeda(r.preco_custo)}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        {isEditing ? (
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={editForm.preco_venda}
+                            onChange={(e) => setEditForm({ ...editForm, preco_venda: e.target.value })}
+                            className="w-24 bg-neutral-800 border border-indigo-600 rounded px-2 py-0.5 text-sm text-right text-neutral-200 focus:outline-none"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") salvarEdicao(r);
+                              if (e.key === "Escape") cancelEdit();
+                            }}
+                          />
+                        ) : (
+                          <span className="text-neutral-300 font-medium">{fmtMoeda(r.preco_venda)}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        {isEditing ? (
+                          <input
+                            type="number"
+                            step="1"
+                            value={editForm.fornecedor_id}
+                            onChange={(e) => setEditForm({ ...editForm, fornecedor_id: e.target.value })}
+                            className="w-20 bg-neutral-800 border border-indigo-600 rounded px-2 py-0.5 text-sm text-right text-neutral-200 focus:outline-none"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") salvarEdicao(r);
+                              if (e.key === "Escape") cancelEdit();
+                            }}
+                          />
+                        ) : (
+                          <span className="text-neutral-500">{r.fornecedor_id ?? "—"}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        {isEditing ? (
+                          <input
+                            type="number"
+                            step="0.001"
+                            value={editForm.estoque_minimo}
+                            onChange={(e) => setEditForm({ ...editForm, estoque_minimo: e.target.value })}
+                            className="w-16 bg-neutral-800 border border-indigo-600 rounded px-2 py-0.5 text-sm text-right text-neutral-200 focus:outline-none"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") salvarEdicao(r);
+                              if (e.key === "Escape") cancelEdit();
+                            }}
+                          />
+                        ) : (
+                          <span className="text-neutral-500">{r.estoque_minimo ?? "—"}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        {isEditing ? (
+                          <input
+                            type="number"
+                            step="0.001"
+                            value={editForm.estoque_maximo}
+                            onChange={(e) => setEditForm({ ...editForm, estoque_maximo: e.target.value })}
+                            className="w-16 bg-neutral-800 border border-indigo-600 rounded px-2 py-0.5 text-sm text-right text-neutral-200 focus:outline-none"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") salvarEdicao(r);
+                              if (e.key === "Escape") cancelEdit();
+                            }}
+                          />
+                        ) : (
+                          <span className="text-neutral-500">{r.estoque_maximo ?? "—"}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-left">
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            value={editForm.localizacao_fisica}
+                            onChange={(e) => setEditForm({ ...editForm, localizacao_fisica: e.target.value })}
+                            className="w-28 bg-neutral-800 border border-indigo-600 rounded px-2 py-0.5 text-sm text-neutral-200 focus:outline-none"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") salvarEdicao(r);
+                              if (e.key === "Escape") cancelEdit();
+                            }}
+                          />
+                        ) : (
+                          <span className="text-neutral-500 text-xs">{r.localizacao_fisica || "—"}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-center">
+                        {isEditing ? (
+                          <div className="flex gap-1 justify-center">
+                            <button onClick={() => salvarEdicao(r)} className="text-emerald-400 hover:text-emerald-300 text-xs">✓</button>
+                            <button onClick={cancelEdit} className="text-red-400 hover:text-red-300 text-xs">✗</button>
+                          </div>
+                        ) : (
+                          <Can permission="ver_estoque">
+                            <button onClick={() => startEdit(r)} className="text-indigo-400 hover:text-indigo-300 text-xs">Editar</button>
+                          </Can>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
