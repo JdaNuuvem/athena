@@ -1,5 +1,4 @@
 """Pytest configuration - prevents database connection attempts during collection."""
-import sys
 from unittest.mock import AsyncMock, MagicMock
 
 def pytest_configure(config):
