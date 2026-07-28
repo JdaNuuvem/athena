@@ -65,6 +65,17 @@ def auditar_exclusao(modulo: str, entidade: str, entidade_id: int, dados_antes: 
                     user_id=usuario.get("user_id"), email=usuario.get("email"),
                     ip=request.remote_addr or "", user_agent=request.headers.get("User-Agent", ""))
 
+def auditar_alteracao(acao: str, modulo: str, entidade: str, entidade_id: int,
+                       dados_antes: dict = None, dados_depois: dict = None) -> int:
+    """Como auditar_exclusao(), mas pra criar/editar: identifica o usuario real
+    da request atual em vez de exigir que cada rota resolva isso na mao."""
+    from core.rbac import usuario_atual_da_request
+    from flask import request
+    usuario = usuario_atual_da_request()
+    return auditar(acao, modulo, entidade, entidade_id, dados_antes=dados_antes, dados_depois=dados_depois,
+                    user_id=usuario.get("user_id"), email=usuario.get("email"),
+                    ip=request.remote_addr or "", user_agent=request.headers.get("User-Agent", ""))
+
 def listar_auditoria(modulo: str = "", email: str = "", entidade: str = "", limit: int = 100,
                       acao: str = "", data_inicio: str = "", data_fim: str = "") -> list:
     async def _go():

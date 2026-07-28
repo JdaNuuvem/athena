@@ -42,8 +42,10 @@ def _list(cols="*", order="id DESC", limit=100, entidade_tipo="", entidade_id=No
 def listar(entidade_tipo="", entidade_id=None) -> list:
     return _list(entidade_tipo=entidade_tipo, entidade_id=entidade_id)
 
-def upload(file_data: bytes, nome_original: str, entidade_tipo: str = "", entidade_id: int = None, criado_por: str = "", mime_type: str = "application/octet-stream") -> dict:
-    """Salva arquivo no disco e registra no banco."""
+def upload(file_data: bytes, nome_original: str, entidade_tipo: str = "", entidade_id: int = None, criado_por: str = "", mime_type: str = "application/octet-stream", tags: str = "") -> dict:
+    """Salva arquivo no disco e registra no banco. "tags" e' usado por
+    consumidores como core/lojas_midia.py pra marcar o proposito do arquivo
+    (ex: "logo", "banner", "foto_fachada")."""
     ext = _os.path.splitext(nome_original)[1] or ""
     nome_armazenado = f"{uuid.uuid4().hex}{ext}"
     filepath = _os.path.join(STORAGE_DIR, nome_armazenado)
@@ -54,9 +56,9 @@ def upload(file_data: bytes, nome_original: str, entidade_tipo: str = "", entida
         tamanho = len(file_data)
         async def _go():
             db = await get_db()
-            row = await db.fetchrow("""INSERT INTO documentos (nome_original, nome_armazenado, entidade_tipo, entidade_id, mime_type, tamanho_bytes, criado_por)
-                VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *""",
-                nome_original, nome_armazenado, entidade_tipo, entidade_id, mime_type, tamanho, criado_por)
+            row = await db.fetchrow("""INSERT INTO documentos (nome_original, nome_armazenado, entidade_tipo, entidade_id, mime_type, tamanho_bytes, criado_por, tags)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *""",
+                nome_original, nome_armazenado, entidade_tipo, entidade_id, mime_type, tamanho, criado_por, tags)
             return dict(row) if row else {"error": "insert failed"}
         result = run_async(_go())
         if result and "error" not in result:

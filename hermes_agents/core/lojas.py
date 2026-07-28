@@ -5,6 +5,39 @@ from core import get_db, run_async, log
 AGENT = "Lojas"
 _table_ok = False
 
+# Cadastro empresarial da loja (identificacao/endereco/contatos) — ALTER TABLE
+# defensivo, mesmo padrao ja usado pra "tipo"/"ativa". Cada tupla e' (coluna, DDL).
+_CAMPOS_GERAIS_DDL = [
+    ("status", "VARCHAR(20) DEFAULT 'ativa'"),
+    ("nome_fantasia", "VARCHAR(150)"),
+    ("razao_social", "VARCHAR(200)"),
+    ("cnpj_cpf", "VARCHAR(18)"),
+    ("inscricao_estadual", "VARCHAR(20)"),
+    ("inscricao_municipal", "VARCHAR(20)"),
+    ("cor_principal", "VARCHAR(7)"),
+    ("cor_secundaria", "VARCHAR(7)"),
+    ("cep", "VARCHAR(9)"),
+    ("rua", "VARCHAR(200)"),
+    ("numero", "VARCHAR(20)"),
+    ("complemento", "VARCHAR(100)"),
+    ("bairro", "VARCHAR(100)"),
+    ("cidade", "VARCHAR(100)"),
+    ("estado", "VARCHAR(2)"),
+    ("pais", "VARCHAR(60) DEFAULT 'Brasil'"),
+    ("latitude", "NUMERIC(10,7)"),
+    ("longitude", "NUMERIC(10,7)"),
+    ("telefone", "VARCHAR(20)"),
+    ("whatsapp", "VARCHAR(20)"),
+    ("email", "VARCHAR(150)"),
+    ("site", "VARCHAR(200)"),
+    ("instagram", "VARCHAR(100)"),
+    ("facebook", "VARCHAR(100)"),
+    ("tiktok", "VARCHAR(100)"),
+    ("youtube", "VARCHAR(100)"),
+]
+STATUS_VALIDOS = ("ativa", "inativa", "em_implantacao", "bloqueada")
+CAMPOS_GERAIS = {nome for nome, _ in _CAMPOS_GERAIS_DDL}
+
 def _log_erro(onde: str, e: Exception):
     """Log local (console) + persistido no banco (system_logs), visivel em
     /seguranca/logs sem precisar acessar o log do container no Coolify."""
@@ -37,6 +70,9 @@ def _ensure_table():
         # menu quando essa loja especifica esta selecionada.
         try: await db.execute("ALTER TABLE lojas ADD COLUMN IF NOT EXISTS tipo VARCHAR(10) DEFAULT 'fisica'")
         except Exception as e: _log_erro("ALTER lojas.tipo", e)
+        for col, ddl in _CAMPOS_GERAIS_DDL:
+            try: await db.execute(f"ALTER TABLE lojas ADD COLUMN IF NOT EXISTS {col} {ddl}")
+            except Exception as e: _log_erro(f"ALTER lojas.{col}", e)
         count = await db.fetchval("SELECT COUNT(*) FROM lojas")
         if count == 0:
             try:
@@ -102,6 +138,49 @@ def atualizar(id_loja: int, nome: str, shopee_markup_pct: float = None, grupos_p
         return r != "UPDATE 0"
     try: return run_async(_go())
     except Exception as e: _log_erro("atualizar", e); return False
+
+def _update_campos(id_loja: int, campos: dict, whitelist: set) -> bool:
+    """Helper generico p/ atualizar um subconjunto de colunas de "lojas" a
+    partir de um dict ja filtrado pela camada de rota. Reaproveitado por
+    core/lojas_operacional.py, lojas_fiscal_financeiro.py e lojas_virtual.py
+    pra nao duplicar a construcao de UPDATE dinamico em cada arquivo.
+    O whitelist restringe os NOMES de coluna aceitos antes de qualquer
+    interpolacao — os VALORES sempre vao parametrizados ($n)."""
+    _ensure_table()
+    campos = {k: v for k, v in campos.items() if k in whitelist and v is not None}
+    if not campos:
+        return True
+    async def _go():
+        db = await get_db()
+        colunas = list(campos.keys())
+        sets = ", ".join(f"{col} = ${i + 1}" for i, col in enumerate(colunas))
+        valores = [campos[c] for c in colunas] + [id_loja]
+        r = await db.execute(f"UPDATE lojas SET {sets} WHERE id = ${len(colunas) + 1}", *valores)
+        return r != "UPDATE 0"
+    try: return run_async(_go())
+    except Exception as e: _log_erro("_update_campos", e); return False
+
+def obter(id_loja: int) -> dict:
+    """Retorna a loja completa (todas as colunas) — usado nas telas de
+    detalhe/edicao, ao contrario de listar() que traz so' o resumo."""
+    _ensure_table()
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow("SELECT * FROM lojas WHERE id = $1", id_loja)
+        return dict(row) if row else None
+    try: return run_async(_go())
+    except Exception as e: _log_erro("obter", e); return None
+
+def atualizar_geral(id_loja: int, campos: dict) -> bool:
+    """Atualiza identificacao/endereco/contatos da loja. 'status' sincroniza
+    a coluna legada 'ativa' (usada em dezenas de "WHERE ativa = TRUE" em
+    estoque/pdv/vendas/relatorios) sem exigir migrar essas queries agora."""
+    campos = dict(campos)
+    if "status" in campos:
+        if campos["status"] not in STATUS_VALIDOS:
+            campos["status"] = "ativa"
+        campos["ativa"] = campos["status"] == "ativa"
+    return _update_campos(id_loja, campos, CAMPOS_GERAIS | {"ativa"})
 
 def deletar(id_loja: int) -> bool:
     _ensure_table()

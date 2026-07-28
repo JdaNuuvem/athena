@@ -1,13 +1,39 @@
 from flask import Blueprint, request, jsonify
 from core.rbac import requer_permissao
+from core.lojas import CAMPOS_GERAIS, STATUS_VALIDOS
+from core.validadores import validar_cnpj_cpf, validar_cep, validar_email
 
 lojas_bp = Blueprint("lojas_manage", __name__, url_prefix="/api/lojas")
+
+
+def _extrair_campos_gerais(data: dict):
+    """Filtra do body so' os campos conhecidos de identificacao/endereco/
+    contatos e valida formato. Retorna (campos, erro)."""
+    campos = {k: v for k, v in data.items() if k in CAMPOS_GERAIS}
+    if "status" in campos and campos["status"] not in STATUS_VALIDOS:
+        return None, f"status invalido. Use um de: {', '.join(STATUS_VALIDOS)}"
+    if "cnpj_cpf" in campos and not validar_cnpj_cpf(campos["cnpj_cpf"]):
+        return None, "CNPJ/CPF invalido"
+    if "cep" in campos and not validar_cep(campos["cep"]):
+        return None, "CEP invalido"
+    if "email" in campos and not validar_email(campos["email"]):
+        return None, "E-mail invalido"
+    return campos, None
 
 
 @lojas_bp.route("/manage", methods=["GET"])
 def listar_lojas_manage():
     from core.lojas import listar as listar_lojas_fn
     return jsonify({"lojas": listar_lojas_fn()})
+
+
+@lojas_bp.route("/manage/<int:id>", methods=["GET"])
+def obter_loja_manage(id):
+    from core.lojas import obter as obter_loja_fn
+    loja = obter_loja_fn(id)
+    if not loja:
+        return jsonify({"error": "Loja nao encontrada"}), 404
+    return jsonify({"loja": loja})
 
 
 @lojas_bp.route("/manage", methods=["POST"])
@@ -17,15 +43,22 @@ def criar_loja_manage():
     tipo = data.get("tipo", "fisica")
     if not nome:
         return jsonify({"error": "Nome e obrigatorio"}), 400
+    campos, erro = _extrair_campos_gerais(data)
+    if erro:
+        return jsonify({"error": erro}), 400
 
     @requer_permissao("configuracoes.criar")
     def _go():
-        from core.lojas import criar as criar_loja_fn
+        from core.lojas import criar as criar_loja_fn, atualizar_geral
+        from core.seguranca import auditar_alteracao
         result = criar_loja_fn(nome, tipo=tipo)
         if not result:
             return jsonify({"error": "Erro ao criar"}), 500
         if result.get("error"):
             return jsonify({"error": result["error"]}), 500
+        if campos:
+            atualizar_geral(result["id"], campos)
+        auditar_alteracao("criar", "lojas", "manage", result["id"], dados_depois={**result, **campos})
         return jsonify({"loja": result})
     return _go()
 
@@ -39,12 +72,22 @@ def atualizar_loja_manage(id):
     tipo = data.get("tipo")
     if not nome:
         return jsonify({"error": "Nome e obrigatorio"}), 400
+    campos, erro = _extrair_campos_gerais(data)
+    if erro:
+        return jsonify({"error": erro}), 400
 
     @requer_permissao("configuracoes.editar")
     def _go():
-        from core.lojas import atualizar as atualizar_loja_fn
+        from core.lojas import atualizar as atualizar_loja_fn, atualizar_geral, obter
+        from core.seguranca import auditar_alteracao
+        dados_antes = obter(id)
         ok = atualizar_loja_fn(id, nome, shopee_markup_pct=markup, grupos_publicacao=grupos, tipo=tipo)
-        return jsonify({"success": ok}) if ok else (jsonify({"error": "Loja nao encontrada"}), 404)
+        if not ok:
+            return jsonify({"error": "Loja nao encontrada"}), 404
+        if campos:
+            atualizar_geral(id, campos)
+        auditar_alteracao("editar", "lojas", "manage", id, dados_antes=dados_antes, dados_depois=campos or None)
+        return jsonify({"success": True})
     return _go()
 
 

@@ -1,7 +1,7 @@
 """Testes de integracao — criar/editar/excluir loja fisica antes nao
 checava nenhuma permissao: qualquer usuario autenticado podia criar ou
 apagar uma das lojas do grupo."""
-import sys, os, unittest
+import sys, os, io, unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from unittest.mock import patch, AsyncMock
 
@@ -20,6 +20,10 @@ patcher.start()
 
 from flask import Flask
 from routes.lojas_manage import lojas_bp
+from routes.lojas_config import lojas_config_bp
+from routes.lojas_responsaveis import lojas_responsaveis_bp
+from routes.lojas_integracoes import lojas_integracoes_bp
+from routes.lojas_midia import lojas_midia_bp
 import core.rbac as rbac
 
 
@@ -27,6 +31,10 @@ def _app():
     app = Flask(__name__)
     app.config["TESTING"] = True
     app.register_blueprint(lojas_bp)
+    app.register_blueprint(lojas_config_bp)
+    app.register_blueprint(lojas_responsaveis_bp)
+    app.register_blueprint(lojas_integracoes_bp)
+    app.register_blueprint(lojas_midia_bp)
     return app.test_client()
 
 
@@ -91,6 +99,59 @@ class TestLojasManageExigePermissao(unittest.TestCase):
             r = self.client.post("/api/lojas/sync/bling", headers=headers)
         self.assertEqual(r.status_code, 403)
         mock_sync.assert_not_called()
+
+    def test_criar_loja_com_cnpj_invalido_rejeita_400(self):
+        headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+        r = self.client.post("/api/lojas/manage", json={"nome": "Loja X", "cnpj_cpf": "11111111111111"},
+                              headers=headers)
+        self.assertEqual(r.status_code, 400)
+
+    def test_criar_loja_com_email_invalido_rejeita_400(self):
+        headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+        r = self.client.post("/api/lojas/manage", json={"nome": "Loja X", "email": "nao-e-email"},
+                              headers=headers)
+        self.assertEqual(r.status_code, 400)
+
+    def test_atualizar_fiscal_sem_permissao_nega(self):
+        token = rbac.gerar_token_sessao(9, "gerente@x.com", "Gerente")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=[]), \
+             patch("core.lojas_fiscal_financeiro.atualizar_fiscal") as mock_fiscal:
+            r = self.client.put("/api/lojas/manage/1/fiscal", json={"regime_tributario": "simples"}, headers=headers)
+        self.assertEqual(r.status_code, 403)
+        mock_fiscal.assert_not_called()
+
+    def test_vincular_responsavel_sem_permissao_nega(self):
+        token = rbac.gerar_token_sessao(9, "gerente@x.com", "Gerente")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=[]), \
+             patch("core.lojas_responsaveis.vincular") as mock_vincular:
+            r = self.client.post("/api/lojas/manage/1/responsaveis",
+                                  json={"usuario_id": 7, "cargo": "gerente_geral"}, headers=headers)
+        self.assertEqual(r.status_code, 403)
+        mock_vincular.assert_not_called()
+
+    def test_atualizar_integracao_sem_permissao_nega(self):
+        token = rbac.gerar_token_sessao(9, "gerente@x.com", "Gerente")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=[]), \
+             patch("core.lojas_integracoes.atualizar_status") as mock_atualizar:
+            r = self.client.put("/api/lojas/manage/1/integracoes/mercado_livre",
+                                 json={"status": "ativa"}, headers=headers)
+        self.assertEqual(r.status_code, 403)
+        mock_atualizar.assert_not_called()
+
+    def test_vincular_midia_sem_permissao_nega(self):
+        token = rbac.gerar_token_sessao(9, "gerente@x.com", "Gerente")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=[]), \
+             patch("core.lojas_midia.vincular") as mock_vincular:
+            r = self.client.post(
+                "/api/lojas/manage/1/midia",
+                data={"tipo": "logo", "arquivo": (io.BytesIO(b"fake"), "logo.png")},
+                content_type="multipart/form-data", headers=headers)
+        self.assertEqual(r.status_code, 403)
+        mock_vincular.assert_not_called()
 
 
 if __name__ == "__main__":

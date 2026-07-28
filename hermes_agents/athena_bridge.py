@@ -213,6 +213,10 @@ from routes.crm import crm_bp
 from routes.documentos import documentos_bp, seguranca_bp
 from routes.rbac import rbac_bp
 from routes.lojas_manage import lojas_bp as lojas_manage_bp
+from routes.lojas_config import lojas_config_bp
+from routes.lojas_responsaveis import lojas_responsaveis_bp
+from routes.lojas_integracoes import lojas_integracoes_bp
+from routes.lojas_midia import lojas_midia_bp
 from routes.rh import rh_bp
 from routes.cadastros import cadastros_bp
 from routes.financeiro import financeiro_bp
@@ -239,6 +243,10 @@ app.register_blueprint(documentos_bp)
 app.register_blueprint(seguranca_bp)
 app.register_blueprint(rbac_bp)
 app.register_blueprint(lojas_manage_bp)
+app.register_blueprint(lojas_config_bp)
+app.register_blueprint(lojas_responsaveis_bp)
+app.register_blueprint(lojas_integracoes_bp)
+app.register_blueprint(lojas_midia_bp)
 app.register_blueprint(rh_bp)
 app.register_blueprint(cadastros_bp)
 app.register_blueprint(financeiro_bp)

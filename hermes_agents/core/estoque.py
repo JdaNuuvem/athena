@@ -213,18 +213,22 @@ def movimentacoes(sku: str = "", loja: str = "", limite: int = 50) -> list:
     async def _go():
         db = await get_db()
         where = ["1=1"]
+        params = []
         if sku:
-            where.append(f"m.sku = '{sku}'")
+            params.append(sku)
+            where.append(f"m.sku = ${len(params)}")
         if loja:
-            where.append(f"m.loja = '{loja}'")
+            params.append(loja)
+            where.append(f"m.loja = ${len(params)}")
         sql_where = " AND ".join(where)
+        params.append(int(limite))
         rows = await db.fetch(f"""
             SELECT m.*, c.descricao AS produto_nome
             FROM estoque_movimentacoes m
             LEFT JOIN catalogo_produtos c ON c.sku = m.sku
             WHERE {sql_where}
-            ORDER BY m.data DESC LIMIT {limite}
-        """)
+            ORDER BY m.data DESC LIMIT ${len(params)}
+        """, *params)
         return [dict(r) for r in rows]
     try:
         return run_async(_go())

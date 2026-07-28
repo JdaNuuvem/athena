@@ -70,7 +70,28 @@ class FakeDB:
                 return "DELETE 0"
             del self.rows[id_loja]
             return "DELETE 1"
+        generico = self._update_generico(q, params)
+        if generico is not None:
+            return generico
         return "OK"
+
+    def _update_generico(self, q, params):
+        """Cobre o UPDATE dinamico gerado por core.lojas._update_campos()
+        (usado por atualizar_geral e por todos os core/lojas_*.py que
+        reaproveitam esse helper): "UPDATE lojas SET col1 = $1, col2 = $2
+        WHERE id = $N"."""
+        import re
+        m = re.match(r"UPDATE lojas SET (.+) WHERE id = \$(\d+)$", q)
+        if not m:
+            return None
+        id_loja = params[int(m.group(2)) - 1]
+        if id_loja not in self.rows:
+            return "UPDATE 0"
+        for atrib in m.group(1).split(","):
+            col, ph = [p.strip() for p in atrib.split("=")]
+            idx = int(ph.lstrip("$")) - 1
+            self.rows[id_loja][col] = params[idx]
+        return "UPDATE 1"
 
     async def fetchval(self, query, *params):
         return 0
@@ -85,6 +106,9 @@ class FakeDB:
             row = {"id": id_loja, "nome": nome, "ativa": True, "tipo": tipo}
             self.rows[id_loja] = row
             return dict(row)
+        if q.startswith("SELECT * FROM lojas WHERE id = $1"):
+            row = self.rows.get(params[0])
+            return dict(row) if row else None
         if q.startswith("UPDATE lojas SET shopee_shop_id = $1"):
             shop_id, shop_name, access_token, refresh_token, expira_em, id_loja = params
             if id_loja not in self.rows:
@@ -202,6 +226,72 @@ class TestLojasFisicas(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(args[0], "ERROR")
         self.assertEqual(args[1], "lojas")
         self.assertIn("ativa", args[2])
+
+
+class TestLojasCadastroGeral(unittest.IsolatedAsyncioTestCase):
+    """Identificacao/endereco/contatos (cadastro empresarial completo) e
+    sincronizacao de status <-> ativa (aditiva, nao quebra WHERE ativa=TRUE
+    ja espalhado em estoque/pdv/vendas)."""
+
+    def setUp(self):
+        self.fake = FakeDB()
+
+        async def _get_db(_fake=self.fake):
+            return _fake
+        self._p = patch("core.lojas.get_db", side_effect=_get_db)
+        self._p.start()
+        lojas._table_ok = True
+
+    def tearDown(self):
+        self._p.stop()
+        lojas._table_ok = False
+
+    async def test_atualizar_geral_identificacao_e_endereco(self):
+        criada = lojas.criar("Loja Centro")
+        ok = lojas.atualizar_geral(criada["id"], {
+            "nome_fantasia": "Charme Nilopolis", "cnpj_cpf": "12345678000199",
+            "cep": "26520-000", "cidade": "Nilopolis", "estado": "RJ",
+            "instagram": "@charme.nilopolis",
+        })
+        self.assertTrue(ok)
+        row = self.fake.rows[criada["id"]]
+        self.assertEqual(row["nome_fantasia"], "Charme Nilopolis")
+        self.assertEqual(row["cidade"], "Nilopolis")
+        self.assertEqual(row["instagram"], "@charme.nilopolis")
+
+    async def test_atualizar_geral_ignora_campos_fora_do_whitelist(self):
+        criada = lojas.criar("Loja X")
+        ok = lojas.atualizar_geral(criada["id"], {"nome_fantasia": "X Fantasia", "senha_admin": "hackeado"})
+        self.assertTrue(ok)
+        self.assertNotIn("senha_admin", self.fake.rows[criada["id"]])
+
+    async def test_status_bloqueada_sincroniza_ativa_false(self):
+        criada = lojas.criar("Loja Y")
+        lojas.atualizar_geral(criada["id"], {"status": "bloqueada"})
+        row = self.fake.rows[criada["id"]]
+        self.assertEqual(row["status"], "bloqueada")
+        self.assertFalse(row["ativa"])
+
+    async def test_status_ativa_sincroniza_ativa_true(self):
+        criada = lojas.criar("Loja Z")
+        lojas.atualizar_geral(criada["id"], {"status": "ativa"})
+        self.assertTrue(self.fake.rows[criada["id"]]["ativa"])
+
+    async def test_status_invalido_cai_para_ativa(self):
+        criada = lojas.criar("Loja W")
+        lojas.atualizar_geral(criada["id"], {"status": "sei-la"})
+        row = self.fake.rows[criada["id"]]
+        self.assertEqual(row["status"], "ativa")
+        self.assertTrue(row["ativa"])
+
+    async def test_obter_loja_completa(self):
+        criada = lojas.criar("Loja Completa")
+        lojas.atualizar_geral(criada["id"], {"razao_social": "Loja Completa LTDA"})
+        obtida = lojas.obter(criada["id"])
+        self.assertEqual(obtida["razao_social"], "Loja Completa LTDA")
+
+    async def test_obter_loja_inexistente_retorna_none(self):
+        self.assertIsNone(lojas.obter(9999))
 
 
 class TestLojasOnlineShopee(unittest.IsolatedAsyncioTestCase):
