@@ -1228,7 +1228,13 @@ export const excluirProdutoLoja = (loja: string, sku: string) =>
   });
 
 export const replicarProdutoLoja = (loja_origem: string, sku: string, lojas_destino: string[]) =>
-  request<{ ok?: boolean; criados?: string[]; ja_existentes?: string[]; erro?: string }>("/api/produtos-loja/replicar", {
+  request<{
+    ok?: boolean;
+    criados?: string[];
+    ja_existentes?: string[];
+    erro?: string;
+    erros?: { loja: string; erro: string }[];
+  }>("/api/produtos-loja/replicar", {
     method: "POST", body: JSON.stringify({ loja_origem, sku, lojas_destino }),
   });
 

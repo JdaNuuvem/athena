@@ -15,7 +15,13 @@ export default function ReplicarModal({
 }) {
   const [selecionadas, setSelecionadas] = useState<string[]>([]);
   const [salvando, setSalvando] = useState(false);
-  const [resultado, setResultado] = useState<{ criados?: string[]; ja_existentes?: string[]; erro?: string } | null>(null);
+  const [resultado, setResultado] = useState<{
+    ok?: boolean;
+    criados?: string[];
+    ja_existentes?: string[];
+    erro?: string;
+    erros?: { loja: string; erro: string }[];
+  } | null>(null);
 
   const toggle = (lojaId: string) =>
     setSelecionadas((s) => (s.includes(lojaId) ? s.filter((l) => l !== lojaId) : [...s, lojaId]));
@@ -25,7 +31,11 @@ export default function ReplicarModal({
     const r = await replicarProdutoLoja(lojaOrigem, sku, selecionadas);
     setResultado(r);
     setSalvando(false);
-    if (r.ok) onDone();
+  };
+
+  const finalizar = () => {
+    if (resultado?.ok) onDone();
+    else onClose();
   };
 
   const destinos = lojasDisponiveis.filter((l) => String(l.id) !== lojaOrigem);
@@ -55,21 +65,30 @@ export default function ReplicarModal({
           )}
         </div>
         {resultado && (
-          <div className="text-[11px] mb-2">
+          <div className="text-[11px] mb-2 space-y-0.5">
             {resultado.erro && <p className="text-red-400">{resultado.erro}</p>}
             {resultado.criados?.length ? <p className="text-emerald-400">Criado em: {resultado.criados.join(", ")}</p> : null}
             {resultado.ja_existentes?.length ? <p className="text-amber-400">Já existia em: {resultado.ja_existentes.join(", ")}</p> : null}
+            {resultado.erros?.length ? (
+              <p className="text-red-400">
+                Falhou em: {resultado.erros.map((e) => `${e.loja} (${e.erro})`).join(", ")}
+              </p>
+            ) : null}
           </div>
         )}
         <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="text-xs px-3 py-1.5 rounded border border-neutral-700">Fechar</button>
-          <button
-            onClick={confirmar}
-            disabled={salvando || selecionadas.length === 0}
-            className="text-xs px-3 py-1.5 rounded bg-blue-600 disabled:opacity-40"
-          >
-            {salvando ? "Replicando..." : "Replicar"}
+          <button onClick={finalizar} className="text-xs px-3 py-1.5 rounded border border-neutral-700">
+            {resultado ? "OK" : "Fechar"}
           </button>
+          {!resultado && (
+            <button
+              onClick={confirmar}
+              disabled={salvando || selecionadas.length === 0}
+              className="text-xs px-3 py-1.5 rounded bg-blue-600 disabled:opacity-40"
+            >
+              {salvando ? "Replicando..." : "Replicar"}
+            </button>
+          )}
         </div>
       </div>
     </div>
