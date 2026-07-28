@@ -1,0 +1,72 @@
+"""Tabelas normalizadas de marca/fabricante/categoria/tag (Fase 1 PIM Core) e
+o CRUD basico sobre elas."""
+import sys, os, unittest, importlib
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from unittest.mock import patch, AsyncMock, MagicMock
+
+
+def _fake_db(fetchval_return=1):
+    db = MagicMock()
+    db.execute = AsyncMock(return_value="OK")
+    db.fetchval = AsyncMock(return_value=fetchval_return)
+    db.fetch = AsyncMock(return_value=[])
+    db.fetchrow = AsyncMock(return_value=None)
+    return db
+
+
+class TestTabelasOrganizacao(unittest.TestCase):
+    def test_ensure_tables_cria_tabelas_normalizadas(self):
+        fake_db = _fake_db(fetchval_return=1)  # >0 => pula migracao de dedup
+        with patch("core.get_db", new=AsyncMock(return_value=fake_db)):
+            import core.catalogo as catalogo
+            importlib.reload(catalogo)
+        sql_executado = " ".join(str(c.args[0]) for c in fake_db.execute.call_args_list if c.args)
+        for tabela in ("catalogo_marcas", "catalogo_fabricantes", "catalogo_categorias",
+                       "catalogo_tags", "catalogo_produto_tags"):
+            self.assertIn(tabela, sql_executado, f"tabela {tabela} nao foi criada")
+
+
+class TestCrudMarcas(unittest.TestCase):
+    def test_criar_marca_retorna_id_e_nome(self):
+        fake_db = _fake_db()
+        fake_db.fetchrow = AsyncMock(return_value={"id": 1, "nome": "Nike"})
+        with patch("core.catalogo.get_db", new=AsyncMock(return_value=fake_db)):
+            import core.catalogo as catalogo
+            resultado = catalogo.criar_marca("Nike")
+        self.assertEqual(resultado, {"id": 1, "nome": "Nike"})
+
+    def test_listar_marcas_retorna_lista(self):
+        fake_db = _fake_db()
+        fake_db.fetch = AsyncMock(return_value=[{"id": 1, "nome": "Nike"}, {"id": 2, "nome": "Adidas"}])
+        with patch("core.catalogo.get_db", new=AsyncMock(return_value=fake_db)):
+            import core.catalogo as catalogo
+            resultado = catalogo.listar_marcas()
+        self.assertEqual(len(resultado), 2)
+
+
+class TestVinculoTags(unittest.TestCase):
+    def test_vincular_tag_produto(self):
+        fake_db = _fake_db()
+        fake_db.execute = AsyncMock(return_value="INSERT 0 1")
+        with patch("core.catalogo.get_db", new=AsyncMock(return_value=fake_db)):
+            import core.catalogo as catalogo
+            resultado = catalogo.vincular_tag(10, 3)
+        self.assertEqual(resultado, {"success": True})
+        fake_db.execute.assert_called_once()
+        self.assertIn("catalogo_produto_tags", str(fake_db.execute.call_args.args[0]))
+
+
+class TestMigracaoDedupMarca(unittest.TestCase):
+    def test_migracao_so_roda_quando_tabela_vazia(self):
+        """Se catalogo_marcas ja tem registros, a migracao de dedup nao deve
+        rodar de novo (evita duplicar em todo boot)."""
+        fake_db = _fake_db(fetchval_return=5)  # tabela ja populada
+        with patch("core.get_db", new=AsyncMock(return_value=fake_db)):
+            import core.catalogo as catalogo
+            importlib.reload(catalogo)
+        sql_executado = " ".join(str(c.args[0]) for c in fake_db.execute.call_args_list if c.args)
+        self.assertNotIn("INSERT INTO catalogo_marcas (nome) SELECT DISTINCT marca", sql_executado)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
