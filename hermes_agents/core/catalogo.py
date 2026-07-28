@@ -78,6 +78,16 @@ def _ensure_tables():
         # Payload bruto completo do Bling — garante 100% dos campos, inclusive os que a Bling adicionar no futuro
         await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS dados_brutos_bling JSONB")
         await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS grupo VARCHAR(50)")
+        # ── Fase 1 PIM Core: campos de identificacao (2026-07-28) ──
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS classificacao VARCHAR(20) DEFAULT 'simples'")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS nome_reduzido VARCHAR(100)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS nome_impressao VARCHAR(100)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS codigo_interno VARCHAR(50)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS codigo_erp VARCHAR(50)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS ex_tipi VARCHAR(10)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS modelo VARCHAR(100)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS linha VARCHAR(100)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS colecao VARCHAR(100)")
         # ── Full-text search indexes (pg_trgm for ILIKE with leading wildcard) ──
         try:
             await db.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
