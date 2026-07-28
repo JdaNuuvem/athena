@@ -53,6 +53,8 @@ def _processar_evento(user_id: int, dados: dict) -> None:
             })
     elif tipo == "digitando":
         conversa_id = dados.get("conversa_id")
+        if user_id not in participantes_ids(conversa_id):
+            return
         broadcast_para_participantes(conversa_id, {
             "evento": "usuario_digitando", "conversa_id": conversa_id, "user_id": user_id,
         })
@@ -64,6 +66,8 @@ def _processar_evento(user_id: int, dados: dict) -> None:
     elif tipo == "lido":
         conversa_id = dados.get("conversa_id")
         ultima_id = dados.get("ultima_mensagem_id")
+        if user_id not in participantes_ids(conversa_id):
+            return
         marcar_lido(conversa_id, user_id, ultima_id)
         broadcast_para_participantes(conversa_id, {
             "evento": "confirmacao_leitura", "conversa_id": conversa_id,
