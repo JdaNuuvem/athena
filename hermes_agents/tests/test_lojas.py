@@ -180,6 +180,12 @@ class TestLojasFisicas(unittest.IsolatedAsyncioTestCase):
         r = lojas.criar("Loja X", tipo="qualquer-coisa")
         self.assertEqual(r["tipo"], "fisica")
 
+    async def test_criar_loja_tipo_hibrida_e_marketplace_aceitos(self):
+        """Fase 2 do frontend expoe 4 tipos (fisica/virtual/hibrida/
+        marketplace) — o backend precisa aceitar todos, nao so' os 2 originais."""
+        self.assertEqual(lojas.criar("Loja Hibrida", tipo="hibrida")["tipo"], "hibrida")
+        self.assertEqual(lojas.criar("Loja Marketplace", tipo="marketplace")["tipo"], "marketplace")
+
     async def test_listar_retorna_lojas_criadas(self):
         lojas.criar("Loja A")
         lojas.criar("Loja B")

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import StatusBadge from "@/app/_components/StatusBadge";
 import LoadingState from "@/app/_components/LoadingState";
@@ -88,10 +89,13 @@ export default function LojasPage() {
                 <p className="text-[10px] text-amber-400">Shopee markup: {l.shopee_markup_pct}%</p>
               )}
               <div className="flex gap-2">
+                <Link href={`/lojas/${l.id}`} className="text-xs text-emerald-400 hover:text-emerald-300">
+                  Ver detalhes →
+                </Link>
                 <button
                   onClick={() => setModal({ open: true, nome: l.nome, markup: l.shopee_markup_pct || 100, grupos: (l as any).grupos_publicacao || "", tipo: l.tipo || "fisica", editId: l.id })}
                   className="text-xs text-indigo-400 hover:text-indigo-300"
-                >Editar</button>
+                >Editar rápido</button>
                 <button
                   onClick={() => deletar(l.id)}
                   className="text-xs text-red-400 hover:text-red-300"

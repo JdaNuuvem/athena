@@ -36,6 +36,7 @@ _CAMPOS_GERAIS_DDL = [
     ("youtube", "VARCHAR(100)"),
 ]
 STATUS_VALIDOS = ("ativa", "inativa", "em_implantacao", "bloqueada")
+TIPOS_VALIDOS = ("fisica", "virtual", "hibrida", "marketplace")
 CAMPOS_GERAIS = {nome for nome, _ in _CAMPOS_GERAIS_DDL}
 
 def _log_erro(onde: str, e: Exception):
@@ -70,6 +71,11 @@ def _ensure_table():
         # menu quando essa loja especifica esta selecionada.
         try: await db.execute("ALTER TABLE lojas ADD COLUMN IF NOT EXISTS tipo VARCHAR(10) DEFAULT 'fisica'")
         except Exception as e: _log_erro("ALTER lojas.tipo", e)
+        # tipo agora tambem aceita "hibrida"/"marketplace" (11 chars) —
+        # VARCHAR(10) original nao cabe. ALTER COLUMN TYPE so' alarga,
+        # nunca trunca dado existente.
+        try: await db.execute("ALTER TABLE lojas ALTER COLUMN tipo TYPE VARCHAR(20)")
+        except Exception as e: _log_erro("ALTER lojas.tipo (widen)", e)
         for col, ddl in _CAMPOS_GERAIS_DDL:
             try: await db.execute(f"ALTER TABLE lojas ADD COLUMN IF NOT EXISTS {col} {ddl}")
             except Exception as e: _log_erro(f"ALTER lojas.{col}", e)
@@ -115,7 +121,7 @@ def listar() -> list:
 
 def criar(nome: str, tipo: str = "fisica"):
     _ensure_table()
-    if tipo not in ("fisica", "virtual"):
+    if tipo not in TIPOS_VALIDOS:
         tipo = "fisica"
     async def _go():
         db = await get_db()
@@ -133,7 +139,7 @@ def atualizar(id_loja: int, nome: str, shopee_markup_pct: float = None, grupos_p
             await db.execute("UPDATE lojas SET shopee_markup_pct = $1 WHERE id = $2", float(shopee_markup_pct), id_loja)
         if grupos_publicacao is not None:
             await db.execute("UPDATE lojas SET grupos_publicacao = $1 WHERE id = $2", grupos_publicacao.strip(), id_loja)
-        if tipo in ("fisica", "virtual"):
+        if tipo in TIPOS_VALIDOS:
             await db.execute("UPDATE lojas SET tipo = $1 WHERE id = $2", tipo, id_loja)
         return r != "UPDATE 0"
     try: return run_async(_go())

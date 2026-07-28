@@ -11,6 +11,24 @@ export function handleUnauthorized() {
   }
 }
 
+// Upload multipart nao pode passar por request() porque ele forca
+// Content-Type: application/json — aqui o navegador precisa definir o
+// boundary do multipart sozinho.
+export async function lojasMidiaUpload(id: number, tipo: string, file: File): Promise<{ midia?: Record<string, unknown>; error?: string }> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const formData = new FormData();
+  formData.append("tipo", tipo);
+  formData.append("arquivo", file);
+  const res = await fetch(`${API_BASE}/api/lojas/manage/${id}/midia`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: formData,
+    credentials: "include",
+  });
+  if (res.status === 401) handleUnauthorized();
+  return res.json();
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
   const headers: Record<string, string> = {};
@@ -370,6 +388,44 @@ export const api = {
   lojasDeletar: (id: number) => request<{ success: boolean }>(`/api/lojas/manage/${id}`, { method: "DELETE" }),
   lojasSyncBling: () => request<{ sync: number; lojas: Array<{ acao: string; id: number; nome: string }> }>("/api/lojas/sync/bling", { method: "POST" }),
   lojasDepositoMap: () => request<{ map: Array<{ loja_id: number; nome: string; deposito_id: number }> }>("/api/lojas/deposito-map"),
+
+  // Lojas — cadastro empresarial (Fase 2)
+  lojasObter: (id: number) => request<{ loja: Record<string, unknown> }>(`/api/lojas/manage/${id}`),
+  lojasAtualizarGeral: (id: number, campos: Record<string, unknown>) =>
+    request<{ success?: boolean; error?: string }>(`/api/lojas/manage/${id}`, { method: "PUT", body: JSON.stringify(campos) }),
+  lojasOperacionalAtualizar: (id: number, campos: Record<string, unknown>) =>
+    request<{ success?: boolean; error?: string }>(`/api/lojas/manage/${id}/operacional`, { method: "PUT", body: JSON.stringify(campos) }),
+  lojasComercialAtualizar: (id: number, campos: Record<string, unknown>) =>
+    request<{ success?: boolean; error?: string }>(`/api/lojas/manage/${id}/comercial`, { method: "PUT", body: JSON.stringify(campos) }),
+  lojasFiscalAtualizar: (id: number, campos: Record<string, unknown>) =>
+    request<{ success?: boolean; error?: string }>(`/api/lojas/manage/${id}/fiscal`, { method: "PUT", body: JSON.stringify(campos) }),
+  lojasFinanceiroAtualizar: (id: number, campos: Record<string, unknown>) =>
+    request<{ success?: boolean; error?: string }>(`/api/lojas/manage/${id}/financeiro`, { method: "PUT", body: JSON.stringify(campos) }),
+  lojasEstoqueConfigAtualizar: (id: number, campos: Record<string, unknown>) =>
+    request<{ success?: boolean; error?: string }>(`/api/lojas/manage/${id}/estoque-config`, { method: "PUT", body: JSON.stringify(campos) }),
+  lojasVirtualAtualizar: (id: number, campos: Record<string, unknown>) =>
+    request<{ success?: boolean; error?: string }>(`/api/lojas/manage/${id}/virtual`, { method: "PUT", body: JSON.stringify(campos) }),
+  lojasDeliveryAtualizar: (id: number, campos: Record<string, unknown>) =>
+    request<{ success?: boolean; error?: string }>(`/api/lojas/manage/${id}/delivery`, { method: "PUT", body: JSON.stringify(campos) }),
+
+  lojasResponsaveisListar: (id: number) =>
+    request<{ responsaveis: Array<Record<string, unknown>> }>(`/api/lojas/manage/${id}/responsaveis`),
+  lojasResponsavelVincular: (id: number, dados: Record<string, unknown>) =>
+    request<{ responsavel?: Record<string, unknown>; error?: string }>(`/api/lojas/manage/${id}/responsaveis`, { method: "POST", body: JSON.stringify(dados) }),
+  lojasResponsavelAtualizar: (id: number, vinculoId: number, dados: Record<string, unknown>) =>
+    request<{ success?: boolean; error?: string }>(`/api/lojas/manage/${id}/responsaveis/${vinculoId}`, { method: "PUT", body: JSON.stringify(dados) }),
+  lojasResponsavelRemover: (id: number, vinculoId: number) =>
+    request<{ success?: boolean; error?: string }>(`/api/lojas/manage/${id}/responsaveis/${vinculoId}`, { method: "DELETE" }),
+
+  lojasIntegracoesListar: (id: number) =>
+    request<{ integracoes: Array<{ integracao: string; status: string; configurado: boolean }> }>(`/api/lojas/manage/${id}/integracoes`),
+  lojasIntegracaoAtualizar: (id: number, chave: string, dados: { status: string; credenciais?: Record<string, unknown> }) =>
+    request<{ integracao?: Record<string, unknown>; error?: string }>(`/api/lojas/manage/${id}/integracoes/${chave}`, { method: "PUT", body: JSON.stringify(dados) }),
+
+  lojasMidiaListar: (id: number, tipo?: string) =>
+    request<{ midia: Array<Record<string, unknown>> }>(`/api/lojas/manage/${id}/midia${tipo ? `?tipo=${tipo}` : ""}`),
+  lojasMidiaRemover: (id: number, midiaId: number) =>
+    request<{ success?: boolean; error?: string }>(`/api/lojas/manage/${id}/midia/${midiaId}`, { method: "DELETE" }),
 
   // KPI
   kpiOverview: (periodo?: number) =>
