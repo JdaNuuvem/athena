@@ -61,9 +61,12 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
   const handleSave = async () => {
     setSaving(true); setMsg("");
     try {
-      // fornecedor_id e' BIGINT no banco — string vazia quebraria o UPDATE, so' envia se selecionado
+      // fornecedor_id, marca_id, fabricante_id, categoria_id_norm sao BIGINT/INT no banco —
+      // string vazia quebraria o UPDATE, so' envia se selecionado
       const payload: Record<string, unknown> = { ...form };
-      if (!payload.fornecedor_id) delete payload.fornecedor_id;
+      for (const campoFk of ["fornecedor_id", "marca_id", "fabricante_id", "categoria_id_norm"]) {
+        if (!payload[campoFk]) delete payload[campoFk];
+      }
       // 1. Save locally
       const r = await fetch("/api/produtos/" + sku, {
         method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
