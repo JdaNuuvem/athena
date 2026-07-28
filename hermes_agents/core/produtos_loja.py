@@ -15,6 +15,8 @@ CAMPOS_EDITAVEIS = (
     "localizacao_fisica", "estoque_minimo", "estoque_maximo", "observacoes_internas",
 )
 
+CAMPOS_SINCRONIZAVEIS_DO_MESTRE = ("nome_override", "codigo_barras_override")
+
 _ok = False
 
 
@@ -159,6 +161,21 @@ def atualizar(loja: str, sku: str, **campos) -> dict:
     auditar_alteracao("editar", "produtos_loja", "produtos_loja", dados_depois["id"],
                        dados_antes=dados_antes, dados_depois=dados_depois)
     return {"ok": True, **dados_depois}
+
+
+def sincronizar_do_mestre(loja: str, sku: str, campos: list[str],
+                           usuario_id: int = None, usuario_nome: str = "") -> dict:
+    """Limpa os overrides escolhidos, fazendo a linha voltar a herdar o valor
+    do mestre via join (nome_mestre/codigo de catalogo_produtos). So cobre
+    os campos que sao override — o resto do cadastro (categoria, marca,
+    imagens, atributos, tributacao) ja vem do join, nao precisa de acao."""
+    invalidos = [c for c in campos if c not in CAMPOS_SINCRONIZAVEIS_DO_MESTRE]
+    if invalidos:
+        return {"erro": f"campos nao sincronizaveis: {invalidos}"}
+    if not campos:
+        return {"erro": "informe ao menos um campo"}
+    valores_none = {c: None for c in campos}
+    return atualizar(loja, sku, usuario_id=usuario_id, usuario_nome=usuario_nome, **valores_none)
 
 
 def excluir(loja: str, sku: str) -> dict:

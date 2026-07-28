@@ -278,6 +278,19 @@ class TestProdutosLoja(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(r["erros"][0]["loja"], "Loja B")
         self.assertIn("erro simulado na loja B", r["erros"][0]["erro"])
 
+    async def test_sincronizar_do_mestre_limpa_override(self):
+        from core.produtos_loja import criar, atualizar, sincronizar_do_mestre
+        criar("Loja A", "SKU1", produto_mestre_sku="SKU1")
+        atualizar("Loja A", "SKU1", nome_override="Nome customizado da loja")
+        r = sincronizar_do_mestre("Loja A", "SKU1", ["nome_override"])
+        self.assertTrue(r.get("ok"))
+
+    async def test_sincronizar_campo_invalido_erro(self):
+        from core.produtos_loja import criar, sincronizar_do_mestre
+        criar("Loja A", "SKU1", produto_mestre_sku="SKU1")
+        r = sincronizar_do_mestre("Loja A", "SKU1", ["preco_custo"])
+        self.assertIn("erro", r)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
