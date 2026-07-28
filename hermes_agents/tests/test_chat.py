@@ -132,5 +132,31 @@ class TestChatRotasPermissao(unittest.TestCase):
             mock_add.assert_called_once()
 
 
+class TestChatWebsocketBroadcastIsolamento(unittest.TestCase):
+    def test_broadcast_so_alcanca_participantes(self):
+        from core.chat_ws import broadcast_para_participantes, registrar_conexao, remover_conexao
+
+        enviados = []
+
+        class FakeWs:
+            def __init__(self, uid): self.uid = uid
+            def send(self, payload): enviados.append((self.uid, payload))
+
+        ws_membro = FakeWs(1)
+        ws_estranho = FakeWs(2)
+        registrar_conexao(1, ws_membro)
+        registrar_conexao(2, ws_estranho)
+        try:
+            with patch("core.chat.participantes_ids", return_value=[1]):
+                broadcast_para_participantes(99, {"evento": "nova_mensagem"})
+        finally:
+            remover_conexao(1, ws_membro)
+            remover_conexao(2, ws_estranho)
+
+        uids_notificados = [uid for uid, _ in enviados]
+        self.assertIn(1, uids_notificados)
+        self.assertNotIn(2, uids_notificados)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

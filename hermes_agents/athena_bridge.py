@@ -221,6 +221,8 @@ from routes.rh import rh_bp
 from routes.cadastros import cadastros_bp
 from routes.financeiro import financeiro_bp
 from routes.bi import bi_bp
+from routes.chat import chat_bp
+from routes.chat_ws import init_sock
 app.register_blueprint(bling_bp)
 app.register_blueprint(integrations_bp)
 app.register_blueprint(webhook_bp)
@@ -251,6 +253,8 @@ app.register_blueprint(rh_bp)
 app.register_blueprint(cadastros_bp)
 app.register_blueprint(financeiro_bp)
 app.register_blueprint(bi_bp)
+app.register_blueprint(chat_bp)
+init_sock(app)
 
 # ponytail: importar aqui garante que catalogo_produtos (SSOT) exista antes de
 # qualquer sync/listagem â€” sincronizar_produtos()/listar_produtos() fazem SQL
@@ -1932,4 +1936,4 @@ if __name__ == "__main__":
         print(f"[Scheduler] Failed to start: {e}")
     port = int(os.environ.get("API_PORT", "3001"))
     debug = os.environ.get("DEBUG", "false").lower() == "true"
-    app.run(host="0.0.0.0", port=port, debug=debug)
+    app.run(host="0.0.0.0", port=port, debug=debug, threaded=True)
