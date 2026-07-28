@@ -6,31 +6,12 @@ import Link from "next/link";
 import { api, type Product } from "@/lib/api";
 import { useStore } from "@/lib/store-context";
 
-const ESTOQUE_ALERT = 10;
-const ESTOQUE_CRITICO = 3;
 const POR_PAGINA = 30;
 
 function colorFromName(nome: string) {
   let h = 0;
   for (let i = 0; i < nome.length; i++) h = nome.charCodeAt(i) + ((h << 5) - h);
   return `hsl(${Math.abs(h) % 360}, 45%, 35%)`;
-}
-
-function StockBadge({ qty, minimo }: { qty: number; minimo?: number }) {
-  // Usa o estoque_minimo real do Bling quando disponivel; caso contrario cai nos limiares genericos
-  const critico = minimo ? minimo * 0.3 : ESTOQUE_CRITICO;
-  const alerta = minimo || ESTOQUE_ALERT;
-  if (qty <= 0) return <span className="text-[10px] bg-red-900/40 text-red-400 px-1.5 py-0.5 rounded-full font-medium">Sem estoque</span>;
-  if (qty <= critico) return <span className="text-[10px] bg-orange-900/40 text-orange-400 px-1.5 py-0.5 rounded-full font-medium">{qty} un</span>;
-  if (qty <= alerta) return <span className="text-[10px] bg-amber-900/30 text-amber-400 px-1.5 py-0.5 rounded-full">{qty} un</span>;
-  return <span className="text-[10px] bg-emerald-900/20 text-emerald-400 px-1.5 py-0.5 rounded-full">{qty} un</span>;
-}
-
-function MargemBadge({ pct }: { pct: number }) {
-  if (pct <= 0) return <span className="text-[10px] text-neutral-600">—</span>;
-  if (pct < 15) return <span className="text-[10px] text-red-400 font-medium">{pct.toFixed(0)}%</span>;
-  if (pct < 30) return <span className="text-[10px] text-amber-400">{pct.toFixed(0)}%</span>;
-  return <span className="text-[10px] text-emerald-400">{pct.toFixed(0)}%</span>;
 }
 
 function ProdutoImagem({ src, nome }: { src?: string | null; nome: string }) {
@@ -264,23 +245,17 @@ export default function ProdutosPage() {
                 </div>
 
                 <div className="flex items-center gap-4 shrink-0">
-                  <div className="text-right">
-                    <div className="text-sm text-emerald-400 font-semibold numeric">
-                      R$ {Number(p.valor ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                    </div>
-                    <div className="text-[10px] text-neutral-500">
-                      {p.total_lojas ?? 0} loja{(p.total_lojas ?? 0) !== 1 ? "s" : ""}
-                    </div>
+                  <div className="flex flex-col items-center gap-1">
+                    <Link href={"/pdv?sku=" + p.sku} onClick={e => e.stopPropagation()} className="px-2 py-1 bg-amber-600 hover:bg-amber-500 text-white text-[10px] rounded-lg shrink-0" title="Vender este produto">🛒</Link>
+                    <Link
+                      href={`/estoque/lojas?busca=${encodeURIComponent(p.sku)}`}
+                      onClick={e => e.stopPropagation()}
+                      className="text-[11px] text-blue-400 hover:underline whitespace-nowrap"
+                    >
+                      Ver por loja →
+                    </Link>
                   </div>
-
-                  <div className="flex items-center gap-2">
-                    <div className="flex flex-col items-center gap-0.5">
-                      <Link href={"/pdv?sku=" + p.sku} onClick={e => e.stopPropagation()} className="px-2 py-1 bg-amber-600 hover:bg-amber-500 text-white text-[10px] rounded-lg shrink-0" title="Vender este produto">🛒</Link>
-                      <StockBadge qty={p.estoque_atual ?? 0} minimo={p.estoque_minimo} />
-                      <MargemBadge pct={p.margem_pct ?? 0} />
-                    </div>
-                    <span className="text-neutral-600 text-sm">›</span>
-                  </div>
+                  <span className="text-neutral-600 text-sm">›</span>
                 </div>
               </div>
             </div>
