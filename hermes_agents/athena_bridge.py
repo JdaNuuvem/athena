@@ -200,6 +200,7 @@ from routes.integrations import bling_bp, integrations_bp
 from routes.webhooks import webhook_bp
 from routes.shopee import shopee_bp, shopee_ads_bp
 from routes.estoque import estoque_bp, workflows_bp
+from routes.produtos_loja import produtos_loja_bp
 from routes.agent_executor import hermes_bp, memory_bp
 from routes.pdv import pdv_bp
 from routes.vendas import vendas_bp
@@ -228,6 +229,7 @@ app.register_blueprint(shopee_bp)
 app.register_blueprint(shopee_ads_bp)
 app.register_blueprint(estoque_bp)
 app.register_blueprint(workflows_bp)
+app.register_blueprint(produtos_loja_bp)
 app.register_blueprint(hermes_bp)
 app.register_blueprint(memory_bp)
 app.register_blueprint(pdv_bp)
