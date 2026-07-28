@@ -141,6 +141,49 @@ class TestLojasManageExigePermissao(unittest.TestCase):
         self.assertEqual(r.status_code, 403)
         mock_atualizar.assert_not_called()
 
+    def test_obter_loja_sem_permissao_nega(self):
+        token = rbac.gerar_token_sessao(9, "gerente@x.com", "Gerente")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=[]), \
+             patch("core.lojas.obter") as mock_obter:
+            r = self.client.get("/api/lojas/manage/1", headers=headers)
+        self.assertEqual(r.status_code, 403)
+        mock_obter.assert_not_called()
+
+    def test_obter_loja_esconde_campos_sensiveis(self):
+        headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+        loja_com_segredos = {
+            "id": 1, "nome": "Loja Charme", "token_fiscal": "segredo-super-secreto",
+            "pix_chave": "chave@pix.com", "certificado_digital": "/certs/x.pfx", "csc_nfce": "abc123",
+        }
+        with patch("core.lojas.obter", return_value=loja_com_segredos):
+            r = self.client.get("/api/lojas/manage/1", headers=headers)
+        self.assertEqual(r.status_code, 200)
+        body = r.get_json()["loja"]
+        for campo in ("token_fiscal", "pix_chave", "certificado_digital", "csc_nfce"):
+            self.assertNotIn(campo, body)
+        self.assertEqual(body["nome"], "Loja Charme")
+
+    def test_listar_integracoes_sem_permissao_nega(self):
+        token = rbac.gerar_token_sessao(9, "gerente@x.com", "Gerente")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=[]), \
+             patch("core.lojas_integracoes.listar") as mock_listar:
+            r = self.client.get("/api/lojas/manage/1/integracoes", headers=headers)
+        self.assertEqual(r.status_code, 403)
+        mock_listar.assert_not_called()
+
+    def test_listar_integracoes_nunca_expoe_credenciais_bruta(self):
+        headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+        com_credenciais = [{"integracao": "mercado_livre", "status": "ativa",
+                             "credenciais": {"client_secret": "segredo-nao-pode-vazar"}}]
+        with patch("core.lojas_integracoes.listar", return_value=com_credenciais):
+            r = self.client.get("/api/lojas/manage/1/integracoes", headers=headers)
+        self.assertEqual(r.status_code, 200)
+        item = r.get_json()["integracoes"][0]
+        self.assertNotIn("credenciais", item)
+        self.assertTrue(item["configurado"])
+
     def test_vincular_midia_sem_permissao_nega(self):
         token = rbac.gerar_token_sessao(9, "gerente@x.com", "Gerente")
         headers = {"Authorization": f"Bearer {token}"}

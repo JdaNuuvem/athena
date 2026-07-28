@@ -29,11 +29,16 @@ def listar_lojas_manage():
 
 @lojas_bp.route("/manage/<int:id>", methods=["GET"])
 def obter_loja_manage(id):
-    from core.lojas import obter as obter_loja_fn
-    loja = obter_loja_fn(id)
-    if not loja:
-        return jsonify({"error": "Loja nao encontrada"}), 404
-    return jsonify({"loja": loja})
+    @requer_permissao("configuracoes.editar")
+    def _go():
+        from core.lojas import obter as obter_loja_fn
+        from core.lojas_fiscal_financeiro import CAMPOS_SENSIVEIS
+        loja = obter_loja_fn(id)
+        if not loja:
+            return jsonify({"error": "Loja nao encontrada"}), 404
+        loja = {k: v for k, v in loja.items() if k not in CAMPOS_SENSIVEIS}
+        return jsonify({"loja": loja})
+    return _go()
 
 
 @lojas_bp.route("/manage", methods=["POST"])

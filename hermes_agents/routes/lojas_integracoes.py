@@ -10,8 +10,15 @@ lojas_integracoes_bp = Blueprint("lojas_integracoes", __name__, url_prefix="/api
 
 @lojas_integracoes_bp.route("/<int:id>/integracoes", methods=["GET"])
 def listar_integracoes(id):
-    from core.lojas_integracoes import listar
-    return jsonify({"integracoes": listar(id)})
+    @requer_permissao("configuracoes.editar")
+    def _go():
+        from core.lojas_integracoes import listar
+        integracoes = [
+            {"integracao": i["integracao"], "status": i["status"], "configurado": bool(i.get("credenciais"))}
+            for i in listar(id)
+        ]
+        return jsonify({"integracoes": integracoes})
+    return _go()
 
 
 @lojas_integracoes_bp.route("/<int:id>/integracoes/<string:chave>", methods=["PUT"])
