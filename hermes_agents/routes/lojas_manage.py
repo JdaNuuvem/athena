@@ -22,7 +22,11 @@ def criar_loja_manage():
     def _go():
         from core.lojas import criar as criar_loja_fn
         result = criar_loja_fn(nome, tipo=tipo)
-        return jsonify({"loja": result}) if result else (jsonify({"error": "Erro ao criar"}), 500)
+        if not result:
+            return jsonify({"error": "Erro ao criar"}), 500
+        if result.get("error"):
+            return jsonify({"error": result["error"]}), 500
+        return jsonify({"loja": result})
     return _go()
 
 

@@ -69,7 +69,7 @@ def criar(nome: str, tipo: str = "fisica"):
         row = await db.fetchrow("INSERT INTO lojas (nome, tipo) VALUES ($1, $2) RETURNING id, nome, ativa, tipo", nome, tipo)
         return dict(row) if row else None
     try: return run_async(_go())
-    except Exception as e: log(AGENT, f"Erro criar: {e}"); return None
+    except Exception as e: log(AGENT, f"Erro criar: {e}"); return {"error": str(e)}
 
 def atualizar(id_loja: int, nome: str, shopee_markup_pct: float = None, grupos_publicacao: str = None, tipo: str = None) -> bool:
     _ensure_table()
