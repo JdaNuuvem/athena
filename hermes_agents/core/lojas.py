@@ -1,8 +1,20 @@
 """Store management CRUD — substitui lojas hardcoded do core/config."""
+import traceback
 from core import get_db, run_async, log
 
 AGENT = "Lojas"
 _table_ok = False
+
+def _log_erro(onde: str, e: Exception):
+    """Log local (console) + persistido no banco (system_logs), visivel em
+    /seguranca/logs sem precisar acessar o log do container no Coolify."""
+    tb = traceback.format_exc()
+    log(AGENT, f"Erro {onde}: {e}\n{tb}")
+    try:
+        from core.seguranca import syslog
+        syslog("ERROR", "lojas", f"{onde}: {e}", stacktrace=tb)
+    except Exception:
+        pass
 
 def _ensure_table():
     global _table_ok
@@ -19,7 +31,7 @@ def _ensure_table():
         # usado pelo frontend para mostrar so' os utilitarios relevantes no
         # menu quando essa loja especifica esta selecionada.
         try: await db.execute("ALTER TABLE lojas ADD COLUMN IF NOT EXISTS tipo VARCHAR(10) DEFAULT 'fisica'")
-        except Exception as e: pass
+        except Exception as e: _log_erro("ALTER lojas.tipo", e)
         count = await db.fetchval("SELECT COUNT(*) FROM lojas")
         if count == 0:
             try:
@@ -49,7 +61,7 @@ def _ensure_table():
         run_async(_go())
         _table_ok = True
     except Exception as e:
-        log(AGENT, f"Erro tabela lojas: {e}")
+        _log_erro("_ensure_table", e)
 
 def listar() -> list:
     _ensure_table()
@@ -58,7 +70,7 @@ def listar() -> list:
         rows = await db.fetch("SELECT id, nome, ativa, created_at, bling_id, tipo FROM lojas ORDER BY id")
         return [dict(r) for r in rows]
     try: return run_async(_go())
-    except Exception as e: log(AGENT, f"Erro listar: {e}"); return []
+    except Exception as e: _log_erro("listar", e); return []
 
 def criar(nome: str, tipo: str = "fisica"):
     _ensure_table()
@@ -69,7 +81,7 @@ def criar(nome: str, tipo: str = "fisica"):
         row = await db.fetchrow("INSERT INTO lojas (nome, tipo) VALUES ($1, $2) RETURNING id, nome, ativa, tipo", nome, tipo)
         return dict(row) if row else None
     try: return run_async(_go())
-    except Exception as e: log(AGENT, f"Erro criar: {e}"); return {"error": str(e)}
+    except Exception as e: _log_erro("criar", e); return {"error": str(e)}
 
 def atualizar(id_loja: int, nome: str, shopee_markup_pct: float = None, grupos_publicacao: str = None, tipo: str = None) -> bool:
     _ensure_table()
@@ -84,7 +96,7 @@ def atualizar(id_loja: int, nome: str, shopee_markup_pct: float = None, grupos_p
             await db.execute("UPDATE lojas SET tipo = $1 WHERE id = $2", tipo, id_loja)
         return r != "UPDATE 0"
     try: return run_async(_go())
-    except Exception as e: log(AGENT, f"Erro atualizar: {e}"); return False
+    except Exception as e: _log_erro("atualizar", e); return False
 
 def deletar(id_loja: int) -> bool:
     _ensure_table()
@@ -93,7 +105,7 @@ def deletar(id_loja: int) -> bool:
         r = await db.execute("DELETE FROM lojas WHERE id = $1", id_loja)
         return r != "DELETE 0"
     try: return run_async(_go())
-    except Exception as e: log(AGENT, f"Erro deletar: {e}"); return False
+    except Exception as e: _log_erro("deletar", e); return False
 
 # ── Sync Bling ──
 
@@ -105,9 +117,9 @@ def _ensure_bling_id():
             if not exists:
                 await db.execute("ALTER TABLE lojas ADD COLUMN bling_id BIGINT")
                 await db.execute("ALTER TABLE lojas ADD COLUMN bling_descricao VARCHAR(200)")
-        except Exception as e: pass
+        except Exception as e: _log_erro("_ensure_bling_id", e)
     try: run_async(_go())
-    except Exception as e: pass
+    except Exception as e: _log_erro("_ensure_bling_id (run_async)", e)
 
 _ensure_bling_id()
 
@@ -126,9 +138,9 @@ def _ensure_shopee_cols():
             await db.execute("ALTER TABLE lojas ADD COLUMN IF NOT EXISTS grupos_publicacao VARCHAR(300)")
             await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_lojas_shopee_shop_id ON lojas (shopee_shop_id) WHERE shopee_shop_id IS NOT NULL")
         except Exception as e:
-            log(AGENT, f"Erro colunas shopee: {e}")
+            _log_erro("_ensure_shopee_cols", e)
     try: run_async(_go())
-    except Exception as e: pass
+    except Exception as e: _log_erro("_ensure_shopee_cols (run_async)", e)
 
 _ensure_shopee_cols()
 
@@ -144,7 +156,7 @@ def listar_lojas_shopee() -> list:
         """)
         return [dict(r) for r in rows]
     try: return run_async(_go())
-    except Exception as e: log(AGENT, f"Erro listar_lojas_shopee: {e}"); return []
+    except Exception as e: _log_erro("listar_lojas_shopee", e); return []
 
 def obter_credenciais_shopee(loja_id: int) -> dict:
     async def _go():
@@ -153,7 +165,7 @@ def obter_credenciais_shopee(loja_id: int) -> dict:
                                    FROM lojas WHERE id = $1""", loja_id)
         return dict(row) if row else {}
     try: return run_async(_go())
-    except Exception as e: log(AGENT, f"Erro obter_credenciais_shopee: {e}"); return {}
+    except Exception as e: _log_erro("obter_credenciais_shopee", e); return {}
 
 def vincular_shopee(loja_id: int, shop_id: str, access_token: str, refresh_token: str = "",
                      shop_name: str = "", expira_em=None) -> dict:
@@ -167,7 +179,7 @@ def vincular_shopee(loja_id: int, shop_id: str, access_token: str, refresh_token
         """, shop_id, shop_name, access_token, refresh_token, expira_em, loja_id)
         return dict(row) if row else {"error": "loja nao encontrada"}
     try: return run_async(_go())
-    except Exception as e: return {"error": str(e)}
+    except Exception as e: _log_erro("vincular_shopee", e); return {"error": str(e)}
 
 def criar_loja_shopee(shop_id: str, access_token: str, refresh_token: str = "", shop_name: str = "", expira_em=None) -> dict:
     """Cria uma nova loja ja vinculada a uma conta Shopee (usado quando nenhuma loja_id foi indicada no auth)."""
@@ -180,7 +192,7 @@ def criar_loja_shopee(shop_id: str, access_token: str, refresh_token: str = "", 
         """, nome, shop_id, shop_name, access_token, refresh_token, expira_em)
         return dict(row) if row else {"error": "falha ao criar loja"}
     try: return run_async(_go())
-    except Exception as e: return {"error": str(e)}
+    except Exception as e: _log_erro("criar_loja_shopee", e); return {"error": str(e)}
 
 def desconectar_shopee(loja_id: int) -> dict:
     """Remove a vinculacao de uma conta Shopee de uma loja (limpa shop_id e tokens).
@@ -232,7 +244,7 @@ def sincronizar_bling() -> dict:
             pagina += 1
         return {"sync": len(resultados), "lojas": resultados}
     try: return run_async(_go())
-    except Exception as e: return {"error": str(e)}
+    except Exception as e: _log_erro("sincronizar_bling", e); return {"error": str(e)}
 
 # ── Helpers para entidades ──
 
@@ -244,7 +256,7 @@ def _primeira_loja() -> str:
         row = await db.fetchrow("SELECT nome FROM lojas WHERE ativa = TRUE ORDER BY id LIMIT 1")
         return row["nome"] if row else "Loja Centro"
     try: return run_async(_go())
-    except Exception as e: return "Loja Centro"
+    except Exception as e: _log_erro("_primeira_loja", e); return "Loja Centro"
 
 LOJA_PRINCIPAL: str = ""
 LOJA_PRODUCAO: str = ""
