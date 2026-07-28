@@ -245,6 +245,12 @@ export default function ProdutosPage() {
                 </div>
 
                 <div className="flex items-center gap-4 shrink-0">
+                  <div className="text-right">
+                    <div className="text-sm text-emerald-400 font-semibold numeric">
+                      R$ {Number(p.valor ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    </div>
+                  </div>
+
                   <div className="flex flex-col items-center gap-1">
                     <Link href={"/pdv?sku=" + p.sku} onClick={e => e.stopPropagation()} className="px-2 py-1 bg-amber-600 hover:bg-amber-500 text-white text-[10px] rounded-lg shrink-0" title="Vender este produto">🛒</Link>
                     <Link

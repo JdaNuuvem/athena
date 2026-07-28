@@ -77,6 +77,7 @@ export interface ContaFinanceira {
 export interface Product {
   sku: string;
   nome: string;
+  valor: number;
   total_variacoes: number;
   imagem_url?: string;
   categoria?: string;
