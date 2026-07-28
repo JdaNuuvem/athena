@@ -27,6 +27,11 @@ def _ensure_table():
                 ativa BOOLEAN DEFAULT TRUE, created_at TIMESTAMP DEFAULT NOW()
             )
         """)
+        # CREATE TABLE IF NOT EXISTS nao altera tabela ja existente — em prod a
+        # tabela "lojas" foi criada antes da coluna "ativa" existir na definicao
+        # acima, entao ela precisa do mesmo ALTER defensivo que "tipo" ja tem.
+        try: await db.execute("ALTER TABLE lojas ADD COLUMN IF NOT EXISTS ativa BOOLEAN DEFAULT TRUE")
+        except Exception as e: _log_erro("ALTER lojas.ativa", e)
         # fisica (PDV/estoque/caixa fisico) ou virtual (marketplace/Shopee) —
         # usado pelo frontend para mostrar so' os utilitarios relevantes no
         # menu quando essa loja especifica esta selecionada.
