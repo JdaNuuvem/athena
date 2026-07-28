@@ -31,5 +31,33 @@ class TestChatConversas(unittest.TestCase):
             self.assertTrue(chat.usuario_e_participante(5, 2))
 
 
+class TestChatMensagens(unittest.TestCase):
+    def test_listar_mensagens_erro_de_db_retorna_lista_vazia(self):
+        with patch("core.chat.get_db", side_effect=RuntimeError("sem conexao")):
+            self.assertEqual(chat.listar_mensagens(1), [])
+
+    def test_editar_mensagem_sem_ser_autor_retorna_error(self):
+        async def _fetchrow(*a, **kw): return None
+        with patch("core.chat.get_db") as mock_get_db:
+            mock_db = AsyncMock(fetchrow=_fetchrow)
+            mock_get_db.return_value = mock_db
+            resultado = chat.editar_mensagem(1, 999, "novo texto")
+        self.assertIn("error", resultado)
+
+    def test_listar_conversas_usuario_ordena_por_atividade_recente(self):
+        with patch("core.chat.get_db") as mock_get_db, \
+             patch("core.chat._canais_departamento_permitidos", return_value=[]), \
+             patch("core.chat._conversas_ticket_permitidas", return_value=[]):
+            async def _fetch(*a, **kw):
+                return [
+                    {"id": 1, "tipo": "dm", "created_at": "2026-01-01", "ultima_atividade": "2026-01-01"},
+                    {"id": 2, "tipo": "grupo", "created_at": "2026-01-01", "ultima_atividade": "2026-06-01"},
+                ]
+            mock_db = AsyncMock(fetch=_fetch)
+            mock_get_db.return_value = mock_db
+            resultado = chat.listar_conversas_usuario(7)
+        self.assertEqual(resultado[0]["id"], 2)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

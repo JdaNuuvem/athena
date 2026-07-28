@@ -210,3 +210,142 @@ def remover_participante(conversa_id: int, user_id: int) -> dict:
         return {"success": True}
     try: return run_async(_go())
     except Exception as e: return {"error": str(e)}
+
+
+# ── Mensagens ──
+
+def enviar_mensagem(conversa_id: int, remetente_id: int, texto: str, anexo_id: int = None, thread_pai_id: int = None) -> dict:
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow(
+            "INSERT INTO chat_mensagens (conversa_id, remetente_id, texto, anexo_id, thread_pai_id) "
+            "VALUES ($1,$2,$3,$4,$5) RETURNING *",
+            conversa_id, remetente_id, texto, anexo_id, thread_pai_id)
+        return dict(row)
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
+
+
+def listar_mensagens(conversa_id: int, antes_de: str = None, limit: int = 50) -> list:
+    async def _go():
+        db = await get_db()
+        if antes_de:
+            rows = await db.fetch(
+                "SELECT * FROM chat_mensagens WHERE conversa_id=$1 AND created_at < $2 "
+                "ORDER BY created_at DESC LIMIT $3",
+                conversa_id, antes_de, limit)
+        else:
+            rows = await db.fetch(
+                "SELECT * FROM chat_mensagens WHERE conversa_id=$1 ORDER BY created_at DESC LIMIT $2",
+                conversa_id, limit)
+        return [dict(r) for r in rows][::-1]
+    try: return run_async(_go())
+    except Exception as e: log(AGENT, f"listar_mensagens: {e}"); return []
+
+
+def editar_mensagem(mensagem_id: int, user_id: int, novo_texto: str) -> dict:
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow(
+            "UPDATE chat_mensagens SET texto=$1, editado_em=NOW() WHERE id=$2 AND remetente_id=$3 RETURNING *",
+            novo_texto, mensagem_id, user_id)
+        return dict(row) if row else {"error": "not found or not owner"}
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
+
+
+def excluir_mensagem(mensagem_id: int, user_id: int) -> dict:
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow(
+            "UPDATE chat_mensagens SET excluido_em=NOW() WHERE id=$1 AND remetente_id=$2 RETURNING *",
+            mensagem_id, user_id)
+        return dict(row) if row else {"error": "not found or not owner"}
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
+
+
+def marcar_lido(conversa_id: int, user_id: int, ultima_mensagem_id: int) -> dict:
+    async def _go():
+        db = await get_db()
+        await db.execute(
+            "INSERT INTO chat_leituras (conversa_id, user_id, ultima_mensagem_lida_id, lido_em) "
+            "VALUES ($1,$2,$3,NOW()) ON CONFLICT (conversa_id, user_id) "
+            "DO UPDATE SET ultima_mensagem_lida_id=$3, lido_em=NOW()",
+            conversa_id, user_id, ultima_mensagem_id)
+        return {"success": True}
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
+
+
+def _canais_departamento_permitidos(user_id: int) -> list:
+    from core.rbac import get_permissoes_por_usuario
+    perms = set(get_permissoes_por_usuario(user_id))
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch("""
+            SELECT c.*, (SELECT MAX(created_at) FROM chat_mensagens m WHERE m.conversa_id = c.id) as ultima_atividade
+            FROM chat_conversas c WHERE c.tipo = 'canal_departamento'
+        """)
+        return [dict(r) for r in rows]
+    try: canais = run_async(_go())
+    except Exception: canais = []
+    return [c for c in canais if f"{c['departamento']}.ver" in perms]
+
+
+def listar_canais_departamento(user_id: int) -> list:
+    return _canais_departamento_permitidos(user_id)
+
+
+def _conversas_ticket_permitidas(user_id: int) -> list:
+    from core.rbac import get_permissoes_por_usuario
+    perms = set(get_permissoes_por_usuario(user_id))
+    if "atendimento.ver" not in perms:
+        return []
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch("""
+            SELECT c.*, t.assunto, t.cliente, t.canal as canal_externo, t.status as ticket_status,
+                   (SELECT MAX(enviado_em) FROM atend_mensagens m WHERE m.ticket_id = c.ticket_ref_id) as ultima_atividade
+            FROM chat_conversas c
+            JOIN atend_tickets t ON t.id = c.ticket_ref_id
+            WHERE c.tipo = 'ticket'
+        """)
+        return [dict(r) for r in rows]
+    try: return run_async(_go())
+    except Exception: return []
+
+
+def listar_conversas_usuario(user_id: int) -> list:
+    """Une DM/grupo (participante), canal de departamento (permissao) e ticket
+    (permissao atendimento.ver), ordenado por atividade mais recente."""
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch("""
+            SELECT c.*, (SELECT MAX(created_at) FROM chat_mensagens m WHERE m.conversa_id = c.id) as ultima_atividade
+            FROM chat_conversas c
+            JOIN chat_participantes p ON p.conversa_id = c.id AND p.user_id = $1 AND p.saiu_em IS NULL
+            WHERE c.tipo IN ('dm', 'grupo')
+        """, user_id)
+        return [dict(r) for r in rows]
+    try: internas = run_async(_go())
+    except Exception: internas = []
+
+    todas = internas + _canais_departamento_permitidos(user_id) + _conversas_ticket_permitidas(user_id)
+    todas.sort(key=lambda c: c.get("ultima_atividade") or c.get("created_at") or datetime.min, reverse=True)
+    return todas
+
+
+def buscar_mensagens(user_id: int, termo: str) -> list:
+    conversa_ids = [c["id"] for c in listar_conversas_usuario(user_id) if c["tipo"] in ("dm", "grupo", "canal_departamento")]
+    if not conversa_ids:
+        return []
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch(
+            "SELECT * FROM chat_mensagens WHERE conversa_id = ANY($1::int[]) AND texto ILIKE $2 "
+            "AND excluido_em IS NULL ORDER BY created_at DESC LIMIT 50",
+            conversa_ids, f"%{termo}%")
+        return [dict(r) for r in rows]
+    try: return run_async(_go())
+    except Exception as e: log(AGENT, f"buscar_mensagens: {e}"); return []
