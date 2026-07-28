@@ -349,3 +349,83 @@ def buscar_mensagens(user_id: int, termo: str) -> list:
         return [dict(r) for r in rows]
     try: return run_async(_go())
     except Exception as e: log(AGENT, f"buscar_mensagens: {e}"); return []
+
+
+# ── Anexos ──
+
+def salvar_anexo(nome_arquivo: str, mime: str, tamanho_bytes: int, storage_path: str, enviado_por: int) -> dict:
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow(
+            "INSERT INTO chat_anexos (nome_arquivo, mime, tamanho_bytes, storage_path, enviado_por) "
+            "VALUES ($1,$2,$3,$4,$5) RETURNING *",
+            nome_arquivo, mime, tamanho_bytes, storage_path, enviado_por)
+        return dict(row)
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
+
+
+def obter_anexo(anexo_id: int) -> dict:
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow("SELECT * FROM chat_anexos WHERE id=$1", anexo_id)
+        return dict(row) if row else {"error": "not found"}
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
+
+
+def conversa_do_anexo(anexo_id: int):
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow("SELECT conversa_id FROM chat_mensagens WHERE anexo_id=$1", anexo_id)
+        return row["conversa_id"] if row else None
+    try: return run_async(_go())
+    except Exception: return None
+
+
+# ── Presenca ──
+
+def atualizar_presenca(user_id: int, status: str) -> dict:
+    async def _go():
+        db = await get_db()
+        await db.execute(
+            "INSERT INTO chat_presenca (user_id, status, last_seen) VALUES ($1,$2,NOW()) "
+            "ON CONFLICT (user_id) DO UPDATE SET status=$2, last_seen=NOW()",
+            user_id, status)
+        return {"success": True}
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
+
+
+def obter_presenca(user_id: int) -> dict:
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow("SELECT * FROM chat_presenca WHERE user_id=$1", user_id)
+        return dict(row) if row else {"user_id": user_id, "status": "offline", "last_seen": None}
+    try: return run_async(_go())
+    except Exception: return {"user_id": user_id, "status": "offline", "last_seen": None}
+
+
+def conversa_id_do_ticket(ticket_id: int):
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow("SELECT id FROM chat_conversas WHERE tipo='ticket' AND ticket_ref_id=$1", ticket_id)
+        return row["id"] if row else None
+    try: return run_async(_go())
+    except Exception: return None
+
+
+def criar_conversa_ticket(ticket_id: int, criado_por: int = None) -> dict:
+    """Cria (ou retorna) a conversa de chat vinculada a um ticket de atendimento —
+    ponte sem migrar dado: a mensagem em si continua em atend_mensagens."""
+    existente_id = conversa_id_do_ticket(ticket_id)
+    if existente_id:
+        return _obter_conversa(existente_id)
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow(
+            "INSERT INTO chat_conversas (tipo, ticket_ref_id, criado_por) VALUES ('ticket', $1, $2) RETURNING *",
+            ticket_id, criado_por)
+        return dict(row)
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}

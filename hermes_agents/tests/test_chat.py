@@ -59,5 +59,14 @@ class TestChatMensagens(unittest.TestCase):
         self.assertEqual(resultado[0]["id"], 2)
 
 
+class TestChatPonteTicket(unittest.TestCase):
+    def test_criar_conversa_ticket_reaproveita_existente(self):
+        with patch("core.chat.conversa_id_do_ticket", return_value=42), \
+             patch("core.chat._obter_conversa", return_value={"id": 42, "tipo": "ticket", "ticket_ref_id": 7}) as mock_obter:
+            resultado = chat.criar_conversa_ticket(7)
+        self.assertEqual(resultado["id"], 42)
+        mock_obter.assert_called_once_with(42)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
