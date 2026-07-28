@@ -1175,3 +1175,64 @@ export const estoqueRatear = (params: {
     body: JSON.stringify(params),
     headers: { "Content-Type": "application/json" },
   });
+
+// ── Produtos por Loja ──
+
+export interface ProdutoLojaRow {
+  id: number;
+  loja: string;
+  sku: string;
+  produto_mestre_sku: string | null;
+  nome_mestre?: string;
+  imagens?: unknown;
+  estoque_atual: number;
+  codigo_interno: string | null;
+  codigo_barras_override: string | null;
+  nome_override: string | null;
+  status: string;
+  preco_custo: number | null;
+  preco_venda: number | null;
+  promocao_ativa: boolean;
+  promocao_preco: number | null;
+  comissao_pct: number | null;
+  fornecedor_id: number | null;
+  deposito: string | null;
+  localizacao_fisica: string | null;
+  estoque_minimo: number | null;
+  estoque_maximo: number | null;
+  observacoes_internas: string | null;
+}
+
+export const listarProdutosLoja = (loja: string, params?: { busca?: string; pagina?: number; por_pagina?: number }) => {
+  const q = new URLSearchParams({ loja });
+  if (params?.busca) q.set("busca", params.busca);
+  if (params?.pagina) q.set("pagina", String(params.pagina));
+  if (params?.por_pagina) q.set("por_pagina", String(params.por_pagina));
+  return request<{ produtos: ProdutoLojaRow[]; total: number; pagina: number }>(`/api/produtos-loja?${q}`);
+};
+
+export const obterProdutoLoja = (loja: string, sku: string) =>
+  request<ProdutoLojaRow & { erro?: string }>(`/api/produtos-loja/${encodeURIComponent(loja)}/${encodeURIComponent(sku)}`);
+
+export const criarProdutoLoja = (dados: Record<string, unknown>) =>
+  request<{ ok?: boolean; erro?: string }>("/api/produtos-loja", { method: "POST", body: JSON.stringify(dados) });
+
+export const atualizarProdutoLoja = (loja: string, sku: string, dados: Record<string, unknown>) =>
+  request<{ ok?: boolean; erro?: string }>(`/api/produtos-loja/${encodeURIComponent(loja)}/${encodeURIComponent(sku)}`, {
+    method: "PUT", body: JSON.stringify(dados),
+  });
+
+export const excluirProdutoLoja = (loja: string, sku: string) =>
+  request<{ ok?: boolean; erro?: string }>(`/api/produtos-loja/${encodeURIComponent(loja)}/${encodeURIComponent(sku)}`, {
+    method: "DELETE",
+  });
+
+export const replicarProdutoLoja = (loja_origem: string, sku: string, lojas_destino: string[]) =>
+  request<{ ok?: boolean; criados?: string[]; ja_existentes?: string[]; erro?: string }>("/api/produtos-loja/replicar", {
+    method: "POST", body: JSON.stringify({ loja_origem, sku, lojas_destino }),
+  });
+
+export const sincronizarProdutoLojaDoMestre = (loja: string, sku: string, campos: string[]) =>
+  request<{ ok?: boolean; erro?: string }>(`/api/produtos-loja/${encodeURIComponent(loja)}/${encodeURIComponent(sku)}/sincronizar-mestre`, {
+    method: "POST", body: JSON.stringify({ campos }),
+  });
