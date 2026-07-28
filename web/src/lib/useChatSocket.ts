@@ -12,9 +12,12 @@ export function useChatSocket() {
   const wsRef = useRef<WebSocket | null>(null);
   const listenersRef = useRef<Set<Listener>>(new Set());
   const tentativasRef = useRef(0);
+  const montadoRef = useRef(true);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [conectado, setConectado] = useState(false);
 
   const conectar = useCallback(() => {
+    if (!montadoRef.current) return;
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     if (!token) return;
     const protocolo = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -31,17 +34,23 @@ export function useChatSocket() {
     };
     ws.onclose = () => {
       setConectado(false);
+      if (!montadoRef.current) return;
       const espera = Math.min(30000, 1000 * 2 ** tentativasRef.current);
       tentativasRef.current += 1;
-      setTimeout(conectar, espera);
+      timeoutRef.current = setTimeout(conectar, espera);
     };
     ws.onerror = () => ws.close();
     wsRef.current = ws;
   }, []);
 
   useEffect(() => {
+    montadoRef.current = true;
     conectar();
-    return () => { wsRef.current?.close(); };
+    return () => {
+      montadoRef.current = false;
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      wsRef.current?.close();
+    };
   }, [conectar]);
 
   const enviar = useCallback((dados: Record<string, unknown>) => {
