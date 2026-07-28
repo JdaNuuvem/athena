@@ -45,7 +45,7 @@ Novas colunas:
 - `saldo_anterior DECIMAL(12,3)`, `saldo_posterior DECIMAL(12,3)` — do bucket afetado, antes/depois desta movimentação.
 - `ip VARCHAR(45)`, `dispositivo VARCHAR(300)` — capturados quando disponível (ver seção IP/dispositivo).
 
-`tipo` (tipo de movimento) vira CHECK constraint com os 18 valores do documento original: `compra, venda, ajuste, inventario, transferencia_saida, transferencia_transito, transferencia_recebida, reserva, liberacao_reserva, separacao, expedicao, recebimento, devolucao, troca, perda, roubo, extravio, bonificacao, cancelamento, estorno`.
+`tipo` (tipo de movimento) usa os 18 valores do documento original: `compra, venda, ajuste, inventario, transferencia_saida, transferencia_transito, transferencia_recebida, reserva, liberacao_reserva, separacao, expedicao, recebimento, devolucao, troca, perda, roubo, extravio, bonificacao, cancelamento, estorno`. **Validação só em Python** (`TIPOS_MOVIMENTO` em `core/estoque_saldos.py`, checada dentro de `mover_saldo()`), não como CHECK constraint de banco — a tabela já tem linhas históricas com `tipo` em `entrada/saida/transferencia_origem/transferencia_destino/rateio`, fora do novo enum, e `ALTER TABLE ADD CONSTRAINT CHECK` validaria (e rejeitaria) essas linhas existentes.
 
 Nomes de transferência mudam de `transferencia_origem/transferencia_destino` (2 linhas, saldo pulando direto) para `transferencia_saida` (disponível→transito na origem), `transferencia_transito` (não usado como linha de ledger separada — o estado "em trânsito" já é o saldo em si), `transferencia_recebida` (transito→disponível no destino ao confirmar). Mantém 2 linhas de ledger por transferência concluída (saída + recebida), como hoje.
 
