@@ -64,8 +64,12 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
       // fornecedor_id, marca_id, fabricante_id, categoria_id_norm sao BIGINT/INT no banco —
       // string vazia quebraria o UPDATE, so' envia se selecionado
       const payload: Record<string, unknown> = { ...form };
-      for (const campoFk of ["fornecedor_id", "marca_id", "fabricante_id", "categoria_id_norm"]) {
-        if (!payload[campoFk]) delete payload[campoFk];
+      if (!payload.fornecedor_id) delete payload.fornecedor_id;
+      // marca_id/fabricante_id/categoria_id_norm: envia null explicito quando limpo
+      // ("— Nenhum —"), ao inves de deletar a chave, para o backend distinguir
+      // "campo nao tocado" (chave ausente) de "campo explicitamente limpo" (null).
+      for (const campoFk of ["marca_id", "fabricante_id", "categoria_id_norm"]) {
+        if (!payload[campoFk]) payload[campoFk] = null;
       }
       // 1. Save locally
       const r = await fetch("/api/produtos/" + sku, {

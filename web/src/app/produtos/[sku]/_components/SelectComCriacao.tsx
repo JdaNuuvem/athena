@@ -22,7 +22,13 @@ export default function SelectComCriacao({
   const confirmarCriacao = async () => {
     const nome = novoNome.trim();
     if (!nome) return;
-    const resultado = await onCriar(nome);
+    let resultado: Opcao | { error: string };
+    try {
+      resultado = await onCriar(nome);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Falha ao criar");
+      return;
+    }
     if ("error" in resultado) {
       setErro(resultado.error);
       return;

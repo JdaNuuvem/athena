@@ -1751,8 +1751,17 @@ def editar_produto(sku):
                       "classificacao","nome_reduzido","nome_impressao","codigo_interno",
                       "codigo_erp","ex_tipi","modelo","linha","colecao",
                       "marca_id","fabricante_id","categoria_id_norm"]
+            # marca_id/fabricante_id/categoria_id_norm sao FKs opcionais: o frontend envia
+            # null explicito quando o usuario limpa o campo ("— Nenhum —"), e isso deve
+            # gerar SET campo = NULL em vez de ser ignorado (que era o comportamento antigo
+            # e tornava impossivel desvincular marca/fabricante/categoria de um produto).
+            fks_anulaveis = {"marca_id", "fabricante_id", "categoria_id_norm"}
             for campo in campos:
-                if campo in data and data[campo] is not None:
+                if campo in fks_anulaveis:
+                    if campo in data:
+                        updates.append(f"{campo} = %s")
+                        values.append(data[campo])
+                elif campo in data and data[campo] is not None:
                     updates.append(f"{campo} = %s")
                     values.append(data[campo])
             if not updates:

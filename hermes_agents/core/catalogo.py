@@ -90,55 +90,63 @@ def _ensure_tables():
         await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS colecao VARCHAR(100)")
 
         # ── Fase 1 PIM Core: taxonomias normalizadas (2026-07-28) ──
-        await db.execute("""CREATE TABLE IF NOT EXISTS catalogo_marcas (
-            id SERIAL PRIMARY KEY, nome VARCHAR(150) NOT NULL UNIQUE, created_at TIMESTAMP DEFAULT NOW()
-        )""")
-        await db.execute("""CREATE TABLE IF NOT EXISTS catalogo_fabricantes (
-            id SERIAL PRIMARY KEY, nome VARCHAR(150) NOT NULL UNIQUE, created_at TIMESTAMP DEFAULT NOW()
-        )""")
-        await db.execute("""CREATE TABLE IF NOT EXISTS catalogo_categorias (
-            id SERIAL PRIMARY KEY, nome VARCHAR(150) NOT NULL,
-            categoria_pai_id INT REFERENCES catalogo_categorias(id),
-            created_at TIMESTAMP DEFAULT NOW()
-        )""")
-        await db.execute("""CREATE TABLE IF NOT EXISTS catalogo_tags (
-            id SERIAL PRIMARY KEY, nome VARCHAR(60) NOT NULL UNIQUE
-        )""")
-        await db.execute("""CREATE TABLE IF NOT EXISTS catalogo_produto_tags (
-            produto_id INT REFERENCES catalogo_produtos(id) ON DELETE CASCADE,
-            tag_id INT REFERENCES catalogo_tags(id) ON DELETE CASCADE,
-            PRIMARY KEY (produto_id, tag_id)
-        )""")
-        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS marca_id INT REFERENCES catalogo_marcas(id)")
-        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS fabricante_id INT REFERENCES catalogo_fabricantes(id)")
-        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS categoria_id_norm INT REFERENCES catalogo_categorias(id)")
+        try:
+            await db.execute("""CREATE TABLE IF NOT EXISTS catalogo_marcas (
+                id SERIAL PRIMARY KEY, nome VARCHAR(150) NOT NULL UNIQUE, created_at TIMESTAMP DEFAULT NOW()
+            )""")
+            await db.execute("""CREATE TABLE IF NOT EXISTS catalogo_fabricantes (
+                id SERIAL PRIMARY KEY, nome VARCHAR(150) NOT NULL UNIQUE, created_at TIMESTAMP DEFAULT NOW()
+            )""")
+            await db.execute("""CREATE TABLE IF NOT EXISTS catalogo_categorias (
+                id SERIAL PRIMARY KEY, nome VARCHAR(150) NOT NULL,
+                categoria_pai_id INT REFERENCES catalogo_categorias(id),
+                created_at TIMESTAMP DEFAULT NOW()
+            )""")
+            await db.execute("""CREATE TABLE IF NOT EXISTS catalogo_tags (
+                id SERIAL PRIMARY KEY, nome VARCHAR(60) NOT NULL UNIQUE
+            )""")
+            await db.execute("""CREATE TABLE IF NOT EXISTS catalogo_produto_tags (
+                produto_id INT REFERENCES catalogo_produtos(id) ON DELETE CASCADE,
+                tag_id INT REFERENCES catalogo_tags(id) ON DELETE CASCADE,
+                PRIMARY KEY (produto_id, tag_id)
+            )""")
+            await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS marca_id INT REFERENCES catalogo_marcas(id)")
+            await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS fabricante_id INT REFERENCES catalogo_fabricantes(id)")
+            await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS categoria_id_norm INT REFERENCES catalogo_categorias(id)")
 
-        # ── Migracao: dedup de marca/categoria texto livre -> tabelas normalizadas ──
-        # So' roda uma vez (guardada por catalogo_marcas vazia) para nao duplicar em todo boot.
-        count_marcas = await db.fetchval("SELECT COUNT(*) FROM catalogo_marcas")
-        if count_marcas == 0:
-            await db.execute("""
-                INSERT INTO catalogo_marcas (nome)
-                SELECT DISTINCT TRIM(marca) FROM catalogo_produtos
-                WHERE marca IS NOT NULL AND TRIM(marca) != ''
-                ON CONFLICT (nome) DO NOTHING
-            """)
-            await db.execute("""
-                UPDATE catalogo_produtos SET marca_id = m.id
-                FROM catalogo_marcas m WHERE TRIM(catalogo_produtos.marca) = m.nome
-            """)
-            await db.execute("""
-                INSERT INTO catalogo_categorias (nome)
-                SELECT DISTINCT TRIM(categoria) FROM catalogo_produtos
-                WHERE categoria IS NOT NULL AND TRIM(categoria) != ''
-                ON CONFLICT DO NOTHING
-            """)
-            await db.execute("""
-                UPDATE catalogo_produtos SET categoria_id_norm = c.id
-                FROM catalogo_categorias c
-                WHERE TRIM(catalogo_produtos.categoria) = c.nome AND c.categoria_pai_id IS NULL
-            """)
-            log(AGENT, "Migracao dedup marca/categoria concluida")
+            # ── Migracao: dedup de marca/categoria texto livre -> tabelas normalizadas ──
+            # Cada metade (marcas / categorias) tem seu proprio guard, para que uma falha
+            # parcial num boot anterior nao impeca a outra metade de rodar num boot futuro.
+            count_marcas = await db.fetchval("SELECT COUNT(*) FROM catalogo_marcas")
+            if count_marcas == 0:
+                await db.execute("""
+                    INSERT INTO catalogo_marcas (nome)
+                    SELECT DISTINCT TRIM(marca) FROM catalogo_produtos
+                    WHERE marca IS NOT NULL AND TRIM(marca) != ''
+                    ON CONFLICT (nome) DO NOTHING
+                """)
+                await db.execute("""
+                    UPDATE catalogo_produtos SET marca_id = m.id
+                    FROM catalogo_marcas m WHERE TRIM(catalogo_produtos.marca) = m.nome
+                """)
+                log(AGENT, "Migracao dedup marca concluida")
+
+            count_categorias = await db.fetchval("SELECT COUNT(*) FROM catalogo_categorias")
+            if count_categorias == 0:
+                await db.execute("""
+                    INSERT INTO catalogo_categorias (nome)
+                    SELECT DISTINCT TRIM(categoria) FROM catalogo_produtos
+                    WHERE categoria IS NOT NULL AND TRIM(categoria) != ''
+                    ON CONFLICT DO NOTHING
+                """)
+                await db.execute("""
+                    UPDATE catalogo_produtos SET categoria_id_norm = c.id
+                    FROM catalogo_categorias c
+                    WHERE TRIM(catalogo_produtos.categoria) = c.nome AND c.categoria_pai_id IS NULL
+                """)
+                log(AGENT, "Migracao dedup categoria concluida")
+        except Exception as e:
+            log(AGENT, f"Erro na migracao de taxonomias PIM Core: {e}")
 
         # ── Full-text search indexes (pg_trgm for ILIKE with leading wildcard) ──
         try:
