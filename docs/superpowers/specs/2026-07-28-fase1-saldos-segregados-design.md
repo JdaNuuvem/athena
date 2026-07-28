@@ -62,7 +62,7 @@ Duas funções novas, internas, por trás das quais tudo passa a operar:
 
 - `entrada` → `mover_saldo(tipo_origem=None, tipo_destino='disponivel', tipo_movimento=motivo mapeado)`
 - `saida` → `mover_saldo(tipo_origem='disponivel', tipo_destino=None, ...)`
-- `transferir` → duas chamadas: `mover_saldo(origem, 'disponivel'→'transito', tipo_movimento='transferencia_saida')` depois (síncrono, mesma chamada) `mover_saldo(destino, 'transito'→'disponivel', tipo_movimento='transferencia_recebida')`. **Nota:** isso simplifica o fluxo atual de `transferir()` (que já credita destino direto) — ele não passa pelo estado pendente do `estoque_transferencias.py`; esse último é o fluxo com aprovação, tratado à parte (próximo item).
+- `transferir` → continua instantâneo (sem estado pendente, comportamento atual preservado — quem precisa do estado `transito`/aprovação é o fluxo separado de `estoque_transferencias.py`, tratado no próximo item). Duas chamadas: `mover_saldo(origem, tipo_origem='disponivel', tipo_destino=None, tipo_movimento='transferencia_saida')` (débito puro na origem) depois `mover_saldo(destino, tipo_origem=None, tipo_destino='disponivel', tipo_movimento='transferencia_recebida')` (crédito puro no destino). Nunca passa pelo bucket `transito` — esse é exclusivo do fluxo com aprovação.
 - `ratear` → uma chamada `mover_saldo` por loja de destino, tipo_movimento='ajuste' com motivo descritivo (comportamento equivalente ao atual).
 
 ## Corrige `estoque_transferencias.py`
