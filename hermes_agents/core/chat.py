@@ -1,8 +1,17 @@
 """Chat Interno Core — Conversas (DM/Grupo/Canal/Ticket), Mensagens, Anexos, Presenca, Busca"""
+import re
 from core import get_db, run_async, log
 from datetime import datetime
 
 AGENT = "Chat Core"
+
+_PADRAO_MENCAO = re.compile(
+    r"@\[(?:"
+    r"user:(?P<uid>\d+):(?P<unome>[^\]]*)"
+    r"|(?P<todos>todos)"
+    r"|dept:(?P<dcod>[a-z_]+):(?P<dnome>[^\]]*)"
+    r")\]"
+)
 
 DEPARTAMENTOS_CANAL = [
     "dashboard", "cadastros", "produtos", "estoque", "compras", "vendas", "pdv",
@@ -237,9 +246,34 @@ def remover_participante(conversa_id: int, user_id: int) -> dict:
     except Exception as e: return {"error": str(e)}
 
 
+def _processar_mencoes(conversa_id: int, texto: str) -> str:
+    """Valida marcadores de mencao (@[user:id:nome], @[todos], @[dept:codigo:nome])
+    contra os participantes atuais da conversa. Marcador invalido (usuario que
+    saiu, departamento fora do proprio canal, sintaxe quebrada) e rebaixado a
+    texto plano — nunca bloqueia o envio da mensagem por causa disso."""
+    if not texto or "@[" not in texto:
+        return texto
+    conversa = _obter_conversa(conversa_id) or {}
+    participantes = set(participantes_ids(conversa_id))
+
+    def _validar(m: "re.Match") -> str:
+        if m.group("uid") is not None:
+            if int(m.group("uid")) in participantes:
+                return m.group(0)
+            return f"@{m.group('unome')}"
+        if m.group("todos") is not None:
+            return m.group(0)
+        if conversa.get("tipo") == "canal_departamento" and conversa.get("departamento") == m.group("dcod"):
+            return m.group(0)
+        return f"@{m.group('dnome')}"
+
+    return _PADRAO_MENCAO.sub(_validar, texto)
+
+
 # ── Mensagens ──
 
 def enviar_mensagem(conversa_id: int, remetente_id: int, texto: str, anexo_id: int = None, thread_pai_id: int = None) -> dict:
+    texto = _processar_mencoes(conversa_id, texto)
     async def _go():
         db = await get_db()
         row = await db.fetchrow(

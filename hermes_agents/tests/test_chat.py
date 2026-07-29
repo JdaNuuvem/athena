@@ -254,5 +254,62 @@ class TestChatPresencaBroadcast(unittest.TestCase):
                          {"evento": "presenca_atualizada", "user_id": 1, "status": "online"})
 
 
+class TestProcessarMencoes(unittest.TestCase):
+    def test_mencao_usuario_participante_mantida(self):
+        with patch("core.chat._obter_conversa", return_value={"id": 5, "tipo": "grupo", "departamento": None}), \
+             patch("core.chat.participantes_ids", return_value=[1, 2, 3]):
+            resultado = chat._processar_mencoes(5, "oi @[user:2:Bruno] tudo bem?")
+        self.assertEqual(resultado, "oi @[user:2:Bruno] tudo bem?")
+
+    def test_mencao_usuario_nao_participante_rebaixada(self):
+        with patch("core.chat._obter_conversa", return_value={"id": 5, "tipo": "grupo", "departamento": None}), \
+             patch("core.chat.participantes_ids", return_value=[1, 3]):
+            resultado = chat._processar_mencoes(5, "oi @[user:2:Bruno] tudo bem?")
+        self.assertEqual(resultado, "oi @Bruno tudo bem?")
+
+    def test_mencao_todos_sempre_mantida(self):
+        with patch("core.chat._obter_conversa", return_value={"id": 5, "tipo": "grupo", "departamento": None}), \
+             patch("core.chat.participantes_ids", return_value=[1]):
+            resultado = chat._processar_mencoes(5, "atencao @[todos] favor ler")
+        self.assertEqual(resultado, "atencao @[todos] favor ler")
+
+    def test_mencao_dept_correto_mantida(self):
+        with patch("core.chat._obter_conversa", return_value={"id": 5, "tipo": "canal_departamento", "departamento": "financeiro"}), \
+             patch("core.chat.participantes_ids", return_value=[1]):
+            resultado = chat._processar_mencoes(5, "@[dept:financeiro:financeiro] revisar")
+        self.assertEqual(resultado, "@[dept:financeiro:financeiro] revisar")
+
+    def test_mencao_dept_fora_do_canal_rebaixada(self):
+        with patch("core.chat._obter_conversa", return_value={"id": 5, "tipo": "grupo", "departamento": None}), \
+             patch("core.chat.participantes_ids", return_value=[1]):
+            resultado = chat._processar_mencoes(5, "@[dept:financeiro:financeiro] revisar")
+        self.assertEqual(resultado, "@financeiro revisar")
+
+    def test_mencao_malformada_vira_texto_literal(self):
+        with patch("core.chat._obter_conversa", return_value={"id": 5, "tipo": "grupo", "departamento": None}), \
+             patch("core.chat.participantes_ids", return_value=[1]):
+            resultado = chat._processar_mencoes(5, "oi @[user:abc:Bruno sem fechar")
+        self.assertEqual(resultado, "oi @[user:abc:Bruno sem fechar")
+
+    def test_texto_sem_mencao_nao_consulta_conversa(self):
+        with patch("core.chat._obter_conversa") as mock_obter:
+            resultado = chat._processar_mencoes(5, "mensagem normal sem nada")
+        mock_obter.assert_not_called()
+        self.assertEqual(resultado, "mensagem normal sem nada")
+
+
+class TestEnviarMensagemProcessaMencoes(unittest.TestCase):
+    def test_enviar_mensagem_usa_texto_processado_por_mencoes(self):
+        async def _fetchrow(query, *args):
+            return {"id": 1, "conversa_id": args[0], "remetente_id": args[1],
+                    "texto": args[2], "anexo_id": args[3], "thread_pai_id": args[4]}
+        with patch("core.chat.get_db") as mock_get_db, \
+             patch("core.chat._processar_mencoes", return_value="ola @[user:2:Bruno]") as mock_processar:
+            mock_get_db.return_value = AsyncMock(fetchrow=_fetchrow)
+            resultado = chat.enviar_mensagem(5, 1, "ola @[user:2:Bruno]")
+        mock_processar.assert_called_once_with(5, "ola @[user:2:Bruno]")
+        self.assertEqual(resultado["texto"], "ola @[user:2:Bruno]")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
