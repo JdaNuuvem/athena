@@ -83,15 +83,6 @@ export interface Product {
   categoria?: string;
   marca?: string;
   codigo_barras?: string;
-  estoque_atual?: number;
-  estoque_minimo?: number;
-  estoque_maximo?: number;
-  preco_custo?: number;
-  margem_pct?: number;
-  receita_30d?: number;
-  vendidos_30d?: number;
-  total_lojas?: number;
-  estoque_lojas?: Array<{ loja: string; preco: number; status: string }>;
 }
 
 export interface ProdutoLimites {

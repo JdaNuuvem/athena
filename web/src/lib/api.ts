@@ -1265,7 +1265,7 @@ export const estoqueLojas = (params: string) =>
   request<{ estoque: EstoqueLojaRow[]; total: number; pagina: number }>(`/api/estoque/lojas?${params}`);
 
 export const estoqueAtualizar = (sku: string, loja: string, quantidade: number) =>
-  request<{ ok: boolean; bling_sync?: { ok?: boolean; error?: string } }>("/api/estoque/lojas", {
+  request<{ ok?: boolean; erro?: string; bling_sync?: { ok?: boolean; error?: string } }>("/api/estoque/lojas", {
     method: "PUT",
     body: JSON.stringify({ sku, loja, quantidade, sync_bling: "1" }),
     headers: { "Content-Type": "application/json" },
@@ -1298,4 +1298,75 @@ export const estoqueRatear = (params: {
     method: "POST",
     body: JSON.stringify(params),
     headers: { "Content-Type": "application/json" },
+  });
+
+// ── Produtos por Loja ──
+
+export interface ProdutoLojaRow {
+  id: number;
+  loja: string;
+  sku: string;
+  produto_mestre_sku: string | null;
+  nome_mestre?: string;
+  imagens?: unknown;
+  // ponytail: colunas DECIMAL do Postgres chegam serializadas como string no
+  // JSON (ex: "99.90"), nao como number — psycopg/Flask nao convertem. O
+  // consumidor (estoque/lojas/page.tsx) precisa envolver em Number(...)
+  // antes de formatar/comparar. Ver Important 3 da revisao final.
+  estoque_atual: number | string;
+  codigo_interno: string | null;
+  codigo_barras_override: string | null;
+  nome_override: string | null;
+  status: string;
+  preco_custo: number | string | null;
+  preco_venda: number | string | null;
+  promocao_ativa: boolean;
+  promocao_preco: number | string | null;
+  comissao_pct: number | string | null;
+  fornecedor_id: number | null;
+  deposito: string | null;
+  localizacao_fisica: string | null;
+  estoque_minimo: number | string | null;
+  estoque_maximo: number | string | null;
+  observacoes_internas: string | null;
+}
+
+export const listarProdutosLoja = (loja: string, params?: { busca?: string; pagina?: number; por_pagina?: number }) => {
+  const q = new URLSearchParams({ loja });
+  if (params?.busca) q.set("busca", params.busca);
+  if (params?.pagina) q.set("pagina", String(params.pagina));
+  if (params?.por_pagina) q.set("por_pagina", String(params.por_pagina));
+  return request<{ produtos: ProdutoLojaRow[]; total: number; pagina: number }>(`/api/produtos-loja?${q}`);
+};
+
+export const obterProdutoLoja = (loja: string, sku: string) =>
+  request<ProdutoLojaRow & { erro?: string }>(`/api/produtos-loja/${encodeURIComponent(loja)}/${encodeURIComponent(sku)}`);
+
+export const criarProdutoLoja = (dados: Record<string, unknown>) =>
+  request<{ ok?: boolean; erro?: string }>("/api/produtos-loja", { method: "POST", body: JSON.stringify(dados) });
+
+export const atualizarProdutoLoja = (loja: string, sku: string, dados: Record<string, unknown>) =>
+  request<{ ok?: boolean; erro?: string }>(`/api/produtos-loja/${encodeURIComponent(loja)}/${encodeURIComponent(sku)}`, {
+    method: "PUT", body: JSON.stringify(dados),
+  });
+
+export const excluirProdutoLoja = (loja: string, sku: string) =>
+  request<{ ok?: boolean; erro?: string }>(`/api/produtos-loja/${encodeURIComponent(loja)}/${encodeURIComponent(sku)}`, {
+    method: "DELETE",
+  });
+
+export const replicarProdutoLoja = (loja_origem: string, sku: string, lojas_destino: string[]) =>
+  request<{
+    ok?: boolean;
+    criados?: string[];
+    ja_existentes?: string[];
+    erro?: string;
+    erros?: { loja: string; erro: string }[];
+  }>("/api/produtos-loja/replicar", {
+    method: "POST", body: JSON.stringify({ loja_origem, sku, lojas_destino }),
+  });
+
+export const sincronizarProdutoLojaDoMestre = (loja: string, sku: string, campos: string[]) =>
+  request<{ ok?: boolean; erro?: string }>(`/api/produtos-loja/${encodeURIComponent(loja)}/${encodeURIComponent(sku)}/sincronizar-mestre`, {
+    method: "POST", body: JSON.stringify({ campos }),
   });
