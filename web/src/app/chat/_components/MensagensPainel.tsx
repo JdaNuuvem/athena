@@ -19,14 +19,20 @@ export default function MensagensPainel({
   const [texto, setTexto] = useState("");
   const [enviandoArquivo, setEnviandoArquivo] = useState(false);
   const [participantes, setParticipantes] = useState<ParticipanteChat[]>([]);
-  const [mencaoAtiva, setMencaoAtiva] = useState<{ inicio: number; filtro: string } | null>(null);
+  const [mencaoAtiva, setMencaoAtiva] = useState<{ inicio: number; fim: number; filtro: string } | null>(null);
   const fimRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { fimRef.current?.scrollIntoView({ behavior: "smooth" }); }, [mensagens]);
 
   useEffect(() => {
-    api.chat.listarParticipantes(conversa.id).then((r) => setParticipantes(r.data)).catch(() => setParticipantes([]));
+    let cancelado = false;
+    api.chat.listarParticipantes(conversa.id).then((r) => {
+      if (!cancelado) setParticipantes(r.data);
+    }).catch(() => {
+      if (!cancelado) setParticipantes([]);
+    });
+    return () => { cancelado = true; };
   }, [conversa.id]);
 
   const enviar = () => {
@@ -45,13 +51,12 @@ export default function MensagensPainel({
     if (indiceArroba === -1) { setMencaoAtiva(null); return; }
     const trecho = antesDoCursor.slice(indiceArroba + 1);
     if (/\s/.test(trecho)) { setMencaoAtiva(null); return; }
-    setMencaoAtiva({ inicio: indiceArroba, filtro: trecho });
+    setMencaoAtiva({ inicio: indiceArroba, fim: posicaoCursor, filtro: trecho });
   };
 
   const selecionarMencao = (marcador: string) => {
     if (!mencaoAtiva) return;
-    const posicaoCursor = inputRef.current?.selectionStart ?? texto.length;
-    const novoTexto = `${texto.slice(0, mencaoAtiva.inicio)}${marcador} ${texto.slice(posicaoCursor)}`;
+    const novoTexto = `${texto.slice(0, mencaoAtiva.inicio)}${marcador} ${texto.slice(mencaoAtiva.fim)}`;
     setTexto(novoTexto);
     setMencaoAtiva(null);
     inputRef.current?.focus();
