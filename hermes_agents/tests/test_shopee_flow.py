@@ -99,6 +99,18 @@ class TestRequestsMockados(unittest.TestCase):
         self.assertIn("shop_id", params)
 
     @patch("shopee.auth.requests.get")
+    def test_get_items_manda_item_status_como_string_simples(self, mock_get):
+        # ponytail: bug real em producao — mandar item_status como JSON array (["NORMAL"])
+        # faz a Shopee responder "product.error_param_item_status" (Item status error).
+        # A API espera o valor cru (NORMAL/DELETED/UNLIST/BANNED), sem json.dumps.
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.raise_for_status = MagicMock()
+        mock_get.return_value.json.return_value = {"response": {"item": [], "total_count": 0}}
+        shopee.get_items("NORMAL", 0)
+        params = mock_get.call_args[1]["params"]
+        self.assertEqual(params["item_status"], "NORMAL")
+
+    @patch("shopee.auth.requests.get")
     def test_get_attribute_tree(self, mock_get):
         mock_get.return_value.status_code = 200
         mock_get.return_value.raise_for_status = MagicMock()

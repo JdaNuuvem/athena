@@ -13,7 +13,7 @@ AGENT = "AG-03 | Shopee Products"
 def get_items(status: str = "NORMAL", offset: int = 0, page_size: int = 100, loja_id: int = None) -> dict:
     """Lista itens da Shopee."""
     return _request("product/get_item_list", {
-        "item_status": json.dumps([status]), "offset": offset, "page_size": page_size,
+        "item_status": status, "offset": offset, "page_size": page_size,
     }, loja_id=loja_id)
 
 
