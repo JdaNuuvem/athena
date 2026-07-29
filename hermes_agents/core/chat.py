@@ -1,8 +1,18 @@
 """Chat Interno Core — Conversas (DM/Grupo/Canal/Ticket), Mensagens, Anexos, Presenca, Busca"""
+import re
 from core import get_db, run_async, log
 from datetime import datetime
 
 AGENT = "Chat Core"
+
+# Mantenha este regex em sincronia com PADRAO_MENCAO em web/src/lib/chatMencoes.tsx.
+_PADRAO_MENCAO = re.compile(
+    r"@\[(?:"
+    r"user:(?P<uid>\d+):(?P<unome>[^\]]*)"
+    r"|(?P<todos>todos)"
+    r"|dept:(?P<dcod>[a-z_]+):(?P<dnome>[^\]]*)"
+    r")\]"
+)
 
 DEPARTAMENTOS_CANAL = [
     "dashboard", "cadastros", "produtos", "estoque", "compras", "vendas", "pdv",
@@ -203,6 +213,33 @@ def usuario_e_participante(conversa_id: int, user_id: int) -> bool:
     return user_id in participantes_ids(conversa_id)
 
 
+def participantes_info(conversa_id: int) -> list:
+    """Como participantes_ids, mas com nome e papel — usado pelo autocomplete
+    de mencao no frontend. Papel vem nulo pra canal_departamento/ticket (nao
+    ha linha em chat_participantes nesses tipos, participacao e derivada)."""
+    ids = participantes_ids(conversa_id)
+    if not ids:
+        return []
+    async def _go():
+        db = await get_db()
+        nomes = await db.fetch(
+            "SELECT id AS user_id, nome FROM rbac_usuarios WHERE id = ANY($1::int[])", ids)
+        papeis = await db.fetch(
+            "SELECT user_id, papel FROM chat_participantes WHERE conversa_id=$1 AND user_id = ANY($2::int[]) AND saiu_em IS NULL",
+            conversa_id, ids)
+        return [dict(r) for r in nomes], [dict(r) for r in papeis]
+    try:
+        nomes, papeis = run_async(_go())
+    except Exception:
+        return []
+    nomes_por_id = {r["user_id"]: r["nome"] for r in nomes}
+    papel_por_id = {r["user_id"]: r["papel"] for r in papeis}
+    return [
+        {"user_id": uid, "nome": nomes_por_id.get(uid, f"Usuario {uid}"), "papel": papel_por_id.get(uid)}
+        for uid in ids if uid in nomes_por_id
+    ]
+
+
 def papel_do_usuario(conversa_id: int, user_id: int):
     async def _go():
         db = await get_db()
@@ -237,9 +274,49 @@ def remover_participante(conversa_id: int, user_id: int) -> dict:
     except Exception as e: return {"error": str(e)}
 
 
+def _processar_mencoes(conversa_id: int, texto: str) -> str:
+    """Valida marcadores de mencao (@[user:id:nome], @[todos], @[dept:codigo:nome])
+    contra os participantes atuais da conversa. Marcador invalido (usuario que
+    saiu, departamento fora do proprio canal, sintaxe quebrada) e rebaixado a
+    texto plano — nunca bloqueia o envio da mensagem por causa disso."""
+    if not texto or "@[" not in texto:
+        return texto
+    conversa = _obter_conversa(conversa_id) or {}
+    participantes = set(participantes_ids(conversa_id))
+
+    def _rebaixar(nome: str) -> str:
+        """Rebaixa um nome-snapshot a texto plano. O snapshot e capturado com
+        `[^\\]]*` e pode conter um `@[` aninhado que nunca passou por validacao
+        (ex.: '@[user:777:@[user:9:Boss]]'); sem neutralizar esse prefixo, o
+        marcador interno sobreviveria exposto no texto persistido."""
+        return "@" + nome.replace("@[", "@")
+
+    def _validar(m: "re.Match") -> str:
+        if m.group("uid") is not None:
+            if int(m.group("uid")) in participantes:
+                return m.group(0)
+            return _rebaixar(m.group("unome"))
+        if m.group("todos") is not None:
+            return m.group(0)
+        if conversa.get("tipo") == "canal_departamento" and conversa.get("departamento") == m.group("dcod"):
+            return m.group(0)
+        return _rebaixar(m.group("dnome"))
+
+    return _PADRAO_MENCAO.sub(_validar, texto)
+
+
+def processar_mencoes(conversa_id: int, texto: str) -> str:
+    """Wrapper publico de _processar_mencoes — rotas REST que desviam da
+    persistencia normal de chat_mensagens (caso de conversa tipo 'ticket', que
+    grava em atend_mensagens) ainda precisam validar marcadores de mencao
+    contra os participantes da conversa antes de persistir o texto."""
+    return _processar_mencoes(conversa_id, texto)
+
+
 # ── Mensagens ──
 
 def enviar_mensagem(conversa_id: int, remetente_id: int, texto: str, anexo_id: int = None, thread_pai_id: int = None) -> dict:
+    texto = _processar_mencoes(conversa_id, texto)
     async def _go():
         db = await get_db()
         row = await db.fetchrow(
@@ -271,9 +348,13 @@ def listar_mensagens(conversa_id: int, antes_de: str = None, limit: int = 50) ->
 def editar_mensagem(mensagem_id: int, user_id: int, novo_texto: str) -> dict:
     async def _go():
         db = await get_db()
+        conversa_row = await db.fetchrow("SELECT conversa_id FROM chat_mensagens WHERE id=$1", mensagem_id)
+        texto_final = novo_texto
+        if conversa_row:
+            texto_final = _processar_mencoes(conversa_row["conversa_id"], novo_texto)
         row = await db.fetchrow(
             "UPDATE chat_mensagens SET texto=$1, editado_em=NOW() WHERE id=$2 AND remetente_id=$3 RETURNING *",
-            novo_texto, mensagem_id, user_id)
+            texto_final, mensagem_id, user_id)
         return dict(row) if row else {"error": "not found or not owner"}
     try: return run_async(_go())
     except Exception as e: return {"error": str(e)}

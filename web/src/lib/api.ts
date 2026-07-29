@@ -68,7 +68,7 @@ import type {
   BlingWebhook,
   Integration,
 } from "@/lib/types/domain";
-import type { ConversaChat, MensagemChat, AnexoChat } from "@/lib/types/chat";
+import type { ConversaChat, MensagemChat, AnexoChat, ParticipanteChat } from "@/lib/types/chat";
 
 export const api = {
   // Auth
@@ -490,6 +490,8 @@ export const api = {
       }),
     buscar: (termo: string) => request<{ data: MensagemChat[] }>(`/api/chat/busca?q=${encodeURIComponent(termo)}`),
     canaisDepartamento: () => request<{ data: ConversaChat[] }>("/api/chat/canais-departamento"),
+    listarParticipantes: (conversaId: number) =>
+      request<{ data: ParticipanteChat[] }>(`/api/chat/conversas/${conversaId}/participantes`),
     uploadAnexo: async (arquivo: File): Promise<AnexoChat> => {
       const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
       const formData = new FormData();

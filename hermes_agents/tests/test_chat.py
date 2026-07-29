@@ -211,6 +211,29 @@ class TestChatRotasTicket(unittest.TestCase):
             self.assertEqual(mock_broadcast.call_args[0][1]["evento"], "nova_mensagem")
             self.assertEqual(r.get_json()["texto"], "resposta")
 
+    def test_enviar_mensagem_ticket_rebaixa_mencao_a_nao_participante(self):
+        # Ticket desvia de enviar_mensagem/_processar_mencoes para
+        # core.atendimento.adicionar_mensagem — mas o texto ainda precisa
+        # passar pelo wrapper publico processar_mencoes antes disso, senao um
+        # marcador de mencao a nao-participante fica cru em atend_mensagens.
+        with patch.dict(os.environ, {"ATHENA_JWT_SECRET": "test-secret-key"}):
+            headers = self._headers()
+            with patch("routes.chat.usuario_e_participante", return_value=True), \
+                 patch("routes.chat.obter_conversa", return_value={"id": 5, "tipo": "ticket", "ticket_ref_id": 77}), \
+                 patch("core.chat._obter_conversa",
+                       return_value={"id": 5, "tipo": "ticket", "ticket_ref_id": 77, "departamento": None}), \
+                 patch("core.chat.participantes_ids", return_value=[1, 3]), \
+                 patch("core.atendimento.adicionar_mensagem",
+                       return_value={"id": 9, "conteudo": "oi @Bruno", "enviado_em": None}) as mock_add, \
+                 patch("routes.chat.enviar_mensagem") as mock_enviar, \
+                 patch("routes.chat.broadcast_para_participantes"):
+                r = self.client.post("/api/chat/conversas/5/mensagens",
+                                     json={"texto": "oi @[user:2:Bruno]"}, headers=headers)
+            self.assertEqual(r.status_code, 200)
+            mock_enviar.assert_not_called()
+            mock_add.assert_called_once()
+            self.assertEqual(mock_add.call_args[0][2], "oi @Bruno")
+
 
 class TestChatWebsocketBroadcastIsolamento(unittest.TestCase):
     def test_broadcast_so_alcanca_participantes(self):
@@ -252,6 +275,144 @@ class TestChatPresencaBroadcast(unittest.TestCase):
         self.assertEqual(sorted(destinos), [2, 3])          # dedup + nao notifica a si mesmo
         self.assertEqual(mock_enviar.call_args_list[0][0][1],
                          {"evento": "presenca_atualizada", "user_id": 1, "status": "online"})
+
+
+class TestProcessarMencoes(unittest.TestCase):
+    def test_mencao_usuario_participante_mantida(self):
+        with patch("core.chat._obter_conversa", return_value={"id": 5, "tipo": "grupo", "departamento": None}), \
+             patch("core.chat.participantes_ids", return_value=[1, 2, 3]):
+            resultado = chat._processar_mencoes(5, "oi @[user:2:Bruno] tudo bem?")
+        self.assertEqual(resultado, "oi @[user:2:Bruno] tudo bem?")
+
+    def test_mencao_usuario_nao_participante_rebaixada(self):
+        with patch("core.chat._obter_conversa", return_value={"id": 5, "tipo": "grupo", "departamento": None}), \
+             patch("core.chat.participantes_ids", return_value=[1, 3]):
+            resultado = chat._processar_mencoes(5, "oi @[user:2:Bruno] tudo bem?")
+        self.assertEqual(resultado, "oi @Bruno tudo bem?")
+
+    def test_mencao_todos_sempre_mantida(self):
+        with patch("core.chat._obter_conversa", return_value={"id": 5, "tipo": "grupo", "departamento": None}), \
+             patch("core.chat.participantes_ids", return_value=[1]):
+            resultado = chat._processar_mencoes(5, "atencao @[todos] favor ler")
+        self.assertEqual(resultado, "atencao @[todos] favor ler")
+
+    def test_mencao_dept_correto_mantida(self):
+        with patch("core.chat._obter_conversa", return_value={"id": 5, "tipo": "canal_departamento", "departamento": "financeiro"}), \
+             patch("core.chat.participantes_ids", return_value=[1]):
+            resultado = chat._processar_mencoes(5, "@[dept:financeiro:financeiro] revisar")
+        self.assertEqual(resultado, "@[dept:financeiro:financeiro] revisar")
+
+    def test_mencao_dept_fora_do_canal_rebaixada(self):
+        with patch("core.chat._obter_conversa", return_value={"id": 5, "tipo": "grupo", "departamento": None}), \
+             patch("core.chat.participantes_ids", return_value=[1]):
+            resultado = chat._processar_mencoes(5, "@[dept:financeiro:financeiro] revisar")
+        self.assertEqual(resultado, "@financeiro revisar")
+
+    def test_mencao_malformada_vira_texto_literal(self):
+        with patch("core.chat._obter_conversa", return_value={"id": 5, "tipo": "grupo", "departamento": None}), \
+             patch("core.chat.participantes_ids", return_value=[1]):
+            resultado = chat._processar_mencoes(5, "oi @[user:abc:Bruno sem fechar")
+        self.assertEqual(resultado, "oi @[user:abc:Bruno sem fechar")
+
+    def test_texto_sem_mencao_nao_consulta_conversa(self):
+        with patch("core.chat._obter_conversa") as mock_obter:
+            resultado = chat._processar_mencoes(5, "mensagem normal sem nada")
+        mock_obter.assert_not_called()
+        self.assertEqual(resultado, "mensagem normal sem nada")
+
+    def test_mencao_usuario_nao_participante_com_marcador_aninhado_no_nome_neutraliza_ambos(self):
+        # 777 nao e participante; o nome-snapshot do marcador contem, embutido,
+        # um segundo marcador (@[user:9:Boss]) que nunca passa por validacao
+        # propria — o rebaixamento do marcador externo tem que neutralizar
+        # tambem esse marcador interno, senao ele sobra exposto no texto final.
+        with patch("core.chat._obter_conversa", return_value={"id": 5, "tipo": "grupo", "departamento": None}), \
+             patch("core.chat.participantes_ids", return_value=[1, 3]):
+            resultado = chat._processar_mencoes(5, "oi @[user:777:@[user:9:Boss]] tudo bem?")
+        self.assertNotIn("@[", resultado)
+        self.assertEqual(resultado, "oi @@user:9:Boss] tudo bem?")
+
+    def test_mencao_dept_fora_do_canal_com_marcador_aninhado_no_nome_neutraliza_ambos(self):
+        # dept fora do canal (rebaixado) cujo nome-snapshot tambem contem um
+        # marcador de usuario aninhado — mesma garantia que o caso acima.
+        with patch("core.chat._obter_conversa", return_value={"id": 5, "tipo": "grupo", "departamento": None}), \
+             patch("core.chat.participantes_ids", return_value=[1]):
+            resultado = chat._processar_mencoes(5, "revisar @[dept:financeiro:@[user:9:Boss]] obrigado")
+        self.assertNotIn("@[", resultado)
+        self.assertEqual(resultado, "revisar @@user:9:Boss] obrigado")
+
+
+class TestEnviarMensagemProcessaMencoes(unittest.TestCase):
+    def test_enviar_mensagem_usa_texto_processado_por_mencoes(self):
+        async def _fetchrow(query, *args):
+            return {"id": 1, "conversa_id": args[0], "remetente_id": args[1],
+                    "texto": args[2], "anexo_id": args[3], "thread_pai_id": args[4]}
+        with patch("core.chat.get_db") as mock_get_db, \
+             patch("core.chat._processar_mencoes", return_value="ola @[user:2:Bruno]") as mock_processar:
+            mock_get_db.return_value = AsyncMock(fetchrow=_fetchrow)
+            resultado = chat.enviar_mensagem(5, 1, "ola @[user:2:Bruno]")
+        mock_processar.assert_called_once_with(5, "ola @[user:2:Bruno]")
+        self.assertEqual(resultado["texto"], "ola @[user:2:Bruno]")
+
+
+class TestEditarMensagemProcessaMencoes(unittest.TestCase):
+    def test_editar_mensagem_rebaixa_mencao_a_nao_participante(self):
+        # A edicao busca o conversa_id da propria mensagem antes do UPDATE, e
+        # aplica _processar_mencoes no novo texto contra essa conversa — sem
+        # isso, editar uma mensagem inocua seria um jeito de injetar marcador
+        # de mencao arbitrario, nunca validado.
+        async def _fetchrow(query, *args):
+            if "SELECT conversa_id" in query:
+                return {"conversa_id": 5}
+            return {"id": args[1], "conversa_id": 5, "remetente_id": args[2], "texto": args[0]}
+        with patch("core.chat.get_db") as mock_get_db, \
+             patch("core.chat._obter_conversa", return_value={"id": 5, "tipo": "grupo", "departamento": None}), \
+             patch("core.chat.participantes_ids", return_value=[1, 3]):
+            mock_get_db.return_value = AsyncMock(fetchrow=_fetchrow)
+            resultado = chat.editar_mensagem(1, 1, "novo texto @[user:2:Bruno]")
+        self.assertEqual(resultado["texto"], "novo texto @Bruno")
+
+
+class TestParticipantesInfo(unittest.TestCase):
+    def test_participantes_info_sem_participantes_retorna_vazio(self):
+        with patch("core.chat.participantes_ids", return_value=[]):
+            self.assertEqual(chat.participantes_info(5), [])
+
+    def test_participantes_info_junta_nome_e_papel(self):
+        async def _fetch(query, *args):
+            if "rbac_usuarios" in query:
+                return [{"user_id": 1, "nome": "Ana"}, {"user_id": 2, "nome": "Bruno"}]
+            return [{"user_id": 1, "papel": "owner"}]
+        with patch("core.chat.participantes_ids", return_value=[1, 2]), \
+             patch("core.chat.get_db") as mock_get_db:
+            mock_get_db.return_value = AsyncMock(fetch=_fetch)
+            resultado = chat.participantes_info(5)
+        self.assertEqual(resultado[0], {"user_id": 1, "nome": "Ana", "papel": "owner"})
+        self.assertEqual(resultado[1], {"user_id": 2, "nome": "Bruno", "papel": None})
+
+
+class TestChatParticipantesEndpoint(unittest.TestCase):
+    def setUp(self):
+        self.client = _app()
+
+    def test_listar_participantes_nao_participante_nega(self):
+        with patch.dict(os.environ, {"ATHENA_JWT_SECRET": "test-secret-key"}):
+            token = rbac.gerar_token_sessao(11, "u@x.com", "Vendedor")
+            headers = {"Authorization": f"Bearer {token}"}
+            with patch("routes.chat.usuario_e_participante", return_value=False):
+                r = self.client.get("/api/chat/conversas/5/participantes", headers=headers)
+            self.assertEqual(r.status_code, 403)
+
+    def test_listar_participantes_participante_libera(self):
+        with patch.dict(os.environ, {"ATHENA_JWT_SECRET": "test-secret-key"}):
+            token = rbac.gerar_token_sessao(11, "u@x.com", "Vendedor")
+            headers = {"Authorization": f"Bearer {token}"}
+            with patch("routes.chat.usuario_e_participante", return_value=True), \
+                 patch("routes.chat.participantes_info",
+                       return_value=[{"user_id": 11, "nome": "Fulano", "papel": "membro"}]) as mock_info:
+                r = self.client.get("/api/chat/conversas/5/participantes", headers=headers)
+            self.assertEqual(r.status_code, 200)
+            self.assertEqual(r.get_json()["data"][0]["nome"], "Fulano")
+            mock_info.assert_called_once_with(5)
 
 
 if __name__ == "__main__":

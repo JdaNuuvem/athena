@@ -1,6 +1,9 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import type { ConversaChat, MensagemChat } from "@/lib/types/chat";
+import type { ConversaChat, MensagemChat, ParticipanteChat } from "@/lib/types/chat";
+import { api } from "@/lib/api";
+import { TextoComMencoes } from "@/lib/chatMencoes";
+import MencaoAutocomplete from "./MencaoAutocomplete";
 
 export default function MensagensPainel({
   conversa, mensagens, usuarioIdAtual, digitandoUserId, onEnviar, onAbrirThread, onUpload,
@@ -15,14 +18,48 @@ export default function MensagensPainel({
 }) {
   const [texto, setTexto] = useState("");
   const [enviandoArquivo, setEnviandoArquivo] = useState(false);
+  const [participantes, setParticipantes] = useState<ParticipanteChat[]>([]);
+  const [mencaoAtiva, setMencaoAtiva] = useState<{ inicio: number; fim: number; filtro: string } | null>(null);
   const fimRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { fimRef.current?.scrollIntoView({ behavior: "smooth" }); }, [mensagens]);
+
+  useEffect(() => {
+    let cancelado = false;
+    api.chat.listarParticipantes(conversa.id).then((r) => {
+      if (!cancelado) setParticipantes(r.data);
+    }).catch(() => {
+      if (!cancelado) setParticipantes([]);
+    });
+    return () => { cancelado = true; };
+  }, [conversa.id]);
 
   const enviar = () => {
     if (!texto.trim()) return;
     onEnviar(texto);
     setTexto("");
+    setMencaoAtiva(null);
+  };
+
+  const aoDigitar = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const valor = e.target.value;
+    setTexto(valor);
+    const posicaoCursor = e.target.selectionStart ?? valor.length;
+    const antesDoCursor = valor.slice(0, posicaoCursor);
+    const indiceArroba = antesDoCursor.lastIndexOf("@");
+    if (indiceArroba === -1) { setMencaoAtiva(null); return; }
+    const trecho = antesDoCursor.slice(indiceArroba + 1);
+    if (/\s/.test(trecho)) { setMencaoAtiva(null); return; }
+    setMencaoAtiva({ inicio: indiceArroba, fim: posicaoCursor, filtro: trecho });
+  };
+
+  const selecionarMencao = (marcador: string) => {
+    if (!mencaoAtiva) return;
+    const novoTexto = `${texto.slice(0, mencaoAtiva.inicio)}${marcador} ${texto.slice(mencaoAtiva.fim)}`;
+    setTexto(novoTexto);
+    setMencaoAtiva(null);
+    inputRef.current?.focus();
   };
 
   const selecionarArquivo = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -55,7 +92,11 @@ export default function MensagensPainel({
               m.remetente_id === usuarioIdAtual ? "bg-indigo-700 text-white ml-auto" : "bg-neutral-700 text-neutral-200"
             }`}
           >
-            <p>{m.excluido_em ? "[mensagem excluída]" : m.texto}</p>
+            <p>
+              {m.excluido_em
+                ? "[mensagem excluída]"
+                : <TextoComMencoes texto={m.texto ?? ""} participantes={participantes} />}
+            </p>
             <div className="flex items-center gap-2 mt-1">
               <p className="text-[10px] opacity-60">{(m.created_at || "").slice(11, 16)}</p>
               {!m.excluido_em && (
@@ -69,13 +110,23 @@ export default function MensagensPainel({
         <div ref={fimRef} />
       </div>
 
-      <div className="p-3 border-t border-neutral-800 shrink-0 flex gap-2">
+      <div className="p-3 border-t border-neutral-800 shrink-0 flex gap-2 relative">
+        {mencaoAtiva && (
+          <MencaoAutocomplete
+            participantes={participantes}
+            filtro={mencaoAtiva.filtro}
+            mostrarTodos
+            departamento={conversa.tipo === "canal_departamento" ? conversa.departamento : null}
+            onSelecionar={selecionarMencao}
+          />
+        )}
         <label className="cursor-pointer text-neutral-400 px-2 flex items-center">
           📎
           <input type="file" className="hidden" onChange={selecionarArquivo} disabled={enviandoArquivo} />
         </label>
         <input
-          type="text" value={texto} onChange={(e) => setTexto(e.target.value)}
+          ref={inputRef}
+          type="text" value={texto} onChange={aoDigitar}
           onKeyDown={(e) => e.key === "Enter" && enviar()}
           placeholder="Digite sua mensagem..." autoFocus
           className="flex-1 bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-2 text-sm text-neutral-200"
