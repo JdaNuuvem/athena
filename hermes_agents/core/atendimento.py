@@ -155,7 +155,6 @@ def adicionar_mensagem(ticket_id: int, remetente: str, conteudo: str, tipo="text
                 "mensagem": {k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in mensagem.items()},
             })
     return mensagem
-
 def listar_mensagens_ticket(ticket_id: int) -> list:
     """Mensagens de UM ticket, em ordem cronologica — usado pela ponte do chat
     interno (conversa tipo 'ticket' le/escreve em atend_mensagens, nao em

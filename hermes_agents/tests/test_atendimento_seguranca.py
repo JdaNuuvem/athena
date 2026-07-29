@@ -96,7 +96,6 @@ class TestAtendimentoExigePermissao(unittest.TestCase):
              patch("core.chat.criar_conversa_ticket") as mock_ponte:
             from core.atendimento import criar_ticket
             resultado = criar_ticket("Cliente X", "Duvida sobre pedido")
-            # Verify the ticket was created
             assert resultado == {"id": 55}
         mock_ponte.assert_called_once_with(55)
 
