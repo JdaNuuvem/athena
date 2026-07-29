@@ -119,16 +119,49 @@ async def _ensure_async():
     await db.execute("ALTER TABLE estoque_movimentacoes ADD COLUMN IF NOT EXISTS saldo_posterior DECIMAL(12,3)")
     await db.execute("ALTER TABLE estoque_movimentacoes ADD COLUMN IF NOT EXISTS ip VARCHAR(45)")
     await db.execute("ALTER TABLE estoque_movimentacoes ADD COLUMN IF NOT EXISTS dispositivo VARCHAR(300)")
+    # ── Fase 3 (loja_id FK): colunas aditivas, defensivas ──
+    # Os donos originais dessas colunas sao core/catalogo.py (estoque_lojas) e
+    # core/estoque.py (estoque_movimentacoes, cujo _ensure() saiu na Fase 1).
+    # Repetidas aqui porque _mover_saldo_async e o trigger de espelho abaixo
+    # dependem delas e podem rodar antes daqueles modulos nesta conexao.
+    # ADD COLUMN IF NOT EXISTS e' no-op quando a coluna ja existe (entao nao
+    # "perde" a FK criada pelo dono original); o BEGIN/EXCEPTION cobre o caso
+    # de a tabela `lojas` ainda nao existir, sem abortar o resto do _ensure.
+    await db.execute("""
+        DO $$
+        BEGIN
+            BEGIN
+                ALTER TABLE estoque_lojas ADD COLUMN IF NOT EXISTS loja_id INT REFERENCES lojas(id);
+            EXCEPTION WHEN others THEN NULL;
+            END;
+            BEGIN
+                ALTER TABLE estoque_movimentacoes ADD COLUMN IF NOT EXISTS loja_id INT REFERENCES lojas(id);
+            EXCEPTION WHEN others THEN NULL;
+            END;
+        END $$
+    """)
     # Espelho: estoque_lojas.quantidade sempre reflete estoque_saldos
     # (tipo='disponivel') — defesa em profundidade pra callers nao migrados.
+    #
+    # Fase 3 x Fase 1: o espelho tambem resolve estoque_lojas.loja_id a partir
+    # do nome da loja. Sem isso, o dual-write de loja_id morria aqui: como
+    # estoque_saldos nao tem loja_id (e nao precisa ter — a chave e' (sku,
+    # loja, tipo)), toda linha de estoque_lojas criada pelo espelho nasceria
+    # com loja_id NULL, e o filtro de RBAC por loja (`e.loja_id = ANY(...)`)
+    # simplesmente nao veria esse estoque. COALESCE pra que um nome de loja
+    # sem correspondencia em `lojas` nunca APAGUE um loja_id ja preenchido
+    # (pelo dual-write ou pela reconciliacao periodica).
     await db.execute("""
         CREATE OR REPLACE FUNCTION fn_espelhar_saldo_disponivel() RETURNS TRIGGER AS $$
         BEGIN
             IF NEW.tipo = 'disponivel' THEN
-                INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao)
-                VALUES (NEW.sku, NEW.loja, NEW.quantidade, NOW())
+                INSERT INTO estoque_lojas (sku, loja, loja_id, quantidade, data_atualizacao)
+                VALUES (NEW.sku, NEW.loja,
+                        (SELECT id FROM lojas WHERE nome = NEW.loja),
+                        NEW.quantidade, NOW())
                 ON CONFLICT (sku, loja) DO UPDATE
-                    SET quantidade = NEW.quantidade, data_atualizacao = NOW();
+                    SET loja_id = COALESCE(EXCLUDED.loja_id, estoque_lojas.loja_id),
+                        quantidade = NEW.quantidade, data_atualizacao = NOW();
             END IF;
             RETURN NEW;
         END;
@@ -206,6 +239,15 @@ async def _mover_saldo_async(conn, sku: str, loja: str, tipo_origem, tipo_destin
     if erro:
         return {"erro": erro}
 
+    # Fase 3 (dual-write loja_id): resolvido UMA vez aqui, na conexao/transacao
+    # que ja esta aberta, e usado nos INSERTs de estoque_movimentacoes abaixo.
+    # Fica nesta funcao — e nao em cada caller — porque desde a Fase 1 este e'
+    # o unico lugar que escreve estoque_movimentacoes; um dual-write feito
+    # pelo caller depois do fato seria uma segunda declaracao podendo divergir.
+    # None quando o nome da loja nao existe em `lojas` (nome digitado errado,
+    # loja legada): nao quebra o fluxo, fica para reconciliar_loja_id().
+    loja_id = await conn.fetchval("SELECT id FROM lojas WHERE nome = $1", loja)
+
     resultado = {"ok": True, "sku": sku, "loja": loja, "quantidade": quantidade}
 
     if tipo_origem is not None:
@@ -223,10 +265,10 @@ async def _mover_saldo_async(conn, sku: str, loja: str, tipo_origem, tipo_destin
         """, sku, loja, tipo_origem, nova_origem)
         await conn.execute("""
             INSERT INTO estoque_movimentacoes
-                (sku, loja, tipo, quantidade, motivo, usuario_id, usuario_nome,
+                (sku, loja, loja_id, tipo, quantidade, motivo, usuario_id, usuario_nome,
                  tipo_saldo, saldo_anterior, saldo_posterior, ip, dispositivo)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-        """, sku, loja, tipo_movimento, quantidade, motivo, usuario_id, usuario_nome,
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        """, sku, loja, loja_id, tipo_movimento, quantidade, motivo, usuario_id, usuario_nome,
             tipo_origem, atual, nova_origem, ip, dispositivo)
         resultado["saldo_origem"] = {"tipo": tipo_origem, "anterior": atual, "atual": nova_origem}
 
@@ -252,10 +294,10 @@ async def _mover_saldo_async(conn, sku: str, loja: str, tipo_origem, tipo_destin
         """, sku, loja, tipo_destino, nova_destino)
         await conn.execute("""
             INSERT INTO estoque_movimentacoes
-                (sku, loja, tipo, quantidade, motivo, usuario_id, usuario_nome,
+                (sku, loja, loja_id, tipo, quantidade, motivo, usuario_id, usuario_nome,
                  tipo_saldo, saldo_anterior, saldo_posterior, ip, dispositivo)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-        """, sku, loja, tipo_movimento, quantidade, motivo, usuario_id, usuario_nome,
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        """, sku, loja, loja_id, tipo_movimento, quantidade, motivo, usuario_id, usuario_nome,
             tipo_destino, atual_d, nova_destino, ip, dispositivo)
         resultado["saldo_destino"] = {"tipo": tipo_destino, "anterior": atual_d, "atual": nova_destino}
 

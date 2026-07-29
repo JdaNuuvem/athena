@@ -203,12 +203,13 @@ class TestFluxoEstoqueSeguranca(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(r.get("ok"))
         self.assertEqual(self.fake.estoque[("SKU1", "Loja A")], 95)
         self.assertEqual(len(self.fake.movimentacoes), 1)
-        # usuario_id e usuario_nome sao os params 5 e 6 (0-indexed) do INSERT em
+        # usuario_id e usuario_nome sao os params 6 e 7 (0-indexed) do INSERT em
         # estoque_movimentacoes feito por core.estoque_saldos.mover_saldo:
-        # (sku, loja, tipo, quantidade, motivo, usuario_id, usuario_nome,
+        # (sku, loja, loja_id, tipo, quantidade, motivo, usuario_id, usuario_nome,
         #  tipo_saldo, saldo_anterior, saldo_posterior, ip, dispositivo)
-        self.assertEqual(self.fake.movimentacoes[0][5], 7)
-        self.assertEqual(self.fake.movimentacoes[0][6], "joao")
+        # loja_id entrou na posicao 2 com a Fase 3 (dual-write loja->loja_id).
+        self.assertEqual(self.fake.movimentacoes[0][6], 7)
+        self.assertEqual(self.fake.movimentacoes[0][7], "joao")
 
     async def test_saida_grande_fica_pendente_nao_aplica(self):
         from core.estoque_aprovacoes import precisa_aprovacao, solicitar
