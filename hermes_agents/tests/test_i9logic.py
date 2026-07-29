@@ -53,3 +53,42 @@ class TestDeParaCRUD(unittest.TestCase):
             resultado = i9logic.listar_mapeamentos("filial")
         self.assertEqual(len(resultado), 1)
         self.assertEqual(resultado[0]["codigo_athena"], "Loja Matriz")
+
+
+class TestMatchingAutomatico(unittest.TestCase):
+    def test_matching_tipo_invalido_retorna_erro(self):
+        resultado = i9logic.executar_matching_automatico("invalido", [])
+        self.assertIn("erro", resultado)
+
+    def test_matching_produto_casa_por_sku_igual(self):
+        async def _fetchval(query, *args):
+            if "catalogo_produtos" in query:
+                return args[0] if args[0] == "041725" else None
+            return None
+        with patch("core.i9logic.get_db") as mock_get_db:
+            mock_get_db.return_value = AsyncMock(fetchval=_fetchval, execute=AsyncMock(return_value="OK"))
+            resultado = i9logic.executar_matching_automatico(
+                "produto", [{"id_i9logic": 29098, "codigo_i9logic": "041725"}])
+        self.assertEqual(resultado["casados"], 1)
+        self.assertEqual(resultado["nao_casados"], [])
+
+    def test_matching_produto_nao_casado_vai_pro_relatorio(self):
+        async def _fetchval(query, *args):
+            return None
+        with patch("core.i9logic.get_db") as mock_get_db:
+            mock_get_db.return_value = AsyncMock(fetchval=_fetchval, execute=AsyncMock(return_value="OK"))
+            resultado = i9logic.executar_matching_automatico(
+                "produto", [{"id_i9logic": 999, "codigo_i9logic": "SKU-INEXISTENTE"}])
+        self.assertEqual(resultado["casados"], 0)
+        self.assertEqual(len(resultado["nao_casados"]), 1)
+        self.assertEqual(resultado["nao_casados"][0]["codigo_i9logic"], "SKU-INEXISTENTE")
+
+    def test_matching_filial_consulta_tabela_lojas(self):
+        async def _fetchval(query, *args):
+            self.assertIn("lojas", query)
+            return "Loja Matriz"
+        with patch("core.i9logic.get_db") as mock_get_db:
+            mock_get_db.return_value = AsyncMock(fetchval=_fetchval, execute=AsyncMock(return_value="OK"))
+            resultado = i9logic.executar_matching_automatico(
+                "filial", [{"id_i9logic": 63, "codigo_i9logic": "Loja Matriz"}])
+        self.assertEqual(resultado["casados"], 1)

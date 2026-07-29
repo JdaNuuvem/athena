@@ -98,3 +98,36 @@ def listar_mapeamentos(tipo: str = None) -> list:
         return [dict(r) for r in rows]
     try: return run_async(_go())
     except Exception: return []
+
+
+def executar_matching_automatico(tipo: str, pares_i9logic: list) -> dict:
+    """pares_i9logic: [{"id_i9logic": ..., "codigo_i9logic": ...}, ...] vindos da
+    API i9Logic (codproduto pra tipo='produto', nome da filial pra tipo='filial').
+    Casa por igualdade textual exata contra catalogo_produtos.sku ou lojas.nome —
+    NUNCA matching fuzzy. O que nao casar vai pro relatorio de nao_casados pra
+    revisao humana, sem tentativa de match aproximado."""
+    if tipo not in ("produto", "filial"):
+        return {"erro": f"tipo invalido: {tipo}. Use 'produto' ou 'filial'"}
+    async def _go():
+        db = await get_db()
+        casados, nao_casados = [], []
+        for par in pares_i9logic:
+            codigo = par.get("codigo_i9logic", "")
+            if tipo == "produto":
+                existe = await db.fetchval("SELECT sku FROM catalogo_produtos WHERE sku=$1", codigo)
+            else:
+                existe = await db.fetchval("SELECT nome FROM lojas WHERE nome=$1", codigo)
+            if existe:
+                await db.execute(
+                    "INSERT INTO de_para_i9logic (tipo, id_i9logic, codigo_athena) VALUES ($1,$2,$3) "
+                    "ON CONFLICT (tipo, id_i9logic) DO UPDATE SET codigo_athena=$3",
+                    tipo, str(par["id_i9logic"]), codigo)
+                casados.append({"id_i9logic": par["id_i9logic"], "codigo_athena": codigo})
+            else:
+                nao_casados.append(par)
+        return casados, nao_casados
+    try:
+        casados, nao_casados = run_async(_go())
+    except Exception as e:
+        return {"erro": str(e)}
+    return {"ok": True, "casados": len(casados), "nao_casados": nao_casados}
