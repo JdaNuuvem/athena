@@ -802,7 +802,7 @@ Expected: sem erros em nenhum arquivo do projeto.
 - [ ] **Step 3: Revisão manual rápida do fluxo**
 
 Conferir manualmente (leitura de código, sem servidor rodando neste ambiente):
-- `enviar_mensagem` chama `_processar_mencoes` antes de persistir, tanto pela rota REST (`routes/chat.py::chat_enviar_mensagem`) quanto pelo handler WebSocket (`routes/chat_ws.py::_processar_evento`, caminho `tipo == "enviar_mensagem"`) — ambos chamam a mesma função de `core/chat.py`, então a validação vale pros dois.
+- Os três caminhos de escrita de mensagem agora passam por validação de menção: REST dm/grupo/canal e WebSocket dm/grupo/canal chamam `enviar_mensagem` (que chama `_processar_mencoes` antes de persistir em `chat_mensagens`) — `routes/chat.py::chat_enviar_mensagem` e `routes/chat_ws.py::_processar_evento` (caminho `tipo == "enviar_mensagem"`) chamam a mesma função de `core/chat.py`. Já REST ticket desvia para `core.atendimento.adicionar_mensagem` (grava em `atend_mensagens`, não em `chat_mensagens`) e por isso não passa por `enviar_mensagem`; nesse caminho a rota aplica o wrapper público `processar_mencoes` (também de `core/chat.py`) diretamente sobre o texto antes de repassá-lo a `adicionar_mensagem`.
 - `MencaoAutocomplete` nunca lista ninguém fora de `participantes` (vindo de `participantes_info`, que por sua vez vem de `participantes_ids`) — sem caminho de UI pra sugerir não-participante.
 
 Se algum problema for encontrado nesta revisão, corrigir e commitar antes de considerar a task concluída. Se tudo estiver certo, não há commit novo nesta task.

@@ -1,6 +1,7 @@
 "use client";
 import type { ParticipanteChat } from "@/lib/types/chat";
 
+// Mantenha este regex em sincronia com _PADRAO_MENCAO em hermes_agents/core/chat.py.
 const PADRAO_MENCAO = /@\[(?:user:(\d+):([^\]]*)|todos|dept:([a-z_]+):([^\]]*))\]/g;
 
 export function construirMarcadorUsuario(userId: number, nome: string): string {

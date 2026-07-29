@@ -5,6 +5,7 @@ from datetime import datetime
 
 AGENT = "Chat Core"
 
+# Mantenha este regex em sincronia com PADRAO_MENCAO em web/src/lib/chatMencoes.tsx.
 _PADRAO_MENCAO = re.compile(
     r"@\[(?:"
     r"user:(?P<uid>\d+):(?P<unome>[^\]]*)"
@@ -283,18 +284,33 @@ def _processar_mencoes(conversa_id: int, texto: str) -> str:
     conversa = _obter_conversa(conversa_id) or {}
     participantes = set(participantes_ids(conversa_id))
 
+    def _rebaixar(nome: str) -> str:
+        """Rebaixa um nome-snapshot a texto plano. O snapshot e capturado com
+        `[^\\]]*` e pode conter um `@[` aninhado que nunca passou por validacao
+        (ex.: '@[user:777:@[user:9:Boss]]'); sem neutralizar esse prefixo, o
+        marcador interno sobreviveria exposto no texto persistido."""
+        return "@" + nome.replace("@[", "@")
+
     def _validar(m: "re.Match") -> str:
         if m.group("uid") is not None:
             if int(m.group("uid")) in participantes:
                 return m.group(0)
-            return f"@{m.group('unome')}"
+            return _rebaixar(m.group("unome"))
         if m.group("todos") is not None:
             return m.group(0)
         if conversa.get("tipo") == "canal_departamento" and conversa.get("departamento") == m.group("dcod"):
             return m.group(0)
-        return f"@{m.group('dnome')}"
+        return _rebaixar(m.group("dnome"))
 
     return _PADRAO_MENCAO.sub(_validar, texto)
+
+
+def processar_mencoes(conversa_id: int, texto: str) -> str:
+    """Wrapper publico de _processar_mencoes — rotas REST que desviam da
+    persistencia normal de chat_mensagens (caso de conversa tipo 'ticket', que
+    grava em atend_mensagens) ainda precisam validar marcadores de mencao
+    contra os participantes da conversa antes de persistir o texto."""
+    return _processar_mencoes(conversa_id, texto)
 
 
 # ── Mensagens ──
@@ -332,9 +348,13 @@ def listar_mensagens(conversa_id: int, antes_de: str = None, limit: int = 50) ->
 def editar_mensagem(mensagem_id: int, user_id: int, novo_texto: str) -> dict:
     async def _go():
         db = await get_db()
+        conversa_row = await db.fetchrow("SELECT conversa_id FROM chat_mensagens WHERE id=$1", mensagem_id)
+        texto_final = novo_texto
+        if conversa_row:
+            texto_final = _processar_mencoes(conversa_row["conversa_id"], novo_texto)
         row = await db.fetchrow(
             "UPDATE chat_mensagens SET texto=$1, editado_em=NOW() WHERE id=$2 AND remetente_id=$3 RETURNING *",
-            novo_texto, mensagem_id, user_id)
+            texto_final, mensagem_id, user_id)
         return dict(row) if row else {"error": "not found or not owner"}
     try: return run_async(_go())
     except Exception as e: return {"error": str(e)}

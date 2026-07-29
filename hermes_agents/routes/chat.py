@@ -9,6 +9,7 @@ from core.chat import (
     marcar_lido, adicionar_participante, remover_participante, papel_do_usuario,
     usuario_e_participante, buscar_mensagens, listar_canais_departamento,
     salvar_anexo, obter_anexo, conversa_do_anexo, obter_conversa, participantes_info,
+    processar_mencoes,
 )
 from core.chat_ws import broadcast_para_participantes
 
@@ -96,9 +97,10 @@ def chat_enviar_mensagem(conversa_id):
     conversa = obter_conversa(conversa_id)
     if conversa and conversa.get("tipo") == "ticket":
         from core.atendimento import adicionar_mensagem
+        texto_processado = processar_mencoes(conversa_id, data.get("texto", ""))
         criada = adicionar_mensagem(conversa["ticket_ref_id"],
                                     usuario.get("nome") or usuario.get("email"),
-                                    data.get("texto", ""), "texto")
+                                    texto_processado, "texto")
         if criada.get("error"):
             return jsonify(criada)
         mensagem = _adaptar_mensagem_ticket(criada, conversa_id)
