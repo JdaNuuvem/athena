@@ -443,6 +443,221 @@ def bling_categories():
     except: return jsonify([])
 
 
+# --- Entidades SSOT: Vincular Clientes / Migrar Fornecedores ---
+
+@integrations_bp.route("/api/integracoes/vincular-clientes", methods=["POST"])
+def vincular_clientes():
+    """Varre vendas_pedidos e fiscal_notas_fiscais e vincula contatos ao cad_clientes pelo documento."""
+    from core.entidades import vincular_cliente_por_documento, migrar_fornecedores_compras
+    r_vendas = vincular_cliente_por_documento("vendas_pedidos", 0)
+    r_fiscal = vincular_cliente_por_documento("fiscal_notas_fiscais", 0)
+    v = r_vendas.get("vinculados", 0) if isinstance(r_vendas, dict) else 0
+    f = r_fiscal.get("vinculados", 0) if isinstance(r_fiscal, dict) else 0
+    return jsonify({"vinculados": v + f})
+
+
+@integrations_bp.route("/api/integracoes/migrar-fornecedores", methods=["POST"])
+def migrar_fornecedores():
+    """Puxa contatos Bling tipo=F e insere em cad_fornecedores, depois migra compras locais."""
+    from bling_erp import listar_contatos, get_access_token
+    from core import get_db, run_async
+    token = get_access_token()
+    if not token:
+        return jsonify({"error": "Bling não autenticado", "migrados": 0})
+    async def _go():
+        db = await get_db()
+        await db.execute("""CREATE TABLE IF NOT EXISTS cad_fornecedores (
+            id SERIAL PRIMARY KEY, nome VARCHAR(200), tipo VARCHAR(2) DEFAULT 'PJ',
+            documento VARCHAR(30), status VARCHAR(20) DEFAULT 'ativo',
+            created_at TIMESTAMP DEFAULT NOW())""")
+        total = 0
+        for pagina in range(1, 20):
+            try:
+                r = listar_contatos(pagina=pagina, limite=100, tipo="F")
+                dados = r.get("data", [])
+                if not dados or r.get("error"):
+                    break
+                for c in dados:
+                    nome = c.get("nome", "")
+                    doc = (c.get("numeroDocumento") or "").replace(".","").replace("/","").replace("-","").strip()
+                    if not nome:
+                        continue
+                    try:
+                        await db.execute("""INSERT INTO cad_fornecedores (nome, tipo, documento, status)
+                            VALUES ($1, 'PJ', $2, 'ativo')
+                            ON CONFLICT DO NOTHING""", nome, doc)
+                        total += 1
+                    except Exception:
+                        pass
+                if len(dados) < 100:
+                    break
+            except Exception:
+                break
+        return total
+    try:
+        from core import run_async
+        bling_count = run_async(_go())
+    except Exception:
+        bling_count = 0
+    # Tambem migra compras locais
+    from core.entidades import migrar_fornecedores_compras
+    r_local = migrar_fornecedores_compras()
+    local_count = r_local.get("migrados", 0) if isinstance(r_local, dict) else 0
+    return jsonify({"migrados": bling_count + local_count})
+
+
+# --- Contas Financeiras SSOT ---
+
+@integrations_bp.route("/api/integracoes/migrar-contas", methods=["POST"])
+def migrar_contas():
+    """Migra contas a receber e a pagar do Bling → fin_contas_receber / fin_contas_pagar."""
+    from core.fiscal import sincronizar_contas_receber_bling, sincronizar_contas_pagar_bling
+    cr = sincronizar_contas_receber_bling()
+    cp = sincronizar_contas_pagar_bling()
+    return jsonify({
+        "receber": cr.get("sync", 0),
+        "pagar": cp.get("sync", 0),
+        "migrados": (cr.get("sync", 0) or 0) + (cp.get("sync", 0) or 0),
+    })
+
+
+@integrations_bp.route("/api/eventos/compra/<int:id_compra>/receber", methods=["POST"])
+def receber_compra(id_compra):
+    """Registra recebimento de compra no Bling e atualiza estoque local."""
+    from bling_erp import _request
+    r = _request(f"pedidos/compras/{id_compra}/receber", {}, method="POST")
+    return jsonify(r)
+
+
+@integrations_bp.route("/api/eventos/venda/<int:id_pedido>/cancelar", methods=["POST"])
+def cancelar_venda(id_pedido):
+    from bling_erp import _request
+    r = _request(f"pedidos/vendas/{id_pedido}/cancelar", {}, method="POST")
+    return jsonify(r)
+
+
+@integrations_bp.route("/api/eventos/venda/<int:id_pedido>/estornar", methods=["POST"])
+def estornar_venda(id_pedido):
+    from bling_erp import _request
+    r = _request(f"pedidos/vendas/{id_pedido}/estornar", {}, method="POST")
+    return jsonify(r)
+
+
+@integrations_bp.route("/api/eventos/venda/<int:id_pedido>/rastreio", methods=["POST"])
+def enviar_rastreio(id_pedido):
+    from bling_erp import _request
+    dados = request.get_json(silent=True) or {}
+    r = _request(f"pedidos/vendas/{id_pedido}/rastrear", {"codigoRastreamento": dados.get("codigo", "")}, method="POST")
+    return jsonify(r)
+
+
+@integrations_bp.route("/api/eventos/conta/<int:id_conta>/baixar", methods=["POST"])
+def baixar_conta(id_conta):
+    from bling_erp import _request
+    r = _request(f"contas/receber/{id_conta}/baixar", {}, method="POST")
+    return jsonify(r)
+
+
+@integrations_bp.route("/api/eventos/producao/<int:id_op>/finalizar", methods=["POST"])
+def finalizar_producao(id_op):
+    """Finaliza OP e atualiza estoque."""
+    try:
+        from ag_04_planejador import registrar_producao_concluida
+        r = registrar_producao_concluida(id_op)
+        if isinstance(r, dict) and r.get("error"):
+            return jsonify(r), 404
+        return jsonify(r)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@integrations_bp.route("/api/eventos/pdv/<int:id_caixa>/fechar-caixa", methods=["POST"])
+def fechar_caixa_pdv(id_caixa):
+    """Fecha caixa PDV com saldo final."""
+    dados = request.get_json(silent=True) or {}
+    from core.pdv import fechar_caixa
+    try:
+        r = fechar_caixa(
+            id_caixa, float(dados.get("saldoFinal", 0) or 0),
+            dados.get("operador_id"), dados.get("senha", ""),
+            dados.get("gerente_pin_id"), dados.get("pin", ""), dados.get("codigo_barras", ""),
+        )
+        return jsonify(r)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@integrations_bp.route("/api/eventos/crm/lead/<int:id_lead>/converter", methods=["POST"])
+def converter_lead(id_lead):
+    """Converte lead em cliente no CRM."""
+    from core import get_db, run_async
+    async def _go():
+        db = await get_db()
+        lead = await db.fetchrow("SELECT * FROM crm_leads WHERE id = $1", id_lead)
+        if not lead:
+            return {"error": "Lead nao encontrado"}
+        cliente_id = await db.fetchval(
+            """INSERT INTO cad_clientes (nome, email, telefone, status)
+               VALUES ($1, $2, $3, 'ativo') ON CONFLICT DO NOTHING RETURNING id""",
+            lead.get("nome", ""), lead.get("email", ""), lead.get("telefone", ""))
+        if cliente_id:
+            await db.execute("UPDATE crm_leads SET status = 'convertido', cliente_id = $1 WHERE id = $2", cliente_id, id_lead)
+        return {"success": True, "lead_id": id_lead, "cliente_id": cliente_id}
+    return jsonify(run_async(_go()))
+
+
+# --- Full Sync / Migrar Tudo ---
+
+@integrations_bp.route("/api/eventos/venda/<int:id_pedido>/faturar", methods=["POST"])
+def faturar_venda(id_pedido):
+    """Gera NF-e no Bling para o pedido."""
+    from bling_erp import _request
+    r = _request(f"pedidos/vendas/{id_pedido}/gerar-nfe", {}, method="POST")
+    return jsonify(r)
+
+
+@integrations_bp.route("/api/integracoes/migrar-tudo", methods=["POST"])
+def migrar_tudo():
+    """Orquestra todas as migracoes Bling → SSOT em paralelo."""
+    from bling_erp import sincronizar_produtos, sincronizar_pedidos
+    from core.entidades import vincular_cliente_por_documento, migrar_fornecedores_compras
+    from core.fiscal import sincronizar_contas_receber_bling, sincronizar_contas_pagar_bling
+    import concurrent.futures
+    erros = []
+    resultados = {}
+    def seguro(fn, nome, *args):
+        try:
+            r = fn(*args) if args else fn()
+            if isinstance(r, dict):
+                if r.get("error"):
+                    erros.append(f"{nome}: {r['error']}")
+                    return 0
+                return r.get("sincronizados") or r.get("sync") or r.get("vinculados") or r.get("migrados") or 0
+            return 0
+        except Exception as e:
+            erros.append(f"{nome}: {e}")
+            return 0
+    # Produtos
+    resultados["produtos"] = seguro(sincronizar_produtos, "produtos")
+    # Vendas
+    resultados["vendas"] = seguro(lambda: sincronizar_pedidos(pagina=1, limite=100), "vendas")
+    # Clientes
+    r_c = seguro(vincular_cliente_por_documento, "clientes", "vendas_pedidos", 0)
+    r_f = seguro(vincular_cliente_por_documento, "clientes_fiscal", "fiscal_notas_fiscais", 0)
+    resultados["clientes"] = r_c + r_f
+    # Fornecedores
+    r_local = seguro(migrar_fornecedores_compras, "fornecedores")
+    resultados["fornecedores"] = r_local
+    # Contas financeiras
+    cr = seguro(sincronizar_contas_receber_bling, "contas_receber")
+    cp = seguro(sincronizar_contas_pagar_bling, "contas_pagar")
+    resultados["contas"] = cr + cp
+    resultados["total_erros"] = len(erros)
+    if erros:
+        resultados["erros"] = erros
+    return jsonify(resultados)
+
+
 # --- Test endpoints ---
 
 @integrations_bp.route("/api/test/bling", methods=["GET"])
@@ -598,7 +813,12 @@ def api_pedidos():
 
 @bling_bp.route("/vendas/sincronizar", methods=["POST"])
 def api_sincronizar_pedidos():
-    return jsonify(sincronizar_pedidos())
+    dados = request.get_json(silent=True) or {}
+    return jsonify(sincronizar_pedidos(
+        loja_id=dados.get("loja_id"),
+        pagina=dados.get("pagina", 1),
+        limite=dados.get("limite", 100)
+    ))
 
 
 @bling_bp.route("/vendas/resumo")
