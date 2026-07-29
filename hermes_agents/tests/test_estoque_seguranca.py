@@ -13,6 +13,7 @@ class FakeDB:
 
     def __init__(self):
         self.estoque = {}  # (sku, loja) -> float
+        self.saldos = {}  # (sku, loja, tipo) -> float
         self.produtos = {}  # sku -> {"descricao":..., "preco_custo":...}
         self.aprovacoes = []
         self.transferencias = []
@@ -21,10 +22,26 @@ class FakeDB:
 
     def set_estoque(self, sku, loja, qtd):
         self.estoque[(sku, loja)] = qtd
+        self.saldos[(sku, loja, "disponivel")] = qtd
+
+    def set_saldo(self, sku, loja, tipo="disponivel", qtd=0):
+        self.saldos[(sku, loja, tipo)] = qtd
+        if tipo == "disponivel":
+            self.estoque[(sku, loja)] = qtd
+
+    def acquire(self):
+        return _FakeAcquireCtx(self)
 
     async def execute(self, query, *params):
         q = " ".join(query.split())
-        if "ALTER TABLE" in q or "CREATE TABLE" in q or "CREATE INDEX" in q:
+        if "ALTER TABLE" in q or "CREATE TABLE" in q or "CREATE INDEX" in q \
+                or "CREATE OR REPLACE FUNCTION" in q or "DROP TRIGGER" in q or "CREATE TRIGGER" in q:
+            return "OK"
+        if "INSERT INTO estoque_saldos" in q:
+            sku, loja, tipo, qtd = params
+            self.saldos[(sku, loja, tipo)] = qtd
+            if tipo == "disponivel":
+                self.estoque[(sku, loja)] = qtd
             return "OK"
         if "INSERT INTO estoque_lojas" in q:
             # Fase 3: INSERT ganhou a coluna loja_id (sku, loja, loja_id, qtd, ...).
@@ -70,6 +87,9 @@ class FakeDB:
 
     async def fetchval(self, query, *params):
         q = " ".join(query.split())
+        if "SELECT quantidade FROM estoque_saldos" in q:
+            sku, loja, tipo = params
+            return self.saldos.get((sku, loja, tipo))
         if "SELECT quantidade FROM estoque_lojas" in q:
             sku, loja = params
             return self.estoque.get((sku, loja))
@@ -107,6 +127,48 @@ class FakeDB:
         return []
 
 
+class _FakeTransactionCtx:
+    """No-op transaction context manager — a real Postgres transaction isn't
+    meaningful over the in-memory fake, so this just supports `async with`."""
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
+class _FakeAcquireCtx:
+    """Fake `async with db.acquire() as conn:` — yields a `_FakeConn` that
+    proxies execute/fetchval back to the same FakeDB instance, plus a
+    `.transaction()` no-op. Needed because core.estoque_saldos.mover_saldo
+    (called by entrada/saida/transferir/ratear) does its writes inside
+    `async with db.acquire() as conn: async with conn.transaction(): ...`."""
+
+    def __init__(self, fake):
+        self._fake = fake
+
+    async def __aenter__(self):
+        return _FakeConn(self._fake)
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
+class _FakeConn:
+    def __init__(self, fake):
+        self._fake = fake
+
+    def transaction(self):
+        return _FakeTransactionCtx()
+
+    async def execute(self, query, *params):
+        return await self._fake.execute(query, *params)
+
+    async def fetchval(self, query, *params):
+        return await self._fake.fetchval(query, *params)
+
+
 class TestFluxoEstoqueSeguranca(unittest.IsolatedAsyncioTestCase):
     """Usa IsolatedAsyncioTestCase + patch direto em core.get_db (importado por
     nome em cada modulo) para testar o fluxo completo end-to-end."""
@@ -114,14 +176,15 @@ class TestFluxoEstoqueSeguranca(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.fake = FakeDB()
         self._patches = []
-        for modulo in ("core.estoque", "core.estoque_aprovacoes", "core.estoque_transferencias", "core.estoque_contagem"):
+        for modulo in ("core.estoque", "core.estoque_saldos", "core.estoque_aprovacoes",
+                       "core.estoque_transferencias", "core.estoque_contagem"):
             async def _get_db(_fake=self.fake):
                 return _fake
             p = patch(f"{modulo}.get_db", side_effect=_get_db)
             p.start()
             self._patches.append(p)
-        import core.estoque as m
-        m._ok = True  # pula _ensure() (CREATE TABLE real) — fake ja "tem" as tabelas
+        import core.estoque_saldos as ms
+        ms._ok = True  # pula _ensure() (CREATE TABLE/trigger real) — fake ja "tem" as tabelas
         import core.estoque_aprovacoes as ma
         ma._ok = True
         import core.estoque_transferencias as mt
@@ -140,9 +203,12 @@ class TestFluxoEstoqueSeguranca(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(r.get("ok"))
         self.assertEqual(self.fake.estoque[("SKU1", "Loja A")], 95)
         self.assertEqual(len(self.fake.movimentacoes), 1)
-        # usuario_id e usuario_nome sao os 2 ultimos params do INSERT em estoque_movimentacoes
-        self.assertEqual(self.fake.movimentacoes[0][-2], 7)
-        self.assertEqual(self.fake.movimentacoes[0][-1], "joao")
+        # usuario_id e usuario_nome sao os params 5 e 6 (0-indexed) do INSERT em
+        # estoque_movimentacoes feito por core.estoque_saldos.mover_saldo:
+        # (sku, loja, tipo, quantidade, motivo, usuario_id, usuario_nome,
+        #  tipo_saldo, saldo_anterior, saldo_posterior, ip, dispositivo)
+        self.assertEqual(self.fake.movimentacoes[0][5], 7)
+        self.assertEqual(self.fake.movimentacoes[0][6], "joao")
 
     async def test_saida_grande_fica_pendente_nao_aplica(self):
         from core.estoque_aprovacoes import precisa_aprovacao, solicitar
@@ -180,11 +246,12 @@ class TestFluxoEstoqueSeguranca(unittest.IsolatedAsyncioTestCase):
 
     async def test_transferencia_pequena_debita_origem_fica_em_transito(self):
         from core.estoque_transferencias import solicitar
-        self.fake.set_estoque("SKU1", "Loja A", 50)
+        self.fake.set_saldo("SKU1", "Loja A", "disponivel", 50)
         r = solicitar("SKU1", "Loja A", "Loja B", 5, "reposicao_entre_lojas", usuario_id=1, usuario_nome="op")
         self.assertEqual(r["status"], "em_transito")
         self.assertFalse(r["pendente_aprovacao"])
-        self.assertEqual(self.fake.estoque[("SKU1", "Loja A")], 45)  # ja debitou origem
+        self.assertEqual(self.fake.saldos[("SKU1", "Loja A", "disponivel")], 45)
+        self.assertEqual(self.fake.saldos[("SKU1", "Loja A", "transito")], 5)
 
     async def test_transferencia_grande_fica_pendente_aprovacao(self):
         from core.estoque_transferencias import solicitar
@@ -192,6 +259,34 @@ class TestFluxoEstoqueSeguranca(unittest.IsolatedAsyncioTestCase):
         r = solicitar("SKU1", "Loja A", "Loja B", 20, "reposicao_entre_lojas", usuario_id=1, usuario_nome="op")
         self.assertEqual(r["status"], "pendente_aprovacao")
         self.assertEqual(self.fake.estoque[("SKU1", "Loja A")], 50)  # nao debitou ainda
+
+    async def test_transferencia_grande_pendente_nao_debita_nada_ainda(self):
+        from core.estoque_transferencias import solicitar
+        self.fake.set_saldo("SKU1", "Loja A", "disponivel", 50)
+        r = solicitar("SKU1", "Loja A", "Loja B", 20, "reposicao_entre_lojas", usuario_id=1, usuario_nome="op")
+        self.assertEqual(r["status"], "pendente_aprovacao")
+        self.assertEqual(self.fake.saldos[("SKU1", "Loja A", "disponivel")], 50)  # nao debitou - so' debita ao aprovar
+        self.assertEqual(self.fake.saldos.get(("SKU1", "Loja A", "transito")), None)
+
+    async def test_aprovar_transferencia_pendente_debita_disponivel_credita_transito(self):
+        from core.estoque_transferencias import solicitar, aprovar
+        self.fake.set_saldo("SKU1", "Loja A", "disponivel", 50)
+        r = solicitar("SKU1", "Loja A", "Loja B", 20, "reposicao_entre_lojas", usuario_id=1, usuario_nome="op")
+        tid = r["transferencia_id"]
+        r2 = aprovar(tid, aprovador_id=9, aprovador_nome="gerente")
+        self.assertTrue(r2.get("ok"))
+        self.assertEqual(self.fake.saldos[("SKU1", "Loja A", "disponivel")], 30)
+        self.assertEqual(self.fake.saldos[("SKU1", "Loja A", "transito")], 20)
+
+    async def test_confirmar_transferencia_debita_transito_origem_credita_disponivel_destino(self):
+        from core.estoque_transferencias import solicitar, confirmar
+        self.fake.set_saldo("SKU1", "Loja A", "disponivel", 50)
+        r = solicitar("SKU1", "Loja A", "Loja B", 5, "reposicao_entre_lojas", usuario_id=1, usuario_nome="op")
+        tid = r["transferencia_id"]
+        r2 = confirmar(tid, confirmador_id=2, confirmador_nome="loja_b_op", quantidade_recebida=5)
+        self.assertEqual(r2["status"], "confirmada")
+        self.assertEqual(self.fake.saldos[("SKU1", "Loja A", "transito")], 0)
+        self.assertEqual(self.fake.saldos[("SKU1", "Loja B", "disponivel")], 5)
 
     async def test_confirmar_transferencia_credita_destino(self):
         from core.estoque_transferencias import solicitar, confirmar

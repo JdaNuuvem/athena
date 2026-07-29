@@ -339,7 +339,7 @@ if __name__ == "__main__":
 
 - [ ] **Step 3: Rodar os testes e confirmar que passam**
 
-Run: `cd hermes_agents && python -m pytest tests/test_estoque_saldos.py -v`
+Run: `cd hermes_agents && python -m unittest tests.test_estoque_saldos -v` (nao usar `pytest` diretamente - importar via pytest forca hermes_agents/__init__.py a carregar o app inteiro e tentar conectar num Postgres real; `python -m unittest` roda sem esse problema)
 Expected: 9 passed.
 
 - [ ] **Step 4: Corrigir a spec quanto ao CHECK constraint de `tipo`**
@@ -533,7 +533,7 @@ Adicionar `self.saldos = {}` em `FakeDB.__init__`. Os testes existentes (`test_s
 
 - [ ] **Step 3: Rodar a suite inteira e confirmar que os testes existentes ainda passam**
 
-Run: `cd hermes_agents && python -m pytest tests/test_estoque_seguranca.py -v`
+Run: `cd hermes_agents && python -m unittest tests.test_estoque_seguranca -v` (mesmo motivo da Task 1 - nao usar pytest)
 Expected: todos os 12 testes existentes PASS (comportamento observável inalterado).
 
 - [ ] **Step 4: Commit**
@@ -775,7 +775,7 @@ Editar `docs/superpowers/specs/2026-07-28-fase1-saldos-segregados-design.md`, se
 
 - [ ] **Step 5: Rodar a suite inteira**
 
-Run: `cd hermes_agents && python -m pytest tests/test_estoque_seguranca.py -v`
+Run: `cd hermes_agents && python -m unittest tests.test_estoque_seguranca -v` (mesmo motivo da Task 1 - nao usar pytest)
 Expected: todos passam, incluindo os 3 testes novos.
 
 - [ ] **Step 6: Commit**
@@ -861,7 +861,7 @@ Não há teste automatizado de rota HTTP nesta suite (os testes existentes cobre
 
 - [ ] **Step 4: Rodar a suite de regressão completa (garante que nada em `core.*` quebrou com a mudança de assinatura)**
 
-Run: `cd hermes_agents && python -m pytest tests/test_estoque_seguranca.py tests/test_estoque_saldos.py -v`
+Run: `cd hermes_agents && python -m unittest tests.test_estoque_seguranca tests.test_estoque_saldos -v` (nao usar pytest - ver nota na Task 1)
 Expected: todos passam.
 
 - [ ] **Step 5: Commit**
@@ -898,7 +898,7 @@ Remove o `INSERT INTO estoque_lojas` cru e a variável `sync_status` (a coluna `
 
 - [ ] **Step 2: Rodar a suite de regressão**
 
-Run: `cd hermes_agents && python -m pytest tests/ -v -k "estoque"`
+Run: `cd hermes_agents && python -m unittest discover -s tests -p "test_estoque*.py" -v` (nao usar `pytest` diretamente - ver nota na Task 1)
 Expected: todos passam (esta mudança não tem teste dedicado hoje — cobertura fica na regressão geral).
 
 - [ ] **Step 3: Commit**
@@ -952,7 +952,7 @@ Isso elimina a interpolação f-string de `LOJA_PRINCIPAL`/`LOJA_PRODUCAO` (agor
 
 - [ ] **Step 2: Rodar a suite de regressão**
 
-Run: `cd hermes_agents && python -m pytest tests/ -v -k "estoque"`
+Run: `cd hermes_agents && python -m unittest discover -s tests -p "test_estoque*.py" -v` (nao usar `pytest` diretamente - ver nota na Task 1)
 Expected: todos passam.
 
 - [ ] **Step 3: Commit**
@@ -977,7 +977,7 @@ Expected: só aparecem `core/catalogo.py` (CREATE TABLE, não escreve linha), `c
 
 - [ ] **Step 2: Rodar a suite completa do projeto**
 
-Run: `cd hermes_agents && python -m pytest tests/ -v`
+Run: `cd hermes_agents && python -m unittest discover -s tests -v` (nao usar `pytest` diretamente - ver nota na Task 1)
 Expected: todos os testes passam, sem exceção.
 
 - [ ] **Step 3: Validação manual do trigger contra Postgres real (staging/local, fora do CI)**

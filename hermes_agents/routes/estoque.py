@@ -22,6 +22,10 @@ def _dicts(cur):
     return [dict(zip(cols, row)) for row in cur.fetchall()]
 
 
+def _origem_requisicao() -> tuple:
+    return request.remote_addr, request.headers.get("User-Agent", "")[:300]
+
+
 # -- Estoque por loja/deposito --
 
 @estoque_bp.route('/lojas', methods=['GET'])
@@ -78,6 +82,8 @@ def estoque_por_loja():
 @estoque_bp.route('/lojas', methods=['PUT'])
 def atualizar_estoque_loja():
     """Atualiza quantidade de estoque em uma loja/deposito. Two-way sync via fila offline."""
+    from core.estoque import ajustar_absoluto
+    from core.rbac import usuario_atual_da_request
     dados = request.json or {}
     sku = dados.get("sku", "").strip()
     loja_nome = str(dados.get("loja", "")).strip()
@@ -85,46 +91,59 @@ def atualizar_estoque_loja():
     sync_bling = str(dados.get("sync_bling", "1")) == "1"
     if not sku or not loja_nome or quantidade is None:
         return jsonify({"erro": "sku, loja e quantidade obrigatorios"}), 400
+    # A alteracao de saldo e o sync com marketplaces sao tratados em blocos
+    # separados de proposito: um erro de sync NAO pode parecer com um erro de
+    # saldo pro cliente — o ajuste ja foi commitado nesse ponto (review #4).
     try:
-        conn = _db_sync()
-        cur = conn.cursor()
-        cur.execute("SELECT id FROM lojas WHERE nome = %s", (loja_nome,))
-        loja_id_row = cur.fetchone()
-        loja_id = loja_id_row[0] if loja_id_row else None
-        cur.execute("""
-            INSERT INTO estoque_lojas (sku, loja, loja_id, quantidade, data_atualizacao, sync_status)
-            VALUES (%s, %s, %s, %s, NOW(), 'pendente')
-            ON CONFLICT (sku, loja) DO UPDATE SET loja_id = %s, quantidade = %s, data_atualizacao = NOW(), sync_status = 'pendente'
-        """, (sku, loja_nome, loja_id, float(quantidade), loja_id, float(quantidade)))
-        cur.close(); conn.close()
-        result = {"ok": True, "sku": sku, "loja": loja_nome, "quantidade": quantidade}
-        if sync_bling:
-            from core.estoque import sync_para_bling
-            bling_r = sync_para_bling(loja_nome, sku, float(quantidade))
-            result["bling_sync"] = bling_r
-        try:
-            from shopee import sincronizar_estoque_todas_lojas_automatico
-            Thread(target=lambda: sincronizar_estoque_todas_lojas_automatico(sku, float(quantidade)), daemon=True).start()
-        except Exception:
-            pass
-        return jsonify(result)
+        # Esta rota gravava estoque_lojas por SQL cru (psycopg2), bypassando
+        # core.estoque — era por isso que a Fase 3 precisou repetir aqui a
+        # resolucao loja->loja_id. Com a Fase 1 ela passa por
+        # ajustar_absoluto -> mover_saldo, que ja grava loja_id no ledger, e o
+        # trigger de espelho propaga loja_id pra estoque_lojas: o dual-write
+        # continua acontecendo, so nao e' mais responsabilidade da rota.
+        usuario = usuario_atual_da_request()
+        ip, dispositivo = _origem_requisicao()
+        resultado = ajustar_absoluto(sku, loja_nome, float(quantidade), "ajuste_inventario",
+                                      usuario["user_id"], usuario["nome"], ip, dispositivo)
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
+    if resultado.get("erro"):
+        return jsonify(resultado), 500
+    if sync_bling:
+        # `core.estoque.sync_para_bling` nunca existiu (ImportError em toda PUT
+        # normal, ja que sync_bling default e' "1"). A funcao real e'
+        # bling_erp.sincronizar_estoque_para_bling(sku, loja, quantidade) —
+        # note tambem a ordem dos argumentos, que estava trocada na chamada
+        # antiga.
+        try:
+            from bling_erp import sincronizar_estoque_para_bling
+            resultado["bling_sync"] = sincronizar_estoque_para_bling(sku, loja_nome, float(quantidade))
+        except Exception as e:
+            resultado["bling_sync"] = {"erro": str(e)}
+    try:
+        from shopee import sincronizar_estoque_todas_lojas_automatico
+        Thread(target=lambda: sincronizar_estoque_todas_lojas_automatico(sku, float(quantidade)), daemon=True).start()
+    except Exception:
+        pass
+    return jsonify(resultado)
 
 
 @estoque_bp.route('/sync/processar', methods=['POST'])
 def processar_fila_estoque():
-    """Processa fila de sync pendente (retry offline)."""
-    from core.estoque import processar_fila_sync
-    limite = request.args.get("limite", 50, type=int)
-    return jsonify(processar_fila_sync(limite))
+    """Fila de sync offline nunca foi implementada — `core.estoque.processar_fila_sync`
+    nao existe (e nunca existiu; o endpoint quebrava com ImportError/500 HTML).
+    Responde 501 explicito ate que a fila seja implementada de fato.
+    TODO(follow-up): implementar fila de retry de sync de estoque."""
+    return jsonify({"erro": "fila de sync de estoque nao implementada",
+                    "detalhe": "endpoint reservado; nenhuma fila offline existe hoje"}), 501
 
 
 @estoque_bp.route('/sync/status/<sku>', methods=['GET'])
 def status_sync_sku(sku):
-    """Status de sync para um SKU."""
-    from core.estoque import status_sync_sku
-    return jsonify(status_sync_sku(sku))
+    """Idem processar_fila_estoque: `core.estoque.status_sync_sku` nao existe.
+    TODO(follow-up): expor status real quando a fila de sync existir."""
+    return jsonify({"sku": sku, "erro": "status de sync de estoque nao implementado",
+                    "detalhe": "endpoint reservado; nenhuma fila offline existe hoje"}), 501
 
 
 @estoque_bp.route('/buscar-codigo', methods=['GET'])
@@ -191,7 +210,8 @@ def estoque_entrada():
     except (ValueError, TypeError):
         return jsonify({"erro": "quantidade invalida"}), 400
     usuario = usuario_atual_da_request()
-    resultado = est_entrada(sku, loja, qtd, motivo, usuario["user_id"], usuario["nome"])
+    ip, dispositivo = _origem_requisicao()
+    resultado = est_entrada(sku, loja, qtd, motivo, usuario["user_id"], usuario["nome"], ip, dispositivo)
     if not resultado.get("erro") and "atual" in resultado:
         _sync_shopee_async(sku, resultado["atual"])
     return jsonify(resultado)
@@ -218,9 +238,10 @@ def estoque_saida():
     except (ValueError, TypeError):
         return jsonify({"erro": "quantidade invalida"}), 400
     usuario = usuario_atual_da_request()
+    ip, dispositivo = _origem_requisicao()
     if precisa_aprovacao(qtd):
-        return jsonify(solicitar_aprovacao(sku, loja, qtd, motivo, usuario["user_id"], usuario["nome"]))
-    resultado = est_saida(sku, loja, qtd, motivo, usuario["user_id"], usuario["nome"])
+        return jsonify(solicitar_aprovacao(sku, loja, qtd, motivo, usuario["user_id"], usuario["nome"], ip, dispositivo))
+    resultado = est_saida(sku, loja, qtd, motivo, usuario["user_id"], usuario["nome"], ip, dispositivo)
     if not resultado.get("erro") and "atual" in resultado:
         _sync_shopee_async(sku, resultado["atual"])
     return jsonify(resultado)
@@ -241,7 +262,8 @@ def estoque_aprovar(aprovacao_id):
     @requer_permissao("estoque.aprovar")
     def _go():
         usuario = usuario_atual_da_request()
-        resultado = aprovar_saida(aprovacao_id, usuario["user_id"], usuario["nome"])
+        ip, dispositivo = _origem_requisicao()
+        resultado = aprovar_saida(aprovacao_id, usuario["user_id"], usuario["nome"], ip, dispositivo)
         if not resultado.get("erro") and "atual" in resultado:
             _sync_shopee_async(resultado["sku"], resultado["atual"])
         return jsonify(resultado)
@@ -282,7 +304,8 @@ def estoque_transferir():
     except (ValueError, TypeError):
         return jsonify({"erro": "quantidade invalida"}), 400
     usuario = usuario_atual_da_request()
-    return jsonify(solicitar_transferencia(sku, origem, destino, qtd, motivo, usuario["user_id"], usuario["nome"]))
+    ip, dispositivo = _origem_requisicao()
+    return jsonify(solicitar_transferencia(sku, origem, destino, qtd, motivo, usuario["user_id"], usuario["nome"], ip, dispositivo))
 
 
 @estoque_bp.route('/transferencias', methods=['GET'])
@@ -303,7 +326,8 @@ def estoque_transferencia_aprovar(transferencia_id):
     @requer_permissao("estoque.aprovar")
     def _go():
         usuario = usuario_atual_da_request()
-        return jsonify(aprovar_transf(transferencia_id, usuario["user_id"], usuario["nome"]))
+        ip, dispositivo = _origem_requisicao()
+        return jsonify(aprovar_transf(transferencia_id, usuario["user_id"], usuario["nome"], ip, dispositivo))
     return _go()
 
 
@@ -315,7 +339,8 @@ def estoque_transferencia_rejeitar(transferencia_id):
     def _go():
         dados = request.json or {}
         usuario = usuario_atual_da_request()
-        return jsonify(rejeitar_transf(transferencia_id, usuario["user_id"], usuario["nome"], str(dados.get("motivo_rejeicao", ""))))
+        ip, dispositivo = _origem_requisicao()
+        return jsonify(rejeitar_transf(transferencia_id, usuario["user_id"], usuario["nome"], str(dados.get("motivo_rejeicao", "")), ip, dispositivo))
     return _go()
 
 
@@ -336,7 +361,8 @@ def estoque_transferencia_confirmar(transferencia_id):
     except (ValueError, TypeError):
         return jsonify({"erro": "quantidade_recebida invalida"}), 400
     usuario = usuario_atual_da_request()
-    return jsonify(confirmar_transf(transferencia_id, usuario["user_id"], usuario["nome"], qtd))
+    ip, dispositivo = _origem_requisicao()
+    return jsonify(confirmar_transf(transferencia_id, usuario["user_id"], usuario["nome"], qtd, ip, dispositivo))
 
 
 @estoque_bp.route('/contagem/sugestoes', methods=['GET'])
