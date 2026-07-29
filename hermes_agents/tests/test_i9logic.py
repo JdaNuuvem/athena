@@ -61,7 +61,9 @@ class TestMatchingAutomatico(unittest.TestCase):
         self.assertIn("erro", resultado)
 
     def test_matching_produto_casa_por_sku_igual(self):
+        query_capturada = {}
         async def _fetchval(query, *args):
+            query_capturada["query"] = query
             if "catalogo_produtos" in query:
                 return args[0] if args[0] == "041725" else None
             return None
@@ -71,6 +73,10 @@ class TestMatchingAutomatico(unittest.TestCase):
                 "produto", [{"id_i9logic": 29098, "codigo_i9logic": "041725"}])
         self.assertEqual(resultado["casados"], 1)
         self.assertEqual(resultado["nao_casados"], [])
+        # Verificar que a query usa igualdade EXATA, nunca fuzzy matching
+        self.assertIn("sku=$1", query_capturada["query"].replace(" ", ""))
+        self.assertNotIn("ILIKE", query_capturada["query"].upper())
+        self.assertNotIn("LIKE", query_capturada["query"].upper())
 
     def test_matching_produto_nao_casado_vai_pro_relatorio(self):
         async def _fetchval(query, *args):
@@ -84,7 +90,9 @@ class TestMatchingAutomatico(unittest.TestCase):
         self.assertEqual(resultado["nao_casados"][0]["codigo_i9logic"], "SKU-INEXISTENTE")
 
     def test_matching_filial_consulta_tabela_lojas(self):
+        query_capturada = {}
         async def _fetchval(query, *args):
+            query_capturada["query"] = query
             self.assertIn("lojas", query)
             return "Loja Matriz"
         with patch("core.i9logic.get_db") as mock_get_db:
@@ -92,3 +100,7 @@ class TestMatchingAutomatico(unittest.TestCase):
             resultado = i9logic.executar_matching_automatico(
                 "filial", [{"id_i9logic": 63, "codigo_i9logic": "Loja Matriz"}])
         self.assertEqual(resultado["casados"], 1)
+        # Verificar que a query usa igualdade EXATA, nunca fuzzy matching
+        self.assertIn("nome=$1", query_capturada["query"].replace(" ", ""))
+        self.assertNotIn("ILIKE", query_capturada["query"].upper())
+        self.assertNotIn("LIKE", query_capturada["query"].upper())
