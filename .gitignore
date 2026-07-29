@@ -58,3 +58,7 @@ graphify-out/
 # Dockerfile a cada build (npm run build com NEXT_STATIC_EXPORT=true dentro
 # do container) — versionar so' gera diffs gigantes sem beneficio real.
 /hermes_agents/dashboard/
+
+# Worktrees isolados de features em desenvolvimento (superpowers) — scratch,
+# nao e' codigo fonte.
+/.claude/worktrees/
