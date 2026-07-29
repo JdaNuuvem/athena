@@ -39,3 +39,9 @@ export interface AnexoChat {
   enviado_por: number | null;
   created_at: string;
 }
+
+export interface ParticipanteChat {
+  user_id: number;
+  nome: string;
+  papel: string | null;
+}
