@@ -94,12 +94,13 @@ async def sync_produtos(loja_id: int = None) -> dict:
                 agora = datetime.now()
                 # Upsert em anuncios (tabela do AG-03) — shop_id permite o mesmo SKU em varias lojas Shopee
                 await db.execute("""
-                    INSERT INTO anuncios (sku, marketplace, shop_id, anuncio_id, titulo, preco, status, ultima_atualizacao)
-                    VALUES ($1, 'shopee', $2, $3::text, $4, $5, $6, $7)
+                    INSERT INTO anuncios (sku, marketplace, shop_id, anuncio_id, titulo, preco, estoque, status, ultima_atualizacao)
+                    VALUES ($1, 'shopee', $2, $3::text, $4, $5, $6, $7, $8)
                     ON CONFLICT (sku, marketplace, shop_id)
-                    DO UPDATE SET anuncio_id = $3, titulo = $4, preco = $5, status = $6, ultima_atualizacao = $7
+                    DO UPDATE SET anuncio_id = $3, titulo = $4, preco = $5, estoque = $6, status = $7, ultima_atualizacao = $8
                 """, d.get("item_sku", str(d["item_id"])), shop_id, str(d["item_id"]),
                     d.get("item_name", ""), price_info.get("current_price", 0),
+                    s.get("total_available_stock", 0),
                     d.get("item_status", "NORMAL").lower(), agora)
                 # Inserir/atualizar em fichas_tecnicas
                 await db.execute("""
@@ -164,6 +165,26 @@ def sync_all(dias: int = 30, loja_id: int = None) -> dict:
     produtos = run_async(sync_produtos(loja_id))
     pedidos = run_async(sync_pedidos(dias, loja_id))
     return {"produtos": produtos, "pedidos": pedidos}
+
+def listar_produtos_sincronizados(loja_id: int) -> list:
+    """Produtos ja sincronizados (tabela anuncios) para uma loja Shopee especifica —
+    usado pela aba Produtos, sem bater na API da Shopee a cada carregamento de tela."""
+    async def _go():
+        db = await get_db()
+        shop_id = get_shopee_config(loja_id).get("shop_id") or ""
+        if not shop_id:
+            return []
+        rows = await db.fetch("""
+            SELECT sku, titulo, preco, estoque, status, anuncio_id, ultima_atualizacao
+            FROM anuncios WHERE marketplace = 'shopee' AND shop_id = $1
+            ORDER BY titulo
+        """, shop_id)
+        return [dict(r) for r in rows]
+    try:
+        return run_async(_go())
+    except Exception as e:
+        log(AGENT, f"Erro listar_produtos_sincronizados: {e}")
+        return []
 
 def status_ultimo_sync() -> dict:
     async def _go():

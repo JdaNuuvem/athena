@@ -202,6 +202,14 @@ def shopee_sync_log():
     from shopee_sync import status_ultimo_sync
     return jsonify({"log": status_ultimo_sync()})
 
+@shopee_bp.route('/produtos-sincronizados', methods=['GET'])
+def shopee_produtos_sincronizados():
+    from shopee_sync import listar_produtos_sincronizados
+    loja_id = request.args.get("loja_id", type=int)
+    if not loja_id:
+        return jsonify({"error": "loja_id obrigatorio"}), 400
+    return jsonify({"produtos": listar_produtos_sincronizados(loja_id)})
+
 @shopee_bp.route('/pedidos', methods=['GET'])
 def shopee_listar_pedidos():
     from shopee import listar_pedidos_shopee_detalhado

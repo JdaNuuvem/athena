@@ -192,6 +192,8 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ loja_id: lojaId, quantidade }),
     }),
+  shopeeProdutosSincronizados: (lojaId: number) =>
+    request<{ produtos: ShopeeProdutoSincronizado[]; error?: string }>(`/api/shopee/produtos-sincronizados?loja_id=${lojaId}`),
   shopeeEstoqueTodasLojas: (sku: string, quantidade: number) =>
     request<{ total: number; sucesso: number; erro?: string; resultados: Array<{ loja_id: number; loja_nome: string; resultado: Record<string, unknown> }> }>("/api/shopee/estoque/todas-lojas", {
       method: "POST",
@@ -660,6 +662,16 @@ export interface ShopeeAtributo {
 export interface ShopeeMarca {
   brand_id: number;
   original_brand_name: string;
+}
+
+export interface ShopeeProdutoSincronizado {
+  sku: string;
+  titulo: string;
+  preco: number;
+  estoque: number;
+  status: string;
+  anuncio_id: string;
+  ultima_atualizacao: string | null;
 }
 
 export interface ShopeeSyncLogEntry {

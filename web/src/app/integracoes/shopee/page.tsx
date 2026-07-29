@@ -205,6 +205,7 @@ function ShopeeIntegrationContent() {
         <p className="text-xs text-neutral-500 mt-0.5">Gerencie suas lojas Shopee e sincronize produtos/estoque — suporta múltiplas contas.</p>
         <div className="flex gap-3 mt-2">
           <Link href="/integracoes/shopee/dashboard" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">📊 Painel consolidado</Link>
+          <Link href="/integracoes/shopee/produtos" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">📦 Produtos</Link>
           <Link href="/integracoes/shopee/pedidos" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">🧾 Pedidos</Link>
         </div>
       </div>

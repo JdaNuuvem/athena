@@ -52,6 +52,7 @@ const NAV_ITEMS: NavItem[] = [
     children: [
       { href: "/integracoes/shopee", label: "Config & Lojas" },
       { href: "/integracoes/shopee/dashboard", label: "Dashboard" },
+      { href: "/integracoes/shopee/produtos", label: "Produtos" },
       { href: "/integracoes/shopee/pedidos", label: "Pedidos" },
       { href: "/shopee/regras", label: "Regras de Preco" },
       { href: "/shopee/kits", label: "Kits & Consistência de Preço" },
