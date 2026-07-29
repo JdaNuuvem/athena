@@ -104,3 +104,47 @@ class TestMatchingAutomatico(unittest.TestCase):
         self.assertIn("nome=$1", query_capturada["query"].replace(" ", ""))
         self.assertNotIn("ILIKE", query_capturada["query"].upper())
         self.assertNotIn("LIKE", query_capturada["query"].upper())
+
+
+class TestPaginarEstoques(unittest.TestCase):
+    def _resposta(self, pagina, total, por_pagina=200):
+        inicio = (pagina - 1) * por_pagina
+        fim = min(inicio + por_pagina, total)
+        dados = [{"idproduto": i, "codproduto": f"COD-{i}", "qtd": 10} for i in range(inicio, fim)]
+        resp = MagicMock()
+        resp.json.return_value = {"data": dados, "total": total}
+        resp.raise_for_status.return_value = None
+        return resp
+
+    def test_pagina_completa_sem_duplicar_mais_de_200_registros(self):
+        total = 450  # 3 paginas: 200, 200, 50
+        def _get(url, params=None, headers=None, timeout=None):
+            return self._resposta(params["page"], total)
+        with patch("core.i9logic.requests.get", side_effect=_get), \
+             patch("core.i9logic.time.sleep") as mock_sleep:
+            resultado = i9logic._paginar_estoques(63, 1)
+        self.assertEqual(len(resultado), total)
+        ids = [r["idproduto"] for r in resultado]
+        self.assertEqual(len(ids), len(set(ids)), "nao deve haver idproduto duplicado entre paginas")
+        self.assertEqual(mock_sleep.call_count, 2)  # dorme entre paginas 1-2 e 2-3, nao depois da ultima
+        mock_sleep.assert_called_with(i9logic.RATE_LIMIT_SLEEP_SEGUNDOS)
+
+    def test_pagina_unica_nao_dorme(self):
+        def _get(url, params=None, headers=None, timeout=None):
+            return self._resposta(params["page"], 50)
+        with patch("core.i9logic.requests.get", side_effect=_get), \
+             patch("core.i9logic.time.sleep") as mock_sleep:
+            resultado = i9logic._paginar_estoques(63, 2)
+        self.assertEqual(len(resultado), 50)
+        mock_sleep.assert_not_called()
+
+    def test_paginacao_passa_tipoestoque_e_filial_corretos(self):
+        chamadas = []
+        def _get(url, params=None, headers=None, timeout=None):
+            chamadas.append(params)
+            return self._resposta(params["page"], 10)
+        with patch("core.i9logic.requests.get", side_effect=_get), \
+             patch("core.i9logic.time.sleep"):
+            i9logic._paginar_estoques(63, 2)
+        self.assertEqual(chamadas[0]["filial"], 63)
+        self.assertEqual(chamadas[0]["tipoestoque"], 2)

@@ -131,3 +131,32 @@ def executar_matching_automatico(tipo: str, pares_i9logic: list) -> dict:
     except Exception as e:
         return {"erro": str(e)}
     return {"ok": True, "casados": len(casados), "nao_casados": nao_casados}
+
+
+# ── Client HTTP (paginacao + rate limit) ──
+
+def _paginar_estoques(filial_id_i9logic: int, tipoestoque: int) -> list:
+    """Pagina o catalogo inteiro da filial pro tipo de estoque pedido
+    (1=fisico, 2=contabil), respeitando o rate limit de 30 req/min via sleep
+    de RATE_LIMIT_SLEEP_SEGUNDOS entre chamadas (nao dorme apos a ultima
+    pagina). Retorna todos os registros de todas as paginas, sem duplicar."""
+    registros = []
+    pagina = 1
+    while True:
+        resp = requests.get(
+            f"{BASE_URL}/v1/produtos_estoques",
+            params={"filial": filial_id_i9logic, "tipoestoque": tipoestoque,
+                     "page": pagina, "per_page": PER_PAGE_PADRAO},
+            headers={"Authorization": f"Bearer {_api_key()}"},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        dados = resp.json()
+        pagina_registros = dados.get("data", [])
+        registros.extend(pagina_registros)
+        total = dados.get("total", len(registros))
+        if pagina * PER_PAGE_PADRAO >= total or not pagina_registros:
+            break
+        pagina += 1
+        time.sleep(RATE_LIMIT_SLEEP_SEGUNDOS)
+    return registros
