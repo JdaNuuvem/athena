@@ -75,7 +75,8 @@ def shopee_atualizar_preco(item_id):
 @integrations_bp.route("/api/shopee/produtos/sincronizar", methods=["POST"])
 def shopee_sync():
     from shopee import sync_all_items
-    itens = sync_all_items()
+    loja_id = (request.json or {}).get("loja_id")
+    itens = sync_all_items(loja_id=loja_id)
     return jsonify({"total": len(itens), "itens": itens})
 
 
