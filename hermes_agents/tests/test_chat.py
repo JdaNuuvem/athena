@@ -311,5 +311,48 @@ class TestEnviarMensagemProcessaMencoes(unittest.TestCase):
         self.assertEqual(resultado["texto"], "ola @[user:2:Bruno]")
 
 
+class TestParticipantesInfo(unittest.TestCase):
+    def test_participantes_info_sem_participantes_retorna_vazio(self):
+        with patch("core.chat.participantes_ids", return_value=[]):
+            self.assertEqual(chat.participantes_info(5), [])
+
+    def test_participantes_info_junta_nome_e_papel(self):
+        async def _fetch(query, *args):
+            if "rbac_usuarios" in query:
+                return [{"user_id": 1, "nome": "Ana"}, {"user_id": 2, "nome": "Bruno"}]
+            return [{"user_id": 1, "papel": "owner"}]
+        with patch("core.chat.participantes_ids", return_value=[1, 2]), \
+             patch("core.chat.get_db") as mock_get_db:
+            mock_get_db.return_value = AsyncMock(fetch=_fetch)
+            resultado = chat.participantes_info(5)
+        self.assertEqual(resultado[0], {"user_id": 1, "nome": "Ana", "papel": "owner"})
+        self.assertEqual(resultado[1], {"user_id": 2, "nome": "Bruno", "papel": None})
+
+
+class TestChatParticipantesEndpoint(unittest.TestCase):
+    def setUp(self):
+        self.client = _app()
+
+    def test_listar_participantes_nao_participante_nega(self):
+        with patch.dict(os.environ, {"ATHENA_JWT_SECRET": "test-secret-key"}):
+            token = rbac.gerar_token_sessao(11, "u@x.com", "Vendedor")
+            headers = {"Authorization": f"Bearer {token}"}
+            with patch("routes.chat.usuario_e_participante", return_value=False):
+                r = self.client.get("/api/chat/conversas/5/participantes", headers=headers)
+            self.assertEqual(r.status_code, 403)
+
+    def test_listar_participantes_participante_libera(self):
+        with patch.dict(os.environ, {"ATHENA_JWT_SECRET": "test-secret-key"}):
+            token = rbac.gerar_token_sessao(11, "u@x.com", "Vendedor")
+            headers = {"Authorization": f"Bearer {token}"}
+            with patch("routes.chat.usuario_e_participante", return_value=True), \
+                 patch("routes.chat.participantes_info",
+                       return_value=[{"user_id": 11, "nome": "Fulano", "papel": "membro"}]) as mock_info:
+                r = self.client.get("/api/chat/conversas/5/participantes", headers=headers)
+            self.assertEqual(r.status_code, 200)
+            self.assertEqual(r.get_json()["data"][0]["nome"], "Fulano")
+            mock_info.assert_called_once_with(5)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

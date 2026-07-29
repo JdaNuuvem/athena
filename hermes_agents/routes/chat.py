@@ -8,7 +8,7 @@ from core.chat import (
     listar_mensagens, enviar_mensagem, editar_mensagem, excluir_mensagem,
     marcar_lido, adicionar_participante, remover_participante, papel_do_usuario,
     usuario_e_participante, buscar_mensagens, listar_canais_departamento,
-    salvar_anexo, obter_anexo, conversa_do_anexo, obter_conversa,
+    salvar_anexo, obter_anexo, conversa_do_anexo, obter_conversa, participantes_info,
 )
 from core.chat_ws import broadcast_para_participantes
 
@@ -215,6 +215,15 @@ def chat_marcar_lido(conversa_id):
         return jsonify({"error": "Permissao negada"}), 403
     data = request.json or {}
     return jsonify(marcar_lido(conversa_id, int(user_id), data.get("ultima_mensagem_id")))
+
+
+@chat_bp.route("/conversas/<int:conversa_id>/participantes", methods=["GET"])
+def chat_listar_participantes(conversa_id):
+    usuario = usuario_atual_da_request()
+    user_id = usuario.get("user_id")
+    if not user_id or not usuario_e_participante(conversa_id, int(user_id)):
+        return jsonify({"error": "Permissao negada"}), 403
+    return jsonify({"data": participantes_info(conversa_id)})
 
 
 @chat_bp.route("/busca", methods=["GET"])

@@ -212,6 +212,33 @@ def usuario_e_participante(conversa_id: int, user_id: int) -> bool:
     return user_id in participantes_ids(conversa_id)
 
 
+def participantes_info(conversa_id: int) -> list:
+    """Como participantes_ids, mas com nome e papel — usado pelo autocomplete
+    de mencao no frontend. Papel vem nulo pra canal_departamento/ticket (nao
+    ha linha em chat_participantes nesses tipos, participacao e derivada)."""
+    ids = participantes_ids(conversa_id)
+    if not ids:
+        return []
+    async def _go():
+        db = await get_db()
+        nomes = await db.fetch(
+            "SELECT id AS user_id, nome FROM rbac_usuarios WHERE id = ANY($1::int[])", ids)
+        papeis = await db.fetch(
+            "SELECT user_id, papel FROM chat_participantes WHERE conversa_id=$1 AND user_id = ANY($2::int[]) AND saiu_em IS NULL",
+            conversa_id, ids)
+        return [dict(r) for r in nomes], [dict(r) for r in papeis]
+    try:
+        nomes, papeis = run_async(_go())
+    except Exception:
+        return []
+    nomes_por_id = {r["user_id"]: r["nome"] for r in nomes}
+    papel_por_id = {r["user_id"]: r["papel"] for r in papeis}
+    return [
+        {"user_id": uid, "nome": nomes_por_id.get(uid, f"Usuario {uid}"), "papel": papel_por_id.get(uid)}
+        for uid in ids if uid in nomes_por_id
+    ]
+
+
 def papel_do_usuario(conversa_id: int, user_id: int):
     async def _go():
         db = await get_db()
