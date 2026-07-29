@@ -94,8 +94,11 @@ def _request(endpoint: str, params: dict = None, method: str = "GET", loja_id: i
             p = {**default_params, **(params or {})}
             r = requests.get(url, params=p, timeout=30)
         else:
-            body = {**default_params, **(params or {})}
-            r = requests.post(url, json=body, timeout=30)
+            # ponytail: a Shopee exige os parametros de assinatura (partner_id, timestamp,
+            # access_token, shop_id, sign) SEMPRE na query string, mesmo em POST — o body
+            # e' so' pros parametros de negocio do endpoint. Mandar tudo junto no JSON body
+            # (como era antes) faz a Shopee responder "There is no partner_id in query".
+            r = requests.post(url, params=default_params, json=params or {}, timeout=30)
         r.raise_for_status()
         return r.json()
     except Exception as e:

@@ -80,6 +80,29 @@ def _reconciliar_loja_id():
         if r.get("ok"): log(AGENT, f"Reconciliacao loja_id: {r['resultado']}")
     except Exception as e: pass
 
+def _renovar_tokens_shopee():
+    """Access_token da Shopee sempre expira em poucas horas (~4h, ditado pela propria
+    Shopee via 'expire_in' na resposta — nao e' algo que o Athena controla ou pode
+    esticar para 365 dias). O que da' a sensacao de token de longa duracao e' renovar
+    proativamente com o refresh_token antes de expirar, entao aqui a gente renova
+    qualquer loja Shopee cujo token expira nos proximos 30 min (ou ja expirou)."""
+    try:
+        from datetime import datetime, timedelta
+        from core.lojas import listar_lojas_shopee
+        from shopee import refresh_shopee_token
+        limite = datetime.now() + timedelta(minutes=30)
+        for loja in listar_lojas_shopee():
+            expira_em = loja.get("shopee_token_expira_em")
+            if not loja.get("tem_token") or not expira_em or expira_em > limite:
+                continue
+            r = refresh_shopee_token(loja_id=loja["id"])
+            if r.get("success"):
+                log(AGENT, f"Token Shopee renovado: loja {loja['id']} ({loja.get('nome')})")
+            else:
+                log(AGENT, f"Falha ao renovar token Shopee da loja {loja['id']}: {r.get('error')}")
+    except Exception as e:
+        log(AGENT, f"Erro _renovar_tokens_shopee: {e}")
+
 def _sync_categorias():
     try:
         from bling_erp import listar_categorias, get_access_token
@@ -111,3 +134,4 @@ add_job(_sync_cr_cp, "bling-cr-cp", 3600)              # 1 hour
 add_job(_sync_categorias, "bling-categorias", 7200)     # 2 hours
 add_job(_persistir_rotacao_estoque, "estoque-rotacao", 86400)  # daily
 add_job(_reconciliar_loja_id, "estoque-reconciliar-loja-id", 3600)  # 1 hour
+add_job(_renovar_tokens_shopee, "shopee-renovar-tokens", 900)  # 15 min

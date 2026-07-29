@@ -159,6 +159,11 @@ class TestRequestsMockados(unittest.TestCase):
         body_enviado = mock_post.call_args[1]["json"]
         self.assertEqual(body_enviado["item_name"], "Produto Teste")
         self.assertEqual(body_enviado["category_id"], 100183)
+        # parametros de assinatura devem ir na query string, nunca só no body
+        params_enviados = mock_post.call_args[1]["params"]
+        self.assertIn("sign", params_enviados)
+        self.assertIn("partner_id", params_enviados)
+        self.assertNotIn("sign", body_enviado)
 
     @patch("shopee.auth.requests.get")
     def test_get_logistics_channel_list(self, mock_get):
