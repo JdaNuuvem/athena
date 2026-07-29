@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { api } from "@/lib/api";
-import { fmtBRL } from "@/lib/format";
 import { Can } from "@/lib/auth";
+import Icon from "../../_components/Icon";
 
 export interface FieldDef {
   key: string;
@@ -91,58 +91,112 @@ export default function CrudPanel({ tabela, columns, formFields, title, permissi
   }, [data, busca, columns]);
 
   const actionCol = columns.length > 0 ? 1 : 0;
+  const canManage = !!formFields && formFields.length > 0;
 
   return (
     <div className="space-y-3">
-      {title && <h3 className="text-sm font-semibold text-neutral-200">{title}</h3>}
-      <div className="flex items-center gap-2">
-        <input
-          type="text"
-          placeholder="Buscar..."
-          value={busca}
-          onChange={e => setBusca(e.target.value)}
-          className="w-48 bg-neutral-800 border border-neutral-700 rounded px-3 py-1.5 text-xs text-neutral-200 placeholder-neutral-500 focus:outline-none focus:border-indigo-500"
-        />
-        {formFields && formFields.length > 0 && (
-          <Can permission={`${permissionPrefix}:create`}>
-            <button onClick={openCreate}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1.5 rounded-lg transition-colors">+ Novo</button>
-          </Can>
-        )}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          {title && <h3 className="text-sm font-semibold text-neutral-200">{title}</h3>}
+          {!loading && !error && (
+            <span className="rounded-full bg-neutral-800 px-2 py-0.5 text-[10px] font-medium text-neutral-400">
+              {filtered.length}{busca ? ` de ${data.length}` : ""}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Icon name="search" size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-500" />
+            <input
+              type="text"
+              placeholder="Buscar..."
+              value={busca}
+              onChange={e => setBusca(e.target.value)}
+              className="w-52 rounded-lg border border-neutral-700 bg-neutral-800 py-1.5 pl-8 pr-3 text-xs text-neutral-200 placeholder-neutral-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
+            />
+          </div>
+          {canManage && (
+            <Can permission={`${permissionPrefix}:create`}>
+              <button
+                onClick={openCreate}
+                className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-500"
+              >
+                <span className="text-sm leading-none">+</span> Novo
+              </button>
+            </Can>
+          )}
+        </div>
       </div>
 
-      {loading ? <p className="text-xs text-neutral-500">Carregando...</p> :
-       error ? <p className="text-xs text-red-400">{error}</p> : (
-        <div className="bg-neutral-800 border border-neutral-700 rounded-lg overflow-hidden">
+      {loading ? (
+        <div className="overflow-hidden rounded-xl border border-neutral-800">
+          <div className="divide-y divide-neutral-800/70">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex gap-4 px-4 py-3">
+                {columns.map((c) => (
+                  <div key={c.key} className="h-3 flex-1 animate-pulse rounded bg-neutral-800" />
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : error ? (
+        <div className="flex items-center gap-2 rounded-xl border border-red-900/50 bg-red-950/30 px-4 py-3 text-xs text-red-400">
+          <Icon name="alert" size={15} className="shrink-0" />
+          {error}
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-neutral-800">
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-neutral-700 text-neutral-400 text-left">
-                {columns.map(c => <th key={c.key} className="px-4 py-2 font-medium">{c.label}</th>)}
-                {formFields && formFields.length > 0 && <th className="px-4 py-2 font-medium w-24">Ações</th>}
+              <tr className="border-b border-neutral-800 bg-neutral-900/60 text-left text-neutral-400">
+                {columns.map(c => <th key={c.key} className="whitespace-nowrap px-4 py-2.5 font-medium">{c.label}</th>)}
+                {canManage && <th className="w-20 px-4 py-2.5 font-medium text-right">Ações</th>}
               </tr>
             </thead>
-            <tbody>
-              {filtered.map(row => (
-                <tr key={String(row.id)} className="border-b border-neutral-700/50 hover:bg-neutral-700/30 text-neutral-300">
+            <tbody className="divide-y divide-neutral-800/70">
+              {filtered.map((row, i) => (
+                <tr key={String(row.id)} className={`text-neutral-300 transition-colors hover:bg-neutral-800/50 ${i % 2 === 1 ? "bg-neutral-900/30" : ""}`}>
                   {columns.map(c => (
-                    <td key={c.key} className="px-4 py-2.5">
+                    <td key={c.key} className="whitespace-nowrap px-4 py-2.5">
                       {c.render ? c.render(row[c.key], row) : String(row[c.key] ?? "—")}
                     </td>
                   ))}
-                  {formFields && formFields.length > 0 && (
+                  {canManage && (
                     <td className="px-4 py-2.5">
-                      <Can permission={`${permissionPrefix}:edit`}>
-                        <button onClick={() => openEdit(row)} className="text-indigo-400 hover:text-indigo-300 mr-2 text-[11px]">Editar</button>
-                      </Can>
-                      <Can permission={`${permissionPrefix}:delete`}>
-                        <button onClick={() => setConfirmDelete(Number(row.id))} className="text-red-400 hover:text-red-300 text-[11px]">Excluir</button>
-                      </Can>
+                      <div className="flex justify-end gap-1">
+                        <Can permission={`${permissionPrefix}:edit`}>
+                          <button
+                            onClick={() => openEdit(row)}
+                            title="Editar"
+                            className="rounded-md p-1.5 text-neutral-500 transition-colors hover:bg-indigo-500/10 hover:text-indigo-400"
+                          >
+                            <Icon name="pencil" size={13} />
+                          </button>
+                        </Can>
+                        <Can permission={`${permissionPrefix}:delete`}>
+                          <button
+                            onClick={() => setConfirmDelete(Number(row.id))}
+                            title="Excluir"
+                            className="rounded-md p-1.5 text-neutral-500 transition-colors hover:bg-red-500/10 hover:text-red-400"
+                          >
+                            <Icon name="trash" size={13} />
+                          </button>
+                        </Can>
+                      </div>
                     </td>
                   )}
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={columns.length + actionCol} className="px-4 py-6 text-center text-neutral-500">Nenhum registro encontrado</td></tr>
+                <tr>
+                  <td colSpan={columns.length + actionCol} className="px-4 py-10">
+                    <div className="flex flex-col items-center gap-2 text-neutral-500">
+                      <Icon name="inbox" size={22} />
+                      <span className="text-xs">{busca ? "Nenhum registro corresponde à busca" : "Nenhum registro cadastrado"}</span>
+                    </div>
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
@@ -150,43 +204,51 @@ export default function CrudPanel({ tabela, columns, formFields, title, permissi
       )}
 
       {modal.open && formFields && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setModal({ open: false, mode: "create" })}>
-          <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-6 w-[400px] max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <h3 className="text-sm font-semibold text-neutral-200 mb-4">{modal.mode === "create" ? "Novo Registro" : "Editar Registro"}</h3>
-            <div className="space-y-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setModal({ open: false, mode: "create" })}>
+          <div className="w-full max-w-[440px] max-h-[85vh] overflow-y-auto rounded-xl border border-neutral-700 bg-neutral-800 shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-neutral-700/70 px-5 py-4">
+              <h3 className="text-sm font-semibold text-neutral-100">{modal.mode === "create" ? "Novo registro" : "Editar registro"}</h3>
+              <button onClick={() => setModal({ open: false, mode: "create" })} className="rounded-md p-1 text-neutral-500 hover:bg-neutral-700 hover:text-neutral-300">
+                <Icon name="close" size={15} />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-3 px-5 py-4">
               {formFields.filter(f => f.key !== "id").map(f => (
-                <div key={f.key}>
-                  <label className="block text-[11px] text-neutral-400 mb-1">{f.label}</label>
+                <div key={f.key} className={f.type === "select" || f.key === "endereco" ? "col-span-2" : "col-span-2 sm:col-span-1"}>
+                  <label className="mb-1 block text-[11px] font-medium text-neutral-400">{f.label}</label>
                   {f.type === "select" && f.options ? (
                     <select value={formData[f.key] ?? ""} onChange={e => setFormData(prev => ({ ...prev, [f.key]: e.target.value }))}
-                      className="w-full bg-neutral-700 border border-neutral-600 rounded px-3 py-2 text-xs text-neutral-200 focus:outline-none focus:border-indigo-500">
+                      className="w-full rounded-lg border border-neutral-600 bg-neutral-700 px-3 py-2 text-xs text-neutral-200 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/50">
                       <option value="">Selecione...</option>
                       {f.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                   ) : (
                     <input type={f.type === "number" ? "number" : "text"} step={f.step ?? "any"}
                       value={formData[f.key] ?? ""} onChange={e => setFormData(prev => ({ ...prev, [f.key]: e.target.value }))}
-                      className="w-full bg-neutral-700 border border-neutral-600 rounded px-3 py-2 text-xs text-neutral-200 focus:outline-none focus:border-indigo-500" />
+                      className="w-full rounded-lg border border-neutral-600 bg-neutral-700 px-3 py-2 text-xs text-neutral-200 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/50" />
                   )}
                 </div>
               ))}
             </div>
-            <div className="flex justify-end gap-2 mt-6">
-              <button onClick={() => setModal({ open: false, mode: "create" })} className="text-xs px-3 py-1.5 rounded-lg text-neutral-400 hover:text-neutral-200 transition-colors">Cancelar</button>
-              <button onClick={handleSave} className="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors">Salvar</button>
+            <div className="flex justify-end gap-2 border-t border-neutral-700/70 px-5 py-4">
+              <button onClick={() => setModal({ open: false, mode: "create" })} className="rounded-lg px-3 py-1.5 text-xs text-neutral-400 transition-colors hover:text-neutral-200">Cancelar</button>
+              <button onClick={handleSave} className="rounded-lg bg-indigo-600 px-3.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-500">Salvar</button>
             </div>
           </div>
         </div>
       )}
 
       {confirmDelete !== null && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setConfirmDelete(null)}>
-          <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-6 w-[320px]" onClick={e => e.stopPropagation()}>
-            <h3 className="text-sm font-semibold text-neutral-200 mb-2">Confirmar exclusão</h3>
-            <p className="text-xs text-neutral-400 mb-4">Tem certeza que deseja excluir este registro?</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setConfirmDelete(null)}>
+          <div className="w-full max-w-[340px] rounded-xl border border-neutral-700 bg-neutral-800 p-5 shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="mb-3 flex items-center gap-2 text-red-400">
+              <Icon name="alert" size={17} />
+              <h3 className="text-sm font-semibold text-neutral-100">Confirmar exclusão</h3>
+            </div>
+            <p className="mb-4 text-xs text-neutral-400">Tem certeza que deseja excluir este registro? Essa ação não pode ser desfeita.</p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setConfirmDelete(null)} className="text-xs px-3 py-1.5 rounded-lg text-neutral-400 hover:text-neutral-200 transition-colors">Cancelar</button>
-              <button onClick={() => handleDelete(confirmDelete)} className="text-xs px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors">Excluir</button>
+              <button onClick={() => setConfirmDelete(null)} className="rounded-lg px-3 py-1.5 text-xs text-neutral-400 transition-colors hover:text-neutral-200">Cancelar</button>
+              <button onClick={() => handleDelete(confirmDelete)} className="rounded-lg bg-red-600 px-3.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-red-500">Excluir</button>
             </div>
           </div>
         </div>

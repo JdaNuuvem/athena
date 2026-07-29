@@ -21,6 +21,16 @@ const paths: Record<string, string> = {
   agents: "M13 10V3L4 14h7v7l9-11h-7z",
   bling: "M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5",
   hermes: "M13 10V3L4 14h7v7l9-11h-7z",
+  building: "M3 21h18M5 21V7l7-4 7 4v14M9 9h1m4 0h1m-6 4h1m4 0h1m-6 4h1m4 0h1",
+  user: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z",
+  truck: "M3 7h11v8H3V7zm11 3h4l3 3v2h-7v-5zM6.5 19a1.5 1.5 0 100-3 1.5 1.5 0 000 3zm12 0a1.5 1.5 0 100-3 1.5 1.5 0 000 3z",
+  userStar: "M15 19a6 6 0 00-12 0M9 12a4 4 0 100-8 4 4 0 000 8zm9-1.5l.94 1.9 2.1.3-1.52 1.48.36 2.09L18 15.27l-1.88 1 .36-2.09-1.52-1.48 2.1-.3L18 10.5z",
+  search: "M21 21l-4.35-4.35M18 11a7 7 0 11-14 0 7 7 0 0114 0z",
+  close: "M6 18L18 6M6 6l12 12",
+  pencil: "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.5-9.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 8.5-8.5z",
+  trash: "M19 7l-.87 12.14A2 2 0 0116.14 21H7.86a2 2 0 01-1.99-1.86L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3M4 7h16",
+  alert: "M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z",
+  inbox: "M3 8l2-5h14l2 5m-18 0v10a2 2 0 002 2h14a2 2 0 002-2V8m-18 0h5a2 2 0 002 2v1a1 1 0 001 1h2a1 1 0 001-1v-1a2 2 0 002-2h5",
 };
 
 export default function Icon({ name, size = 20, className = "" }: { name: string; size?: number; className?: string }) {
