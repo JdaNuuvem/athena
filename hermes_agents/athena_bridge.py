@@ -219,6 +219,7 @@ from routes.lojas_integracoes import lojas_integracoes_bp
 from routes.lojas_midia import lojas_midia_bp
 from routes.rh import rh_bp
 from routes.cadastros import cadastros_bp
+from routes.produtos import produtos_bp
 from routes.financeiro import financeiro_bp
 from routes.bi import bi_bp
 from routes.chat import chat_bp
@@ -251,6 +252,7 @@ app.register_blueprint(lojas_integracoes_bp)
 app.register_blueprint(lojas_midia_bp)
 app.register_blueprint(rh_bp)
 app.register_blueprint(cadastros_bp)
+app.register_blueprint(produtos_bp)
 app.register_blueprint(financeiro_bp)
 app.register_blueprint(bi_bp)
 app.register_blueprint(chat_bp)
@@ -1688,79 +1690,103 @@ def listar_produtos():
 @app.route('/api/produtos', methods=['POST'])
 def criar_produto_local():
     """Cria produto 100% local em catalogo_produtos, sem depender de sync do Bling."""
-    if not _autenticado():
-        return jsonify({"error": "Unauthorized"}), 401
-    data = request.json or {}
-    sku = (data.get("sku") or "").strip()
-    descricao = (data.get("descricao") or "").strip()
-    if not sku or not descricao:
-        return jsonify({"error": "sku e descricao sao obrigatorios"}), 400
+    from core.rbac import requer_permissao
 
-    campos = {"sku": sku, "descricao": descricao}
-    for campo in ("categoria", "marca", "codigo_barras", "fornecedor_codigo",
-                  "unidade_padrao", "tipo", "estoque_localizacao"):
-        if data.get(campo):
-            campos[campo] = data[campo]
-    for campo in ("preco_custo", "custo_transporte", "preco_venda",
-                  "estoque_minimo", "estoque_maximo"):
-        if data.get(campo) not in (None, ""):
-            try: campos[campo] = float(data[campo])
-            except (TypeError, ValueError): pass
-    if data.get("fornecedor_id") not in (None, ""):
-        try: campos["fornecedor_id"] = int(data["fornecedor_id"])
-        except (TypeError, ValueError): pass
+    @requer_permissao("produtos.criar")
+    def _handler():
+        data = request.json or {}
+        sku = (data.get("sku") or "").strip()
+        descricao = (data.get("descricao") or "").strip()
+        if not sku or not descricao:
+            return jsonify({"error": "sku e descricao sao obrigatorios"}), 400
 
-    from core.catalogo import criar
-    resultado = criar(campos)
-    if resultado.get("error"):
-        msg = resultado["error"]
-        status = 409 if "unique" in msg.lower() or "duplicate" in msg.lower() else 500
-        return jsonify({"error": f"SKU ja existe" if status == 409 else msg}), status
-    try:
-        from core.seguranca import auditar
-        auditar("criar", "produtos", "produto", dados_depois=campos)
-    except Exception:
-        pass
-    return jsonify({"success": True, "produto": resultado}), 201
+        campos = {"sku": sku, "descricao": descricao}
+        for campo in ("categoria", "marca", "codigo_barras", "fornecedor_codigo",
+                      "unidade_padrao", "tipo", "estoque_localizacao",
+                      "classificacao", "nome_reduzido", "nome_impressao",
+                      "codigo_interno", "codigo_erp", "ex_tipi",
+                      "modelo", "linha", "colecao"):
+            if data.get(campo):
+                campos[campo] = data[campo]
+        for campo in ("preco_custo", "custo_transporte", "preco_venda",
+                      "estoque_minimo", "estoque_maximo"):
+            if data.get(campo) not in (None, ""):
+                try: campos[campo] = float(data[campo])
+                except (TypeError, ValueError): pass
+        for campo in ("fornecedor_id", "marca_id", "fabricante_id", "categoria_id_norm"):
+            if data.get(campo) not in (None, ""):
+                try: campos[campo] = int(data[campo])
+                except (TypeError, ValueError): pass
+
+        from core.catalogo import criar
+        resultado = criar(campos)
+        if resultado.get("error"):
+            msg = resultado["error"]
+            status = 409 if "unique" in msg.lower() or "duplicate" in msg.lower() else 500
+            return jsonify({"error": "SKU ja existe" if status == 409 else msg}), status
+        try:
+            from core.seguranca import auditar_alteracao
+            auditar_alteracao("criar", "produtos", "catalogo_produtos", resultado.get("id"), dados_depois=campos)
+        except Exception:
+            pass
+        return jsonify({"success": True, "produto": resultado}), 201
+
+    return _handler()
 
 @app.route('/api/produtos/<sku>', methods=['PUT'])
 def editar_produto(sku):
-    if not _autenticado():
-        return jsonify({"error": "Unauthorized"}), 401
-    try:
-        data = request.json or {}
-        conn = _db_sync(); cur = conn.cursor()
-        updates = []
-        values = []
-        campos = ["descricao","ncm","cest","categoria","marca","unidade_padrao","tipo",
-                  "peso_bruto","sku_pai","atributo",
-                  "codigo_barras","gtin_embalagem","descricao_curta","descricao_complementar",
-                  "peso_liquido","largura","altura","profundidade","unidade_medida_dimensao",
-                  "volumes","itens_por_caixa","cfop_padrao","observacoes","link_externo",
-                  "fornecedor_nome","fornecedor_codigo","fornecedor_id","preco_custo",
-                  "custo_transporte","preco_venda",
-                  "estoque_minimo","estoque_maximo","estoque_localizacao"]
-        for campo in campos:
-            if campo in data and data[campo] is not None:
-                updates.append(f"{campo} = %s")
-                values.append(data[campo])
-        if not updates:
-            return jsonify({"error": "Nenhum campo para atualizar"}), 400
-        updates.append("updated_at = NOW()")
-        values.append(sku)
-        sql = f"UPDATE catalogo_produtos SET {', '.join(updates)} WHERE sku = %s"
-        cur.execute(sql, values)
-        if "descricao" in data:
-            cur.execute("UPDATE fichas_tecnicas SET descricao = %s WHERE sku = %s", (data["descricao"], sku))
-        cur.close(); conn.close()
+    from core.rbac import requer_permissao
+
+    @requer_permissao("produtos.editar")
+    def _handler():
         try:
-            from core.seguranca import auditar
-            auditar("editar", "produtos", "produto", dados_depois=data)
-        except Exception:
-            pass
-        return jsonify({"success": True, "sku": sku})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+            data = request.json or {}
+            conn = _db_sync(); cur = conn.cursor()
+            updates = []
+            values = []
+            campos = ["descricao","ncm","cest","categoria","marca","unidade_padrao","tipo",
+                      "peso_bruto","sku_pai","atributo",
+                      "codigo_barras","gtin_embalagem","descricao_curta","descricao_complementar",
+                      "peso_liquido","largura","altura","profundidade","unidade_medida_dimensao",
+                      "volumes","itens_por_caixa","cfop_padrao","observacoes","link_externo",
+                      "fornecedor_nome","fornecedor_codigo","fornecedor_id","preco_custo",
+                      "custo_transporte","preco_venda",
+                      "estoque_minimo","estoque_maximo","estoque_localizacao",
+                      "classificacao","nome_reduzido","nome_impressao","codigo_interno",
+                      "codigo_erp","ex_tipi","modelo","linha","colecao",
+                      "marca_id","fabricante_id","categoria_id_norm"]
+            # marca_id/fabricante_id/categoria_id_norm sao FKs opcionais: o frontend envia
+            # null explicito quando o usuario limpa o campo ("— Nenhum —"), e isso deve
+            # gerar SET campo = NULL em vez de ser ignorado (que era o comportamento antigo
+            # e tornava impossivel desvincular marca/fabricante/categoria de um produto).
+            fks_anulaveis = {"marca_id", "fabricante_id", "categoria_id_norm"}
+            for campo in campos:
+                if campo in fks_anulaveis:
+                    if campo in data:
+                        updates.append(f"{campo} = %s")
+                        values.append(data[campo])
+                elif campo in data and data[campo] is not None:
+                    updates.append(f"{campo} = %s")
+                    values.append(data[campo])
+            if not updates:
+                return jsonify({"error": "Nenhum campo para atualizar"}), 400
+            updates.append("updated_at = NOW()")
+            values.append(sku)
+            sql = f"UPDATE catalogo_produtos SET {', '.join(updates)} WHERE sku = %s"
+            cur.execute(sql, values)
+            if "descricao" in data:
+                cur.execute("UPDATE fichas_tecnicas SET descricao = %s WHERE sku = %s", (data["descricao"], sku))
+            cur.close(); conn.close()
+            try:
+                from core.seguranca import auditar_alteracao
+                auditar_alteracao("editar", "produtos", "catalogo_produtos", None, dados_depois={**data, "sku": sku})
+            except Exception:
+                pass
+            return jsonify({"success": True, "sku": sku})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    return _handler()
 
 @app.route('/api/produtos/<sku>', methods=['GET'])
 def detalhe_produto(sku):

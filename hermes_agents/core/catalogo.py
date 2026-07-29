@@ -86,6 +86,76 @@ def _ensure_tables():
         # Payload bruto completo do Bling — garante 100% dos campos, inclusive os que a Bling adicionar no futuro
         await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS dados_brutos_bling JSONB")
         await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS grupo VARCHAR(50)")
+        # ── Fase 1 PIM Core: campos de identificacao (2026-07-28) ──
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS classificacao VARCHAR(20) DEFAULT 'simples'")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS nome_reduzido VARCHAR(100)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS nome_impressao VARCHAR(100)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS codigo_interno VARCHAR(50)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS codigo_erp VARCHAR(50)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS ex_tipi VARCHAR(10)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS modelo VARCHAR(100)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS linha VARCHAR(100)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS colecao VARCHAR(100)")
+
+        # ── Fase 1 PIM Core: taxonomias normalizadas (2026-07-28) ──
+        try:
+            await db.execute("""CREATE TABLE IF NOT EXISTS catalogo_marcas (
+                id SERIAL PRIMARY KEY, nome VARCHAR(150) NOT NULL UNIQUE, created_at TIMESTAMP DEFAULT NOW()
+            )""")
+            await db.execute("""CREATE TABLE IF NOT EXISTS catalogo_fabricantes (
+                id SERIAL PRIMARY KEY, nome VARCHAR(150) NOT NULL UNIQUE, created_at TIMESTAMP DEFAULT NOW()
+            )""")
+            await db.execute("""CREATE TABLE IF NOT EXISTS catalogo_categorias (
+                id SERIAL PRIMARY KEY, nome VARCHAR(150) NOT NULL,
+                categoria_pai_id INT REFERENCES catalogo_categorias(id),
+                created_at TIMESTAMP DEFAULT NOW()
+            )""")
+            await db.execute("""CREATE TABLE IF NOT EXISTS catalogo_tags (
+                id SERIAL PRIMARY KEY, nome VARCHAR(60) NOT NULL UNIQUE
+            )""")
+            await db.execute("""CREATE TABLE IF NOT EXISTS catalogo_produto_tags (
+                produto_id INT REFERENCES catalogo_produtos(id) ON DELETE CASCADE,
+                tag_id INT REFERENCES catalogo_tags(id) ON DELETE CASCADE,
+                PRIMARY KEY (produto_id, tag_id)
+            )""")
+            await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS marca_id INT REFERENCES catalogo_marcas(id)")
+            await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS fabricante_id INT REFERENCES catalogo_fabricantes(id)")
+            await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS categoria_id_norm INT REFERENCES catalogo_categorias(id)")
+
+            # ── Migracao: dedup de marca/categoria texto livre -> tabelas normalizadas ──
+            # Cada metade (marcas / categorias) tem seu proprio guard, para que uma falha
+            # parcial num boot anterior nao impeca a outra metade de rodar num boot futuro.
+            count_marcas = await db.fetchval("SELECT COUNT(*) FROM catalogo_marcas")
+            if count_marcas == 0:
+                await db.execute("""
+                    INSERT INTO catalogo_marcas (nome)
+                    SELECT DISTINCT TRIM(marca) FROM catalogo_produtos
+                    WHERE marca IS NOT NULL AND TRIM(marca) != ''
+                    ON CONFLICT (nome) DO NOTHING
+                """)
+                await db.execute("""
+                    UPDATE catalogo_produtos SET marca_id = m.id
+                    FROM catalogo_marcas m WHERE TRIM(catalogo_produtos.marca) = m.nome
+                """)
+                log(AGENT, "Migracao dedup marca concluida")
+
+            count_categorias = await db.fetchval("SELECT COUNT(*) FROM catalogo_categorias")
+            if count_categorias == 0:
+                await db.execute("""
+                    INSERT INTO catalogo_categorias (nome)
+                    SELECT DISTINCT TRIM(categoria) FROM catalogo_produtos
+                    WHERE categoria IS NOT NULL AND TRIM(categoria) != ''
+                    ON CONFLICT DO NOTHING
+                """)
+                await db.execute("""
+                    UPDATE catalogo_produtos SET categoria_id_norm = c.id
+                    FROM catalogo_categorias c
+                    WHERE TRIM(catalogo_produtos.categoria) = c.nome AND c.categoria_pai_id IS NULL
+                """)
+                log(AGENT, "Migracao dedup categoria concluida")
+        except Exception as e:
+            log(AGENT, f"Erro na migracao de taxonomias PIM Core: {e}")
+
         # ── Full-text search indexes (pg_trgm for ILIKE with leading wildcard) ──
         try:
             await db.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
@@ -219,3 +289,105 @@ def ficha_tecnica_por_sku(sku: str) -> dict:
         return dict(row) if row else {}
     try: return run_async(_go())
     except Exception as e: return {}
+
+# ── Fase 1 PIM Core: organizacao (marcas, fabricantes, categorias, tags) ──
+
+def listar_marcas() -> list:
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch("SELECT * FROM catalogo_marcas ORDER BY nome")
+        return [dict(r) for r in rows]
+    try: return run_async(_go())
+    except Exception as e: return []
+
+def criar_marca(nome: str) -> dict:
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow(
+            "INSERT INTO catalogo_marcas (nome) VALUES ($1) ON CONFLICT (nome) DO UPDATE SET nome = EXCLUDED.nome RETURNING *",
+            nome.strip())
+        return dict(row) if row else {"error": "insert failed"}
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
+
+def listar_fabricantes() -> list:
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch("SELECT * FROM catalogo_fabricantes ORDER BY nome")
+        return [dict(r) for r in rows]
+    try: return run_async(_go())
+    except Exception as e: return []
+
+def criar_fabricante(nome: str) -> dict:
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow(
+            "INSERT INTO catalogo_fabricantes (nome) VALUES ($1) ON CONFLICT (nome) DO UPDATE SET nome = EXCLUDED.nome RETURNING *",
+            nome.strip())
+        return dict(row) if row else {"error": "insert failed"}
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
+
+def listar_categorias() -> list:
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch("SELECT * FROM catalogo_categorias ORDER BY nome")
+        return [dict(r) for r in rows]
+    try: return run_async(_go())
+    except Exception as e: return []
+
+def criar_categoria(nome: str, categoria_pai_id: int = None) -> dict:
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow(
+            "INSERT INTO catalogo_categorias (nome, categoria_pai_id) VALUES ($1, $2) RETURNING *",
+            nome.strip(), categoria_pai_id)
+        return dict(row) if row else {"error": "insert failed"}
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
+
+def listar_tags() -> list:
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch("SELECT * FROM catalogo_tags ORDER BY nome")
+        return [dict(r) for r in rows]
+    try: return run_async(_go())
+    except Exception as e: return []
+
+def criar_tag(nome: str) -> dict:
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow(
+            "INSERT INTO catalogo_tags (nome) VALUES ($1) ON CONFLICT (nome) DO UPDATE SET nome = EXCLUDED.nome RETURNING *",
+            nome.strip())
+        return dict(row) if row else {"error": "insert failed"}
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
+
+def tags_do_produto(produto_id: int) -> list:
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch("""SELECT t.id, t.nome FROM catalogo_tags t
+            JOIN catalogo_produto_tags pt ON pt.tag_id = t.id
+            WHERE pt.produto_id = $1 ORDER BY t.nome""", produto_id)
+        return [dict(r) for r in rows]
+    try: return run_async(_go())
+    except Exception as e: return []
+
+def vincular_tag(produto_id: int, tag_id: int) -> dict:
+    async def _go():
+        db = await get_db()
+        await db.execute(
+            "INSERT INTO catalogo_produto_tags (produto_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+            produto_id, tag_id)
+    try: run_async(_go()); return {"success": True}
+    except Exception as e: return {"error": str(e)}
+
+def desvincular_tag(produto_id: int, tag_id: int) -> dict:
+    async def _go():
+        db = await get_db()
+        await db.execute(
+            "DELETE FROM catalogo_produto_tags WHERE produto_id = $1 AND tag_id = $2",
+            produto_id, tag_id)
+    try: run_async(_go()); return {"success": True}
+    except Exception as e: return {"error": str(e)}

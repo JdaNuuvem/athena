@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import SelectComCriacao from "./SelectComCriacao";
 
 interface Fornecedor { id: number; nome: string; }
 
@@ -21,10 +22,16 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState("");
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
+  const [marcas, setMarcas] = useState<{ id: number; nome: string }[]>([]);
+  const [fabricantes, setFabricantes] = useState<{ id: number; nome: string }[]>([]);
+  const [categorias, setCategorias] = useState<{ id: number; nome: string }[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     api.cadList("fornecedores").then(r => setFornecedores((r.data ?? []) as Fornecedor[])).catch(() => {});
+    api.listarMarcas().then(r => setMarcas(r.data ?? [])).catch(() => {});
+    api.listarFabricantes().then(r => setFabricantes(r.data ?? [])).catch(() => {});
+    api.listarCategoriasProduto().then(r => setCategorias(r.data ?? [])).catch(() => {});
   }, []);
 
   const p = produto as any;
@@ -39,6 +46,9 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
     "fornecedor_nome", "fornecedor_codigo", "fornecedor_id", "preco_custo",
     "custo_transporte", "preco_venda",
     "estoque_minimo", "estoque_maximo", "estoque_localizacao",
+    "classificacao", "nome_reduzido", "nome_impressao", "codigo_interno",
+    "codigo_erp", "ex_tipi", "modelo", "linha", "colecao",
+    "marca_id", "fabricante_id", "categoria_id_norm",
   ];
 
   const startEdit = () => {
@@ -51,9 +61,16 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
   const handleSave = async () => {
     setSaving(true); setMsg("");
     try {
-      // fornecedor_id e' BIGINT no banco — string vazia quebraria o UPDATE, so' envia se selecionado
+      // fornecedor_id, marca_id, fabricante_id, categoria_id_norm sao BIGINT/INT no banco —
+      // string vazia quebraria o UPDATE, so' envia se selecionado
       const payload: Record<string, unknown> = { ...form };
       if (!payload.fornecedor_id) delete payload.fornecedor_id;
+      // marca_id/fabricante_id/categoria_id_norm: envia null explicito quando limpo
+      // ("— Nenhum —"), ao inves de deletar a chave, para o backend distinguir
+      // "campo nao tocado" (chave ausente) de "campo explicitamente limpo" (null).
+      for (const campoFk of ["marca_id", "fabricante_id", "categoria_id_norm"]) {
+        if (!payload[campoFk]) payload[campoFk] = null;
+      }
       // 1. Save locally
       const r = await fetch("/api/produtos/" + sku, {
         method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
@@ -173,6 +190,85 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
           <InputGroup label="GTIN Embalagem">{field("gtin_embalagem")}</InputGroup>
           <InputGroup label="Tipo Bling"><div className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-500">{String(p?.bling_tipo || "—")} / {String(p?.formato || "—")}</div></InputGroup>
           <InputGroup label="Situação"><div className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-500">{p?.situacao === "A" ? "Ativo" : p?.situacao === "I" ? "Inativo" : String(p?.situacao || "—")}</div></InputGroup>
+        </div>
+      </Section>
+
+      <Section title="Classificação e Organização">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          <InputGroup label="Classificação">
+            {editando ? (
+              <select
+                value={form.classificacao || "simples"}
+                onChange={e => setForm({ ...form, classificacao: e.target.value })}
+                className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-indigo-500"
+              >
+                <option value="simples">Simples</option>
+                <option value="variavel">Variável</option>
+                <option value="kit">Kit</option>
+                <option value="combo">Combo</option>
+              </select>
+            ) : (
+              <div className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 capitalize">
+                {String(p?.classificacao || "simples")}
+              </div>
+            )}
+          </InputGroup>
+          <InputGroup label="Nome Reduzido">{field("nome_reduzido")}</InputGroup>
+          <InputGroup label="Nome para Impressão">{field("nome_impressao")}</InputGroup>
+          <InputGroup label="Código Interno">{field("codigo_interno")}</InputGroup>
+          <InputGroup label="Código ERP">{field("codigo_erp")}</InputGroup>
+          <InputGroup label="EX TIPI">{field("ex_tipi")}</InputGroup>
+          <InputGroup label="Modelo">{field("modelo")}</InputGroup>
+          <InputGroup label="Linha">{field("linha")}</InputGroup>
+          <InputGroup label="Coleção">{field("colecao")}</InputGroup>
+          {editando ? (
+            <SelectComCriacao
+              label="Marca"
+              value={form.marca_id || ""}
+              options={marcas}
+              onChange={id => setForm({ ...form, marca_id: id })}
+              onCriar={api.criarMarca}
+              onCriado={nova => setMarcas(prev => [...prev, nova])}
+            />
+          ) : (
+            <InputGroup label="Marca">
+              <div className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200">
+                {marcas.find(m => m.id === Number(p?.marca_id))?.nome || "—"}
+              </div>
+            </InputGroup>
+          )}
+          {editando ? (
+            <SelectComCriacao
+              label="Fabricante"
+              value={form.fabricante_id || ""}
+              options={fabricantes}
+              onChange={id => setForm({ ...form, fabricante_id: id })}
+              onCriar={api.criarFabricante}
+              onCriado={novo => setFabricantes(prev => [...prev, novo])}
+            />
+          ) : (
+            <InputGroup label="Fabricante">
+              <div className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200">
+                {fabricantes.find(f => f.id === Number(p?.fabricante_id))?.nome || "—"}
+              </div>
+            </InputGroup>
+          )}
+          {editando ? (
+            <SelectComCriacao
+              label="Categoria (normalizada)"
+              value={form.categoria_id_norm || ""}
+              options={categorias}
+              onChange={id => setForm({ ...form, categoria_id_norm: id })}
+              onCriar={api.criarCategoriaProduto}
+              onCriado={nova => setCategorias(prev => [...prev, nova])}
+            />
+          ) : (
+            <InputGroup label="Categoria (normalizada)">
+              <div className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200">
+                {categorias.find(c => c.id === Number(p?.categoria_id_norm))?.nome || "—"}
+              </div>
+            </InputGroup>
+          )}
         </div>
       </Section>
 
