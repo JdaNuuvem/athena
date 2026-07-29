@@ -1,7 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
-import type { MensagemChat } from "@/lib/types/chat";
+import type { MensagemChat, ParticipanteChat } from "@/lib/types/chat";
 import { api } from "@/lib/api";
+import { TextoComMencoes } from "@/lib/chatMencoes";
 
 export default function ThreadPainel({
   mensagemPai, onFechar, onEnviarResposta,
@@ -11,6 +12,7 @@ export default function ThreadPainel({
   onEnviarResposta: (texto: string, threadPaiId: number) => void;
 }) {
   const [respostas, setRespostas] = useState<MensagemChat[]>([]);
+  const [participantes, setParticipantes] = useState<ParticipanteChat[]>([]);
   const [texto, setTexto] = useState("");
 
   useEffect(() => {
@@ -18,6 +20,10 @@ export default function ThreadPainel({
       setRespostas(r.data.filter((m) => m.thread_pai_id === mensagemPai.id));
     }).catch(() => {});
   }, [mensagemPai.id, mensagemPai.conversa_id]);
+
+  useEffect(() => {
+    api.chat.listarParticipantes(mensagemPai.conversa_id).then((r) => setParticipantes(r.data)).catch(() => setParticipantes([]));
+  }, [mensagemPai.conversa_id]);
 
   const enviar = () => {
     if (!texto.trim()) return;
@@ -32,12 +38,14 @@ export default function ThreadPainel({
         <button onClick={onFechar} className="text-neutral-500 text-xs">fechar</button>
       </div>
       <div className="p-3 border-b border-neutral-800 bg-neutral-800/50">
-        <p className="text-sm text-neutral-300">{mensagemPai.texto}</p>
+        <p className="text-sm text-neutral-300">
+          <TextoComMencoes texto={mensagemPai.texto ?? ""} participantes={participantes} />
+        </p>
       </div>
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
         {respostas.map((r) => (
           <div key={r.id} className="bg-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200">
-            {r.texto}
+            <TextoComMencoes texto={r.texto ?? ""} participantes={participantes} />
           </div>
         ))}
       </div>
