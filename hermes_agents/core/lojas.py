@@ -109,10 +109,19 @@ async def _loja_efetiva_async(loja) -> str:
     db = await get_db()
     if chave.isdigit():
         row = await db.fetchrow(
-            "SELECT l1.nome, l2.nome AS nome_fisica FROM lojas l1 "
+            "SELECT l1.nome, l1.tipo, l2.nome AS nome_fisica FROM lojas l1 "
             "LEFT JOIN lojas l2 ON l2.id = l1.loja_vinculada_id "
             "WHERE l1.id = $1", int(chave))
-        efetiva = (row["nome_fisica"] or row["nome"]) if row else loja
+        # so' usa nome_fisica se a PROPRIA loja for tipo='virtual' — defesa
+        # contra loja_vinculada_id setado numa loja fisica/hibrida/marketplace
+        # (nao deveria acontecer se quem grava validar, mas o resolver nao
+        # pode confiar so' na escrita; mesmo criterio do branch por nome abaixo).
+        if not row:
+            efetiva = loja
+        elif row.get("tipo") == "virtual" and row.get("nome_fisica"):
+            efetiva = row["nome_fisica"]
+        else:
+            efetiva = row["nome"]
     else:
         row = await db.fetchrow(
             "SELECT l2.nome FROM lojas l1 JOIN lojas l2 ON l2.id = l1.loja_vinculada_id "
@@ -142,11 +151,18 @@ def loja_efetiva_sync(cur, loja: str) -> str:
         return _cache_loja_efetiva[chave]
     if chave.isdigit():
         cur.execute(
-            "SELECT l1.nome, l2.nome AS nome_fisica FROM lojas l1 "
+            "SELECT l1.nome, l1.tipo, l2.nome AS nome_fisica FROM lojas l1 "
             "LEFT JOIN lojas l2 ON l2.id = l1.loja_vinculada_id "
             "WHERE l1.id = %s", (int(chave),))
         row = cur.fetchone()
-        efetiva = (row[1] or row[0]) if row else loja
+        # mesma defesa do branch async acima: so' usa nome_fisica (row[2]) se
+        # a propria loja (row[1]) for tipo='virtual'.
+        if not row:
+            efetiva = loja
+        elif row[1] == "virtual" and row[2]:
+            efetiva = row[2]
+        else:
+            efetiva = row[0]
     else:
         cur.execute(
             "SELECT l2.nome FROM lojas l1 JOIN lojas l2 ON l2.id = l1.loja_vinculada_id "

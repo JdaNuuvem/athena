@@ -34,7 +34,7 @@ class TestLojaEfetivaAsync(unittest.TestCase):
 
     def test_id_com_vinculo_resolve_para_nome_da_fisica(self):
         db = AsyncMock()
-        db.fetchrow.return_value = {"nome": "Loja Virtual A", "nome_fisica": "Loja Fisica Central"}
+        db.fetchrow.return_value = {"nome": "Loja Virtual A", "tipo": "virtual", "nome_fisica": "Loja Fisica Central"}
         with patch("core.lojas.get_db", AsyncMock(return_value=db)):
             resultado = lojas._sync_run(lojas._loja_efetiva_async("42"))
         self.assertEqual(resultado, "Loja Fisica Central")
@@ -45,6 +45,16 @@ class TestLojaEfetivaAsync(unittest.TestCase):
         with patch("core.lojas.get_db", AsyncMock(return_value=db)):
             resultado = lojas._sync_run(lojas._loja_efetiva_async("7"))
         self.assertEqual(resultado, "Loja Y")
+
+    def test_id_fisica_com_loja_vinculada_id_setado_ignora_e_resolve_proprio_nome(self):
+        """Regressao: loja fisica (tipo != 'virtual') com loja_vinculada_id
+        setado (nao deveria acontecer, mas o resolver nao pode confiar so' na
+        escrita) deve resolver pro proprio nome, nunca pro nome "vinculado"."""
+        db = AsyncMock()
+        db.fetchrow.return_value = {"nome": "Loja Fisica Y", "tipo": "fisica", "nome_fisica": "Loja Vinculada Errada"}
+        with patch("core.lojas.get_db", AsyncMock(return_value=db)):
+            resultado = lojas._sync_run(lojas._loja_efetiva_async("99"))
+        self.assertEqual(resultado, "Loja Fisica Y")
 
     def test_cache_evita_segunda_consulta(self):
         db = AsyncMock()
@@ -70,3 +80,23 @@ class TestLojaEfetivaSync(unittest.TestCase):
         cur.fetchone.return_value = None
         resultado = lojas.loja_efetiva_sync(cur, "Loja X")
         self.assertEqual(resultado, "Loja X")
+
+    def test_cursor_sync_id_virtual_com_vinculo_resolve_para_fisica(self):
+        cur = MagicMock()
+        cur.fetchone.return_value = ("Loja Virtual A", "virtual", "Loja Fisica Central")
+        resultado = lojas.loja_efetiva_sync(cur, "42")
+        self.assertEqual(resultado, "Loja Fisica Central")
+
+    def test_cursor_sync_id_sem_vinculo_resolve_proprio_nome(self):
+        cur = MagicMock()
+        cur.fetchone.return_value = ("Loja Y", "fisica", None)
+        resultado = lojas.loja_efetiva_sync(cur, "7")
+        self.assertEqual(resultado, "Loja Y")
+
+    def test_cursor_sync_id_fisica_com_loja_vinculada_id_setado_ignora_e_resolve_proprio_nome(self):
+        """Regressao (mesmo caso do async acima): loja fisica com
+        loja_vinculada_id setado nao deve resolver pro nome "vinculado"."""
+        cur = MagicMock()
+        cur.fetchone.return_value = ("Loja Fisica Y", "fisica", "Loja Vinculada Errada")
+        resultado = lojas.loja_efetiva_sync(cur, "99")
+        self.assertEqual(resultado, "Loja Fisica Y")
