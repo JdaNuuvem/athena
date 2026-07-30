@@ -7,17 +7,21 @@ AGENT = "Scheduler"
 JOBS = []
 
 def add_job(fn, name: str, interval_seconds: int):
-    JOBS.append((fn, name, interval_seconds))
+    JOBS.append({"fn": fn, "name": name, "interval": interval_seconds, "last_run": 0.0})
 
 def _worker():
     while True:
-        for fn, name, interval in JOBS:
+        now = time.time()
+        for job in JOBS:
+            if now - job["last_run"] < job["interval"]:
+                continue
+            job["last_run"] = now
             try:
-                fn()
+                job["fn"]()
             except Exception as e:
-                log(AGENT, f"Job '{name}' error: {e}")
+                log(AGENT, f"Job '{job['name']}' error: {e}")
         # sleep in chunks so shutdown is responsive
-        for _ in range(60):
+        for _ in range(10):
             time.sleep(1)
 
 _started = False
@@ -138,12 +142,15 @@ def _sync_categorias():
     except Exception as e: pass
 
 # ponytail: jobs run every N seconds. Adjust intervals based on volume.
-add_job(_sync_pedidos, "bling-pedidos", 300)          # 5 min
+# Bling desativado temporariamente (modulo nao usado no momento — ver core/lojas.py /
+# integracoes) — jobs abaixo comentados para nao consumir a API do Bling nem
+# competir por tempo de scheduler com os jobs Shopee.
+# add_job(_sync_pedidos, "bling-pedidos", 300)          # 5 min
 add_job(_sync_pedidos_shopee, "shopee-pedidos", 300)   # 5 min
-add_job(_sync_nf, "bling-nf", 600)                     # 10 min
-add_job(_sync_contatos, "bling-contatos", 1800)        # 30 min
-add_job(_sync_cr_cp, "bling-cr-cp", 3600)              # 1 hour
-add_job(_sync_categorias, "bling-categorias", 7200)     # 2 hours
+# add_job(_sync_nf, "bling-nf", 600)                     # 10 min
+# add_job(_sync_contatos, "bling-contatos", 1800)        # 30 min
+# add_job(_sync_cr_cp, "bling-cr-cp", 3600)              # 1 hour
+# add_job(_sync_categorias, "bling-categorias", 7200)     # 2 hours
 add_job(_persistir_rotacao_estoque, "estoque-rotacao", 86400)  # daily
 add_job(_reconciliar_loja_id, "estoque-reconciliar-loja-id", 3600)  # 1 hour
 add_job(_renovar_tokens_shopee, "shopee-renovar-tokens", 900)  # 15 min

@@ -262,6 +262,17 @@ def _num(*candidatos) -> float:
             except (TypeError, ValueError): continue
     return 0.0
 
+def _data(s):
+    """Converte string 'YYYY-MM-DD...' do Bling para date real — asyncpg exige um
+    objeto date nos parametros ligados a colunas DATE, nao aceita string mesmo com ::date."""
+    if not s:
+        return None
+    from datetime import datetime
+    try:
+        return datetime.strptime(s[:10], "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return None
+
 def _mapear_nfe_detalhe(nf: dict) -> dict:
     """Mapeia o payload de detalhe do Bling (GET /nfe/{id}) para as colunas de
     fiscal_notas_fiscais. Os valores de tributos usam multiplas chaves candidatas
@@ -282,8 +293,8 @@ def _mapear_nfe_detalhe(nf: dict) -> dict:
         "numero": str(nf.get("numero", "")),
         "chave_acesso": nf.get("chaveAcesso", ""),
         "tipo": "saida" if nf.get("tipo", 0) == 0 else "entrada",
-        "data_emissao": (nf.get("dataEmissao") or "")[:10] or None,
-        "data_operacao": (nf.get("dataOperacao") or "")[:10] or None,
+        "data_emissao": _data(nf.get("dataEmissao")),
+        "data_operacao": _data(nf.get("dataOperacao")),
         "natureza_operacao": natureza.get("descricao", ""),
         "cfop": natureza.get("cfop", ""),
         "contato_nome": contato.get("nome", ""),

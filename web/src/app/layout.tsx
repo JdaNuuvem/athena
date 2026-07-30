@@ -21,11 +21,12 @@ const NAV_PERMS: Record<string, string> = {
   "/fiscal": "fiscal:view",
   "/crm": "crm:view",
   "/atendimento": "services:view",
-  "/producao": "manufacturing:view",
-  "/manutencao": "manufacturing:view",
-  "/qualidade": "manufacturing:view",
-  "/moldes": "manufacturing:view",
-  "/memory": "agents:view",
+  // Abas desativadas temporariamente (não usadas no momento) — ver NAV_ITEMS abaixo
+  // "/producao": "manufacturing:view",
+  // "/manutencao": "manufacturing:view",
+  // "/qualidade": "manufacturing:view",
+  // "/moldes": "manufacturing:view",
+  // "/memory": "agents:view",
   "/rh": "hr:view",
   "/bi": "bi:view",
   "/documentos": "documents:view",
@@ -92,11 +93,12 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/fiscal", label: "Fiscal", icon: "fiscal" },
   { href: "/crm", label: "CRM", icon: "crm" },
   { href: "/atendimento", label: "Atendimento", icon: "atendimento" },
-  { href: "/producao", label: "Produção", icon: "producao" },
-  { href: "/manutencao", label: "Manutenção", icon: "producao" },
-  { href: "/qualidade", label: "Qualidade", icon: "producao" },
-  { href: "/moldes", label: "Moldes & CNC", icon: "producao" },
-  { href: "/memory", label: "Memória", icon: "agents" },
+  // Abas desativadas temporariamente (não usadas no momento)
+  // { href: "/producao", label: "Produção", icon: "producao" },
+  // { href: "/manutencao", label: "Manutenção", icon: "producao" },
+  // { href: "/qualidade", label: "Qualidade", icon: "producao" },
+  // { href: "/moldes", label: "Moldes & CNC", icon: "producao" },
+  // { href: "/memory", label: "Memória", icon: "agents" },
   { href: "/rh", label: "RH", icon: "rh" },
   { href: "/bi", label: "BI", icon: "bi" },
   { href: "/documentos", label: "Documentos", icon: "documentos" },
@@ -159,6 +161,28 @@ function Sidebar() {
           {sidebarOpen ? "◀" : "▶"}
         </button>
       </div>
+
+      {sidebarOpen ? (
+        <div className="px-3 pt-3 pb-2 border-b border-neutral-800">
+          <label className="text-[9px] text-neutral-500 uppercase tracking-wider mb-1 block">Loja</label>
+          <select
+            value={lojaId}
+            onChange={(e) => setLojaId(e.target.value)}
+            className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-indigo-500"
+          >
+            <option value="todas">🏢 Todas as Lojas</option>
+            {lojas.map((l) => (
+              <option key={l.id} value={String(l.id)}>{l.tipo === "virtual" ? "🌐" : "📍"} {l.nome}</option>
+            ))}
+          </select>
+        </div>
+      ) : (
+        <div className="px-1.5 py-2 flex justify-center border-b border-neutral-800">
+          <span className="text-[9px] text-neutral-500 cursor-help" title={`Loja: ${lojaId}`}>
+            {lojaId === "todas" ? "🏢" : tipoLojaSelecionada === "virtual" ? "🌐" : "📍"}
+          </span>
+        </div>
+      )}
 
       <nav className="flex-1 p-2 space-y-1 overflow-y-auto" role="navigation">
         {navItems.map((item) => {
@@ -229,27 +253,6 @@ function Sidebar() {
           );
         })}
       </nav>
-
-      {sidebarOpen && (
-        <div className="px-3 pb-2">
-          <label className="text-[9px] text-neutral-500 uppercase tracking-wider mb-1 block">Loja</label>
-          <select
-            value={lojaId}
-            onChange={(e) => setLojaId(e.target.value)}
-            className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-indigo-500"
-          >
-            <option value="todas">🏢 Todas as Lojas</option>
-            {lojas.map((l) => (
-              <option key={l.id} value={String(l.id)}>📍 {l.nome}</option>
-            ))}
-          </select>
-        </div>
-      )}
-      {!sidebarOpen && (
-        <div className="px-1.5 pb-2 flex justify-center">
-          <span className="text-[9px] text-neutral-500 cursor-help" title={`Loja: ${lojaId}`}>🏢</span>
-        </div>
-      )}
 
       {user && (
         <div className="p-3 border-t border-neutral-800">

@@ -85,6 +85,15 @@ class TestSincronizarNotasFiscaisBling(unittest.TestCase):
         r = self.fiscal.sincronizar_notas_fiscais_bling()
         self.assertEqual(r["sync"], 0)
 
+    def test_mapear_nfe_detalhe_datas_sao_date_reais(self):
+        """asyncpg exige datetime.date nos parametros ligados a colunas DATE — passar
+        string (mesmo com ::date no SQL) falha com 'str' object has no attribute 'toordinal'."""
+        from datetime import date
+        campos = self.fiscal._mapear_nfe_detalhe(_NFE_DETALHE_MOCK)
+        self.assertEqual(campos["data_emissao"], date(2026, 7, 20))
+        self.assertIsInstance(campos["data_emissao"], date)
+        self.assertNotIsInstance(campos["data_emissao"], str)
+
     @patch("bling_erp.get_access_token", return_value="tok")
     @patch("bling_erp.listar_notas_fiscais", return_value={"data": [{"id": 777}]})
     @patch("bling_erp.get_nfe_completa", return_value={"data": _NFE_DETALHE_MOCK})

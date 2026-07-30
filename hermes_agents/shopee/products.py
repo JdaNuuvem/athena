@@ -1,7 +1,7 @@
 """
 Shopee Products — CRUD operations via API.
 """
-import sys, os, json
+import sys, os
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
@@ -18,9 +18,11 @@ def get_items(status: str = "NORMAL", offset: int = 0, page_size: int = 100, loj
 
 
 def get_item_base_info(item_ids: list, loja_id: int = None) -> dict:
-    """Detalhes de itens específicos."""
+    """Detalhes de itens específicos. item_id_list e' string de IDs separados por
+    virgula (nao array JSON) — a Shopee rejeita '[id1, id2]' com
+    'strconv.ParseUint: parsing "[id1": invalid syntax'."""
     return _request("product/get_item_base_info", {
-        "item_id_list": json.dumps(item_ids),
+        "item_id_list": ",".join(str(i) for i in item_ids),
     }, loja_id=loja_id)
 
 

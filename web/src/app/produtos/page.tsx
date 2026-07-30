@@ -88,7 +88,7 @@ function Pagination({ pagina, total, onChange }: { pagina: number; total: number
 }
 
 export default function ProdutosPage() {
-  const { lojaId } = useStore();
+  const { lojaId, tipoLojaSelecionada } = useStore();
   const [produtos, setProdutos] = useState<Product[]>([]);
   const [total, setTotal] = useState(0);
   const [busca, setBusca] = useState("");
@@ -105,6 +105,24 @@ export default function ProdutosPage() {
     try {
       const p = pg ?? 1;
       const v = vars ?? mostrarVariacoes;
+
+      if (tipoLojaSelecionada === "virtual" && lojaId !== "todas") {
+        const r = await api.shopeeProdutosSincronizados(Number(lojaId));
+        if (r.error) throw new Error(r.error);
+        const termo = (search || "").toLowerCase();
+        const filtrados = (r.produtos ?? []).filter(
+          (sp) => !termo || sp.sku.toLowerCase().includes(termo) || sp.titulo.toLowerCase().includes(termo)
+        );
+        const mapeados: Product[] = filtrados.map((sp) => ({
+          sku: sp.sku, nome: sp.titulo, valor: sp.preco, total_variacoes: 0,
+        }));
+        const inicio = (p - 1) * POR_PAGINA;
+        setProdutos(mapeados.slice(inicio, inicio + POR_PAGINA));
+        setTotal(mapeados.length);
+        if (!search) setPagina(p);
+        return;
+      }
+
       const r = await api.listarProdutos({ busca: search, pagina: p, variacoes: v, loja: lojaId === "todas" ? undefined : lojaId });
       setProdutos((r.produtos ?? []) as Product[]);
       setTotal(r.total ?? 0);
@@ -114,7 +132,7 @@ export default function ProdutosPage() {
     } finally {
       setLoading(false);
     }
-  }, [mostrarVariacoes, lojaId]);
+  }, [mostrarVariacoes, lojaId, tipoLojaSelecionada]);
 
   useEffect(() => { load(undefined, 1); }, [load]);
 
