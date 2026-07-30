@@ -148,3 +148,38 @@ class TestPaginarEstoques(unittest.TestCase):
             i9logic._paginar_estoques(63, 2)
         self.assertEqual(chamadas[0]["filial"], 63)
         self.assertEqual(chamadas[0]["tipoestoque"], 2)
+
+
+class TestGravarSnapshot(unittest.TestCase):
+    def test_grava_resolvendo_sku_e_loja_via_depara(self):
+        chamadas_fetchval = []
+        async def _fetchval(query, *args):
+            chamadas_fetchval.append((query, args))
+            if "tipo='produto'" in query:
+                return "SKU-29098"
+            if "tipo='filial'" in query:
+                return "Loja Matriz"
+            return None
+        async def _fetchrow(query, *args):
+            return {"id": 1, "idproduto_i9logic": args[0], "codproduto_i9logic": args[1],
+                    "sku_athena": args[2], "filial_i9logic": args[3], "loja_athena": args[4],
+                    "qtd_fisico": args[5], "qtd_contabil": args[6], "divergencia": args[6] - args[5]}
+        with patch("core.i9logic.get_db") as mock_get_db:
+            mock_get_db.return_value = AsyncMock(fetchval=_fetchval, fetchrow=_fetchrow)
+            resultado = i9logic.gravar_snapshot(29098, "041725", 63, 165, 348)
+        self.assertEqual(resultado["sku_athena"], "SKU-29098")
+        self.assertEqual(resultado["loja_athena"], "Loja Matriz")
+        self.assertEqual(resultado["divergencia"], 183)
+
+    def test_grava_com_athena_nulo_quando_sem_depara(self):
+        async def _fetchval(query, *args):
+            return None
+        async def _fetchrow(query, *args):
+            return {"id": 1, "idproduto_i9logic": args[0], "codproduto_i9logic": args[1],
+                    "sku_athena": args[2], "filial_i9logic": args[3], "loja_athena": args[4],
+                    "qtd_fisico": args[5], "qtd_contabil": args[6]}
+        with patch("core.i9logic.get_db") as mock_get_db:
+            mock_get_db.return_value = AsyncMock(fetchval=_fetchval, fetchrow=_fetchrow)
+            resultado = i9logic.gravar_snapshot(999, "SEM-DEPARA", 1, 10, 10)
+        self.assertIsNone(resultado["sku_athena"])
+        self.assertIsNone(resultado["loja_athena"])

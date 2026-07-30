@@ -160,3 +160,36 @@ def _paginar_estoques(filial_id_i9logic: int, tipoestoque: int) -> list:
         pagina += 1
         time.sleep(RATE_LIMIT_SLEEP_SEGUNDOS)
     return registros
+
+
+# ── Snapshot (staging) ──
+
+def gravar_snapshot(idproduto_i9logic: int, codproduto_i9logic: str, filial_i9logic: int,
+                     qtd_fisico: float, qtd_contabil: float, data_coleta: datetime = None) -> dict:
+    """Resolve sku_athena/loja_athena via de-para no momento da gravacao; grava
+    nulo se nao encontrar mapeamento — nao perde o dado bruto coletado esperando
+    resolucao manual do de-para. data_coleta explicito (nao so' o DEFAULT NOW()
+    da coluna) permite que o job de coleta (Task 6) marque todas as linhas de
+    uma mesma corrida com o MESMO instante, mesmo gravando fora de uma unica
+    transacao — necessario pra 'uma linha por corrida completa' do spec."""
+    async def _go():
+        db = await get_db()
+        sku_athena = await db.fetchval(
+            "SELECT codigo_athena FROM de_para_i9logic WHERE tipo='produto' AND id_i9logic=$1",
+            str(idproduto_i9logic))
+        loja_athena = await db.fetchval(
+            "SELECT codigo_athena FROM de_para_i9logic WHERE tipo='filial' AND id_i9logic=$1",
+            str(filial_i9logic))
+        row = await db.fetchrow("""
+            INSERT INTO i9logic_estoque_snapshot
+                (idproduto_i9logic, codproduto_i9logic, sku_athena, filial_i9logic, loja_athena,
+                 qtd_fisico, qtd_contabil, data_coleta)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,COALESCE($8, NOW()))
+            ON CONFLICT (idproduto_i9logic, filial_i9logic, data_coleta) DO UPDATE
+                SET qtd_fisico=$6, qtd_contabil=$7
+            RETURNING *
+        """, idproduto_i9logic, codproduto_i9logic, sku_athena, filial_i9logic, loja_athena,
+            qtd_fisico, qtd_contabil, data_coleta)
+        return dict(row)
+    try: return run_async(_go())
+    except Exception as e: return {"erro": str(e)}
