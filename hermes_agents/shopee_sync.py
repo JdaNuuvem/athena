@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from core import log, run_async, get_db, hoje
 from shopee import (
-    configurado, get_items, get_item_base_info,
+    configurado, get_items, get_item_base_info, get_model_list,
     get_orders_by_time_range, get_order_detail, get_shopee_config,
 )
 
@@ -69,6 +69,22 @@ async def _init_tables():
     except Exception:
         pass
 
+async def _upsert_anuncio(db, shop_id: str, sku: str, anuncio_id: str, titulo: str,
+                           preco: float, estoque: int, status: str, agora: datetime) -> None:
+    """Upsert de 1 linha em anuncios (produto simples OU 1 variacao de um produto
+    com modelos) + garante a linha correspondente em fichas_tecnicas."""
+    await db.execute("""
+        INSERT INTO anuncios (sku, marketplace, shop_id, anuncio_id, titulo, preco, estoque, status, ultima_atualizacao)
+        VALUES ($1, 'shopee', $2, $3::text, $4, $5, $6, $7, $8)
+        ON CONFLICT (sku, marketplace, shop_id)
+        DO UPDATE SET anuncio_id = $3, titulo = $4, preco = $5, estoque = $6, status = $7, ultima_atualizacao = $8
+    """, sku, shop_id, anuncio_id, titulo, preco, estoque, status, agora)
+    await db.execute("""
+        INSERT INTO fichas_tecnicas (sku, descricao) VALUES ($1, $2)
+        ON CONFLICT (sku) DO NOTHING
+    """, sku, titulo)
+
+
 async def sync_produtos(loja_id: int = None) -> dict:
     """Sincroniza produtos da Shopee para o catalogo local. loja_id identifica qual conta
     Shopee usar (multiloja); quando omitido, usa a config global legada (loja unica)."""
@@ -97,28 +113,42 @@ async def sync_produtos(loja_id: int = None) -> dict:
                 continue
             detalhes.extend(details.get("response", {}).get("item_list", []))
         for d in detalhes:
+            item_id = d["item_id"]
+            item_name = d.get("item_name", "")
+            status = d.get("item_status", "NORMAL").lower()
+            agora = datetime.now()
+            if d.get("has_model"):
+                # Produto com variacao: preco/estoque nao existem no nivel do item
+                # (fica 0 em price_info/stock_info_v2) — precisa buscar cada
+                # modelo (variacao) via get_model_list, 1 linha em anuncios por SKU.
+                modelos = get_model_list(item_id, loja_id=loja_id)
+                if modelos.get("error"):
+                    erros.append(f"get_model_list item {item_id}: {modelos.get('message', modelos['error'])}")
+                    continue
+                for m in modelos.get("response", {}).get("model", []):
+                    try:
+                        sku = m.get("model_sku") or f"{d.get('item_sku', item_id)}-{m['model_id']}"
+                        s = m.get("stock_info_v2", {}).get("summary_info", {}) or {}
+                        price_info = (m.get("price_info") or [{}])[0] or {}
+                        nome_variacao = m.get("model_name", "")
+                        titulo = f"{item_name} - {nome_variacao}" if nome_variacao else item_name
+                        await _upsert_anuncio(db, shop_id, sku, f"{item_id}_{m['model_id']}", titulo,
+                                               price_info.get("current_price", 0),
+                                               s.get("total_available_stock", 0), status, agora)
+                        total += 1
+                    except Exception as e:
+                        erros.append(f"item {item_id} modelo {m.get('model_id')}: {e}")
+                continue
             try:
+                sku = d.get("item_sku", str(item_id))
                 s = d.get("stock_info_v2", {}).get("summary_info", {}) or {}
                 price_info = (d.get("price_info") or [{}])[0] or {}
-                agora = datetime.now()
-                # Upsert em anuncios (tabela do AG-03) — shop_id permite o mesmo SKU em varias lojas Shopee
-                await db.execute("""
-                    INSERT INTO anuncios (sku, marketplace, shop_id, anuncio_id, titulo, preco, estoque, status, ultima_atualizacao)
-                    VALUES ($1, 'shopee', $2, $3::text, $4, $5, $6, $7, $8)
-                    ON CONFLICT (sku, marketplace, shop_id)
-                    DO UPDATE SET anuncio_id = $3, titulo = $4, preco = $5, estoque = $6, status = $7, ultima_atualizacao = $8
-                """, d.get("item_sku", str(d["item_id"])), shop_id, str(d["item_id"]),
-                    d.get("item_name", ""), price_info.get("current_price", 0),
-                    s.get("total_available_stock", 0),
-                    d.get("item_status", "NORMAL").lower(), agora)
-                # Inserir/atualizar em fichas_tecnicas
-                await db.execute("""
-                    INSERT INTO fichas_tecnicas (sku, descricao) VALUES ($1, $2)
-                    ON CONFLICT (sku) DO NOTHING
-                """, d.get("item_sku", str(d["item_id"])), d.get("item_name", ""))
+                await _upsert_anuncio(db, shop_id, sku, str(item_id), item_name,
+                                       price_info.get("current_price", 0),
+                                       s.get("total_available_stock", 0), status, agora)
                 total += 1
             except Exception as e:
-                erros.append(f"item {d.get('item_id')}: {e}")
+                erros.append(f"item {item_id}: {e}")
         offset = resp.get("next_offset", 0)
         if not resp.get("has_next_page"):
             break

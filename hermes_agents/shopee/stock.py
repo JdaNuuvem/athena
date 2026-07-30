@@ -15,7 +15,10 @@ AGENT = "AG-03 | Shopee Stock"
 
 def sincronizar_estoque_shopee(sku: str, quantidade: int, loja_id: int = None) -> dict:
     """Sincroniza estoque local → Shopee. Resolve o item_id via a tabela anuncios
-    (marketplace='shopee'), respeitando a loja/shop_id quando informada (multiloja)."""
+    (marketplace='shopee'), respeitando a loja/shop_id quando informada (multiloja).
+    Produtos com variacao gravam anuncio_id como "item_id_model_id" (ver
+    shopee_sync.sync_produtos) — nesse caso o payload precisa do model_id, senao
+    a Shopee rejeita o update (item com modelos nao aceita stock no nivel do item)."""
     async def _go():
         db = await get_db()
         cfg = get_shopee_config(loja_id)
@@ -24,8 +27,15 @@ def sincronizar_estoque_shopee(sku: str, quantidade: int, loja_id: int = None) -
             sku, cfg.get("shop_id") or "")
         if not row or not row["anuncio_id"]:
             return {"error": "SKU sem anuncio_id da Shopee para esta loja — execute a sincronizacao primeiro"}
-        item_id = int(row["anuncio_id"])
-        return update_stock(item_id, [{"seller_stock": [{"stock": quantidade}]}], loja_id=loja_id)
+        anuncio_id = row["anuncio_id"]
+        if "_" in anuncio_id:
+            item_id_str, model_id_str = anuncio_id.split("_", 1)
+            item_id = int(item_id_str)
+            stock_list = [{"model_id": int(model_id_str), "seller_stock": [{"stock": quantidade}]}]
+        else:
+            item_id = int(anuncio_id)
+            stock_list = [{"seller_stock": [{"stock": quantidade}]}]
+        return update_stock(item_id, stock_list, loja_id=loja_id)
     return run_async(_go())
 
 

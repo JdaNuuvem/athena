@@ -119,6 +119,70 @@ class TestSyncProdutosGravaEstoque(unittest.TestCase):
         self.assertEqual(r["total"], 75)
         self.assertEqual(mock_get_base.call_count, 2)  # lotes de 50 + 25
 
+    @patch("shopee_sync.get_shopee_config")
+    @patch("shopee_sync.get_model_list")
+    @patch("shopee_sync.get_item_base_info")
+    @patch("shopee_sync.get_items")
+    @patch("shopee_sync.get_db")
+    def test_sync_produtos_com_variacao_grava_1_linha_por_modelo(self, mock_get_db, mock_get_items, mock_get_base, mock_get_models, mock_cfg):
+        """Produto com has_model=True nao tem preco/estoque no nivel do item —
+        price_info/stock_info_v2 vem zerados. O preco/estoque real esta em cada
+        variacao (model), obtido via get_model_list(). Sem isso, produtos com
+        variacao sempre sincronizavam com preco R$ 0,00."""
+        mock_cfg.return_value = {"shop_id": "1782908877"}
+        mock_get_items.return_value = {"response": {"item": [{"item_id": 333}], "has_next_page": False, "next_offset": 0}}
+        mock_get_base.return_value = {"response": {"item_list": [{
+            "item_id": 333, "item_sku": "BAR-LAM-MASTER", "item_name": "Lamina Master",
+            "item_status": "NORMAL", "has_model": True,
+            "price_info": [{"current_price": 0}],
+        }]}}
+        mock_get_models.return_value = {"response": {"model": [
+            {"model_id": 1, "model_name": "1 Unidade", "model_sku": "BAR-LAM-MASTER-1UN",
+             "price_info": [{"current_price": 27.99}],
+             "stock_info_v2": {"summary_info": {"total_available_stock": 10}}},
+            {"model_id": 2, "model_name": "2 Unidades", "model_sku": "BAR-LAM-MASTER-2UN",
+             "price_info": [{"current_price": 54.29}],
+             "stock_info_v2": {"summary_info": {"total_available_stock": 5}}},
+            {"model_id": 3, "model_name": "3 Unidades", "model_sku": "BAR-LAM-MASTER-3UN",
+             "price_info": [{"current_price": 79.99}],
+             "stock_info_v2": {"summary_info": {"total_available_stock": 3}}},
+        ]}}
+        fake_db = AsyncMock()
+        fake_db.fetchval.return_value = 1
+        mock_get_db.return_value = fake_db
+
+        r = shopee_sync.run_async(shopee_sync.sync_produtos(loja_id=7))
+
+        self.assertEqual(r["total"], 3)
+        mock_get_models.assert_called_once_with(333, loja_id=7)
+        inserts = [c for c in fake_db.execute.call_args_list if "INSERT INTO anuncios" in c.args[0]]
+        self.assertEqual(len(inserts), 3)
+        skus_gravados = {c.args[1] for c in inserts}
+        self.assertEqual(skus_gravados, {"BAR-LAM-MASTER-1UN", "BAR-LAM-MASTER-2UN", "BAR-LAM-MASTER-3UN"})
+        precos_gravados = {c.args[1]: c.args[5] for c in inserts}
+        self.assertEqual(precos_gravados["BAR-LAM-MASTER-2UN"], 54.29)
+
+    @patch("shopee_sync.get_shopee_config")
+    @patch("shopee_sync.get_model_list")
+    @patch("shopee_sync.get_item_base_info")
+    @patch("shopee_sync.get_items")
+    @patch("shopee_sync.get_db")
+    def test_sync_produtos_erro_no_get_model_list_nao_derruba_sync(self, mock_get_db, mock_get_items, mock_get_base, mock_get_models, mock_cfg):
+        mock_cfg.return_value = {"shop_id": "1782908877"}
+        mock_get_items.return_value = {"response": {"item": [{"item_id": 333}], "has_next_page": False, "next_offset": 0}}
+        mock_get_base.return_value = {"response": {"item_list": [{
+            "item_id": 333, "item_sku": "X", "item_name": "X", "item_status": "NORMAL", "has_model": True,
+        }]}}
+        mock_get_models.return_value = {"error": "item_not_found", "message": "item nao encontrado"}
+        fake_db = AsyncMock()
+        fake_db.fetchval.return_value = 1
+        mock_get_db.return_value = fake_db
+
+        r = shopee_sync.run_async(shopee_sync.sync_produtos(loja_id=7))
+
+        self.assertEqual(r["total"], 0)
+        self.assertEqual(r["erros"], 1)
+
 
 class TestListarProdutosSincronizados(unittest.TestCase):
 
