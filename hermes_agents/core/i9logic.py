@@ -20,6 +20,16 @@ LIMIAR_ALERTA_ABSOLUTO = 5
 LIMIAR_ALERTA_PERCENTUAL = 0.10
 TOLERANCIA_ZERO = 0.5
 
+MAX_TENTATIVAS_PAGINA = 3
+BACKOFF_SEGUNDOS = [2.5, 5, 10]
+
+
+class I9LogicPaginaError(Exception):
+    def __init__(self, pagina: int, causa):
+        self.pagina = pagina
+        self.causa = causa
+        super().__init__(f"falha ao buscar pagina {pagina} apos {MAX_TENTATIVAS_PAGINA} tentativas: {causa}")
+
 
 def _api_key() -> str:
     return os.environ.get("I9LOGIC_API_KEY") or get_config("i9logic", "api_key") or ""
@@ -141,31 +151,52 @@ def executar_matching_automatico(tipo: str, pares_i9logic: list) -> dict:
 
 # ── Client HTTP (paginacao + rate limit) ──
 
-def _paginar_estoques(filial_id_i9logic: int, tipoestoque: int) -> list:
-    """Pagina o catalogo inteiro da filial pro tipo de estoque pedido
-    (1=fisico, 2=contabil), respeitando o rate limit de 30 req/min via sleep
-    de RATE_LIMIT_SLEEP_SEGUNDOS entre chamadas (nao dorme apos a ultima
-    pagina). Retorna todos os registros de todas as paginas, sem duplicar."""
+def _paginar(endpoint: str, params: dict, on_pagina=None) -> list:
+    """Pagina qualquer endpoint do i9Logic respeitando o rate limit (sleep de
+    RATE_LIMIT_SLEEP_SEGUNDOS entre paginas, nunca apos a ultima). Falha de
+    rede/API numa pagina tenta de novo ate MAX_TENTATIVAS_PAGINA vezes com
+    backoff (BACKOFF_SEGUNDOS); esgotou, levanta I9LogicPaginaError (carrega
+    o numero da pagina que falhou, pro chamador reportar progresso parcial).
+    on_pagina, se passado, e' chamado com a lista de registros de cada
+    pagina assim que ela chega — permite processamento/gravacao incremental
+    em cargas grandes (import de catalogo) sem perder o progresso se uma
+    pagina posterior falhar."""
     registros = []
     pagina = 1
     while True:
-        resp = requests.get(
-            f"{BASE_URL}/v1/produtos_estoques",
-            params={"filial": filial_id_i9logic, "tipoestoque": tipoestoque,
-                     "page": pagina, "per_page": PER_PAGE_PADRAO},
-            headers={"X-Client-Id": _client_id(), "Authorization": f"Bearer {_api_key()}"},
-            timeout=30,
-        )
-        resp.raise_for_status()
-        dados = resp.json()
+        dados = None
+        ultimo_erro = None
+        for tentativa in range(MAX_TENTATIVAS_PAGINA):
+            try:
+                resp = requests.get(
+                    f"{BASE_URL}/v1/{endpoint}",
+                    params={**params, "page": pagina, "per_page": PER_PAGE_PADRAO},
+                    headers={"X-Client-Id": _client_id(), "Authorization": f"Bearer {_api_key()}"},
+                    timeout=30,
+                )
+                resp.raise_for_status()
+                dados = resp.json()
+                break
+            except Exception as e:
+                ultimo_erro = e
+                if tentativa < MAX_TENTATIVAS_PAGINA - 1:
+                    time.sleep(BACKOFF_SEGUNDOS[tentativa])
+        if dados is None:
+            raise I9LogicPaginaError(pagina, ultimo_erro)
         pagina_registros = dados.get("data", [])
         registros.extend(pagina_registros)
+        if on_pagina:
+            on_pagina(pagina_registros)
         total = dados.get("total", len(registros))
         if pagina * PER_PAGE_PADRAO >= total or not pagina_registros:
             break
         pagina += 1
         time.sleep(RATE_LIMIT_SLEEP_SEGUNDOS)
     return registros
+
+
+def _paginar_estoques(filial_id_i9logic: int, tipoestoque: int) -> list:
+    return _paginar("produtos_estoques", {"filial": filial_id_i9logic, "tipoestoque": tipoestoque})
 
 
 # ── Snapshot (staging) ──
