@@ -1955,6 +1955,17 @@ def serve_frontend(path):
         dir_index = target / 'index.html'
         if dir_index.exists():
             return send_from_directory(str(target), 'index.html')
+    # ponytail: rota dinamica do Next (ex: /produtos/<sku>, /lojas/<id>,
+    # /agents/<id>) — o export estatico so' gera HTML para o valor
+    # "placeholder" de generateStaticParams (o SKU/ID real e' lido em runtime
+    # via useParams). Sem isso, um F5 ou link direto numa rota dinamica cai
+    # no fallback final e serve a raiz do app (dashboard/login) em vez da
+    # pagina certa — o SPA carregado por engano nao sabe que deveria estar em
+    # /produtos/<sku> e nunca chega a rodar o useParams daquela pagina.
+    primeiro_segmento = path.split('/', 1)[0]
+    placeholder = static_dir / primeiro_segmento / 'placeholder.html'
+    if placeholder.exists():
+        return send_from_directory(str(static_dir / primeiro_segmento), 'placeholder.html')
     return send_from_directory(static_dir, 'index.html')
 
 if __name__ == "__main__":
