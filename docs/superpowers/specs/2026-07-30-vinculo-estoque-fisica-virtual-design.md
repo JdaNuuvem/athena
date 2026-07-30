@@ -66,7 +66,7 @@ Leitura/escrita crua que precisa de chamada explícita ao resolver:
 |---|---|---|
 | `core/estoque.py:55-92` | `listar()` | asyncpg |
 | `core/estoque.py:247-276` | `movimentacoes()` | asyncpg |
-| `core/estoque.py:360-370` | `sync_bling()` | asyncpg |
+| ~~`core/estoque.py:360-370`~~ | ~~`sync_bling()`~~ | **fora de escopo** — usuário decidiu em 30/07/2026 não usar o módulo Bling por ora; revisitar quando voltar a ser usado |
 | `core/estoque_analise.py:35,93,104,178,189` | `giro()`, `ruptura()`, `cobertura()` | asyncpg |
 | `core/estoque_aprovacoes.py:55` | `solicitar()` | asyncpg |
 | `core/estoque_contagem.py:55-66,85-87` | `sugestoes()`, `registrar()` | asyncpg |

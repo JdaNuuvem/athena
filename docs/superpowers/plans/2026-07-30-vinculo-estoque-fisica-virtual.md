@@ -496,7 +496,9 @@ git commit -m "feat: saldo/_saldo_async resolvem loja por vinculo antes de ler"
 
 ---
 
-### Task 5: `core/estoque.py` — `listar()`, `movimentacoes()`, `sync_bling()`
+### Task 5: `core/estoque.py` — `listar()`, `movimentacoes()`
+
+**Nota:** `sync_bling()` (linha 360) fica FORA desta task — decisão do usuário em 30/07/2026 de não usar o módulo Bling por ora. Não resolver vínculo lá por enquanto; revisitar quando o módulo voltar a ser usado.
 
 **Files:**
 - Modify: `hermes_agents/core/estoque.py`
@@ -563,15 +565,6 @@ Em `movimentacoes()` (linha 247), primeira linha do corpo de `_go()`:
 ```
 Usar `loja_resolvida` no `params.append(...)` da linha 258 no lugar de `loja`.
 
-Em `sync_bling()` (linha 360), dentro do `_go()`:
-```python
-        async def _go():
-            db = await get_db()
-            loja_resolvida = await _loja_efetiva_async(loja)
-            return await db.fetchval(
-                "SELECT quantidade FROM estoque_lojas WHERE sku = $1 AND loja = $2", sku, loja_resolvida)
-```
-
 - [ ] **Step 4: Rodar e confirmar que passa**
 
 Run: `cd hermes_agents && python -m pytest tests/test_estoque_vinculo.py -v`
@@ -586,7 +579,7 @@ Expected: PASS, output pristine
 
 ```bash
 git add hermes_agents/core/estoque.py hermes_agents/tests/test_estoque_vinculo.py
-git commit -m "feat: estoque.listar/movimentacoes/sync_bling resolvem loja por vinculo"
+git commit -m "feat: estoque.listar/movimentacoes resolvem loja por vinculo"
 ```
 
 ---
