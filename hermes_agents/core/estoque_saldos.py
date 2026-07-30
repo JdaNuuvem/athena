@@ -204,6 +204,35 @@ def _validar(tipo_origem, tipo_destino, tipo_movimento, quantidade):
 
 async def _saldo_async(conn, sku: str, loja: str, tipo: str = "disponivel") -> float:
     """Le um bucket usando a conexao/transacao ja aberta pelo caller."""
+    # Vinculo fisica x virtual (Fase Vinculo): resolve ANTES de qualquer
+    # leitura — mesmo espirito do choke point de escrita (_mover_saldo_async,
+    # acima): se `loja` for uma virtual com vinculo ativo, devolve o nome da
+    # fisica vinculada; senao, devolve o proprio nome. Este e' o UNICO choke
+    # point de LEITURA de estoque_saldos usado por callers async-native (ex.:
+    # core/estoque.py::ajustar_absoluto_async), entao fica vinculo-aware sem
+    # precisar tocar em cada caller individualmente.
+    #
+    # Mesmo fail-open de _mover_saldo_async (ver comentario detalhado la'):
+    # _loja_efetiva_async abre sua PROPRIA conexao via get_db(), independente
+    # do `conn` ja aberto aqui, entao um DB indisponivel — ou, em teste, um
+    # fake que nao cobre essa query — nao pode derrubar toda LEITURA de
+    # estoque do sistema. Melhor prosseguir com o nome original (mesmo
+    # comportamento de antes do vinculo existir) do que propagar a excecao ou,
+    # pior, ler sob um valor corrompido devolvido por um mock/fake alheio.
+    # _log_erro persiste em system_logs (visivel em /seguranca/logs) pra
+    # cobrir os DOIS jeitos de falhar: excecao (DB indisponivel) e retorno
+    # invalido sem excecao (mock/fake alheio que devolve algo que nao e' str).
+    try:
+        loja_resolvida = await _loja_efetiva_async(loja)
+        if isinstance(loja_resolvida, str) and loja_resolvida:
+            loja = loja_resolvida
+        else:
+            _log_erro(
+                "estoque_saldos._saldo_async: resolver_loja_efetiva",
+                ValueError(f"loja '{loja}' -> valor invalido {loja_resolvida!r} (esperado str nao-vazia)"))
+    except Exception as e:
+        _log_erro("estoque_saldos._saldo_async: resolver_loja_efetiva", e)
+
     v = await conn.fetchval(
         "SELECT quantidade FROM estoque_saldos WHERE sku = $1 AND loja = $2 AND tipo = $3",
         sku, loja, tipo)
@@ -211,12 +240,34 @@ async def _saldo_async(conn, sku: str, loja: str, tipo: str = "disponivel") -> f
 
 
 def saldo(sku: str, loja: str, tipo: str = "disponivel") -> float:
+    """Wrapper SINCRONO. NAO delega pra _saldo_async(conn, ...) — abre sua
+    propria conexao via get_db() em vez de reaproveitar uma `conn` de
+    transacao (nao ha' nenhuma pra reaproveitar aqui) — por isso precisa do
+    seu PROPRIO guard de resolucao de loja abaixo, e nao so' o de
+    _saldo_async."""
     _ensure()
     async def _go():
         db = await get_db()
+        # Vinculo fisica x virtual (Fase Vinculo): mesmo fail-open de
+        # _saldo_async (ver comentario detalhado la'). Usa uma variavel local
+        # separada (loja_efetiva) em vez de reatribuir o parametro `loja` do
+        # escopo externo — evita mutar via closure/nonlocal a variavel usada
+        # na mensagem de erro do except abaixo caso o fetchval falhe depois.
+        loja_efetiva = loja
+        try:
+            loja_resolvida = await _loja_efetiva_async(loja)
+            if isinstance(loja_resolvida, str) and loja_resolvida:
+                loja_efetiva = loja_resolvida
+            else:
+                _log_erro(
+                    "estoque_saldos.saldo: resolver_loja_efetiva",
+                    ValueError(f"loja '{loja}' -> valor invalido {loja_resolvida!r} (esperado str nao-vazia)"))
+        except Exception as e:
+            _log_erro("estoque_saldos.saldo: resolver_loja_efetiva", e)
+
         v = await db.fetchval(
             "SELECT quantidade FROM estoque_saldos WHERE sku = $1 AND loja = $2 AND tipo = $3",
-            sku, loja, tipo)
+            sku, loja_efetiva, tipo)
         return float(v or 0)
     try:
         return run_async(_go())
