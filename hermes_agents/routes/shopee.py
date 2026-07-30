@@ -634,7 +634,12 @@ def shopee_remover_variacao_produto(item_id):
         if not model_id_list:
             return jsonify({"error": "model_id_list e obrigatorio"}), 400
         try:
-            return jsonify(delete_model(item_id, model_id_list, loja_id=int(loja_id)))
+            # A Shopee so' aceita 1 model_id por chamada (delete_model.model_id
+            # e' singular) — a rota aceita uma lista por conveniencia do
+            # cliente e faz 1 chamada por model_id.
+            resultados = [{"model_id": mid, **delete_model(item_id, mid, loja_id=int(loja_id))} for mid in model_id_list]
+            erros = [r for r in resultados if r.get("error")]
+            return jsonify({"resultados": resultados, "sucesso": len(resultados) - len(erros), "total": len(resultados)})
         except Exception as e:
             return jsonify({"error": str(e)}), 500
 

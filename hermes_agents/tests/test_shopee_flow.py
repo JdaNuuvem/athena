@@ -393,12 +393,17 @@ class TestRotasFlask(unittest.TestCase):
 
     @patch("shopee.delete_model")
     def test_rota_remover_variacao(self, mock_delete):
+        # Shopee so' aceita 1 model_id por chamada — a rota aceita lista por
+        # conveniencia e faz 1 chamada por model_id internamente.
         mock_delete.return_value = {"response": {}}
         resp = self.client.delete("/api/shopee/produtos/42/variacoes", json={
             "loja_id": 1, "model_id_list": [111, 222],
         }, headers=self._h())
         self.assertEqual(resp.status_code, 200)
-        mock_delete.assert_called_once_with(42, [111, 222], loja_id=1)
+        self.assertEqual(resp.get_json()["sucesso"], 2)
+        self.assertEqual(mock_delete.call_count, 2)
+        mock_delete.assert_any_call(42, 111, loja_id=1)
+        mock_delete.assert_any_call(42, 222, loja_id=1)
 
     def test_rota_remover_variacao_sem_model_id_list(self):
         resp = self.client.delete("/api/shopee/produtos/42/variacoes", json={"loja_id": 1}, headers=self._h())

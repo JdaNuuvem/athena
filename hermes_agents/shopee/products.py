@@ -61,10 +61,13 @@ def update_tier_variation(item_id: int, tier_variation: list, model_list: list, 
     }, method="POST", loja_id=loja_id)
 
 
-def delete_model(item_id: int, model_id_list: list, loja_id: int = None) -> dict:
-    """Remove uma ou mais variacoes (models) de um item."""
+def delete_model(item_id: int, model_id: int, loja_id: int = None) -> dict:
+    """Remove uma variacao (model) de um item. So' aceita 1 model_id por
+    chamada — confirmado contra a API real: {"model_id_list": [...]} retorna
+    'invalid DeleteModelRequest.ModelId: ModelId is required', o campo
+    esperado e' "model_id" no singular. Pra remover varias, chamar em loop."""
     return _request("product/delete_model", {
-        "item_id": item_id, "model_id_list": model_id_list,
+        "item_id": item_id, "model_id": model_id,
     }, method="POST", loja_id=loja_id)
 
 

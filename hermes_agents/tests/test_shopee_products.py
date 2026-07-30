@@ -106,15 +106,19 @@ class TestUpdateTierVariation(unittest.TestCase):
 
 
 class TestDeleteModel(unittest.TestCase):
+    """model_id e' singular, nao uma lista — confirmado contra a API real:
+    {"model_id_list": [...]} retorna 'ModelId is required'; so' funciona com
+    {"model_id": 111}."""
 
     @patch("shopee.products._request")
-    def test_monta_payload_com_model_id_list(self, mock_request):
+    def test_monta_payload_com_model_id_singular(self, mock_request):
         mock_request.return_value = {"response": {}}
-        products.delete_model(58262112365, [111, 222], loja_id=7)
+        products.delete_model(58262112365, 111, loja_id=7)
         endpoint, params = mock_request.call_args[0][:2]
         self.assertEqual(endpoint, "product/delete_model")
         self.assertEqual(params["item_id"], 58262112365)
-        self.assertEqual(params["model_id_list"], [111, 222])
+        self.assertEqual(params["model_id"], 111)
+        self.assertNotIn("model_id_list", params)
 
 
 if __name__ == "__main__":
