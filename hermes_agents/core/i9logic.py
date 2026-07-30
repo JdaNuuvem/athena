@@ -297,3 +297,36 @@ def comparar_com_athena(sku: str, loja: str) -> dict:
         "classificacao": classificar_divergencia(qtd_fisico, disponivel_athena),
         "data_coleta": ultimo["data_coleta"],
     }
+
+
+# ── Job de coleta ──
+
+def executar_coleta_filial(filial_id_i9logic: int) -> dict:
+    """Coleta fisico e contabil da filial inteira, pareia por idproduto, e grava
+    cada par no snapshot com o MESMO data_coleta (uma corrida = um instante),
+    resolvendo sku_athena/loja_athena via de-para em cada gravacao."""
+    inicio_corrida = datetime.now()
+    fisicos = _paginar_estoques(filial_id_i9logic, 1)
+    contabeis = _paginar_estoques(filial_id_i9logic, 2)
+    contabil_por_produto = {r["idproduto"]: r for r in contabeis}
+    gravados, erros = 0, 0
+    for f in fisicos:
+        idproduto = f["idproduto"]
+        c = contabil_por_produto.get(idproduto, {})
+        r = gravar_snapshot(
+            idproduto, f.get("codproduto"), filial_id_i9logic,
+            f.get("qtd", 0), c.get("qtd", 0), data_coleta=inicio_corrida)
+        if r.get("erro"): erros += 1
+        else: gravados += 1
+    return {"ok": True, "filial": filial_id_i9logic, "fisicos": len(fisicos),
+            "contabeis": len(contabeis), "gravados": gravados, "erros": erros,
+            "data_coleta": inicio_corrida}
+
+
+def executar_coleta_todas_filiais() -> dict:
+    """Roda executar_coleta_filial pra cada filial ja mapeada em de_para_i9logic
+    (tipo='filial'). Filial sem de-para nao entra — nao ha id_i9logic resolvido
+    sem o mapeamento."""
+    filiais = listar_mapeamentos("filial")
+    resultados = [executar_coleta_filial(int(m["id_i9logic"])) for m in filiais]
+    return {"ok": True, "filiais_processadas": len(resultados), "resultados": resultados}

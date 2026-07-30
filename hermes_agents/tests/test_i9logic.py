@@ -312,3 +312,47 @@ class TestCompararComAthena(unittest.TestCase):
         self.assertEqual(resultado["qtd_fisico_i9logic"], 100.0)
         self.assertEqual(resultado["divergencia"], -5.0)
         self.assertEqual(resultado["classificacao"], "alerta")
+
+
+class TestExecutarColeta(unittest.TestCase):
+    def test_coleta_filial_pareia_fisico_e_contabil_por_idproduto(self):
+        def _paginar(filial, tipoestoque):
+            if tipoestoque == 1:
+                return [{"idproduto": 1, "codproduto": "A", "qtd": 10},
+                        {"idproduto": 2, "codproduto": "B", "qtd": 20}]
+            return [{"idproduto": 1, "codproduto": "A", "qtd": 15},
+                    {"idproduto": 2, "codproduto": "B", "qtd": 20}]
+        gravados = []
+        def _gravar(idproduto, codproduto, filial, qtd_fisico, qtd_contabil, data_coleta=None):
+            gravados.append((idproduto, qtd_fisico, qtd_contabil))
+            return {"ok": True}
+        with patch("core.i9logic._paginar_estoques", side_effect=_paginar), \
+             patch("core.i9logic.gravar_snapshot", side_effect=_gravar):
+            resultado = i9logic.executar_coleta_filial(63)
+        self.assertEqual(resultado["fisicos"], 2)
+        self.assertEqual(resultado["gravados"], 2)
+        self.assertIn((1, 10, 15), gravados)
+        self.assertIn((2, 20, 20), gravados)
+
+    def test_coleta_filial_usa_mesmo_data_coleta_pra_todas_as_linhas(self):
+        def _paginar(filial, tipoestoque):
+            return [{"idproduto": 1, "codproduto": "A", "qtd": 10}]
+        datas_usadas = []
+        def _gravar(idproduto, codproduto, filial, qtd_fisico, qtd_contabil, data_coleta=None):
+            datas_usadas.append(data_coleta)
+            return {"ok": True}
+        with patch("core.i9logic._paginar_estoques", side_effect=_paginar), \
+             patch("core.i9logic.gravar_snapshot", side_effect=_gravar):
+            i9logic.executar_coleta_filial(63)
+        self.assertIsNotNone(datas_usadas[0])
+
+    def test_coleta_todas_filiais_itera_mapeamentos(self):
+        with patch("core.i9logic.listar_mapeamentos", return_value=[
+                {"id_i9logic": "63", "codigo_athena": "Loja Matriz"},
+                {"id_i9logic": "64", "codigo_athena": "Loja Filial"}]), \
+             patch("core.i9logic.executar_coleta_filial", return_value={"ok": True, "gravados": 5}) as mock_coleta:
+            resultado = i9logic.executar_coleta_todas_filiais()
+        self.assertEqual(resultado["filiais_processadas"], 2)
+        self.assertEqual(mock_coleta.call_count, 2)
+        mock_coleta.assert_any_call(63)
+        mock_coleta.assert_any_call(64)
