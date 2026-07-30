@@ -203,42 +203,58 @@ def vincular_estoque(loja_virtual_id: int, loja_fisica_id: int) -> dict:
 def desvincular_estoque(loja_virtual_id: int) -> dict:
     """Desativa o vinculo: a virtual recebe uma copia do saldo compartilhado
     no momento da desvinculacao (entrada por sku com saldo > 0 na fisica),
-    como novo ponto de partida independente. A fisica fica intocada."""
-    from core.estoque import entrada as estoque_entrada
-    async def _buscar():
+    como novo ponto de partida independente. A fisica fica intocada.
+
+    Tudo roda numa unica conexao/transacao (fix pos-review: a versao
+    original chamava a entrada() SINCRONA por sku dentro de um loop Python —
+    cada chamada passa por run_async(), que abre um asyncio.run() novo, e
+    get_db() cria [e abandona] um pool asyncpg sempre que o loop muda (ver
+    aviso em core/__init__.py::get_db() e em
+    core/estoque_saldos.py::mover_saldo()). Pra uma fisica com centenas de
+    skus isso vazava centenas de pools nunca fechados numa unica chamada.
+    Tambem nao era atomico: uma falha no meio deixava o vinculo ja limpo
+    com so' parte dos saldos copiados, e uma nova tentativa esbarrava em
+    "sem vinculo ativo" — sem jeito de retomar. Agora, como em
+    core/estoque.py::transferir()/ratear(), tudo (leitura do saldo da
+    fisica, limpeza do vinculo e a copia por sku via entrada_async) roda
+    numa so' conexao/transacao: se qualquer sku falhar, a transacao inteira
+    e' revertida — vinculo continua ativo, nada foi copiado, e o operador
+    pode tentar de novo."""
+    from core.estoque import entrada_async as estoque_entrada_async
+    from core.estoque_saldos import SaldoError
+    async def _go():
         db = await get_db()
-        virtual = await db.fetchrow("SELECT id, tipo, nome, loja_vinculada_id FROM lojas WHERE id = $1", loja_virtual_id)
-        if not virtual:
-            return None, {"erro": "Loja virtual nao encontrada"}
-        if not virtual["loja_vinculada_id"]:
-            return None, {"erro": f"Loja {virtual['nome']} nao tem vinculo ativo"}
-        fisica = await db.fetchrow("SELECT nome FROM lojas WHERE id = $1", virtual["loja_vinculada_id"])
-        saldos = await db.fetch(
-            "SELECT sku, quantidade FROM estoque_saldos WHERE loja = $1 AND tipo = 'disponivel' AND quantidade > 0",
-            fisica["nome"])
-        return {"virtual_nome": virtual["nome"], "fisica_nome": fisica["nome"], "saldos": saldos}, None
+        async with db.acquire() as conn:
+            async with conn.transaction():
+                virtual = await conn.fetchrow(
+                    "SELECT id, tipo, nome, loja_vinculada_id FROM lojas WHERE id = $1", loja_virtual_id)
+                if not virtual:
+                    return {"erro": "Loja virtual nao encontrada"}
+                if not virtual["loja_vinculada_id"]:
+                    return {"erro": f"Loja {virtual['nome']} nao tem vinculo ativo"}
+                fisica = await conn.fetchrow("SELECT nome FROM lojas WHERE id = $1", virtual["loja_vinculada_id"])
+                saldos = await conn.fetch(
+                    "SELECT sku, quantidade FROM estoque_saldos WHERE loja = $1 AND tipo = 'disponivel' AND quantidade > 0",
+                    fisica["nome"])
+                await conn.execute("UPDATE lojas SET loja_vinculada_id = NULL WHERE id = $1", loja_virtual_id)
+                copiados = 0
+                for s in saldos:
+                    r = await estoque_entrada_async(
+                        conn, s["sku"], virtual["nome"], float(s["quantidade"]), "ajuste_inventario")
+                    if r.get("erro"):
+                        raise SaldoError(f"{s['sku']}: {r['erro']}")
+                    copiados += 1
+                return {"ok": True, "loja_virtual": virtual["nome"], "loja_fisica": fisica["nome"],
+                        "skus_copiados": copiados}
     try:
-        dados, erro = run_async(_buscar())
+        resultado = run_async(_go())
+    except SaldoError as e:
+        return {"erro": str(e)}
     except Exception as e:
         return {"erro": str(e)}
-    if erro:
-        return erro
-
-    async def _limpar_vinculo():
-        db = await get_db()
-        await db.execute("UPDATE lojas SET loja_vinculada_id = NULL WHERE id = $1", loja_virtual_id)
-    try:
-        run_async(_limpar_vinculo())
-    except Exception as e:
-        return {"erro": str(e)}
-    invalidar_cache_loja_efetiva()
-
-    copiados = 0
-    for s in dados["saldos"]:
-        r = estoque_entrada(s["sku"], dados["virtual_nome"], float(s["quantidade"]), "ajuste_inventario")
-        if not r.get("erro"):
-            copiados += 1
-    return {"ok": True, "loja_virtual": dados["virtual_nome"], "loja_fisica": dados["fisica_nome"], "skus_copiados": copiados}
+    if not resultado.get("erro"):
+        invalidar_cache_loja_efetiva()
+    return resultado
 
 
 def _ensure_table():
