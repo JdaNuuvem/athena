@@ -18,6 +18,14 @@ import core.i9logic_catalogo as catalogo_i9logic
 from core.i9logic import I9LogicPaginaError
 
 
+def _fake_db_com_conn(conn):
+    """db (pool) so expõe acquire() - se o codigo chamar db.transaction()/
+    db.fetchrow() por engano, levanta AttributeError imediatamente."""
+    db = MagicMock(spec=["acquire"])
+    db.acquire.return_value = AsyncMock(__aenter__=AsyncMock(return_value=conn), __aexit__=AsyncMock(return_value=None))
+    return db
+
+
 class TestUpsertProduto(unittest.TestCase):
     def test_codproduto_vazio_retorna_erro(self):
         resultado = catalogo_i9logic._upsert_produto({"id": 1, "codproduto": "  "})
@@ -25,38 +33,56 @@ class TestUpsertProduto(unittest.TestCase):
 
     def test_grava_de_para_automatico_junto_com_upsert(self):
         chamadas_execute = []
-        async def _fetchrow(query, *args):
-            return {"sku": args[0]}
-        async def _execute(query, *args):
-            chamadas_execute.append((query, args))
-            return "OK"
+
         class TxMock:
             async def __aenter__(self):
                 return self
             async def __aexit__(self, *args):
                 return None
-        def _transaction():
-            # transaction() returns the context manager object directly
-            return TxMock()
 
-        with patch("core.i9logic_catalogo.get_db") as mock_get_db:
-            mock_db = AsyncMock(fetchrow=_fetchrow, execute=_execute)
-            mock_db.transaction = _transaction
-            mock_get_db.return_value = mock_db
+        async def _fetchrow(query, *args):
+            return {"sku": args[0]}
+
+        async def _execute(query, *args):
+            chamadas_execute.append((query, args))
+            return "OK"
+
+        conn = AsyncMock()
+        conn.transaction = MagicMock(return_value=TxMock())
+        conn.fetchrow = _fetchrow
+        conn.execute = _execute
+
+        with patch("core.i9logic_catalogo.get_db", return_value=_fake_db_com_conn(conn)):
             resultado = catalogo_i9logic._upsert_produto(
                 {"id": 99, "codproduto": "SKU-99", "descricao": "Teste", "ean": "123",
                  "ncm": "0000", "unidademedida": "UN", "peso": 1})
+
         self.assertEqual(resultado["sku"], "SKU-99")
         self.assertTrue(any("de_para_i9logic" in q for q, _ in chamadas_execute))
         query_depara, args_depara = next((q, a) for q, a in chamadas_execute if "de_para_i9logic" in q)
         self.assertEqual(args_depara, ("99", "SKU-99"))
+
+    def test_pool_nao_pode_chamar_transaction_diretamente(self):
+        """Verifica que chamar db.transaction() diretamente levanta AttributeError."""
+        conn = AsyncMock()
+        db = _fake_db_com_conn(conn)
+        # db tem spec=["acquire"] entao qualquer outro metodo vai dar erro
+        with self.assertRaises(AttributeError):
+            db.transaction()  # type: ignore
 
 
 class TestUpsertPagina(unittest.TestCase):
     def test_filtra_apenas_ativo_e_emlinha(self):
         """Testa que _upsert_pagina filtra produtos ativo=1 e emlinha=1"""
         chamadas_upsert = []
-        async def _upsert_mock(db, produto):
+
+        class TxMock:
+            async def __aenter__(self):
+                return self
+            async def __aexit__(self, *args):
+                return None
+
+        async def _upsert_mock(conn, produto):
             chamadas_upsert.append(produto.get("codproduto"))
             return {"sku": produto.get("codproduto")}
 
@@ -66,9 +92,11 @@ class TestUpsertPagina(unittest.TestCase):
             {"id": 3, "codproduto": "FORADELINHA", "ativo": "1", "emlinha": "0"},
         ]
 
+        conn = AsyncMock()
+        conn.transaction = MagicMock(return_value=TxMock())
+
         with patch("core.i9logic_catalogo._upsert_produto_async", side_effect=_upsert_mock), \
-             patch("core.i9logic_catalogo.get_db") as mock_get_db:
-            mock_get_db.return_value = AsyncMock()
+             patch("core.i9logic_catalogo.get_db", return_value=_fake_db_com_conn(conn)):
             importados, erros = catalogo_i9logic._upsert_pagina(pagina)
 
         self.assertEqual(chamadas_upsert, ["ATIVO1"])
@@ -77,7 +105,14 @@ class TestUpsertPagina(unittest.TestCase):
 
     def test_produto_malformado_e_pulado_sem_abortar_lote(self):
         """Testa que produtos malformados sao registrados sem abortar o lote"""
-        async def _upsert_mock(db, produto):
+
+        class TxMock:
+            async def __aenter__(self):
+                return self
+            async def __aexit__(self, *args):
+                return None
+
+        async def _upsert_mock(conn, produto):
             if not produto.get("codproduto"):
                 return {"erro": "codproduto vazio"}
             return {"sku": produto.get("codproduto")}
@@ -87,30 +122,28 @@ class TestUpsertPagina(unittest.TestCase):
             {"id": 2, "codproduto": "OK", "ativo": "1", "emlinha": "1"},
         ]
 
+        conn = AsyncMock()
+        conn.transaction = MagicMock(return_value=TxMock())
+
         with patch("core.i9logic_catalogo._upsert_produto_async", side_effect=_upsert_mock), \
-             patch("core.i9logic_catalogo.get_db") as mock_get_db:
-            mock_get_db.return_value = AsyncMock()
+             patch("core.i9logic_catalogo.get_db", return_value=_fake_db_com_conn(conn)):
             importados, erros = catalogo_i9logic._upsert_pagina(pagina)
 
         self.assertEqual(importados, 1)
         self.assertEqual(len(erros), 1)
         self.assertIn("codproduto vazio", erros[0]["erro"])
 
-    def test_transacao_atomica_envolvida(self):
-        """Testa que _upsert_produto_async usa transaction context manager"""
-        chamadas_transaction = []
+    def test_transacao_atomica_com_connexao_adquirida(self):
+        """Testa que _upsert_produto_async usa transaction em conn adquirida"""
+        chamadas_tx = []
 
         class TxMock:
             async def __aenter__(self):
-                chamadas_transaction.append("enter")
+                chamadas_tx.append("enter")
                 return self
             async def __aexit__(self, *args):
-                chamadas_transaction.append("exit")
+                chamadas_tx.append("exit")
                 return None
-
-        def _transaction():
-            # transaction() retorna o context manager object
-            return TxMock()
 
         async def _fetchrow(query, *args):
             return {"sku": args[0]}
@@ -118,20 +151,18 @@ class TestUpsertPagina(unittest.TestCase):
         async def _execute(query, *args):
             return "OK"
 
-        with patch("core.i9logic_catalogo.get_db") as mock_get_db:
-            mock_db = AsyncMock()
-            mock_db.fetchrow = _fetchrow
-            mock_db.execute = _execute
-            mock_db.transaction = _transaction
-            mock_get_db.return_value = mock_db
+        conn = AsyncMock()
+        conn.transaction = MagicMock(return_value=TxMock())
+        conn.fetchrow = _fetchrow
+        conn.execute = _execute
 
-            import asyncio
-            result = asyncio.run(catalogo_i9logic._upsert_produto_async(mock_db,
-                {"id": 99, "codproduto": "SKU-99", "descricao": "Teste"}))
+        import asyncio
+        result = asyncio.run(catalogo_i9logic._upsert_produto_async(conn,
+            {"id": 99, "codproduto": "SKU-99", "descricao": "Teste"}))
 
         self.assertEqual(result["sku"], "SKU-99")
-        self.assertIn("enter", chamadas_transaction)
-        self.assertIn("exit", chamadas_transaction)
+        self.assertIn("enter", chamadas_tx)
+        self.assertIn("exit", chamadas_tx)
 
 
 class TestSincronizarCatalogo(unittest.TestCase):
