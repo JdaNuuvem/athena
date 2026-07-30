@@ -172,6 +172,75 @@ def loja_efetiva_sync(cur, loja: str) -> str:
     _cache_loja_efetiva[chave] = efetiva
     return efetiva
 
+def vincular_estoque(loja_virtual_id: int, loja_fisica_id: int) -> dict:
+    """Ativa o vinculo: saldo da fisica vira o compartilhado. Linhas que a
+    virtual tinha em estoque_saldos/estoque_lojas sob o proprio nome ficam
+    orfas (nao apagadas — historico preservado), porque leitura/escrita
+    passam a resolver pro nome da fisica a partir de agora."""
+    async def _go():
+        db = await get_db()
+        virtual = await db.fetchrow("SELECT id, tipo, nome FROM lojas WHERE id = $1", loja_virtual_id)
+        if not virtual:
+            return {"erro": "Loja virtual nao encontrada"}
+        if virtual["tipo"] != "virtual":
+            return {"erro": f"Loja {virtual['nome']} nao e' do tipo virtual"}
+        fisica = await db.fetchrow("SELECT id, tipo, nome FROM lojas WHERE id = $1", loja_fisica_id)
+        if not fisica:
+            return {"erro": "Loja fisica nao encontrada"}
+        if fisica["tipo"] != "fisica":
+            return {"erro": f"Loja {fisica['nome']} nao e' do tipo fisica"}
+        await db.execute("UPDATE lojas SET loja_vinculada_id = $1 WHERE id = $2", loja_fisica_id, loja_virtual_id)
+        return {"ok": True, "loja_virtual": virtual["nome"], "loja_fisica": fisica["nome"]}
+    try:
+        resultado = run_async(_go())
+    except Exception as e:
+        return {"erro": str(e)}
+    if not resultado.get("erro"):
+        invalidar_cache_loja_efetiva()
+    return resultado
+
+
+def desvincular_estoque(loja_virtual_id: int) -> dict:
+    """Desativa o vinculo: a virtual recebe uma copia do saldo compartilhado
+    no momento da desvinculacao (entrada por sku com saldo > 0 na fisica),
+    como novo ponto de partida independente. A fisica fica intocada."""
+    from core.estoque import entrada as estoque_entrada
+    async def _buscar():
+        db = await get_db()
+        virtual = await db.fetchrow("SELECT id, tipo, nome, loja_vinculada_id FROM lojas WHERE id = $1", loja_virtual_id)
+        if not virtual:
+            return None, {"erro": "Loja virtual nao encontrada"}
+        if not virtual["loja_vinculada_id"]:
+            return None, {"erro": f"Loja {virtual['nome']} nao tem vinculo ativo"}
+        fisica = await db.fetchrow("SELECT nome FROM lojas WHERE id = $1", virtual["loja_vinculada_id"])
+        saldos = await db.fetch(
+            "SELECT sku, quantidade FROM estoque_saldos WHERE loja = $1 AND tipo = 'disponivel' AND quantidade > 0",
+            fisica["nome"])
+        return {"virtual_nome": virtual["nome"], "fisica_nome": fisica["nome"], "saldos": saldos}, None
+    try:
+        dados, erro = run_async(_buscar())
+    except Exception as e:
+        return {"erro": str(e)}
+    if erro:
+        return erro
+
+    async def _limpar_vinculo():
+        db = await get_db()
+        await db.execute("UPDATE lojas SET loja_vinculada_id = NULL WHERE id = $1", loja_virtual_id)
+    try:
+        run_async(_limpar_vinculo())
+    except Exception as e:
+        return {"erro": str(e)}
+    invalidar_cache_loja_efetiva()
+
+    copiados = 0
+    for s in dados["saldos"]:
+        r = estoque_entrada(s["sku"], dados["virtual_nome"], float(s["quantidade"]), "ajuste_inventario")
+        if not r.get("erro"):
+            copiados += 1
+    return {"ok": True, "loja_virtual": dados["virtual_nome"], "loja_fisica": dados["fisica_nome"], "skus_copiados": copiados}
+
+
 def _ensure_table():
     global _table_ok
     if _table_ok: return

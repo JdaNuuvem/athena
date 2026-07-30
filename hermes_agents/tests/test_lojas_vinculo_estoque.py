@@ -100,3 +100,95 @@ class TestLojaEfetivaSync(unittest.TestCase):
         cur.fetchone.return_value = ("Loja Fisica Y", "fisica", "Loja Vinculada Errada")
         resultado = lojas.loja_efetiva_sync(cur, "99")
         self.assertEqual(resultado, "Loja Fisica Y")
+
+
+class TestVincularDesvincularEstoque(unittest.TestCase):
+    def setUp(self):
+        lojas.invalidar_cache_loja_efetiva()
+
+    def test_vincular_rejeita_se_virtual_nao_e_tipo_virtual(self):
+        db = AsyncMock()
+        db.fetchrow.side_effect = [
+            {"id": 1, "tipo": "fisica", "nome": "Loja A"},  # loja "virtual" informada
+            {"id": 2, "tipo": "fisica", "nome": "Loja B"},
+        ]
+        with patch("core.lojas.get_db", AsyncMock(return_value=db)):
+            resultado = lojas.vincular_estoque(1, 2)
+        self.assertIn("erro", resultado)
+
+    def test_vincular_rejeita_se_fisica_nao_e_tipo_fisica(self):
+        db = AsyncMock()
+        db.fetchrow.side_effect = [
+            {"id": 1, "tipo": "virtual", "nome": "Loja Virtual A"},
+            {"id": 2, "tipo": "virtual", "nome": "Loja Virtual B"},
+        ]
+        with patch("core.lojas.get_db", AsyncMock(return_value=db)):
+            resultado = lojas.vincular_estoque(1, 2)
+        self.assertIn("erro", resultado)
+
+    def test_desvincular_sem_vinculo_ativo_retorna_erro(self):
+        db = AsyncMock()
+        db.fetchrow.return_value = {"id": 1, "tipo": "virtual", "nome": "Loja Virtual A", "loja_vinculada_id": None}
+        with patch("core.lojas.get_db", AsyncMock(return_value=db)):
+            resultado = lojas.desvincular_estoque(1)
+        self.assertIn("erro", resultado)
+
+    def test_vincular_sucesso_grava_vinculo_e_invalida_cache(self):
+        db = AsyncMock()
+        db.fetchrow.side_effect = [
+            {"id": 1, "tipo": "virtual", "nome": "Loja Virtual A"},
+            {"id": 2, "tipo": "fisica", "nome": "Loja Fisica B"},
+        ]
+        lojas._cache_loja_efetiva["algo"] = "valor_stale"
+        with patch("core.lojas.get_db", AsyncMock(return_value=db)):
+            resultado = lojas.vincular_estoque(1, 2)
+        self.assertTrue(resultado.get("ok"))
+        self.assertEqual(resultado["loja_virtual"], "Loja Virtual A")
+        self.assertEqual(resultado["loja_fisica"], "Loja Fisica B")
+        db.execute.assert_called_once_with(
+            "UPDATE lojas SET loja_vinculada_id = $1 WHERE id = $2", 2, 1)
+        self.assertEqual(lojas._cache_loja_efetiva, {})
+
+    def test_desvincular_sucesso_copia_saldos_por_sku_e_limpa_vinculo(self):
+        db = AsyncMock()
+        db.fetchrow.side_effect = [
+            {"id": 1, "tipo": "virtual", "nome": "Loja Virtual A", "loja_vinculada_id": 2},
+            {"nome": "Loja Fisica B"},
+        ]
+        db.fetch.return_value = [
+            {"sku": "SKU1", "quantidade": 10},
+            {"sku": "SKU2", "quantidade": 5},
+        ]
+        lojas._cache_loja_efetiva["algo"] = "valor_stale"
+        with patch("core.lojas.get_db", AsyncMock(return_value=db)), \
+             patch("core.estoque.entrada", return_value={"ok": True}) as mock_entrada:
+            resultado = lojas.desvincular_estoque(1)
+        self.assertTrue(resultado.get("ok"))
+        self.assertEqual(resultado["loja_virtual"], "Loja Virtual A")
+        self.assertEqual(resultado["loja_fisica"], "Loja Fisica B")
+        self.assertEqual(resultado["skus_copiados"], 2)
+        mock_entrada.assert_any_call("SKU1", "Loja Virtual A", 10.0, "ajuste_inventario")
+        mock_entrada.assert_any_call("SKU2", "Loja Virtual A", 5.0, "ajuste_inventario")
+        limpa_calls = [c for c in db.execute.call_args_list
+                       if "loja_vinculada_id = NULL" in c.args[0]]
+        self.assertEqual(len(limpa_calls), 1)
+        self.assertEqual(limpa_calls[0].args[1], 1)
+        self.assertEqual(lojas._cache_loja_efetiva, {})
+
+    def test_desvincular_nao_copia_skus_com_erro_na_entrada(self):
+        """Se entrada() falhar pra um sku (ex.: motivo invalido), esse sku nao
+        conta em skus_copiados mas nao interrompe os demais."""
+        db = AsyncMock()
+        db.fetchrow.side_effect = [
+            {"id": 1, "tipo": "virtual", "nome": "Loja Virtual A", "loja_vinculada_id": 2},
+            {"nome": "Loja Fisica B"},
+        ]
+        db.fetch.return_value = [
+            {"sku": "SKU1", "quantidade": 10},
+            {"sku": "SKU2", "quantidade": 5},
+        ]
+        with patch("core.lojas.get_db", AsyncMock(return_value=db)), \
+             patch("core.estoque.entrada", side_effect=[{"erro": "falhou"}, {"ok": True}]):
+            resultado = lojas.desvincular_estoque(1)
+        self.assertTrue(resultado.get("ok"))
+        self.assertEqual(resultado["skus_copiados"], 1)
