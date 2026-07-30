@@ -57,6 +57,7 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
   // ── Modo edicao (produto ja publicado nesta loja) ──
   const [lojasComShopId, setLojasComShopId] = useState<Record<number, string>>({});
   const [itemIdExistente, setItemIdExistente] = useState<number | null>(null);
+  const [ehVariacao, setEhVariacao] = useState(false);
   const [modoEdicao, setModoEdicao] = useState(false);
   const [carregandoEdicao, setCarregandoEdicao] = useState(false);
   const [formEdicao, setFormEdicao] = useState({ nome: "", descricao: "", preco: "", estoque: "", peso: "" });
@@ -99,19 +100,27 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
     const anuncios = (p?.estoque_lojas || []) as Array<{ marketplace: string; shop_id?: string; anuncio_id?: string }>;
     const existente = anuncios.find(a => a.marketplace === "shopee" && a.shop_id === shopId && a.anuncio_id);
     if (!existente?.anuncio_id) return;
-    const itemId = Number(existente.anuncio_id);
+    // anuncio_id de uma variacao vem como "item_id_model_id" (ver
+    // shopee_sync.sync_produtos) — o item_id do produto pai e' sempre a
+    // primeira parte, mesmo formato usado sem variacao.
+    const [itemIdStr, modelIdStr] = existente.anuncio_id.split("_");
+    const itemId = Number(itemIdStr);
     setItemIdExistente(itemId);
+    setEhVariacao(!!modelIdStr);
     setModoEdicao(true);
     setCarregandoEdicao(true);
     api.shopeeDetalheProduto(itemId, lojaId).then(r => {
       const item = r.item || {};
       const priceInfo = (item.price_info as Array<{ current_price?: number }> | undefined)?.[0];
       const stockInfo = (item.stock_info_v2 as { summary_info?: { total_available_stock?: number } } | undefined)?.summary_info;
+      // Produto com variacao: price_info/stock_info_v2 do item pai vem
+      // zerado (o real esta no model). Usa o estoque desse SKU especifico
+      // (ja correto) direto do catalogo interno em vez do item pai.
       setFormEdicao({
         nome: String(item.item_name || ""),
         descricao: String(item.description || ""),
-        preco: String(priceInfo?.current_price ?? ""),
-        estoque: String(stockInfo?.total_available_stock ?? ""),
+        preco: modelIdStr ? "" : String(priceInfo?.current_price ?? ""),
+        estoque: modelIdStr ? String(p?.estoque_atual ?? "") : String(stockInfo?.total_available_stock ?? ""),
         peso: String(item.weight ?? ""),
       });
     }).catch(() => {}).finally(() => setCarregandoEdicao(false));
@@ -133,7 +142,10 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
       } else {
         const precoNum = Number(formEdicao.preco);
         const estoqueNum = Number(formEdicao.estoque);
-        if (precoNum > 0) await api.shopeeAtualizarPreco(itemIdExistente, lojaId, precoNum);
+        // Produto com variacao nao tem preco a nivel de item (so' por model_id,
+        // via product/update_price) — update_price(item_id) sem model_id nao
+        // se aplica e a Shopee ignoraria/rejeitaria.
+        if (!ehVariacao && precoNum > 0) await api.shopeeAtualizarPreco(itemIdExistente, lojaId, precoNum);
         if (!Number.isNaN(estoqueNum)) await api.shopeeAtualizarEstoqueProduto(sku, lojaId, estoqueNum);
         setResultado({ ok: true, texto: "Anúncio atualizado na Shopee." });
       }
@@ -317,6 +329,16 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
               Publicar como novo anúncio em vez disso
             </button>
           </div>
+          {ehVariacao && (
+            <div className="bg-amber-950/40 border border-amber-900/50 rounded-lg p-3 text-xs text-amber-300 space-y-1">
+              <p className="font-medium">⚠ Este SKU é uma variação de um produto com múltiplos modelos.</p>
+              <p className="text-amber-400/80">
+                Nome e descrição abaixo são do produto pai (afetam todas as variações). Estoque desta
+                variação já é enviado corretamente por este formulário. Preço por variação: ajuste em{" "}
+                <span className="font-mono">Integrações → Shopee → Produtos</span> (o campo abaixo está desativado).
+              </p>
+            </div>
+          )}
           {carregandoEdicao ? (
             <p className="text-xs text-neutral-500">Carregando dados atuais da Shopee...</p>
           ) : (
@@ -325,8 +347,8 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
                 <InputGroup label="Nome do produto">
                   <input value={formEdicao.nome} onChange={e => setFormEdicao({ ...formEdicao, nome: e.target.value })} className={inputCls} />
                 </InputGroup>
-                <InputGroup label="Preço (R$)">
-                  <input type="number" value={formEdicao.preco} onChange={e => setFormEdicao({ ...formEdicao, preco: e.target.value })} className={inputCls} />
+                <InputGroup label={ehVariacao ? "Preço (produto pai — use a listagem para editar por variação)" : "Preço (R$)"}>
+                  <input type="number" value={formEdicao.preco} disabled={ehVariacao} onChange={e => setFormEdicao({ ...formEdicao, preco: e.target.value })} className={`${inputCls} ${ehVariacao ? "opacity-50 cursor-not-allowed" : ""}`} />
                 </InputGroup>
               </div>
               <InputGroup label="Descrição">
