@@ -14,7 +14,7 @@ Duas portas de entrada para escrita:
                                  pool asyncpg novo a cada chamada.
 """
 from core import get_db, run_async, log
-from core.lojas import _loja_efetiva_async
+from core.lojas import _loja_efetiva_async, _log_erro
 
 AGENT = "Estoque Saldos"
 
@@ -253,12 +253,26 @@ async def _mover_saldo_async(conn, sku: str, loja: str, tipo_origem, tipo_destin
     # estoque do sistema. Melhor prosseguir com o nome original (mesmo
     # comportamento de antes do vinculo existir) do que propagar a excecao ou,
     # pior, gravar sob um valor corrompido devolvido por um mock/fake alheio.
+    #
+    # Fail-open exige trilha duravel: se a resolucao falha e a escrita segue
+    # sob o nome original silenciosamente, uma loja vinculada gravando no
+    # balanco errado so' e' descoberta se o erro ficar registrado em algum
+    # lugar consultavel. _log_erro (core.lojas — mesmo helper que
+    # rbac_lojas.py/lojas_operacional.py/lojas_virtual.py/etc ja' importam
+    # cross-module) persiste em system_logs (visivel em /seguranca/logs),
+    # nao so' no console do container — cobre os DOIS jeitos de falhar:
+    # excecao (DB indisponivel) e retorno invalido sem excecao (mock/fake
+    # alheio que devolve algo que nao e' string).
     try:
         loja_resolvida = await _loja_efetiva_async(loja)
         if isinstance(loja_resolvida, str) and loja_resolvida:
             loja = loja_resolvida
+        else:
+            _log_erro(
+                "estoque_saldos._mover_saldo_async: resolver_loja_efetiva",
+                ValueError(f"loja '{loja}' -> valor invalido {loja_resolvida!r} (esperado str nao-vazia)"))
     except Exception as e:
-        log(AGENT, f"Erro ao resolver loja efetiva de '{loja}': {e}")
+        _log_erro("estoque_saldos._mover_saldo_async: resolver_loja_efetiva", e)
 
     erro = _validar(tipo_origem, tipo_destino, tipo_movimento, quantidade)
     if erro:

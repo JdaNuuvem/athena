@@ -441,15 +441,27 @@ class TestVinculoEstoqueEscrita(unittest.TestCase):
         pior, gravava sob um valor corrompido). O guard em
         _mover_saldo_async precisa tratar um resolver que EXPLODE como um
         no-op — grava sob o nome original, exatamente como antes do vinculo
-        existir — em vez de propagar o erro pra fora de mover_saldo()."""
+        existir — em vez de propagar o erro pra fora de mover_saldo().
+
+        Review fix: fail-open sem trilha duravel e' inaceitavel (uma loja
+        vinculada gravando no balanco errado silenciosamente nunca seria
+        descoberta) — o guard precisa chamar core.lojas._log_erro (persiste
+        em system_logs, visivel em /seguranca/logs), nao so' um log() de
+        console. Aqui verificamos que a excecao chega ate' _log_erro."""
         from core.estoque_saldos import mover_saldo
+        erro_original = RuntimeError("DB indisponivel")
         with patch("core.estoque_saldos._loja_efetiva_async",
-                    AsyncMock(side_effect=RuntimeError("DB indisponivel"))) as mock_resolver:
+                    AsyncMock(side_effect=erro_original)) as mock_resolver, \
+             patch("core.estoque_saldos._log_erro") as mock_log_erro:
             resultado = mover_saldo("SKU-1", "Loja A", None, "disponivel", 10,
                                      "compra", usuario_id=1, usuario_nome="Teste")
         mock_resolver.assert_called_once_with("Loja A")
         self.assertTrue(resultado.get("ok"), resultado)
         self.assertIn(("SKU-1", "Loja A", "disponivel"), self.fake.saldos)
+        mock_log_erro.assert_called_once()
+        onde, exc = mock_log_erro.call_args[0]
+        self.assertIn("resolver_loja_efetiva", onde)
+        self.assertIs(exc, erro_original)
 
     def test_resolver_devolve_valor_nao_string_e_ignorado_grava_sob_nome_original(self):
         """Mesma regression acima, outra face dela: quando o resolver NAO
@@ -457,15 +469,26 @@ class TestVinculoEstoqueEscrita(unittest.TestCase):
         (ex.: um Mock, se algum outro teste na mesma sessao deixar
         asyncpg.create_pool monkeypatchado globalmente sem dar stop()), o
         guard deve ignorar o valor e manter o nome original — nunca gravar
-        estoque sob uma chave corrompida."""
+        estoque sob uma chave corrompida.
+
+        Review fix: este era o branch que, antes do fix, nao logava NADA —
+        nem console, nem system_logs — deixando uma corrupcao silenciosa
+        sem qualquer trilha. Agora tambem passa por _log_erro."""
         from core.estoque_saldos import mover_saldo
+        valor_invalido = object()
         with patch("core.estoque_saldos._loja_efetiva_async",
-                    AsyncMock(return_value=object())) as mock_resolver:
+                    AsyncMock(return_value=valor_invalido)) as mock_resolver, \
+             patch("core.estoque_saldos._log_erro") as mock_log_erro:
             resultado = mover_saldo("SKU-1", "Loja A", None, "disponivel", 10,
                                      "compra", usuario_id=1, usuario_nome="Teste")
         mock_resolver.assert_called_once_with("Loja A")
         self.assertTrue(resultado.get("ok"), resultado)
         self.assertIn(("SKU-1", "Loja A", "disponivel"), self.fake.saldos)
+        mock_log_erro.assert_called_once()
+        onde, exc = mock_log_erro.call_args[0]
+        self.assertIn("resolver_loja_efetiva", onde)
+        self.assertIsInstance(exc, Exception)
+        self.assertIn(repr(valor_invalido), str(exc))
 
 
 if __name__ == "__main__":
