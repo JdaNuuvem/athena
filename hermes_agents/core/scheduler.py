@@ -115,6 +115,15 @@ def _renovar_tokens_shopee():
     except Exception as e:
         log(AGENT, f"Erro _renovar_tokens_shopee: {e}")
 
+def _sync_pedidos_i9logic():
+    try:
+        from core.i9logic_vendas import sincronizar_pedidos_i9logic
+        r = sincronizar_pedidos_i9logic()
+        if r.get("sincronizados", 0) > 0:
+            log(AGENT, f"Pedidos i9Logic sync: {r['sincronizados']}")
+    except Exception as e:
+        log(AGENT, f"Erro sync pedidos i9Logic: {e}")
+
 def _sync_categorias():
     try:
         from bling_erp import listar_categorias, get_access_token
@@ -147,3 +156,4 @@ add_job(_sync_categorias, "bling-categorias", 7200)     # 2 hours
 add_job(_persistir_rotacao_estoque, "estoque-rotacao", 86400)  # daily
 add_job(_reconciliar_loja_id, "estoque-reconciliar-loja-id", 3600)  # 1 hour
 add_job(_renovar_tokens_shopee, "shopee-renovar-tokens", 900)  # 15 min
+add_job(_sync_pedidos_i9logic, "i9logic-pedidos", 600)  # 10 min

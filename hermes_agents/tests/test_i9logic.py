@@ -760,3 +760,18 @@ class TestRotasI9Logic(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.get_json()["importados"], 5)
         mock_sync.assert_called_once()
+
+    def test_sincronizar_vendas_exige_estoque_editar(self):
+        headers = self._headers_com_permissao([])
+        with patch("core.rbac.usuario_tem_permissao", return_value=False):
+            r = self.client.post("/api/integrations/i9logic/vendas/sincronizar", headers=headers)
+        self.assertEqual(r.status_code, 403)
+
+    def test_sincronizar_vendas_com_permissao_libera(self):
+        headers = self._headers_com_permissao(["estoque.editar"])
+        with patch("core.rbac.usuario_tem_permissao", return_value=True), \
+             patch("routes.i9logic.sincronizar_pedidos_i9logic",
+                   return_value={"ok": True, "sincronizados": 2}) as mock_sync:
+            r = self.client.post("/api/integrations/i9logic/vendas/sincronizar", headers=headers, json={})
+        self.assertEqual(r.status_code, 200)
+        mock_sync.assert_called_once_with(data_de=None, data_ate=None)
