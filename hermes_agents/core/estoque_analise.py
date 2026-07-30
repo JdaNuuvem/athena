@@ -4,6 +4,7 @@ Substitui os indicadores que a tela `/estoque/analise` gerava com
 Math.random() no cliente (ver spec 2026-07-29-estoque-analise-*)."""
 from datetime import date
 from core import get_db, run_async
+from core.lojas import _loja_efetiva_async, _log_erro
 
 AGENT = "Estoque Analise"
 
@@ -26,7 +27,19 @@ def giro(loja: str = "", dias: int = 30) -> list:
     pelo saldo atual — nao ha snapshot diario de estoque no banco pra
     calcular media de verdade (limitacao declarada na spec)."""
     async def _go():
+        nonlocal loja
         db = await get_db()
+        if loja:
+            try:
+                r = await _loja_efetiva_async(loja)
+                if isinstance(r, str) and r:
+                    loja = r
+                else:
+                    _log_erro(
+                        "estoque_analise.giro: resolver_loja_efetiva",
+                        ValueError(f"loja '{loja}' -> valor invalido {r!r} (esperado str nao-vazia)"))
+            except Exception as e:
+                _log_erro("estoque_analise.giro: resolver_loja_efetiva", e)
         where_saldo = ["1=1"]
         params_saldo = []
         _filtro_loja("e.loja", loja, where_saldo, params_saldo)
@@ -82,7 +95,19 @@ def ruptura(loja: str = "") -> list:
     catalogo — somar minimos diferentes por loja nao teria um limiar unico
     que faca sentido."""
     async def _go():
+        nonlocal loja
         db = await get_db()
+        if loja:
+            try:
+                r = await _loja_efetiva_async(loja)
+                if isinstance(r, str) and r:
+                    loja = r
+                else:
+                    _log_erro(
+                        "estoque_analise.ruptura: resolver_loja_efetiva",
+                        ValueError(f"loja '{loja}' -> valor invalido {r!r} (esperado str nao-vazia)"))
+            except Exception as e:
+                _log_erro("estoque_analise.ruptura: resolver_loja_efetiva", e)
         where = ["1=1"]
         params = []
         _filtro_loja("e.loja", loja, where, params)
@@ -166,7 +191,19 @@ def cobertura(loja: str = "") -> list:
     Sem demanda no periodo, cobertura fica None internamente ("sem venda
     recente", nao Infinity nem crash) e sai como 0 no payload."""
     async def _go():
+        nonlocal loja
         db = await get_db()
+        if loja:
+            try:
+                r = await _loja_efetiva_async(loja)
+                if isinstance(r, str) and r:
+                    loja = r
+                else:
+                    _log_erro(
+                        "estoque_analise.cobertura: resolver_loja_efetiva",
+                        ValueError(f"loja '{loja}' -> valor invalido {r!r} (esperado str nao-vazia)"))
+            except Exception as e:
+                _log_erro("estoque_analise.cobertura: resolver_loja_efetiva", e)
         where = ["1=1"]
         params = []
         _filtro_loja("e.loja", loja, where, params)
