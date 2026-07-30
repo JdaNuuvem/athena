@@ -154,6 +154,58 @@ class TestPaginarEstoques(unittest.TestCase):
         self.assertEqual(chamadas[0]["tipoestoque"], 2)
 
 
+class TestPaginarGenerico(unittest.TestCase):
+    def _resposta(self, pagina, total, por_pagina=200):
+        inicio = (pagina - 1) * por_pagina
+        fim = min(inicio + por_pagina, total)
+        dados = [{"id": i} for i in range(inicio, fim)]
+        resp = MagicMock()
+        resp.json.return_value = {"data": dados, "total": total}
+        resp.raise_for_status.return_value = None
+        return resp
+
+    def test_retry_recupera_apos_falha_temporaria(self):
+        chamadas = {"n": 0}
+        def _get(url, params=None, headers=None, timeout=None):
+            chamadas["n"] += 1
+            if chamadas["n"] == 1:
+                raise Exception("timeout")
+            return self._resposta(params["page"], 10)
+        with patch("core.i9logic.requests.get", side_effect=_get), \
+             patch("core.i9logic.time.sleep") as mock_sleep:
+            resultado = i9logic._paginar("produtos", {})
+        self.assertEqual(len(resultado), 10)
+        self.assertEqual(chamadas["n"], 2)
+
+    def test_esgotou_retries_levanta_erro_com_numero_da_pagina(self):
+        def _get(url, params=None, headers=None, timeout=None):
+            raise Exception("erro persistente")
+        with patch("core.i9logic.requests.get", side_effect=_get), \
+             patch("core.i9logic.time.sleep"):
+            with self.assertRaises(i9logic.I9LogicPaginaError) as ctx:
+                i9logic._paginar("produtos", {})
+        self.assertEqual(ctx.exception.pagina, 1)
+
+    def test_on_pagina_chamado_a_cada_pagina_com_registros_certos(self):
+        total = 450
+        paginas_recebidas = []
+        def _get(url, params=None, headers=None, timeout=None):
+            return self._resposta(params["page"], total)
+        with patch("core.i9logic.requests.get", side_effect=_get), \
+             patch("core.i9logic.time.sleep"):
+            resultado = i9logic._paginar("produtos", {}, on_pagina=lambda regs: paginas_recebidas.append(len(regs)))
+        self.assertEqual(paginas_recebidas, [200, 200, 50])
+        self.assertEqual(len(resultado), total)
+
+    def test_sem_on_pagina_nao_quebra(self):
+        def _get(url, params=None, headers=None, timeout=None):
+            return self._resposta(params["page"], 5)
+        with patch("core.i9logic.requests.get", side_effect=_get), \
+             patch("core.i9logic.time.sleep"):
+            resultado = i9logic._paginar("produtos", {})
+        self.assertEqual(len(resultado), 5)
+
+
 class TestGravarSnapshot(unittest.TestCase):
     def test_grava_resolvendo_sku_e_loja_via_depara(self):
         chamadas_fetchval = []
