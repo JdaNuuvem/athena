@@ -532,6 +532,24 @@ class TestRotasI9Logic(unittest.TestCase):
         self.assertEqual(mock_ajustar.call_args[0][0], 1)
         mock_marcar.assert_not_called()
 
+    def test_ajustar_divergencia_snapshot_nao_encontrado_retorna_404(self):
+        headers = self._headers_com_permissao(["estoque.editar"])
+        with patch("core.rbac.usuario_tem_permissao", return_value=True), \
+             patch("routes.i9logic.aplicar_ajuste_divergencia",
+                   return_value={"erro": "snapshot nao encontrado"}):
+            r = self.client.post("/api/integrations/i9logic/divergencias/999/ajustar", headers=headers)
+        self.assertEqual(r.status_code, 404)
+        self.assertIn("erro", r.get_json())
+
+    def test_ajustar_divergencia_erro_de_negocio_retorna_400(self):
+        headers = self._headers_com_permissao(["estoque.editar"])
+        with patch("core.rbac.usuario_tem_permissao", return_value=True), \
+             patch("routes.i9logic.aplicar_ajuste_divergencia",
+                   return_value={"erro": "snapshot sem de-para resolvido (sku_athena/loja_athena nulos) - resolva o de-para antes de ajustar"}):
+            r = self.client.post("/api/integrations/i9logic/divergencias/1/ajustar", headers=headers)
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("erro", r.get_json())
+
     def test_comparar_exige_estoque_ver(self):
         headers = self._headers_com_permissao([])
         with patch("core.rbac.usuario_tem_permissao", return_value=False):
@@ -563,3 +581,25 @@ class TestRotasI9Logic(unittest.TestCase):
         mock_seed.assert_called_once()
         self.assertEqual(mock_seed.call_args[0][0], "SKU-1")
         self.assertEqual(mock_seed.call_args[0][1], "Loja1")
+
+    def test_seed_sem_snapshot_retorna_404(self):
+        # Texto real de core.i9logic.seed_inicial (linha 356) — nao contem literalmente
+        # "nao encontrado", entao a rota tambem reconhece "sem snapshot" como not-found.
+        headers = self._headers_com_permissao(["estoque.editar"])
+        with patch("core.rbac.usuario_tem_permissao", return_value=True), \
+             patch("routes.i9logic.seed_inicial",
+                   return_value={"erro": "sem snapshot para este sku/loja"}):
+            r = self.client.post("/api/integrations/i9logic/seed", headers=headers,
+                                  json={"sku": "SKU-X", "loja": "Loja1"})
+        self.assertEqual(r.status_code, 404)
+        self.assertIn("erro", r.get_json())
+
+    def test_seed_quantidade_invalida_retorna_400(self):
+        headers = self._headers_com_permissao(["estoque.editar"])
+        with patch("core.rbac.usuario_tem_permissao", return_value=True), \
+             patch("routes.i9logic.seed_inicial",
+                   return_value={"erro": "quantidade fisica coletada e' zero ou negativa, seed nao aplicado"}):
+            r = self.client.post("/api/integrations/i9logic/seed", headers=headers,
+                                  json={"sku": "SKU-X", "loja": "Loja1"})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("erro", r.get_json())

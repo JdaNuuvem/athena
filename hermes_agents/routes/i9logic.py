@@ -69,7 +69,12 @@ def i9logic_ajustar_divergencia(snapshot_id):
     @requer_permissao("estoque.editar")
     def _go():
         usuario = usuario_atual_da_request()
-        return jsonify(aplicar_ajuste_divergencia(snapshot_id, usuario.get("user_id"), usuario.get("nome", "")))
+        resultado = aplicar_ajuste_divergencia(snapshot_id, usuario.get("user_id"), usuario.get("nome", ""))
+        if resultado.get("erro"):
+            erro = resultado["erro"]
+            eh_nao_encontrado = "nao encontrado" in erro or "sem snapshot" in erro
+            return jsonify(resultado), (404 if eh_nao_encontrado else 400)
+        return jsonify(resultado)
     return _go()
 
 
@@ -87,7 +92,12 @@ def i9logic_seed():
     def _go():
         dados = request.json or {}
         usuario = usuario_atual_da_request()
-        return jsonify(seed_inicial(
+        resultado = seed_inicial(
             dados.get("sku", ""), dados.get("loja", ""),
-            usuario.get("user_id"), usuario.get("nome", "")))
+            usuario.get("user_id"), usuario.get("nome", ""))
+        if resultado.get("erro"):
+            erro = resultado["erro"]
+            eh_nao_encontrado = "nao encontrado" in erro or "sem snapshot" in erro
+            return jsonify(resultado), (404 if eh_nao_encontrado else 400)
+        return jsonify(resultado)
     return _go()
