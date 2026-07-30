@@ -77,6 +77,85 @@ def resolver_loja_id(nome: str):
     _cache_loja_id[nome] = loja_id
     return loja_id
 
+# Cache simples chave->nome_efetivo (chave = nome OU id como string), usado
+# pelo vinculo de estoque fisica x virtual (Fase Vinculo). Uma loja virtual
+# com loja_vinculada_id ativo compartilha o saldo da fisica vinculada —
+# qualquer operacao de estoque na virtual deve gravar/ler na fisica.
+# Invalidado sempre que um vinculo e' criado/desfeito — ver invalidar_cache_loja_efetiva().
+_cache_loja_efetiva: dict = {}
+
+def invalidar_cache_loja_efetiva():
+    _cache_loja_efetiva.clear()
+
+def _sync_run(coro):
+    """Helper de teste — roda uma coroutine isolada sem passar por run_async
+    (que abriria um pool asyncpg de verdade). Producao usa loja_efetiva()."""
+    import asyncio
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
+
+async def _loja_efetiva_async(loja) -> str:
+    """Aceita nome OU id (string de digitos) de loja; devolve sempre o NOME
+    efetivo — se for virtual com vinculo ativo, o nome da fisica vinculada;
+    senao, o proprio nome (resolvendo id->nome primeiro, se for o caso)."""
+    if not loja:
+        return loja
+    chave = str(loja)
+    if chave in _cache_loja_efetiva:
+        return _cache_loja_efetiva[chave]
+    db = await get_db()
+    if chave.isdigit():
+        row = await db.fetchrow(
+            "SELECT l1.nome, l2.nome AS nome_fisica FROM lojas l1 "
+            "LEFT JOIN lojas l2 ON l2.id = l1.loja_vinculada_id "
+            "WHERE l1.id = $1", int(chave))
+        efetiva = (row["nome_fisica"] or row["nome"]) if row else loja
+    else:
+        row = await db.fetchrow(
+            "SELECT l2.nome FROM lojas l1 JOIN lojas l2 ON l2.id = l1.loja_vinculada_id "
+            "WHERE l1.nome = $1 AND l1.tipo = 'virtual' AND l1.loja_vinculada_id IS NOT NULL", chave)
+        efetiva = row["nome"] if row else chave
+    _cache_loja_efetiva[chave] = efetiva
+    return efetiva
+
+def loja_efetiva(loja: str) -> str:
+    """Versao sincrona (wrapper sobre run_async) — use em qualquer caller
+    que ja tenha so' o nome/id em maos fora de um `async def`."""
+    if not loja:
+        return loja
+    try:
+        return run_async(_loja_efetiva_async(loja))
+    except Exception as e:
+        _log_erro("loja_efetiva", e)
+        return loja
+
+def loja_efetiva_sync(cur, loja: str) -> str:
+    """Para callers com conexao psycopg2 direta (routes/estoque.py,
+    athena_bridge.py) — usa cursor sincrono, mesmo cache compartilhado."""
+    if not loja:
+        return loja
+    chave = str(loja)
+    if chave in _cache_loja_efetiva:
+        return _cache_loja_efetiva[chave]
+    if chave.isdigit():
+        cur.execute(
+            "SELECT l1.nome, l2.nome AS nome_fisica FROM lojas l1 "
+            "LEFT JOIN lojas l2 ON l2.id = l1.loja_vinculada_id "
+            "WHERE l1.id = %s", (int(chave),))
+        row = cur.fetchone()
+        efetiva = (row[1] or row[0]) if row else loja
+    else:
+        cur.execute(
+            "SELECT l2.nome FROM lojas l1 JOIN lojas l2 ON l2.id = l1.loja_vinculada_id "
+            "WHERE l1.nome = %s AND l1.tipo = 'virtual' AND l1.loja_vinculada_id IS NOT NULL", (chave,))
+        row = cur.fetchone()
+        efetiva = row[0] if row else chave
+    _cache_loja_efetiva[chave] = efetiva
+    return efetiva
+
 def _ensure_table():
     global _table_ok
     if _table_ok: return
@@ -103,6 +182,11 @@ def _ensure_table():
         # nunca trunca dado existente.
         try: await db.execute("ALTER TABLE lojas ALTER COLUMN tipo TYPE VARCHAR(20)")
         except Exception as e: _log_erro("ALTER lojas.tipo (widen)", e)
+        # vinculo de estoque fisica x virtual — quando preenchido numa loja
+        # "virtual", aponta pra loja "fisica" que efetivamente detem o saldo
+        # compartilhado (ver _loja_efetiva_async/loja_efetiva/loja_efetiva_sync acima).
+        try: await db.execute("ALTER TABLE lojas ADD COLUMN IF NOT EXISTS loja_vinculada_id INT REFERENCES lojas(id)")
+        except Exception as e: _log_erro("ALTER lojas.loja_vinculada_id", e)
         for col, ddl in _CAMPOS_GERAIS_DDL:
             try: await db.execute(f"ALTER TABLE lojas ADD COLUMN IF NOT EXISTS {col} {ddl}")
             except Exception as e: _log_erro(f"ALTER lojas.{col}", e)
