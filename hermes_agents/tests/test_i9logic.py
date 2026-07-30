@@ -406,3 +406,160 @@ class TestSeedInicial(unittest.TestCase):
         mock_entrada.assert_called_once_with(
             "SKU-X", "Loja Y", 165.0, motivo="import_i9logic", usuario_id=1, usuario_nome="Ana")
         self.assertTrue(resultado["ok"])
+
+
+from flask import Flask
+import core.rbac as rbac
+
+
+def _app():
+    from routes.i9logic import i9logic_bp
+    app = Flask(__name__)
+    app.config["TESTING"] = True
+    app.register_blueprint(i9logic_bp)
+    return app.test_client()
+
+
+class TestRotasI9Logic(unittest.TestCase):
+    def setUp(self):
+        self.client = _app()
+
+    def _headers_com_permissao(self, permissoes):
+        with patch.dict(os.environ, {"ATHENA_JWT_SECRET": "test-secret-key"}):
+            token = rbac.gerar_token_sessao(11, "u@x.com", "Gerente")
+            return {"Authorization": f"Bearer {token}"}
+
+    def test_listar_depara_exige_estoque_ver(self):
+        headers = self._headers_com_permissao([])
+        with patch("core.rbac.usuario_tem_permissao", return_value=False):
+            r = self.client.get("/api/integrations/i9logic/depara", headers=headers)
+        self.assertEqual(r.status_code, 403)
+
+    def test_listar_depara_com_permissao_libera(self):
+        headers = self._headers_com_permissao(["estoque.ver"])
+        with patch("core.rbac.usuario_tem_permissao", return_value=True), \
+             patch("routes.i9logic.listar_mapeamentos", return_value=[{"id": 1}]) as mock_listar:
+            r = self.client.get("/api/integrations/i9logic/depara", headers=headers)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.get_json()["data"], [{"id": 1}])
+        mock_listar.assert_called_once()
+
+    def test_criar_depara_exige_estoque_editar(self):
+        headers = self._headers_com_permissao([])
+        with patch("core.rbac.usuario_tem_permissao", return_value=False):
+            r = self.client.post("/api/integrations/i9logic/depara", headers=headers,
+                                  json={"tipo": "produto", "id_i9logic": 1, "codigo_athena": "SKU-1"})
+        self.assertEqual(r.status_code, 403)
+
+    def test_criar_depara_com_permissao_libera(self):
+        headers = self._headers_com_permissao(["estoque.editar"])
+        with patch("core.rbac.usuario_tem_permissao", return_value=True), \
+             patch("routes.i9logic.criar_mapeamento", return_value={"id": 1}) as mock_criar:
+            r = self.client.post("/api/integrations/i9logic/depara", headers=headers,
+                                  json={"tipo": "produto", "id_i9logic": 1, "codigo_athena": "SKU-1"})
+        self.assertEqual(r.status_code, 200)
+        mock_criar.assert_called_once_with("produto", 1, "SKU-1")
+
+    def test_matching_automatico_exige_estoque_editar(self):
+        headers = self._headers_com_permissao([])
+        with patch("core.rbac.usuario_tem_permissao", return_value=False):
+            r = self.client.post("/api/integrations/i9logic/depara/matching", headers=headers,
+                                  json={"tipo": "produto", "pares": []})
+        self.assertEqual(r.status_code, 403)
+
+    def test_listar_divergencias_exige_estoque_ver(self):
+        headers = self._headers_com_permissao([])
+        with patch("core.rbac.usuario_tem_permissao", return_value=False):
+            r = self.client.get("/api/integrations/i9logic/divergencias", headers=headers)
+        self.assertEqual(r.status_code, 403)
+
+    def test_listar_divergencias_com_permissao_libera(self):
+        headers = self._headers_com_permissao(["estoque.ver"])
+        with patch("core.rbac.usuario_tem_permissao", return_value=True), \
+             patch("routes.i9logic.listar_itens_para_revisao", return_value=[{"id": 1}]) as mock_listar:
+            r = self.client.get("/api/integrations/i9logic/divergencias", headers=headers)
+        self.assertEqual(r.status_code, 200)
+        mock_listar.assert_called_once()
+
+    def test_coletar_exige_estoque_editar(self):
+        headers = self._headers_com_permissao([])
+        with patch("core.rbac.usuario_tem_permissao", return_value=False):
+            r = self.client.post("/api/integrations/i9logic/coletar", headers=headers)
+        self.assertEqual(r.status_code, 403)
+
+    def test_coletar_com_permissao_dispara_job(self):
+        headers = self._headers_com_permissao(["estoque.editar"])
+        with patch("core.rbac.usuario_tem_permissao", return_value=True), \
+             patch("routes.i9logic.executar_coleta_todas_filiais", return_value={"ok": True}) as mock_coleta:
+            r = self.client.post("/api/integrations/i9logic/coletar", headers=headers)
+        self.assertEqual(r.status_code, 200)
+        mock_coleta.assert_called_once()
+
+    def test_resolver_divergencia_exige_estoque_editar(self):
+        headers = self._headers_com_permissao([])
+        with patch("core.rbac.usuario_tem_permissao", return_value=False):
+            r = self.client.post("/api/integrations/i9logic/divergencias/1/resolver", headers=headers)
+        self.assertEqual(r.status_code, 403)
+
+    def test_resolver_divergencia_com_permissao_chama_marcar_revisado_nao_ajusta(self):
+        """/resolver so' aceita a divergencia como conhecida — nunca ajusta saldo,
+        entao NUNCA pode chamar aplicar_ajuste_divergencia."""
+        headers = self._headers_com_permissao(["estoque.editar"])
+        with patch("core.rbac.usuario_tem_permissao", return_value=True), \
+             patch("routes.i9logic.marcar_revisado", return_value={"ok": True}) as mock_marcar, \
+             patch("routes.i9logic.aplicar_ajuste_divergencia") as mock_ajustar:
+            r = self.client.post("/api/integrations/i9logic/divergencias/1/resolver", headers=headers)
+        self.assertEqual(r.status_code, 200)
+        mock_marcar.assert_called_once_with(1)
+        mock_ajustar.assert_not_called()
+
+    def test_ajustar_divergencia_exige_estoque_editar(self):
+        headers = self._headers_com_permissao([])
+        with patch("core.rbac.usuario_tem_permissao", return_value=False):
+            r = self.client.post("/api/integrations/i9logic/divergencias/1/ajustar", headers=headers)
+        self.assertEqual(r.status_code, 403)
+
+    def test_ajustar_divergencia_com_permissao_chama_aplicar_ajuste_nao_so_marca(self):
+        """/ajustar ajusta o saldo de verdade — nao pode ser satisfeita so' chamando
+        marcar_revisado (que e' o comportamento da rota /resolver, diferente)."""
+        headers = self._headers_com_permissao(["estoque.editar"])
+        with patch("core.rbac.usuario_tem_permissao", return_value=True), \
+             patch("routes.i9logic.aplicar_ajuste_divergencia", return_value={"ok": True}) as mock_ajustar, \
+             patch("routes.i9logic.marcar_revisado") as mock_marcar:
+            r = self.client.post("/api/integrations/i9logic/divergencias/1/ajustar", headers=headers)
+        self.assertEqual(r.status_code, 200)
+        mock_ajustar.assert_called_once()
+        self.assertEqual(mock_ajustar.call_args[0][0], 1)
+        mock_marcar.assert_not_called()
+
+    def test_comparar_exige_estoque_ver(self):
+        headers = self._headers_com_permissao([])
+        with patch("core.rbac.usuario_tem_permissao", return_value=False):
+            r = self.client.get("/api/integrations/i9logic/comparar?sku=SKU-1&loja=Loja1", headers=headers)
+        self.assertEqual(r.status_code, 403)
+
+    def test_comparar_com_permissao_libera(self):
+        headers = self._headers_com_permissao(["estoque.ver"])
+        with patch("core.rbac.usuario_tem_permissao", return_value=True), \
+             patch("routes.i9logic.comparar_com_athena", return_value={"ok": True}) as mock_comparar:
+            r = self.client.get("/api/integrations/i9logic/comparar?sku=SKU-1&loja=Loja1", headers=headers)
+        self.assertEqual(r.status_code, 200)
+        mock_comparar.assert_called_once_with("SKU-1", "Loja1")
+
+    def test_seed_exige_estoque_editar(self):
+        headers = self._headers_com_permissao([])
+        with patch("core.rbac.usuario_tem_permissao", return_value=False):
+            r = self.client.post("/api/integrations/i9logic/seed", headers=headers,
+                                  json={"sku": "SKU-1", "loja": "Loja1"})
+        self.assertEqual(r.status_code, 403)
+
+    def test_seed_com_permissao_libera(self):
+        headers = self._headers_com_permissao(["estoque.editar"])
+        with patch("core.rbac.usuario_tem_permissao", return_value=True), \
+             patch("routes.i9logic.seed_inicial", return_value={"ok": True}) as mock_seed:
+            r = self.client.post("/api/integrations/i9logic/seed", headers=headers,
+                                  json={"sku": "SKU-1", "loja": "Loja1"})
+        self.assertEqual(r.status_code, 200)
+        mock_seed.assert_called_once()
+        self.assertEqual(mock_seed.call_args[0][0], "SKU-1")
+        self.assertEqual(mock_seed.call_args[0][1], "Loja1")
