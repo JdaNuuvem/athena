@@ -184,5 +184,210 @@ class TestMovimentacoesResolveVinculo(unittest.TestCase):
         self.assertIsInstance(exc, Exception)
 
 
+# ── Task 7 (vinculo fisica x virtual): estoque_aprovacoes.solicitar() e
+# estoque_contagem.sugestoes()/registrar() resolvem `loja` (nome/id de uma
+# loja virtual com vinculo ativo) pro nome da fisica vinculada ANTES de
+# checar saldo / montar o WHERE / gravar — mesmo padrao ja' estabelecido em
+# core/estoque_saldos.py (Tasks 3-4), core/estoque.py (Task 5, acima neste
+# mesmo arquivo) e core/estoque_analise.py (Task 6, test_estoque_analise.py).
+#
+# solicitar()/sugestoes() sao closures async (`async def _go()`) — resolvem
+# via `_loja_efetiva_async` com o mesmo guard fail-open manual (try/except +
+# validacao isinstance(str) do valor de retorno) das Tasks 5-6.
+#
+# registrar() e' DIFERENTE: e' uma funcao SINCRONA que chama run_async() tres
+# vezes em sequencia (nao um unico `_go()`), entao resolve via a versao
+# SINCRONA `loja_efetiva()` (wrapper sobre run_async, ja' fail-open com seu
+# proprio _log_erro interno — core/lojas.py:133-142), UMA VEZ no topo da
+# funcao — chamar a async diretamente dali (fora de um `async def`) nao e'
+# possivel, e reimplementar isso com run_async(_loja_efetiva_async(...))
+# manualmente correria o mesmo risco de vazar pool ja' documentado em
+# core/lojas.py::loja_efetiva().
+#
+# Patch-target (mesmo cuidado das Tasks 3-6): os alvos sao
+# `core.estoque_aprovacoes._loja_efetiva_async`/`_log_erro` e
+# `core.estoque_contagem._loja_efetiva_async`/`_log_erro`/`loja_efetiva` (os
+# NOMES importados dentro DE CADA modulo consumidor via `from core.lojas
+# import ...`), NUNCA `core.lojas.*` diretamente — com `from ... import
+# ...`, cada modulo consumidor fica com sua PROPRIA referencia ao objeto
+# funcao; patchar so' o modulo de origem nao intercepta a chamada.
+#
+# Assercoes de "qual loja foi usada" sempre rodam DEPOIS do bloco `with`
+# (via db.fetchval.call_args/db.fetch.call_args/db.execute.call_args), nunca
+# dentro de um side_effect — um assertion failure ali seria engolido pelo
+# `except Exception: return {"erro": ...}`/`except Exception: return []`
+# externo de cada funcao (issue real, ja' batida nesta mesma plan).
+class TestAprovacoesResolveVinculo(unittest.TestCase):
+    def test_solicitar_resolve_loja_antes_de_checar_saldo(self):
+        db = AsyncMock()
+        db.fetchval.return_value = 5
+        db.fetchrow.return_value = {"id": 1}
+        with patch("core.estoque_aprovacoes.get_db", AsyncMock(return_value=db)), \
+             patch("core.estoque_aprovacoes._loja_efetiva_async",
+                   AsyncMock(return_value="Loja Fisica Central")) as mock_resolver:
+            import core.estoque_aprovacoes as aprov
+            aprov._ok = True  # pula _ensure() (CREATE TABLE) no teste
+            resultado = aprov.solicitar("SKU-1", "Loja Virtual A", 3, "quebra")
+        mock_resolver.assert_called_once_with("Loja Virtual A")
+        self.assertNotIn("erro", resultado)
+        self.assertEqual(resultado["loja"], "Loja Fisica Central")
+        fetchval_args = db.fetchval.call_args[0]
+        self.assertIn("Loja Fisica Central", fetchval_args)
+        fetchrow_args = db.fetchrow.call_args[0]
+        self.assertIn("Loja Fisica Central", fetchrow_args)
+
+    def test_solicitar_resolver_indisponivel_usa_loja_original_retorna_dado_real(self):
+        """Fail-open: o resolver real (core.lojas._loja_efetiva_async) abre
+        sua PROPRIA conexao via get_db(), independente do `db` fakeado
+        aqui — uma excecao (DB indisponivel) precisa ser tratada como
+        no-op (solicitar() continua usando 'loja' ORIGINAL), nunca propagar
+        e fazer o try/except externo de _go() devolver {"erro": ...}
+        silenciosamente por causa so' de um resolver que falhou."""
+        db = AsyncMock()
+        db.fetchval.return_value = 5
+        db.fetchrow.return_value = {"id": 1}
+        erro_original = RuntimeError("DB indisponivel")
+        with patch("core.estoque_aprovacoes.get_db", AsyncMock(return_value=db)), \
+             patch("core.estoque_aprovacoes._loja_efetiva_async",
+                   AsyncMock(side_effect=erro_original)) as mock_resolver, \
+             patch("core.estoque_aprovacoes._log_erro") as mock_log_erro:
+            import core.estoque_aprovacoes as aprov
+            aprov._ok = True
+            resultado = aprov.solicitar("SKU-1", "Loja Virtual A", 3, "quebra")
+        mock_resolver.assert_called_once_with("Loja Virtual A")
+        self.assertNotIn("erro", resultado)
+        self.assertEqual(resultado["loja"], "Loja Virtual A")
+        fetchval_args = db.fetchval.call_args[0]
+        self.assertIn("Loja Virtual A", fetchval_args)
+        mock_log_erro.assert_called_once()
+        onde, exc = mock_log_erro.call_args[0]
+        self.assertIn("resolver_loja_efetiva", onde)
+        self.assertIs(exc, erro_original)
+
+    def test_solicitar_resolver_devolve_valor_invalido_usa_loja_original_retorna_dado_real(self):
+        """Outra face da regression acima: resolver que NAO levanta excecao
+        mas devolve algo que nao e' um nome de loja valido (None) precisa
+        ser ignorado (usa 'loja' original) e logado via _log_erro — nunca
+        checar saldo/gravar pendencia usando uma chave corrompida
+        silenciosamente."""
+        db = AsyncMock()
+        db.fetchval.return_value = 5
+        db.fetchrow.return_value = {"id": 1}
+        with patch("core.estoque_aprovacoes.get_db", AsyncMock(return_value=db)), \
+             patch("core.estoque_aprovacoes._loja_efetiva_async",
+                   AsyncMock(return_value=None)) as mock_resolver, \
+             patch("core.estoque_aprovacoes._log_erro") as mock_log_erro:
+            import core.estoque_aprovacoes as aprov
+            aprov._ok = True
+            resultado = aprov.solicitar("SKU-1", "Loja Virtual A", 3, "quebra")
+        mock_resolver.assert_called_once_with("Loja Virtual A")
+        self.assertNotIn("erro", resultado)
+        self.assertEqual(resultado["loja"], "Loja Virtual A")
+        fetchval_args = db.fetchval.call_args[0]
+        self.assertIn("Loja Virtual A", fetchval_args)
+        mock_log_erro.assert_called_once()
+        onde, exc = mock_log_erro.call_args[0]
+        self.assertIn("resolver_loja_efetiva", onde)
+        self.assertIsInstance(exc, Exception)
+
+
+class TestContagemResolveVinculo(unittest.TestCase):
+    def test_sugestoes_resolve_loja(self):
+        db = AsyncMock()
+        db.fetch.return_value = []
+        with patch("core.estoque_contagem.get_db", AsyncMock(return_value=db)), \
+             patch("core.estoque_contagem._loja_efetiva_async",
+                   AsyncMock(return_value="Loja Fisica Central")) as mock_resolver:
+            import core.estoque_contagem as contagem
+            contagem._ok = True
+            resultado = contagem.sugestoes(loja="Loja Virtual A")
+        mock_resolver.assert_called_once_with("Loja Virtual A")
+        self.assertEqual(resultado, [])
+        args = db.fetch.call_args[0]
+        self.assertIn("Loja Fisica Central", args)
+
+    def test_sugestoes_resolver_indisponivel_usa_loja_original_retorna_dado_real(self):
+        """Fail-open (mesmo raciocinio do homologo em
+        TestAprovacoesResolveVinculo). Usa uma linha fake NAO-vazia pra
+        provar que o retorno veio da query real com a loja ORIGINAL, nao de
+        um except externo engolindo tudo."""
+        db = AsyncMock()
+        db.fetch.return_value = [{"sku": "SKU1", "loja": "Loja Virtual A"}]
+        erro_original = RuntimeError("DB indisponivel")
+        with patch("core.estoque_contagem.get_db", AsyncMock(return_value=db)), \
+             patch("core.estoque_contagem._loja_efetiva_async",
+                   AsyncMock(side_effect=erro_original)) as mock_resolver, \
+             patch("core.estoque_contagem._log_erro") as mock_log_erro:
+            import core.estoque_contagem as contagem
+            contagem._ok = True
+            resultado = contagem.sugestoes(loja="Loja Virtual A")
+        mock_resolver.assert_called_once_with("Loja Virtual A")
+        self.assertEqual(resultado, [{"sku": "SKU1", "loja": "Loja Virtual A"}])
+        args = db.fetch.call_args[0]
+        self.assertIn("Loja Virtual A", args)
+        mock_log_erro.assert_called_once()
+        onde, exc = mock_log_erro.call_args[0]
+        self.assertIn("resolver_loja_efetiva", onde)
+        self.assertIs(exc, erro_original)
+
+    def test_sugestoes_resolver_devolve_valor_invalido_usa_loja_original_retorna_dado_real(self):
+        """Outra face da regression acima: resolver que devolve valor
+        invalido sem excecao (None)."""
+        db = AsyncMock()
+        db.fetch.return_value = [{"sku": "SKU1", "loja": "Loja Virtual A"}]
+        with patch("core.estoque_contagem.get_db", AsyncMock(return_value=db)), \
+             patch("core.estoque_contagem._loja_efetiva_async",
+                   AsyncMock(return_value=None)) as mock_resolver, \
+             patch("core.estoque_contagem._log_erro") as mock_log_erro:
+            import core.estoque_contagem as contagem
+            contagem._ok = True
+            resultado = contagem.sugestoes(loja="Loja Virtual A")
+        mock_resolver.assert_called_once_with("Loja Virtual A")
+        self.assertEqual(resultado, [{"sku": "SKU1", "loja": "Loja Virtual A"}])
+        args = db.fetch.call_args[0]
+        self.assertIn("Loja Virtual A", args)
+        mock_log_erro.assert_called_once()
+        onde, exc = mock_log_erro.call_args[0]
+        self.assertIn("resolver_loja_efetiva", onde)
+        self.assertIsInstance(exc, Exception)
+
+
+class TestRegistrarResolveVinculo(unittest.TestCase):
+    """registrar() nao e' um closure async unico como as demais funcoes
+    deste arquivo — e' SINCRONA e chama run_async() tres vezes em
+    sequencia, entao resolve via a versao SINCRONA loja_efetiva() (nao
+    _loja_efetiva_async), UMA VEZ no topo, encadeando o resultado pra todas
+    as chamadas downstream (_go() do saldo, _entrada()/_saida()/
+    _solicitar_aprovacao(), e o INSERT de _salvar()). Ver comentario acima
+    desta classe pro raciocinio completo e o cuidado de patch-target (NOME
+    diferente do usado por sugestoes()/solicitar() acima, embora venha do
+    mesmo core/lojas.py).
+
+    Nao re-testa o fail-open do proprio loja_efetiva() aqui — ja' coberto
+    pelos testes dele (Task 1); so' verifica que registrar() chama e
+    encadeia o nome resolvido corretamente."""
+
+    def test_registrar_entrada_usa_loja_resolvida_em_entrada_e_salvar(self):
+        db = AsyncMock()
+        db.fetchval.side_effect = [3, 1]  # 1: saldo atual (_go); 2: loja_id (_salvar)
+        with patch("core.estoque_contagem.get_db", AsyncMock(return_value=db)), \
+             patch("core.estoque_contagem.loja_efetiva",
+                   return_value="Loja Fisica Central") as mock_loja_efetiva, \
+             patch("core.estoque_contagem._entrada",
+                   return_value={"ok": True}) as mock_entrada:
+            import core.estoque_contagem as contagem
+            contagem._ok = True
+            resultado = contagem.registrar("SKU-1", "Loja Virtual A", 10,
+                                            usuario_id=1, usuario_nome="Fulano")
+        mock_loja_efetiva.assert_called_once_with("Loja Virtual A")
+        mock_entrada.assert_called_once_with(
+            "SKU-1", "Loja Fisica Central", 7, "ajuste_inventario", 1, "Fulano")
+        salvar_args = db.execute.call_args[0]
+        self.assertIn("Loja Fisica Central", salvar_args)
+        self.assertNotIn("Loja Virtual A", salvar_args)
+        self.assertEqual(resultado["loja"], "Loja Fisica Central")
+        self.assertEqual(resultado["ajuste_status"], "aplicado")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
