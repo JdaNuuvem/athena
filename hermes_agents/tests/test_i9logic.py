@@ -183,3 +183,116 @@ class TestGravarSnapshot(unittest.TestCase):
             resultado = i9logic.gravar_snapshot(999, "SEM-DEPARA", 1, 10, 10)
         self.assertIsNone(resultado["sku_athena"])
         self.assertIsNone(resultado["loja_athena"])
+
+
+class TestClassificarDivergencia(unittest.TestCase):
+    def test_sem_divergencia_e_sem_acao(self):
+        self.assertEqual(i9logic.classificar_divergencia(100, 100), "sem_acao")
+
+    def test_divergencia_dentro_da_tolerancia_e_sem_acao(self):
+        self.assertEqual(i9logic.classificar_divergencia(100, 100.5), "sem_acao")
+
+    def test_divergencia_pequena_e_so_registrada(self):
+        # divergencia = 2, abaixo do limiar absoluto (5) e percentual (10% de 100 = 10)
+        self.assertEqual(i9logic.classificar_divergencia(100, 102), "registrado")
+
+    def test_divergencia_exatamente_no_limiar_absoluto_e_alerta(self):
+        # divergencia = 5, >= LIMIAR_ALERTA_ABSOLUTO
+        self.assertEqual(i9logic.classificar_divergencia(100, 105), "alerta")
+
+    def test_divergencia_exatamente_no_limiar_percentual_e_alerta(self):
+        # fisico=10, divergencia=1 -> 1/10 = 10% exato, mas abs(1) < 5 -> ainda alerta pelo percentual
+        self.assertEqual(i9logic.classificar_divergencia(10, 11), "alerta")
+
+    def test_divergencia_grande_bate_os_dois_limiares_e_alerta(self):
+        self.assertEqual(i9logic.classificar_divergencia(165, 348), "alerta")
+
+    def test_qtd_fisico_zero_usa_base_minima_um_no_percentual(self):
+        # fisico=0, comparacao=3 -> divergencia=3, abaixo do absoluto (5); percentual usa
+        # max(0,1)=1 como base -> 3/1 = 300% -> alerta
+        self.assertEqual(i9logic.classificar_divergencia(0, 3), "alerta")
+
+
+class TestListarERevisar(unittest.TestCase):
+    def test_listar_itens_para_revisao_filtra_por_tolerancia(self):
+        async def _fetch(query, *args):
+            self.assertEqual(args[0], False)
+            return [{"id": 1, "divergencia": 183}]
+        with patch("core.i9logic.get_db") as mock_get_db:
+            mock_get_db.return_value = AsyncMock(fetch=_fetch)
+            resultado = i9logic.listar_itens_para_revisao()
+        self.assertEqual(len(resultado), 1)
+
+    def test_marcar_revisado_nao_encontrado_retorna_erro(self):
+        with patch("core.i9logic.get_db") as mock_get_db:
+            mock_get_db.return_value = AsyncMock(fetchrow=AsyncMock(return_value=None))
+            resultado = i9logic.marcar_revisado(999)
+        self.assertIn("erro", resultado)
+
+    def test_marcar_revisado_encontrado_retorna_ok(self):
+        async def _fetchrow(query, *args):
+            return {"id": args[0], "revisado": True}
+        with patch("core.i9logic.get_db") as mock_get_db:
+            mock_get_db.return_value = AsyncMock(fetchrow=_fetchrow)
+            resultado = i9logic.marcar_revisado(1)
+        self.assertTrue(resultado["ok"])
+
+
+class TestAplicarAjusteDivergencia(unittest.TestCase):
+    def test_snapshot_nao_encontrado_retorna_erro(self):
+        with patch("core.i9logic.get_db") as mock_get_db:
+            mock_get_db.return_value = AsyncMock(fetchrow=AsyncMock(return_value=None))
+            resultado = i9logic.aplicar_ajuste_divergencia(999)
+        self.assertIn("erro", resultado)
+
+    def test_snapshot_sem_depara_resolvido_retorna_erro(self):
+        async def _fetchrow(query, *args):
+            return {"id": 1, "sku_athena": None, "loja_athena": None, "qtd_fisico": 165}
+        with patch("core.i9logic.get_db") as mock_get_db:
+            mock_get_db.return_value = AsyncMock(fetchrow=_fetchrow)
+            resultado = i9logic.aplicar_ajuste_divergencia(1)
+        self.assertIn("erro", resultado)
+
+    def test_ajusta_via_ajustar_absoluto_e_marca_revisado(self):
+        chamadas = {"n": 0}
+        async def _fetchrow(query, *args):
+            chamadas["n"] += 1
+            if chamadas["n"] == 1:
+                return {"id": 1, "sku_athena": "SKU-29098", "loja_athena": "Loja Matriz", "qtd_fisico": 165}
+            return {"id": 1, "revisado": True}
+        with patch("core.i9logic.get_db") as mock_get_db, \
+             patch("core.estoque.ajustar_absoluto", return_value={"ok": True, "atual": 165}) as mock_ajustar:
+            mock_get_db.return_value = AsyncMock(fetchrow=_fetchrow)
+            resultado = i9logic.aplicar_ajuste_divergencia(1, usuario_id=1, usuario_nome="Ana")
+        mock_ajustar.assert_called_once_with(
+            "SKU-29098", "Loja Matriz", 165.0, motivo="ajuste_inventario", usuario_id=1, usuario_nome="Ana")
+        self.assertTrue(resultado["ok"])
+
+    def test_ajustar_absoluto_com_erro_nao_marca_revisado(self):
+        async def _fetchrow(query, *args):
+            return {"id": 1, "sku_athena": "SKU-X", "loja_athena": "Loja Y", "qtd_fisico": 165}
+        with patch("core.i9logic.get_db") as mock_get_db, \
+             patch("core.estoque.ajustar_absoluto", return_value={"erro": "falha simulada"}):
+            mock_get_db.return_value = AsyncMock(fetchrow=_fetchrow)
+            resultado = i9logic.aplicar_ajuste_divergencia(1)
+        self.assertIn("erro", resultado)
+
+
+class TestCompararComAthena(unittest.TestCase):
+    def test_sem_snapshot_retorna_erro(self):
+        with patch("core.i9logic.get_db") as mock_get_db:
+            mock_get_db.return_value = AsyncMock(fetchrow=AsyncMock(return_value=None))
+            resultado = i9logic.comparar_com_athena("SKU-X", "Loja Y")
+        self.assertIn("erro", resultado)
+
+    def test_com_snapshot_calcula_divergencia_contra_saldo_athena(self):
+        async def _fetchrow(query, *args):
+            return {"qtd_fisico": 100, "data_coleta": "2026-07-29T00:00:00"}
+        with patch("core.i9logic.get_db") as mock_get_db, \
+             patch("core.estoque_saldos.saldo", return_value=95.0):
+            mock_get_db.return_value = AsyncMock(fetchrow=_fetchrow)
+            resultado = i9logic.comparar_com_athena("SKU-X", "Loja Y")
+        self.assertEqual(resultado["disponivel_athena"], 95.0)
+        self.assertEqual(resultado["qtd_fisico_i9logic"], 100.0)
+        self.assertEqual(resultado["divergencia"], -5.0)
+        self.assertEqual(resultado["classificacao"], "alerta")

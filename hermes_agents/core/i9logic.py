@@ -193,3 +193,105 @@ def gravar_snapshot(idproduto_i9logic: int, codproduto_i9logic: str, filial_i9lo
         return dict(row)
     try: return run_async(_go())
     except Exception as e: return {"erro": str(e)}
+
+
+# ── Divergencia: classificacao, listagem, comparacao com Athena ──
+
+def classificar_divergencia(qtd_fisico: float, qtd_comparacao: float) -> str:
+    """qtd_comparacao e' o contabil (i9Logic isolado, modo seed/auditoria) ou o
+    disponivel do Athena (modo monitoramento continuo) — a mesma regra de
+    classificacao serve pros dois casos, so' muda o que se compara contra o
+    fisico. Nunca ajusta nada sozinho, so' classifica pra fila de revisao."""
+    divergencia = abs(float(qtd_comparacao) - float(qtd_fisico))
+    if divergencia <= TOLERANCIA_ZERO:
+        return "sem_acao"
+    base = max(float(qtd_fisico), 1)
+    if divergencia >= LIMIAR_ALERTA_ABSOLUTO or (divergencia / base) >= LIMIAR_ALERTA_PERCENTUAL:
+        return "alerta"
+    return "registrado"
+
+
+def listar_itens_para_revisao(revisado: bool = False) -> list:
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch(
+            "SELECT * FROM i9logic_estoque_snapshot WHERE revisado=$1 AND ABS(divergencia) > $2 "
+            "ORDER BY ABS(divergencia) DESC", revisado, TOLERANCIA_ZERO)
+        return [dict(r) for r in rows]
+    try: return run_async(_go())
+    except Exception: return []
+
+
+def marcar_revisado(snapshot_id: int) -> dict:
+    """Resolve o item como 'aceitar a divergencia como conhecida' — so' marca
+    revisado, nunca toca saldo. Pro caminho que ajusta saldo de verdade, ver
+    aplicar_ajuste_divergencia()."""
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow(
+            "UPDATE i9logic_estoque_snapshot SET revisado=TRUE WHERE id=$1 RETURNING *", snapshot_id)
+        return dict(row) if row else None
+    try:
+        r = run_async(_go())
+        return {"ok": True, "snapshot": r} if r else {"erro": "snapshot nao encontrado"}
+    except Exception as e: return {"erro": str(e)}
+
+
+def aplicar_ajuste_divergencia(snapshot_id: int, usuario_id: int = None, usuario_nome: str = "") -> dict:
+    """Resolve o item como 'ajustar manualmente' (spec): aplica o fisico
+    coletado como quantidade absoluta via core.estoque.ajustar_absoluto() —
+    passa pelo ledger formal do Athena (Fase 1), motivo fixo 'ajuste_inventario'
+    (nao da' pra colar o id do snapshot dentro do motivo — e' um enum validado
+    contra MOTIVOS_ENTRADA/MOTIVOS_SAIDA, nao texto livre). Rastreabilidade fica
+    por correlacao de tempo entre estoque_movimentacoes e este snapshot, mais o
+    proprio snapshot_id que o chamador ja tinha na mao pra disparar isto.
+    So' marca revisado=TRUE se o ajuste realmente aplicar sem erro."""
+    async def _buscar():
+        db = await get_db()
+        return await db.fetchrow(
+            "SELECT sku_athena, loja_athena, qtd_fisico FROM i9logic_estoque_snapshot WHERE id=$1",
+            snapshot_id)
+    try:
+        snap = run_async(_buscar())
+    except Exception as e:
+        return {"erro": str(e)}
+    if not snap:
+        return {"erro": "snapshot nao encontrado"}
+    if not snap["sku_athena"] or not snap["loja_athena"]:
+        return {"erro": "snapshot sem de-para resolvido (sku_athena/loja_athena nulos) - resolva o de-para antes de ajustar"}
+    from core.estoque import ajustar_absoluto
+    resultado = ajustar_absoluto(
+        snap["sku_athena"], snap["loja_athena"], float(snap["qtd_fisico"] or 0),
+        motivo="ajuste_inventario", usuario_id=usuario_id, usuario_nome=usuario_nome)
+    if resultado.get("erro"):
+        return resultado
+    marcado = marcar_revisado(snapshot_id)
+    return {"ok": True, "ajuste": resultado, "snapshot": marcado.get("snapshot")}
+
+
+def comparar_com_athena(sku: str, loja: str) -> dict:
+    """Modo monitoramento continuo (spec): compara o disponivel atual do Athena
+    contra o fisico mais recente coletado do i9Logic pro mesmo sku/loja."""
+    from core.estoque_saldos import saldo
+    async def _go():
+        db = await get_db()
+        return await db.fetchrow("""
+            SELECT qtd_fisico, data_coleta FROM i9logic_estoque_snapshot
+            WHERE sku_athena=$1 AND loja_athena=$2 ORDER BY data_coleta DESC LIMIT 1
+        """, sku, loja)
+    try:
+        ultimo = run_async(_go())
+    except Exception as e:
+        return {"erro": str(e)}
+    if not ultimo:
+        return {"erro": "sem snapshot para este sku/loja"}
+    disponivel_athena = saldo(sku, loja, "disponivel")
+    qtd_fisico = float(ultimo["qtd_fisico"] or 0)
+    return {
+        "sku": sku, "loja": loja,
+        "disponivel_athena": disponivel_athena,
+        "qtd_fisico_i9logic": qtd_fisico,
+        "divergencia": round(disponivel_athena - qtd_fisico, 3),
+        "classificacao": classificar_divergencia(qtd_fisico, disponivel_athena),
+        "data_coleta": ultimo["data_coleta"],
+    }
