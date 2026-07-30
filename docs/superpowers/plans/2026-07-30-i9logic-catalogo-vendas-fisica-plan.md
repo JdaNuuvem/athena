@@ -733,18 +733,13 @@ class TestSincronizarPedidos(unittest.TestCase):
 class TestGravarPedido(unittest.TestCase):
     def test_grava_pedido_novo_itens_e_pagamentos(self):
         execucoes = []
-        async def _fetchrow(query, *args):
-            return None
-        async def _execute(query, *args):
-            execucoes.append(query)
-            return "OK"
         dados = {
             "pedido": {"id": 322643, "cancelado": "0", "valor_total": 25.97, "data": "2026-07-29"},
             "loja_athena": "Loja Matriz",
             "itens": [{"codproduto": "012810", "descricao": "Pinca", "qtd": 1, "valorvenda": 1.99}],
             "pagamentos": [{"formadepagamento": 335, "valor": 25.97, "codautorizacao": ""}],
         }
-        # fetchval cobre: loja_id (lojas), checagem de pedido existente (None = novo),
+        # fetchval do conn cobre: loja_id (lojas), checagem de pedido existente (None = novo),
         # e o INSERT em vendas_pedidos retornando o id novo
         async def _fetchval(query, *args):
             if "lojas" in query:
@@ -754,8 +749,23 @@ class TestGravarPedido(unittest.TestCase):
             if "INSERT INTO vendas_pedidos" in query:
                 return 55
             return None
+        async def _execute(query, *args):
+            execucoes.append(query)
+            return "OK"
+        # db (a pool) so' expoe acquire() - se o codigo voltar a chamar
+        # db.transaction()/db.fetchval() direto por engano, o teste quebra
+        # com AttributeError em vez de passar batido (mesmo bug que ja
+        # aconteceu no import de catalogo, corrigido la).
+        conn = AsyncMock()
+        conn.fetchval = _fetchval
+        conn.execute = _execute
+        conn.transaction.return_value = AsyncMock(
+            __aenter__=AsyncMock(return_value=None), __aexit__=AsyncMock(return_value=None))
+        db = MagicMock(spec=["acquire"])
+        db.acquire.return_value = AsyncMock(
+            __aenter__=AsyncMock(return_value=conn), __aexit__=AsyncMock(return_value=None))
         with patch("core.i9logic_vendas.get_db") as mock_get_db:
-            mock_get_db.return_value = AsyncMock(fetchval=_fetchval, fetchrow=_fetchrow, execute=_execute)
+            mock_get_db.return_value = db
             resultado = vendas_i9logic._gravar_pedido(dados)
         self.assertTrue(resultado["ok"])
         self.assertTrue(any("vendas_itens" in q for q in execucoes))
@@ -804,39 +814,48 @@ def _ja_sincronizados(ids_i9logic: list) -> set:
 
 
 def _gravar_pedido(dados: dict) -> dict:
+    """Grava pedido+itens+pagamentos numa UNICA conexao/transacao (nunca
+    db.execute/db.fetchval direto na pool - asyncpg.Pool nao tem .transaction(),
+    so' asyncpg.Connection tem, obtida via db.acquire()). Tudo-ou-nada: se
+    qualquer INSERT falhar no meio, nada deste pedido fica gravado, e ele
+    continua elegivel pra retry no proximo ciclo (a janela rolante so' pula
+    pedido cujo id_i9logic ja existe em vendas_pedidos - uma gravacao parcial
+    quebraria essa premissa)."""
     pedido = dados["pedido"]
     async def _go():
         db = await get_db()
-        loja_id = await db.fetchval("SELECT id FROM lojas WHERE nome=$1", dados["loja_athena"])
-        status = "cancelado" if str(pedido.get("cancelado")) == "1" else "concluido"
-        existente = await db.fetchval("SELECT id FROM vendas_pedidos WHERE id_i9logic=$1", pedido["id"])
-        if existente:
-            await db.execute(
-                "UPDATE vendas_pedidos SET status=$1, total=$2, updated_at=NOW() WHERE id_i9logic=$3",
-                status, pedido.get("valor_total", 0), pedido["id"])
-            pedido_id = existente
-            await db.execute("DELETE FROM vendas_itens WHERE pedido_id=$1", pedido_id)
-            await db.execute("DELETE FROM vendas_pagamentos WHERE pedido_id=$1", pedido_id)
-        else:
-            pedido_id = await db.fetchval("""
-                INSERT INTO vendas_pedidos (numero, status, total, data, origem, loja_id, id_i9logic)
-                VALUES ($1,$2,$3,$4,'i9logic_pdv',$5,$6) RETURNING id
-            """, str(pedido["id"]), status, pedido.get("valor_total", 0), pedido.get("data"),
-                loja_id, pedido["id"])
-        for item in dados["itens"]:
-            qtd = float(item.get("qtd", 0) or 0)
-            valor_unitario = float(item.get("valorvenda", 0) or 0)
-            await db.execute("""
-                INSERT INTO vendas_itens (pedido_id, sku, descricao, quantidade, valor_unitario, valor_total)
-                VALUES ($1,$2,$3,$4,$5,$6)
-            """, pedido_id, item.get("codproduto", ""), item.get("descricao", ""),
-                qtd, valor_unitario, qtd * valor_unitario)
-        for pagamento in dados["pagamentos"]:
-            await db.execute("""
-                INSERT INTO vendas_pagamentos (pedido_id, forma, valor, autorizacao)
-                VALUES ($1,$2,$3,$4)
-            """, pedido_id, str(pagamento.get("formadepagamento", "")),
-                pagamento.get("valor", 0), pagamento.get("codautorizacao") or None)
+        async with db.acquire() as conn:
+            async with conn.transaction():
+                loja_id = await conn.fetchval("SELECT id FROM lojas WHERE nome=$1", dados["loja_athena"])
+                status = "cancelado" if str(pedido.get("cancelado")) == "1" else "concluido"
+                existente = await conn.fetchval("SELECT id FROM vendas_pedidos WHERE id_i9logic=$1", pedido["id"])
+                if existente:
+                    await conn.execute(
+                        "UPDATE vendas_pedidos SET status=$1, total=$2, updated_at=NOW() WHERE id_i9logic=$3",
+                        status, pedido.get("valor_total", 0), pedido["id"])
+                    pedido_id = existente
+                    await conn.execute("DELETE FROM vendas_itens WHERE pedido_id=$1", pedido_id)
+                    await conn.execute("DELETE FROM vendas_pagamentos WHERE pedido_id=$1", pedido_id)
+                else:
+                    pedido_id = await conn.fetchval("""
+                        INSERT INTO vendas_pedidos (numero, status, total, data, origem, loja_id, id_i9logic)
+                        VALUES ($1,$2,$3,$4,'i9logic_pdv',$5,$6) RETURNING id
+                    """, str(pedido["id"]), status, pedido.get("valor_total", 0), pedido.get("data"),
+                        loja_id, pedido["id"])
+                for item in dados["itens"]:
+                    qtd = float(item.get("qtd", 0) or 0)
+                    valor_unitario = float(item.get("valorvenda", 0) or 0)
+                    await conn.execute("""
+                        INSERT INTO vendas_itens (pedido_id, sku, descricao, quantidade, valor_unitario, valor_total)
+                        VALUES ($1,$2,$3,$4,$5,$6)
+                    """, pedido_id, item.get("codproduto", ""), item.get("descricao", ""),
+                        qtd, valor_unitario, qtd * valor_unitario)
+                for pagamento in dados["pagamentos"]:
+                    await conn.execute("""
+                        INSERT INTO vendas_pagamentos (pedido_id, forma, valor, autorizacao)
+                        VALUES ($1,$2,$3,$4)
+                    """, pedido_id, str(pagamento.get("formadepagamento", "")),
+                        pagamento.get("valor", 0), pagamento.get("codautorizacao") or None)
         return {"ok": True, "pedido_id": pedido_id}
     try:
         return run_async(_go())
