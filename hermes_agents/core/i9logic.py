@@ -25,6 +25,10 @@ def _api_key() -> str:
     return os.environ.get("I9LOGIC_API_KEY") or get_config("i9logic", "api_key") or ""
 
 
+def _client_id() -> str:
+    return os.environ.get("I9LOGIC_CLIENT_ID") or get_config("i9logic", "client_id") or ""
+
+
 def _ensure_tables():
     async def _go():
         db = await get_db()
@@ -149,7 +153,7 @@ def _paginar_estoques(filial_id_i9logic: int, tipoestoque: int) -> list:
             f"{BASE_URL}/v1/produtos_estoques",
             params={"filial": filial_id_i9logic, "tipoestoque": tipoestoque,
                      "page": pagina, "per_page": PER_PAGE_PADRAO},
-            headers={"Authorization": f"Bearer {_api_key()}"},
+            headers={"X-Client-Id": _client_id(), "Authorization": f"Bearer {_api_key()}"},
             timeout=30,
         )
         resp.raise_for_status()
