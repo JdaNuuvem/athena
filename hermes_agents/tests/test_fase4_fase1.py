@@ -56,6 +56,15 @@ class TestSugestaoRotacao(unittest.TestCase):
             r = est.sugestao_rotacao()
         self.assertEqual(r, [])  # escassez tem 8, > 2, nao sugere
 
+    def test_import_i9logic_esta_em_motivos_entrada(self):
+        """Guarda de regressao: seed inicial do i9Logic (core/i9logic.py::seed_inicial)
+        depende do motivo 'import_i9logic' existir em MOTIVOS_ENTRADA e no mapa de
+        tipo_movimento — sem isso, entrada() cai silenciosamente em 'outro'."""
+        from core.estoque import MOTIVOS_ENTRADA, _MAPA_MOVIMENTO_ENTRADA
+        self.assertIn("import_i9logic", MOTIVOS_ENTRADA)
+        self.assertIn("import_i9logic", _MAPA_MOVIMENTO_ENTRADA)
+        self.assertEqual(_MAPA_MOVIMENTO_ENTRADA["import_i9logic"], "recebimento")
+
 
 class TestPDVAuth(unittest.TestCase):
     """Fase 1 — Auth de operador PDV."""
