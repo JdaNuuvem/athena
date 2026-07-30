@@ -25,6 +25,10 @@ def _ensure_tables():
         except Exception as e: pass
         try: await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_vendas_pedidos_shopee_order_sn ON vendas_pedidos (shopee_order_sn) WHERE shopee_order_sn IS NOT NULL")
         except Exception as e: pass
+        try: await db.execute("ALTER TABLE vendas_pedidos ADD COLUMN IF NOT EXISTS id_i9logic BIGINT")
+        except Exception as e: pass
+        try: await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_vendas_pedidos_id_i9logic ON vendas_pedidos (id_i9logic) WHERE id_i9logic IS NOT NULL")
+        except Exception as e: pass
         # Fase 3: loja_id ja existia como INT solto (sem FK declarada). NOT VALID
         # nao exige validar o dado historico na hora — so' passa a valer pra
         # escritas novas. Postgres nao tem "ADD CONSTRAINT IF NOT EXISTS", o

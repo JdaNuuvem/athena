@@ -154,6 +154,58 @@ class TestPaginarEstoques(unittest.TestCase):
         self.assertEqual(chamadas[0]["tipoestoque"], 2)
 
 
+class TestPaginarGenerico(unittest.TestCase):
+    def _resposta(self, pagina, total, por_pagina=200):
+        inicio = (pagina - 1) * por_pagina
+        fim = min(inicio + por_pagina, total)
+        dados = [{"id": i} for i in range(inicio, fim)]
+        resp = MagicMock()
+        resp.json.return_value = {"data": dados, "total": total}
+        resp.raise_for_status.return_value = None
+        return resp
+
+    def test_retry_recupera_apos_falha_temporaria(self):
+        chamadas = {"n": 0}
+        def _get(url, params=None, headers=None, timeout=None):
+            chamadas["n"] += 1
+            if chamadas["n"] == 1:
+                raise Exception("timeout")
+            return self._resposta(params["page"], 10)
+        with patch("core.i9logic.requests.get", side_effect=_get), \
+             patch("core.i9logic.time.sleep") as mock_sleep:
+            resultado = i9logic._paginar("produtos", {})
+        self.assertEqual(len(resultado), 10)
+        self.assertEqual(chamadas["n"], 2)
+
+    def test_esgotou_retries_levanta_erro_com_numero_da_pagina(self):
+        def _get(url, params=None, headers=None, timeout=None):
+            raise Exception("erro persistente")
+        with patch("core.i9logic.requests.get", side_effect=_get), \
+             patch("core.i9logic.time.sleep"):
+            with self.assertRaises(i9logic.I9LogicPaginaError) as ctx:
+                i9logic._paginar("produtos", {})
+        self.assertEqual(ctx.exception.pagina, 1)
+
+    def test_on_pagina_chamado_a_cada_pagina_com_registros_certos(self):
+        total = 450
+        paginas_recebidas = []
+        def _get(url, params=None, headers=None, timeout=None):
+            return self._resposta(params["page"], total)
+        with patch("core.i9logic.requests.get", side_effect=_get), \
+             patch("core.i9logic.time.sleep"):
+            resultado = i9logic._paginar("produtos", {}, on_pagina=lambda regs: paginas_recebidas.append(len(regs)))
+        self.assertEqual(paginas_recebidas, [200, 200, 50])
+        self.assertEqual(len(resultado), total)
+
+    def test_sem_on_pagina_nao_quebra(self):
+        def _get(url, params=None, headers=None, timeout=None):
+            return self._resposta(params["page"], 5)
+        with patch("core.i9logic.requests.get", side_effect=_get), \
+             patch("core.i9logic.time.sleep"):
+            resultado = i9logic._paginar("produtos", {})
+        self.assertEqual(len(resultado), 5)
+
+
 class TestGravarSnapshot(unittest.TestCase):
     def test_grava_resolvendo_sku_e_loja_via_depara(self):
         chamadas_fetchval = []
@@ -692,3 +744,34 @@ class TestRotasI9Logic(unittest.TestCase):
                                   json={"sku": "SKU-X", "loja": "Loja1"})
         self.assertEqual(r.status_code, 400)
         self.assertIn("erro", r.get_json())
+
+    def test_importar_produtos_exige_produtos_editar(self):
+        headers = self._headers_com_permissao([])
+        with patch("core.rbac.usuario_tem_permissao", return_value=False):
+            r = self.client.post("/api/integrations/i9logic/produtos/importar", headers=headers)
+        self.assertEqual(r.status_code, 403)
+
+    def test_importar_produtos_com_permissao_libera(self):
+        headers = self._headers_com_permissao(["produtos.editar"])
+        with patch("core.rbac.usuario_tem_permissao", return_value=True), \
+             patch("routes.i9logic.sincronizar_catalogo_i9logic",
+                   return_value={"ok": True, "importados": 5, "erros_registro": []}) as mock_sync:
+            r = self.client.post("/api/integrations/i9logic/produtos/importar", headers=headers)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.get_json()["importados"], 5)
+        mock_sync.assert_called_once()
+
+    def test_sincronizar_vendas_exige_vendas_editar(self):
+        headers = self._headers_com_permissao([])
+        with patch("core.rbac.usuario_tem_permissao", return_value=False):
+            r = self.client.post("/api/integrations/i9logic/vendas/sincronizar", headers=headers)
+        self.assertEqual(r.status_code, 403)
+
+    def test_sincronizar_vendas_com_permissao_libera(self):
+        headers = self._headers_com_permissao(["vendas.editar"])
+        with patch("core.rbac.usuario_tem_permissao", return_value=True), \
+             patch("routes.i9logic.sincronizar_pedidos_i9logic",
+                   return_value={"ok": True, "sincronizados": 2}) as mock_sync:
+            r = self.client.post("/api/integrations/i9logic/vendas/sincronizar", headers=headers, json={})
+        self.assertEqual(r.status_code, 200)
+        mock_sync.assert_called_once_with(data_de=None, data_ate=None)

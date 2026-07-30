@@ -6,6 +6,8 @@ from core.i9logic import (
     executar_coleta_todas_filiais, listar_itens_para_revisao, marcar_revisado,
     aplicar_ajuste_divergencia, comparar_com_athena, seed_inicial,
 )
+from core.i9logic_catalogo import sincronizar_catalogo_i9logic
+from core.i9logic_vendas import sincronizar_pedidos_i9logic
 
 i9logic_bp = Blueprint("i9logic", __name__, url_prefix="/api/integrations/i9logic")
 
@@ -103,4 +105,27 @@ def i9logic_seed():
             eh_nao_encontrado = "nao encontrado" in erro or "sem snapshot" in erro
             return jsonify(resultado), (404 if eh_nao_encontrado else 400)
         return jsonify(resultado)
+    return _go()
+
+
+@i9logic_bp.route("/produtos/importar", methods=["POST"])
+def i9logic_importar_produtos():
+    """Importacao unica do catalogo inteiro (22k+ produtos) - disparo manual,
+    nao entra no job recorrente do scheduler."""
+    @requer_permissao("produtos.editar")
+    def _go():
+        return jsonify(sincronizar_catalogo_i9logic())
+    return _go()
+
+
+@i9logic_bp.route("/vendas/sincronizar", methods=["POST"])
+def i9logic_sincronizar_vendas():
+    """Dispara um ciclo de sync de vendas PDV. Sem data_de/data_ate no corpo,
+    usa a janela rolante padrao (mesma que o job recorrente do scheduler);
+    com data_de/data_ate, serve de backfill manual de historico."""
+    @requer_permissao("vendas.editar")
+    def _go():
+        dados = request.get_json(silent=True) or {}
+        return jsonify(sincronizar_pedidos_i9logic(
+            data_de=dados.get("data_de"), data_ate=dados.get("data_ate")))
     return _go()
