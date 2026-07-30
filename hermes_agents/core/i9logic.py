@@ -266,6 +266,8 @@ def aplicar_ajuste_divergencia(snapshot_id: int, usuario_id: int = None, usuario
     if resultado.get("erro"):
         return resultado
     marcado = marcar_revisado(snapshot_id)
+    if marcado.get("erro"):
+        return {"erro": f"ajuste aplicado mas falha ao marcar revisado: {marcado['erro']}", "ajuste": resultado}
     return {"ok": True, "ajuste": resultado, "snapshot": marcado.get("snapshot")}
 
 

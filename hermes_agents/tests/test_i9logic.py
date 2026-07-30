@@ -277,6 +277,22 @@ class TestAplicarAjusteDivergencia(unittest.TestCase):
             resultado = i9logic.aplicar_ajuste_divergencia(1)
         self.assertIn("erro", resultado)
 
+    def test_ajuste_aplicado_mas_marcar_revisado_falha_propaga_erro(self):
+        # ajustar_absoluto tem sucesso, mas o UPDATE de marcar_revisado nao encontra
+        # mais a linha (ex: deletada concorrentemente) -> nao pode mascarar como ok.
+        chamadas = {"n": 0}
+        async def _fetchrow(query, *args):
+            chamadas["n"] += 1
+            if chamadas["n"] == 1:
+                return {"id": 1, "sku_athena": "SKU-29098", "loja_athena": "Loja Matriz", "qtd_fisico": 165}
+            return None
+        with patch("core.i9logic.get_db") as mock_get_db, \
+             patch("core.estoque.ajustar_absoluto", return_value={"ok": True, "atual": 165}):
+            mock_get_db.return_value = AsyncMock(fetchrow=_fetchrow)
+            resultado = i9logic.aplicar_ajuste_divergencia(1)
+        self.assertIn("erro", resultado)
+        self.assertNotIn("ok", resultado)
+
 
 class TestCompararComAthena(unittest.TestCase):
     def test_sem_snapshot_retorna_erro(self):
