@@ -22,6 +22,10 @@ class TestDeParaCRUD(unittest.TestCase):
         resultado = i9logic.criar_mapeamento("invalido", "1", "SKU-1")
         self.assertIn("erro", resultado)
 
+    def test_criar_mapeamento_id_i9logic_vazio_retorna_erro(self):
+        resultado = i9logic.criar_mapeamento("produto", "", "SKU-X")
+        self.assertIn("erro", resultado)
+
     def test_criar_mapeamento_produto_grava(self):
         async def _fetchrow(query, *args):
             return {"id": 1, "tipo": args[0], "id_i9logic": args[1], "codigo_athena": args[2]}
@@ -262,7 +266,9 @@ class TestAplicarAjusteDivergencia(unittest.TestCase):
             return {"id": 1, "revisado": True}
         with patch("core.i9logic.get_db") as mock_get_db, \
              patch("core.estoque.ajustar_absoluto", return_value={"ok": True, "atual": 165}) as mock_ajustar:
-            mock_get_db.return_value = AsyncMock(fetchrow=_fetchrow)
+            # fetchval = guarda de frescor (mais recente) - retorna o MESMO id do
+            # snapshot sendo testado, senao a guarda nova recusaria o ajuste.
+            mock_get_db.return_value = AsyncMock(fetchrow=_fetchrow, fetchval=AsyncMock(return_value=1))
             resultado = i9logic.aplicar_ajuste_divergencia(1, usuario_id=1, usuario_nome="Ana")
         mock_ajustar.assert_called_once_with(
             "SKU-29098", "Loja Matriz", 165.0, motivo="ajuste_inventario", usuario_id=1, usuario_nome="Ana")
@@ -273,7 +279,7 @@ class TestAplicarAjusteDivergencia(unittest.TestCase):
             return {"id": 1, "sku_athena": "SKU-X", "loja_athena": "Loja Y", "qtd_fisico": 165}
         with patch("core.i9logic.get_db") as mock_get_db, \
              patch("core.estoque.ajustar_absoluto", return_value={"erro": "falha simulada"}):
-            mock_get_db.return_value = AsyncMock(fetchrow=_fetchrow)
+            mock_get_db.return_value = AsyncMock(fetchrow=_fetchrow, fetchval=AsyncMock(return_value=1))
             resultado = i9logic.aplicar_ajuste_divergencia(1)
         self.assertIn("erro", resultado)
 
@@ -288,10 +294,55 @@ class TestAplicarAjusteDivergencia(unittest.TestCase):
             return None
         with patch("core.i9logic.get_db") as mock_get_db, \
              patch("core.estoque.ajustar_absoluto", return_value={"ok": True, "atual": 165}):
-            mock_get_db.return_value = AsyncMock(fetchrow=_fetchrow)
+            mock_get_db.return_value = AsyncMock(fetchrow=_fetchrow, fetchval=AsyncMock(return_value=1))
             resultado = i9logic.aplicar_ajuste_divergencia(1)
         self.assertIn("erro", resultado)
         self.assertNotIn("ok", resultado)
+
+    def test_qtd_fisico_zero_sem_confirmar_zerar_recusa_e_nao_ajusta(self):
+        async def _fetchrow(query, *args):
+            return {"id": 1, "sku_athena": "SKU-29098", "loja_athena": "Loja Matriz", "qtd_fisico": 0}
+        with patch("core.i9logic.get_db") as mock_get_db, \
+             patch("core.estoque.ajustar_absoluto") as mock_ajustar:
+            mock_get_db.return_value = AsyncMock(fetchrow=_fetchrow, fetchval=AsyncMock(return_value=1))
+            resultado = i9logic.aplicar_ajuste_divergencia(1)
+        self.assertIn("erro", resultado)
+        mock_ajustar.assert_not_called()
+
+    def test_qtd_fisico_zero_com_confirmar_zerar_aplica_normalmente(self):
+        chamadas = {"n": 0}
+        async def _fetchrow(query, *args):
+            chamadas["n"] += 1
+            if chamadas["n"] == 1:
+                return {"id": 1, "sku_athena": "SKU-29098", "loja_athena": "Loja Matriz", "qtd_fisico": 0}
+            return {"id": 1, "revisado": True}
+        with patch("core.i9logic.get_db") as mock_get_db, \
+             patch("core.estoque.ajustar_absoluto", return_value={"ok": True, "atual": 0}) as mock_ajustar:
+            mock_get_db.return_value = AsyncMock(fetchrow=_fetchrow, fetchval=AsyncMock(return_value=1))
+            resultado = i9logic.aplicar_ajuste_divergencia(1, confirmar_zerar=True)
+        mock_ajustar.assert_called_once()
+        self.assertTrue(resultado["ok"])
+
+    def test_qtd_fisico_none_sem_confirmar_zerar_recusa(self):
+        async def _fetchrow(query, *args):
+            return {"id": 1, "sku_athena": "SKU-29098", "loja_athena": "Loja Matriz", "qtd_fisico": None}
+        with patch("core.i9logic.get_db") as mock_get_db, \
+             patch("core.estoque.ajustar_absoluto") as mock_ajustar:
+            mock_get_db.return_value = AsyncMock(fetchrow=_fetchrow, fetchval=AsyncMock(return_value=1))
+            resultado = i9logic.aplicar_ajuste_divergencia(1)
+        self.assertIn("erro", resultado)
+        mock_ajustar.assert_not_called()
+
+    def test_snapshot_nao_e_o_mais_recente_recusa_e_nao_ajusta(self):
+        async def _fetchrow(query, *args):
+            return {"id": 1, "sku_athena": "SKU-29098", "loja_athena": "Loja Matriz", "qtd_fisico": 165}
+        with patch("core.i9logic.get_db") as mock_get_db, \
+             patch("core.estoque.ajustar_absoluto") as mock_ajustar:
+            # id_mais_recente (42) diferente do snapshot_id sendo ajustado (1)
+            mock_get_db.return_value = AsyncMock(fetchrow=_fetchrow, fetchval=AsyncMock(return_value=42))
+            resultado = i9logic.aplicar_ajuste_divergencia(1)
+        self.assertIn("erro", resultado)
+        mock_ajustar.assert_not_called()
 
 
 class TestCompararComAthena(unittest.TestCase):
@@ -370,7 +421,8 @@ class TestExecutarColeta(unittest.TestCase):
         self.assertIn((2, 0, 50), gravados)
 
     def test_coleta_todas_filiais_itera_mapeamentos(self):
-        with patch("core.i9logic.listar_mapeamentos", return_value=[
+        with patch("core.i9logic.BASE_URL", "https://fake.i9logic.test"), \
+             patch("core.i9logic.listar_mapeamentos", return_value=[
                 {"id_i9logic": "63", "codigo_athena": "Loja Matriz"},
                 {"id_i9logic": "64", "codigo_athena": "Loja Filial"}]), \
              patch("core.i9logic.executar_coleta_filial", return_value={"ok": True, "gravados": 5}) as mock_coleta:
@@ -379,6 +431,25 @@ class TestExecutarColeta(unittest.TestCase):
         self.assertEqual(mock_coleta.call_count, 2)
         mock_coleta.assert_any_call(63)
         mock_coleta.assert_any_call(64)
+
+    def test_coleta_todas_filiais_erro_numa_filial_nao_aborta_as_demais(self):
+        with patch("core.i9logic.BASE_URL", "https://fake.i9logic.test"), \
+             patch("core.i9logic.listar_mapeamentos", return_value=[
+                {"id_i9logic": "63", "codigo_athena": "Loja Matriz"},
+                {"id_i9logic": "64", "codigo_athena": "Loja Filial"}]), \
+             patch("core.i9logic.executar_coleta_filial",
+                   side_effect=[{"ok": True}, Exception("erro de rede")]):
+            resultado = i9logic.executar_coleta_todas_filiais()
+        self.assertEqual(resultado["filiais_processadas"], 2)
+        self.assertEqual(resultado["resultados"][0], {"ok": True})
+        self.assertIn("erro", resultado["resultados"][1])
+
+    def test_coleta_todas_filiais_sem_base_url_retorna_erro_sem_listar_mapeamentos(self):
+        with patch("core.i9logic.BASE_URL", ""), \
+             patch("core.i9logic.listar_mapeamentos") as mock_listar:
+            resultado = i9logic.executar_coleta_todas_filiais()
+        self.assertIn("erro", resultado)
+        mock_listar.assert_not_called()
 
 
 class TestSeedInicial(unittest.TestCase):
@@ -531,6 +602,24 @@ class TestRotasI9Logic(unittest.TestCase):
         mock_ajustar.assert_called_once()
         self.assertEqual(mock_ajustar.call_args[0][0], 1)
         mock_marcar.assert_not_called()
+
+    def test_ajustar_divergencia_repassa_confirmar_zerar_do_corpo(self):
+        headers = self._headers_com_permissao(["estoque.editar"])
+        with patch("core.rbac.usuario_tem_permissao", return_value=True), \
+             patch("routes.i9logic.aplicar_ajuste_divergencia", return_value={"ok": True}) as mock_ajustar:
+            r = self.client.post("/api/integrations/i9logic/divergencias/1/ajustar", headers=headers,
+                                  json={"confirmar_zerar": True})
+        self.assertEqual(r.status_code, 200)
+        mock_ajustar.assert_called_once()
+        self.assertEqual(mock_ajustar.call_args.kwargs.get("confirmar_zerar"), True)
+
+    def test_ajustar_divergencia_sem_corpo_repassa_confirmar_zerar_false(self):
+        headers = self._headers_com_permissao(["estoque.editar"])
+        with patch("core.rbac.usuario_tem_permissao", return_value=True), \
+             patch("routes.i9logic.aplicar_ajuste_divergencia", return_value={"ok": True}) as mock_ajustar:
+            r = self.client.post("/api/integrations/i9logic/divergencias/1/ajustar", headers=headers)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(mock_ajustar.call_args.kwargs.get("confirmar_zerar"), False)
 
     def test_ajustar_divergencia_snapshot_nao_encontrado_retorna_404(self):
         headers = self._headers_com_permissao(["estoque.editar"])

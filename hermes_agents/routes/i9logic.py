@@ -68,8 +68,11 @@ def i9logic_ajustar_divergencia(snapshot_id):
     """Ajusta o saldo Athena pro fisico coletado, via ledger formal (Fase 1)."""
     @requer_permissao("estoque.editar")
     def _go():
+        dados = request.get_json(silent=True) or {}
         usuario = usuario_atual_da_request()
-        resultado = aplicar_ajuste_divergencia(snapshot_id, usuario.get("user_id"), usuario.get("nome", ""))
+        resultado = aplicar_ajuste_divergencia(
+            snapshot_id, usuario.get("user_id"), usuario.get("nome", ""),
+            confirmar_zerar=bool(dados.get("confirmar_zerar", False)))
         if resultado.get("erro"):
             erro = resultado["erro"]
             eh_nao_encontrado = "nao encontrado" in erro or "sem snapshot" in erro

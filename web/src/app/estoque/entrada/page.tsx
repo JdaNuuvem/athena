@@ -24,6 +24,7 @@ const LABEL_MOTIVO: Record<string, string> = {
   devolucao_cliente: "Devolução de cliente",
   producao_interna: "Produção interna",
   ajuste_inventario: "Ajuste de inventário",
+  import_i9logic: "Importação i9Logic",
   outro: "Outro",
 };
 

@@ -67,6 +67,8 @@ def criar_mapeamento(tipo: str, id_i9logic, codigo_athena: str) -> dict:
     nome da loja)."""
     if tipo not in ("produto", "filial"):
         return {"erro": f"tipo invalido: {tipo}. Use 'produto' ou 'filial'"}
+    if not str(id_i9logic).strip():
+        return {"erro": "id_i9logic obrigatorio"}
     async def _go():
         db = await get_db()
         row = await db.fetchrow(
@@ -237,7 +239,8 @@ def marcar_revisado(snapshot_id: int) -> dict:
     except Exception as e: return {"erro": str(e)}
 
 
-def aplicar_ajuste_divergencia(snapshot_id: int, usuario_id: int = None, usuario_nome: str = "") -> dict:
+def aplicar_ajuste_divergencia(snapshot_id: int, usuario_id: int = None, usuario_nome: str = "",
+                                confirmar_zerar: bool = False) -> dict:
     """Resolve o item como 'ajustar manualmente' (spec): aplica o fisico
     coletado como quantidade absoluta via core.estoque.ajustar_absoluto() —
     passa pelo ledger formal do Athena (Fase 1), motivo fixo 'ajuste_inventario'
@@ -245,7 +248,17 @@ def aplicar_ajuste_divergencia(snapshot_id: int, usuario_id: int = None, usuario
     contra MOTIVOS_ENTRADA/MOTIVOS_SAIDA, nao texto livre). Rastreabilidade fica
     por correlacao de tempo entre estoque_movimentacoes e este snapshot, mais o
     proprio snapshot_id que o chamador ja tinha na mao pra disparar isto.
-    So' marca revisado=TRUE se o ajuste realmente aplicar sem erro."""
+    So' marca revisado=TRUE se o ajuste realmente aplicar sem erro.
+
+    Duas guardas antes de aplicar:
+    1. qtd_fisico zero/nula: um produto que so' apareceu no feed contabil
+       (ausente do fisico) grava qtd_fisico=0 no snapshot como sinal de
+       auditoria (Task 6) — nao necessariamente estoque zero de verdade.
+       Aplicar isso como absoluto zeraria o saldo do Athena sem querer. So'
+       aceita se o chamador confirmar explicitamente via confirmar_zerar=True.
+    2. frescor: so' aplica se este snapshot_id for o MAIS RECENTE pra aquele
+       sku_athena/loja_athena — evita aplicar um snapshot antigo por cima do
+       saldo atual."""
     async def _buscar():
         db = await get_db()
         return await db.fetchrow(
@@ -259,9 +272,29 @@ def aplicar_ajuste_divergencia(snapshot_id: int, usuario_id: int = None, usuario
         return {"erro": "snapshot nao encontrado"}
     if not snap["sku_athena"] or not snap["loja_athena"]:
         return {"erro": "snapshot sem de-para resolvido (sku_athena/loja_athena nulos) - resolva o de-para antes de ajustar"}
+    qtd = snap["qtd_fisico"]
+    if (qtd is None or float(qtd) <= 0) and not confirmar_zerar:
+        return {"erro": "quantidade fisica deste snapshot e' zero ou nula - aplicar isso zeraria o saldo do "
+                         "Athena. Pode ser produto ausente do feed fisico da coleta (nao necessariamente "
+                         "estoque zero de verdade). Confirme explicitamente com confirmar_zerar=True se for "
+                         "intencional, ou investigue a coleta antes."}
+    async def _mais_recente():
+        db = await get_db()
+        return await db.fetchval(
+            "SELECT id FROM i9logic_estoque_snapshot WHERE sku_athena=$1 AND loja_athena=$2 "
+            "ORDER BY data_coleta DESC LIMIT 1",
+            snap["sku_athena"], snap["loja_athena"])
+    try:
+        id_mais_recente = run_async(_mais_recente())
+    except Exception as e:
+        return {"erro": str(e)}
+    if id_mais_recente is not None and id_mais_recente != snapshot_id:
+        return {"erro": f"este snapshot (id={snapshot_id}) nao e' o mais recente pra este sku/loja "
+                         f"(o mais recente e' id={id_mais_recente}) - ajuste a partir do mais recente, "
+                         f"nao de um snapshot antigo"}
     from core.estoque import ajustar_absoluto
     resultado = ajustar_absoluto(
-        snap["sku_athena"], snap["loja_athena"], float(snap["qtd_fisico"] or 0),
+        snap["sku_athena"], snap["loja_athena"], float(qtd or 0),
         motivo="ajuste_inventario", usuario_id=usuario_id, usuario_nome=usuario_nome)
     if resultado.get("erro"):
         return resultado
@@ -329,9 +362,18 @@ def executar_coleta_filial(filial_id_i9logic: int) -> dict:
 def executar_coleta_todas_filiais() -> dict:
     """Roda executar_coleta_filial pra cada filial ja mapeada em de_para_i9logic
     (tipo='filial'). Filial sem de-para nao entra — nao ha id_i9logic resolvido
-    sem o mapeamento."""
+    sem o mapeamento. Cada filial roda isolada num try/except: erro de
+    rede/API malformada numa filial vira {"erro": ...} no lugar do resultado
+    daquela filial, sem abortar o processamento das demais."""
+    if not BASE_URL:
+        return {"erro": "I9LOGIC_BASE_URL nao configurado - configure antes de rodar a coleta"}
     filiais = listar_mapeamentos("filial")
-    resultados = [executar_coleta_filial(int(m["id_i9logic"])) for m in filiais]
+    resultados = []
+    for m in filiais:
+        try:
+            resultados.append(executar_coleta_filial(int(m["id_i9logic"])))
+        except Exception as e:
+            resultados.append({"erro": str(e), "filial_i9logic_bruto": m.get("id_i9logic")})
     return {"ok": True, "filiais_processadas": len(resultados), "resultados": resultados}
 
 
