@@ -34,6 +34,8 @@ def _ensure_tables():
         await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS id_bling BIGINT")
         await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS sku_pai VARCHAR(50)")
         await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS atributo VARCHAR(200)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS ean VARCHAR(20)")
+        await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS id_i9logic BIGINT")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_catalogo_produtos_sku_pai ON catalogo_produtos (sku_pai)")
         await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS imagem_url VARCHAR(500)")
         await db.execute("ALTER TABLE catalogo_produtos ADD COLUMN IF NOT EXISTS situacao VARCHAR(1) DEFAULT 'A'")
