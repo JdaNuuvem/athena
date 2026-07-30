@@ -1,7 +1,7 @@
 """Testes de core/estoque_analise.py — giro/ruptura/cobertura sobre dado
 real (asyncpg mockado, sem banco de verdade)."""
 import sys, os, unittest
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from unittest.mock import patch, AsyncMock
 
@@ -326,6 +326,50 @@ class TestRupturaResolveVinculo(unittest.TestCase):
         onde, exc = mock_log_erro.call_args[0]
         self.assertIn("resolver_loja_efetiva", onde)
         self.assertIsInstance(exc, Exception)
+
+    def test_ruptura_com_abastecimento_registrado_consulta_velocidade_media_da_fisica(self):
+        """Fecha um gap de cobertura flagado em review: nenhum teste deste
+        arquivo (nem os 2 pre-existentes de TestRuptura, nem os outros 2
+        acima) alcancava o branch `if loja:` ANINHADO dentro do loop por
+        linha (alimenta a query de velocidade media/impacto de receita via
+        db.fetchrow) — todos ou caiam no `if not rows: return []` precoce,
+        ou usavam um fixture com `ultimo is None` (dispara o `continue`
+        ANTES desse branch). Sem isso, um shadow/stale-variable bug
+        reintroduzido especificamente nesse branch aninhado nao seria
+        pego por nada neste arquivo.
+
+        Fixture: abastecimento NAO-vazio (ultimo != None) faz o codigo
+        seguir alem do `continue` ate' montar params_vendas e chamar
+        db.fetchrow — e' so' ai' que a loja resolvida (ou nao) chega
+        nessa query especifica."""
+        ultimo_dt = datetime.now() - timedelta(days=15)
+        async def fake_fetch(query, *params):
+            q = " ".join(query.split())
+            if "FROM estoque_lojas" in q:
+                return [{"sku": "XYZ-9", "produto": "Produto XYZ", "saldo_atual": 2, "estoque_minimo": 10}]
+            if "estoque_movimentacoes" in q:
+                return [{"sku": "XYZ-9", "data": ultimo_dt}]  # ultimo NAO e' None
+            return []
+        with patch("core.estoque_analise.get_db") as mock_get_db, \
+             patch("core.estoque_analise._loja_efetiva_async",
+                   AsyncMock(return_value="Loja Fisica Central")) as mock_resolver:
+            db = AsyncMock()
+            db.fetch = AsyncMock(side_effect=fake_fetch)
+            db.fetchrow = AsyncMock(return_value={"qtd": 15, "preco_medio": 20.0})
+            mock_get_db.return_value = db
+            resultado = analise.ruptura(loja="Loja Virtual A")
+        mock_resolver.assert_called_once_with("Loja Virtual A")
+        self.assertEqual(resultado, [{
+            "sku": "XYZ-9", "produto": "Produto XYZ",
+            "dias_ruptura": 15,
+            "vendas_perdidas_estimadas": 7.5,
+            "impacto_receita": 150.0,
+            "ultimo_abastecimento": ultimo_dt.date().isoformat(),
+        }])
+        db.fetchrow.assert_called_once()
+        fetchrow_args = db.fetchrow.call_args[0]
+        self.assertIn("Loja Fisica Central", fetchrow_args)
+        self.assertNotIn("Loja Virtual A", fetchrow_args)
 
 
 class TestCoberturaResolveVinculo(unittest.TestCase):
