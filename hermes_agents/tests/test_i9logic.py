@@ -379,3 +379,30 @@ class TestExecutarColeta(unittest.TestCase):
         self.assertEqual(mock_coleta.call_count, 2)
         mock_coleta.assert_any_call(63)
         mock_coleta.assert_any_call(64)
+
+
+class TestSeedInicial(unittest.TestCase):
+    def test_sem_snapshot_retorna_erro(self):
+        with patch("core.i9logic.get_db") as mock_get_db:
+            mock_get_db.return_value = AsyncMock(fetchrow=AsyncMock(return_value=None))
+            resultado = i9logic.seed_inicial("SKU-X", "Loja Y")
+        self.assertIn("erro", resultado)
+
+    def test_quantidade_zero_ou_negativa_nao_aplica_seed(self):
+        async def _fetchrow(query, *args):
+            return {"qtd_fisico": 0}
+        with patch("core.i9logic.get_db") as mock_get_db:
+            mock_get_db.return_value = AsyncMock(fetchrow=_fetchrow)
+            resultado = i9logic.seed_inicial("SKU-X", "Loja Y")
+        self.assertIn("erro", resultado)
+
+    def test_seed_chama_entrada_com_motivo_import_i9logic(self):
+        async def _fetchrow(query, *args):
+            return {"qtd_fisico": 165}
+        with patch("core.i9logic.get_db") as mock_get_db, \
+             patch("core.estoque.entrada", return_value={"ok": True}) as mock_entrada:
+            mock_get_db.return_value = AsyncMock(fetchrow=_fetchrow)
+            resultado = i9logic.seed_inicial("SKU-X", "Loja Y", usuario_id=1, usuario_nome="Ana")
+        mock_entrada.assert_called_once_with(
+            "SKU-X", "Loja Y", 165.0, motivo="import_i9logic", usuario_id=1, usuario_nome="Ana")
+        self.assertTrue(resultado["ok"])

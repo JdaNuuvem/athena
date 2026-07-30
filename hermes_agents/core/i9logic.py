@@ -333,3 +333,29 @@ def executar_coleta_todas_filiais() -> dict:
     filiais = listar_mapeamentos("filial")
     resultados = [executar_coleta_filial(int(m["id_i9logic"])) for m in filiais]
     return {"ok": True, "filiais_processadas": len(resultados), "resultados": resultados}
+
+
+# ── Seed inicial ──
+
+def seed_inicial(sku_athena: str, loja_athena: str, usuario_id: int = None, usuario_nome: str = "") -> dict:
+    """Usa o fisico mais recente coletado como entrada UNICA no Athena — so'
+    faz sentido na primeira migracao do sku/loja pra Athena (spec: 'modo 1'). O
+    contabil nao participa do seed, fica so' no snapshot como referencia."""
+    from core.estoque import entrada
+    async def _go():
+        db = await get_db()
+        return await db.fetchrow("""
+            SELECT qtd_fisico FROM i9logic_estoque_snapshot
+            WHERE sku_athena=$1 AND loja_athena=$2 ORDER BY data_coleta DESC LIMIT 1
+        """, sku_athena, loja_athena)
+    try:
+        ultimo = run_async(_go())
+    except Exception as e:
+        return {"erro": str(e)}
+    if not ultimo:
+        return {"erro": "sem snapshot para este sku/loja"}
+    qtd = float(ultimo["qtd_fisico"] or 0)
+    if qtd <= 0:
+        return {"erro": "quantidade fisica coletada e' zero ou negativa, seed nao aplicado"}
+    return entrada(sku_athena, loja_athena, qtd, motivo="import_i9logic",
+                    usuario_id=usuario_id, usuario_nome=usuario_nome)
