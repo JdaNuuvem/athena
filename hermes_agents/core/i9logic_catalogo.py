@@ -15,12 +15,13 @@ from core.i9logic import _paginar, I9LogicPaginaError, BASE_URL
 AGENT = "I9Logic Catalogo"
 
 
-def _upsert_produto(produto: dict) -> dict:
+async def _upsert_produto_async(db, produto: dict) -> dict:
+    """Versao async que trabalha com db ja existente (compartilhada com chamador).
+    Envolvida em transacao pra atomicidade de catalogo_produtos + de_para_i9logic."""
     sku = str(produto.get("codproduto", "")).strip()
     if not sku:
         return {"erro": "codproduto vazio"}
-    async def _go():
-        db = await get_db()
+    async with db.transaction():
         row = await db.fetchrow("""
             INSERT INTO catalogo_produtos (sku, descricao, ean, ncm, unidade_padrao, peso_bruto, id_i9logic)
             VALUES ($1,$2,$3,$4,$5,$6,$7)
@@ -35,11 +36,46 @@ def _upsert_produto(produto: dict) -> dict:
             INSERT INTO de_para_i9logic (tipo, id_i9logic, codigo_athena) VALUES ('produto',$1,$2)
             ON CONFLICT (tipo, id_i9logic) DO UPDATE SET codigo_athena=$2
         """, str(produto.get("id")), sku)
-        return dict(row)
+    return dict(row)
+
+
+def _upsert_produto(produto: dict) -> dict:
+    """Mantido para uso isolado/pontual - abre sua propria conexao. O loop
+    principal de sincronizar_catalogo_i9logic NAO usa mais esta funcao (ver
+    _upsert_pagina) - usa uma conexao por pagina em vez de uma por produto."""
+    async def _go():
+        db = await get_db()
+        return await _upsert_produto_async(db, produto)
     try:
         return run_async(_go())
     except Exception as e:
         return {"erro": str(e)}
+
+
+def _upsert_pagina(pagina_registros: list) -> tuple:
+    """Upserta uma pagina inteira numa unica conexao/transacao por produto -
+    reduz de 1 conexao/produto pra 1 conexao/pagina (~111 no total pro
+    catalogo inteiro em vez de ~22.105). Retorna (importados, erros_registro)."""
+    elegiveis = [p for p in pagina_registros
+                 if str(p.get("ativo", "")) == "1" and str(p.get("emlinha", "")) == "1"]
+    async def _go():
+        db = await get_db()
+        importados_pagina = 0
+        erros_pagina = []
+        for produto in elegiveis:
+            try:
+                r = await _upsert_produto_async(db, produto)
+                if isinstance(r, dict) and r.get("erro"):
+                    erros_pagina.append({"codproduto": produto.get("codproduto"), "erro": r["erro"]})
+                else:
+                    importados_pagina += 1
+            except Exception as e:
+                erros_pagina.append({"codproduto": produto.get("codproduto"), "erro": str(e)})
+        return importados_pagina, erros_pagina
+    try:
+        return run_async(_go())
+    except Exception as e:
+        return 0, [{"codproduto": None, "erro": f"falha na pagina inteira: {e}"}]
 
 
 def sincronizar_catalogo_i9logic() -> dict:
@@ -52,14 +88,9 @@ def sincronizar_catalogo_i9logic() -> dict:
     erros_registro = []
 
     def _on_pagina(pagina_registros):
-        for produto in pagina_registros:
-            if str(produto.get("ativo", "")) != "1" or str(produto.get("emlinha", "")) != "1":
-                continue
-            r = _upsert_produto(produto)
-            if r.get("erro"):
-                erros_registro.append({"codproduto": produto.get("codproduto"), "erro": r["erro"]})
-            else:
-                importados["count"] += 1
+        count, erros = _upsert_pagina(pagina_registros)
+        importados["count"] += count
+        erros_registro.extend(erros)
 
     try:
         _paginar("produtos", {}, on_pagina=_on_pagina)
