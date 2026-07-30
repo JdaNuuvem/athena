@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import VisaoGeralTab from "./_components/VisaoGeralTab";
 import CadastroTab from "./_components/CadastroTab";
@@ -27,12 +27,18 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]["id"];
 
+const TAB_IDS = TABS.map((t) => t.id) as readonly string[];
+
 export default function ProdutoClientPage() {
   const params = useParams<{ sku: string }>();
+  const searchParams = useSearchParams();
   const sku = params?.sku || "";
   const [produto, setProduto] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<TabId>("visao-geral");
+  const tabFromUrl = searchParams.get("tab");
+  const [tab, setTab] = useState<TabId>(
+    tabFromUrl && TAB_IDS.includes(tabFromUrl) ? (tabFromUrl as TabId) : "visao-geral"
+  );
   const [showRateio, setShowRateio] = useState(false);
 
   useEffect(() => {

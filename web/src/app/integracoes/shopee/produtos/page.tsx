@@ -90,10 +90,19 @@ export default function ShopeeProdutosPage() {
 
   return (
     <div className="p-6 space-y-4 max-w-5xl">
-      <div>
-        <Link href="/integracoes/shopee" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors">← Shopee</Link>
-        <h1 className="text-lg font-light text-neutral-300 mt-1">Produtos Shopee</h1>
-        <p className="text-xs text-neutral-500 mt-0.5">Produtos sincronizados de cada loja Shopee, com estoque atual e envio manual pro anúncio.</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <Link href="/integracoes/shopee" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors">← Shopee</Link>
+          <h1 className="text-lg font-light text-neutral-300 mt-1">Produtos Shopee</h1>
+          <p className="text-xs text-neutral-500 mt-0.5">Produtos sincronizados de cada loja Shopee, com estoque atual e envio manual pro anúncio.</p>
+        </div>
+        <Link
+          href="/produtos/novo"
+          title="Cadastre o produto no catálogo e depois publique na aba 'Publicar Shopee' dele"
+          className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3 py-1.5 rounded-lg transition-colors shrink-0"
+        >
+          + Adicionar produto
+        </Link>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -140,6 +149,7 @@ export default function ShopeeProdutosPage() {
                   <th className="text-right px-4 py-3 font-medium">Preço</th>
                   <th className="text-right px-4 py-3 font-medium">Estoque</th>
                   <th className="text-left px-4 py-3 font-medium">Status</th>
+                  <th className="text-center px-4 py-3 font-medium">Editar</th>
                   <th className="text-center px-4 py-3 font-medium">Enviar estoque</th>
                 </tr>
               </thead>
@@ -157,6 +167,14 @@ export default function ShopeeProdutosPage() {
                       </span>
                     </td>
                     <td className={`px-4 py-2.5 text-xs font-medium capitalize ${statusColor(p.status)}`}>{p.status}</td>
+                    <td className="px-4 py-2.5 text-center">
+                      <Link
+                        href={`/produtos/${p.sku}?tab=shopee`}
+                        className="text-[10px] bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-2 py-1 rounded inline-block"
+                      >
+                        Editar
+                      </Link>
+                    </td>
                     <td className="px-4 py-2.5">
                       <div className="flex items-center justify-center gap-1">
                         <input

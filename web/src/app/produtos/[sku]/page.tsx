@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import ProdutoClientPage from "./client";
 
 // ponytail: producao serve um export estatico (output: 'export') — rotas
@@ -10,5 +11,9 @@ export async function generateStaticParams() {
 }
 
 export default function ProdutoPage() {
-  return <ProdutoClientPage />;
+  return (
+    <Suspense fallback={<div className="p-6 text-neutral-500">Carregando...</div>}>
+      <ProdutoClientPage />
+    </Suspense>
+  );
 }
