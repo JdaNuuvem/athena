@@ -353,6 +353,21 @@ class TestRotasFlask(unittest.TestCase):
         resp = self.client.post("/api/shopee/produtos", json={"item_name": "X"}, headers=self._h())
         self.assertEqual(resp.status_code, 400)
 
+    @patch("shopee.listar_pedidos_shopee_detalhado")
+    def test_rota_pedidos(self, mock_listar):
+        mock_listar.return_value = {"pedidos": [{"order_sn": "SN1", "status": "READY_TO_SHIP"}]}
+        resp = self.client.get("/api/shopee/pedidos?loja_id=7&dias=30", headers=self._h())
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(resp.get_json()["pedidos"]), 1)
+        mock_listar.assert_called_once_with(30, loja_id=7, status=None)
+
+    @patch("shopee.listar_pedidos_shopee_detalhado")
+    def test_rota_pedidos_repassa_erro_da_shopee(self, mock_listar):
+        mock_listar.return_value = {"error": "order.order_list_invalid_time", "message": "..."}
+        resp = self.client.get("/api/shopee/pedidos?loja_id=7&dias=30", headers=self._h())
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.get_json().get("error"), "order.order_list_invalid_time")
+
     @patch("shopee.sincronizar_estoque_todas_lojas")
     def test_rota_estoque_todas_lojas(self, mock_sync):
         mock_sync.return_value = {"total": 2, "sucesso": 2, "resultados": []}

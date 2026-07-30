@@ -12,26 +12,67 @@ from .auth import _request, AGENT
 AGENT_ORD = "AG-03 | Shopee Orders"
 
 
+# ponytail: order/get_order_list e order/get_order_detail sao GET, nao POST —
+# validado ao vivo contra a loja de producao (POST dava 404 puro, endpoint nao
+# resolvia). order_status so' aceita 1 valor por chamada (CSV de 2+ statuses
+# retorna "order_status is invalid"); order_sn_list e' CSV (aceita varios SNs
+# numa chamada so'), nao lista JSON. time_range_field/time_from/time_to sao os
+# nomes reais dos parametros de periodo — create_time_from/to (usados antes)
+# nao existem na API e causavam o 404. Range maximo de 15 dias por chamada.
+
 def get_orders(status: str = "READY_TO_SHIP", limit: int = 50, loja_id: int = None) -> dict:
-    """Obtém pedidos da Shopee por status."""
+    """Obtém pedidos da Shopee por status, ultimos 15 dias."""
+    now = int(time.time())
     return _request("order/get_order_list", {
-        "order_status": status, "page_size": limit,
-    }, method="POST", loja_id=loja_id)
+        "time_range_field": "create_time", "time_from": now - 15 * 86400, "time_to": now,
+        "page_size": limit, "cursor": "", "order_status": status,
+    }, loja_id=loja_id)
 
 
 def get_order_detail(order_sn: str, loja_id: int = None) -> dict:
-    """Detalhes de um pedido específico."""
-    return _request("order/get_order_detail", {"order_sn_list": [order_sn]}, method="POST", loja_id=loja_id)
+    """Detalhes de um pedido específico (ou varios, se order_sn for uma string CSV)."""
+    return _request("order/get_order_detail", {
+        "order_sn_list": order_sn,
+        "response_optional_fields": "buyer_username,recipient_address,item_list,total_amount",
+    }, loja_id=loja_id)
+
+
+_RANGE_MAX_SEGUNDOS = 15 * 86400 - 3600  # limite real da Shopee e' 15 dias; margem de 1h de seguranca
+_PAGINAS_MAX = 20  # trava de seguranca contra loop de paginacao (20 x page_size pedidos por janela/status)
 
 
 def get_orders_by_time_range(start_time: int, end_time: int, statuses: list = None, limit: int = 50, loja_id: int = None) -> dict:
-    """Obtém pedidos por período."""
+    """Obtém pedidos por período. A Shopee aceita 1 status por chamada e no
+    maximo 15 dias de intervalo — quebra automaticamente periodos maiores em
+    janelas de 15 dias, pagina via cursor dentro de cada janela, e agrega o
+    resultado de uma chamada por status/janela/pagina."""
     if statuses is None:
         statuses = ["READY_TO_SHIP", "PROCESSED"]
-    return _request("order/get_order_list", {
-        "create_time_from": start_time, "create_time_to": end_time,
-        "order_status": ",".join(statuses), "page_size": limit,
-    }, method="POST", loja_id=loja_id)
+    janelas = []
+    inicio = start_time
+    while inicio < end_time:
+        fim = min(inicio + _RANGE_MAX_SEGUNDOS, end_time)
+        janelas.append((inicio, fim))
+        inicio = fim
+    agregados = []
+    for status in statuses:
+        for janela_inicio, janela_fim in janelas:
+            cursor = ""
+            for _ in range(_PAGINAS_MAX):
+                r = _request("order/get_order_list", {
+                    "time_range_field": "create_time", "time_from": janela_inicio, "time_to": janela_fim,
+                    "page_size": limit, "cursor": cursor, "order_status": status,
+                }, loja_id=loja_id)
+                if r.get("error"):
+                    return r
+                resp = r.get("response", {}) or {}
+                agregados.extend(resp.get("order_list", []))
+                if not resp.get("more"):
+                    break
+                cursor = resp.get("next_cursor", "")
+                if not cursor:
+                    break
+    return {"response": {"order_list": agregados}}
 
 
 def get_logistics_channel_list(loja_id: int = None) -> dict:
@@ -62,7 +103,7 @@ def listar_pedidos_shopee_detalhado(dias: int = 7, loja_id: int = None, status: 
         order_sns = [o.get("order_sn") for o in lote if o.get("order_sn")]
         if not order_sns:
             continue
-        d = _request("order/get_order_detail", {"order_sn_list": order_sns}, method="POST", loja_id=loja_id)
+        d = get_order_detail(",".join(order_sns), loja_id=loja_id)
         detalhes = {o["order_sn"]: o for o in (d.get("response", {}) or {}).get("order_list", [])}
         for o in lote:
             det = detalhes.get(o.get("order_sn"), o)

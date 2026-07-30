@@ -38,10 +38,22 @@ def _sync_pedidos():
     except Exception as e: pass
 
 def _sync_pedidos_shopee():
+    """Chamava sincronizar_pedidos_shopee() sem loja_id — usava so' a config
+    legada de loja unica, nunca de fato iterando as lojas Shopee conectadas
+    (multiloja). Com 2+ lojas conectadas, so' a ultima autorizada seria
+    sincronizada de verdade."""
     try:
         from core.vendas import sincronizar_pedidos_shopee
-        r = sincronizar_pedidos_shopee()
-        if r.get("sync", 0) > 0: log(AGENT, f"Pedidos Shopee sync: {r['sync']}")
+        from core.lojas import listar_lojas_shopee
+        for loja in listar_lojas_shopee():
+            if not loja.get("tem_token"):
+                continue
+            try:
+                r = sincronizar_pedidos_shopee(loja_id=loja["id"])
+                if r.get("sync", 0) > 0:
+                    log(AGENT, f"Pedidos Shopee sync (loja {loja['id']}): {r['sync']}")
+            except Exception as e:
+                log(AGENT, f"Erro sync pedidos Shopee loja {loja['id']}: {e}")
     except Exception as e: pass
 
 def _sync_contatos():
