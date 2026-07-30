@@ -14,6 +14,7 @@ Duas portas de entrada para escrita:
                                  pool asyncpg novo a cada chamada.
 """
 from core import get_db, run_async, log
+from core.lojas import _loja_efetiva_async
 
 AGENT = "Estoque Saldos"
 
@@ -235,6 +236,30 @@ async def _mover_saldo_async(conn, sku: str, loja: str, tipo_origem, tipo_destin
     nunca escreve nada antes de detectar um erro proprio. Quando o caller
     encadeia duas chamadas na mesma transacao (transferencia), ele deve
     levantar SaldoError no erro da segunda pra forcar o ROLLBACK da primeira."""
+    # Vinculo fisica x virtual (Fase Vinculo): resolve ANTES de qualquer
+    # leitura/escrita — se `loja` for uma virtual com vinculo ativo, devolve o
+    # nome da fisica vinculada; senao, devolve o proprio nome (so' resolvendo
+    # id->nome, se for o caso). Este e' o UNICO choke point de escrita de
+    # estoque_saldos (mover_saldo() delega pra ca'), entao todo write-path
+    # (PDV, entrada/saida manual, transferencia, aprovacao, rateio) fica
+    # vinculo-aware sem precisar tocar em cada caller individualmente.
+    #
+    # Try/except + isinstance defensivos, mesmo espirito de
+    # core.lojas.loja_efetiva() (o wrapper sincrono, que ja' faz
+    # try/except-e-fallback ao redor desta mesma _loja_efetiva_async):
+    # _loja_efetiva_async abre sua PROPRIA conexao via get_db() (independente
+    # do `conn' ja aberto aqui), entao um DB indisponivel — ou, em teste, um
+    # fake que nao cobre essa query — nao pode derrubar TODA movimentacao de
+    # estoque do sistema. Melhor prosseguir com o nome original (mesmo
+    # comportamento de antes do vinculo existir) do que propagar a excecao ou,
+    # pior, gravar sob um valor corrompido devolvido por um mock/fake alheio.
+    try:
+        loja_resolvida = await _loja_efetiva_async(loja)
+        if isinstance(loja_resolvida, str) and loja_resolvida:
+            loja = loja_resolvida
+    except Exception as e:
+        log(AGENT, f"Erro ao resolver loja efetiva de '{loja}': {e}")
+
     erro = _validar(tipo_origem, tipo_destino, tipo_movimento, quantidade)
     if erro:
         return {"erro": erro}

@@ -2,7 +2,7 @@
 depender do resto do modulo core/estoque.py."""
 import sys, os, unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 
 
 class FakeDBSaldos:
@@ -371,6 +371,101 @@ class TestTransferirAtomica(unittest.IsolatedAsyncioTestCase):
         self.assertIn("erro", r)
         self.assertNotIn(("SKU1", "Loja B", "disponivel"), self.fake.saldos)
         self.assertEqual(len(self.fake.movimentacoes), 0)
+
+
+class TestVinculoEstoqueEscrita(unittest.TestCase):
+    """Task 3: _mover_saldo_async precisa resolver `loja` (virtual com
+    vinculo ativo -> nome da fisica vinculada) ANTES de qualquer leitura/
+    escrita de saldo — esse e' o unico choke point de escrita do modulo, todo
+    write-path (mover_saldo/entrada/saida/transferencia/rateio/...) passa por
+    aqui, entao vira vinculo-aware automaticamente.
+
+    O resolver em si (core.lojas._loja_efetiva_async) ja' tem cobertura
+    propria nos testes da Task 1 — aqui o alvo e' so' confirmar que
+    _mover_saldo_async CHAMA o resolver com o nome bruto recebido e usa o
+    valor DEVOLVIDO por ele (nao o original) em toda escrita subsequente.
+
+    Importante: o patch abaixo mira `core.estoque_saldos._loja_efetiva_async`
+    (o NOME importado dentro deste modulo via `from core.lojas import
+    _loja_efetiva_async`), nao `core.lojas._loja_efetiva_async` — com
+    `from ... import ...`, o modulo que consome fica com sua propria
+    referencia ao objeto funcao; patchar so' o modulo de origem nao
+    intercepta a chamada feita a partir daqui."""
+
+    def setUp(self):
+        self.fake = FakeDBSaldos()
+        async def _get_db(_fake=self.fake):
+            return _fake
+        self.patch_db = patch("core.estoque_saldos.get_db", side_effect=_get_db)
+        self.patch_db.start()
+        import core.estoque_saldos as m
+        m._ok = True
+
+    def tearDown(self):
+        self.patch_db.stop()
+
+    def test_entrada_em_loja_virtual_vinculada_grava_sob_o_nome_da_fisica(self):
+        from core.estoque_saldos import mover_saldo
+        with patch("core.estoque_saldos._loja_efetiva_async",
+                    AsyncMock(return_value="Loja Fisica Central")) as mock_resolver:
+            resultado = mover_saldo("SKU-1", "Loja Virtual A", None, "disponivel", 10,
+                                     "compra", usuario_id=1, usuario_nome="Teste")
+        mock_resolver.assert_called_once_with("Loja Virtual A")
+        self.assertTrue(resultado.get("ok"), resultado)
+        self.assertIn(("SKU-1", "Loja Fisica Central", "disponivel"), self.fake.saldos)
+        self.assertNotIn(("SKU-1", "Loja Virtual A", "disponivel"), self.fake.saldos)
+
+    def test_loja_sem_vinculo_passa_pelo_resolver_e_grava_sob_o_proprio_nome(self):
+        """Regression: loja fisica (ou virtual sem vinculo) precisa continuar
+        gravando sob o proprio nome — o resolver so' troca quando ha' vinculo
+        ativo; aqui o fake devolve o mesmo nome recebido, como o resolver real
+        faz pra esse caso (ver core/lojas.py::_loja_efetiva_async)."""
+        from core.estoque_saldos import mover_saldo
+        with patch("core.estoque_saldos._loja_efetiva_async",
+                    AsyncMock(side_effect=lambda loja: loja)) as mock_resolver:
+            resultado = mover_saldo("SKU-1", "Loja A", None, "disponivel", 10,
+                                     "compra", usuario_id=1, usuario_nome="Teste")
+        mock_resolver.assert_called_once_with("Loja A")
+        self.assertTrue(resultado.get("ok"), resultado)
+        self.assertIn(("SKU-1", "Loja A", "disponivel"), self.fake.saldos)
+
+    def test_resolver_indisponivel_nao_derruba_a_escrita_grava_sob_nome_original(self):
+        """Regression descoberta ao rodar a suite completa (Step 5): o
+        resolver real (core.lojas._loja_efetiva_async) abre sua PROPRIA
+        conexao via get_db(), independente do `conn` que _mover_saldo_async
+        ja tem aberto. Testes de OUTROS modulos (test_estoque_seguranca.py,
+        test_estoque_loja_id.py, ...) so' fakeiam core.estoque_saldos.get_db/
+        core.estoque.get_db, nao core.lojas.get_db — entao, sem uma defesa
+        aqui, uma excecao (DB indisponivel) OU um fake/mock alheio que nao
+        cobre essa query especifica derrubava a movimentacao inteira (ou,
+        pior, gravava sob um valor corrompido). O guard em
+        _mover_saldo_async precisa tratar um resolver que EXPLODE como um
+        no-op — grava sob o nome original, exatamente como antes do vinculo
+        existir — em vez de propagar o erro pra fora de mover_saldo()."""
+        from core.estoque_saldos import mover_saldo
+        with patch("core.estoque_saldos._loja_efetiva_async",
+                    AsyncMock(side_effect=RuntimeError("DB indisponivel"))) as mock_resolver:
+            resultado = mover_saldo("SKU-1", "Loja A", None, "disponivel", 10,
+                                     "compra", usuario_id=1, usuario_nome="Teste")
+        mock_resolver.assert_called_once_with("Loja A")
+        self.assertTrue(resultado.get("ok"), resultado)
+        self.assertIn(("SKU-1", "Loja A", "disponivel"), self.fake.saldos)
+
+    def test_resolver_devolve_valor_nao_string_e_ignorado_grava_sob_nome_original(self):
+        """Mesma regression acima, outra face dela: quando o resolver NAO
+        levanta excecao mas devolve algo que nao e' um nome de loja valido
+        (ex.: um Mock, se algum outro teste na mesma sessao deixar
+        asyncpg.create_pool monkeypatchado globalmente sem dar stop()), o
+        guard deve ignorar o valor e manter o nome original — nunca gravar
+        estoque sob uma chave corrompida."""
+        from core.estoque_saldos import mover_saldo
+        with patch("core.estoque_saldos._loja_efetiva_async",
+                    AsyncMock(return_value=object())) as mock_resolver:
+            resultado = mover_saldo("SKU-1", "Loja A", None, "disponivel", 10,
+                                     "compra", usuario_id=1, usuario_nome="Teste")
+        mock_resolver.assert_called_once_with("Loja A")
+        self.assertTrue(resultado.get("ok"), resultado)
+        self.assertIn(("SKU-1", "Loja A", "disponivel"), self.fake.saldos)
 
 
 if __name__ == "__main__":
