@@ -89,6 +89,36 @@ class TestSyncProdutosGravaEstoque(unittest.TestCase):
         insert_call = next(c for c in fake_db.execute.call_args_list if "INSERT INTO anuncios" in c.args[0])
         self.assertIn(0, insert_call.args)
 
+    @patch("shopee_sync.get_shopee_config")
+    @patch("shopee_sync.get_item_base_info")
+    @patch("shopee_sync.get_items")
+    @patch("shopee_sync.get_db")
+    def test_sync_produtos_pagina_com_mais_de_50_itens_fatia_lotes(self, mock_get_db, mock_get_items, mock_get_base, mock_cfg):
+        """get_item_base_info rejeita mais de 50 IDs por chamada ('value must
+        contain between 1 and 50 items, inclusive') — get_items traz ate 100
+        por pagina, entao sync_produtos precisa fatiar em lotes de 50."""
+        mock_cfg.return_value = {"shop_id": "1782908877"}
+        items_pagina = [{"item_id": i} for i in range(1, 76)]  # 75 itens numa so pagina
+        mock_get_items.return_value = {"response": {"item": items_pagina, "has_next_page": False, "next_offset": 0}}
+
+        def fake_get_base_info(ids, loja_id=None):
+            self.assertLessEqual(len(ids), 50)
+            return {"response": {"item_list": [{
+                "item_id": i, "item_sku": f"SKU-{i}", "item_name": f"Produto {i}",
+                "item_status": "NORMAL", "price_info": [{"current_price": 10.0}],
+                "stock_info_v2": {"summary_info": {"total_available_stock": 1}},
+            } for i in ids]}}
+        mock_get_base.side_effect = fake_get_base_info
+
+        fake_db = AsyncMock()
+        fake_db.fetchval.return_value = 1
+        mock_get_db.return_value = fake_db
+
+        r = shopee_sync.run_async(shopee_sync.sync_produtos(loja_id=7))
+
+        self.assertEqual(r["total"], 75)
+        self.assertEqual(mock_get_base.call_count, 2)  # lotes de 50 + 25
+
 
 class TestListarProdutosSincronizados(unittest.TestCase):
 

@@ -86,8 +86,17 @@ async def sync_produtos(loja_id: int = None) -> dict:
         if not items:
             break
         ids = [i["item_id"] for i in items]
-        details = get_item_base_info(ids, loja_id=loja_id)
-        for d in details.get("response", {}).get("item_list", []):
+        # get_item_base_info aceita no maximo 50 IDs por chamada ("value must
+        # contain between 1 and 50 items, inclusive") — get_items traz ate 100
+        # por pagina, entao precisa fatiar em lotes de 50.
+        detalhes = []
+        for lote_inicio in range(0, len(ids), 50):
+            details = get_item_base_info(ids[lote_inicio:lote_inicio + 50], loja_id=loja_id)
+            if details.get("error"):
+                erros.append(f"get_item_base_info (lote {lote_inicio}): {details.get('message', details['error'])}")
+                continue
+            detalhes.extend(details.get("response", {}).get("item_list", []))
+        for d in detalhes:
             try:
                 s = d.get("stock_info_v2", {}).get("summary_info", {}) or {}
                 price_info = (d.get("price_info") or [{}])[0] or {}
