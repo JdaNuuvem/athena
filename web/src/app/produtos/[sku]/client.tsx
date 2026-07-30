@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import VisaoGeralTab from "./_components/VisaoGeralTab";
 import CadastroTab from "./_components/CadastroTab";
@@ -30,9 +30,16 @@ type TabId = (typeof TABS)[number]["id"];
 const TAB_IDS = TABS.map((t) => t.id) as readonly string[];
 
 export default function ProdutoClientPage() {
-  const params = useParams<{ sku: string }>();
+  // ponytail: nao usa useParams() aqui — no export estatico, o HTML de
+  // /produtos/[sku] e' pre-renderizado 1x com sku="placeholder" (unico valor
+  // de generateStaticParams) e serve de fallback pra qualquer SKU real (ver
+  // serve_frontend em athena_bridge.py). Em navegacao client-side isso nao
+  // importa, mas na hidratacao de uma pagina carregada direto (F5, link
+  // direto) useParams() retorna o "placeholder" embutido no build em vez do
+  // SKU real da URL. usePathname() sempre reflete a URL real do browser.
+  const pathname = usePathname();
   const searchParams = useSearchParams();
-  const sku = params?.sku || "";
+  const sku = decodeURIComponent(pathname?.split("/").filter(Boolean).pop() || "");
   const [produto, setProduto] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const tabFromUrl = searchParams.get("tab");

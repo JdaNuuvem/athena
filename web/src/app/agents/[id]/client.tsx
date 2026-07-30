@@ -2,11 +2,18 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { api, type Agent } from "@/lib/api";
 
 export default function AgentClientPage() {
-  const { id } = useParams<{ id: string }>();
+  // ponytail: nao usa useParams() — no export estatico o HTML e' pre-renderizado
+  // 1x com id="placeholder" e serve de fallback pra qualquer /agents/<id-real>
+  // (ver serve_frontend em athena_bridge.py). useParams() retornaria o
+  // "placeholder" do build em vez do id real numa hidratacao de pagina
+  // carregada direto (F5, link direto) — usePathname() sempre reflete a URL
+  // real do browser. Mesmo bug corrigido em produtos/[sku] e lojas/[id].
+  const pathname = usePathname();
+  const id = decodeURIComponent(pathname?.split("/").filter(Boolean).pop() || "");
   const [agent, setAgent] = useState<Agent | null>(null);
   const [response, setResponse] = useState<string>("");
   const [input, setInput] = useState("");

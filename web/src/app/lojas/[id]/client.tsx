@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { api } from "@/lib/api";
 import GeralTab from "./_components/GeralTab";
 import OperacionalComercialTab from "./_components/OperacionalComercialTab";
@@ -25,8 +25,14 @@ const TABS = [
 type TabId = (typeof TABS)[number]["id"];
 
 export default function LojaClientPage() {
-  const params = useParams<{ id: string }>();
-  const id = Number(params?.id || 0);
+  // ponytail: nao usa useParams() — no export estatico o HTML e' pre-renderizado
+  // 1x com id="placeholder" e serve de fallback pra qualquer /lojas/<id-real>
+  // (ver serve_frontend em athena_bridge.py). useParams() retornaria o
+  // "placeholder" do build em vez do id real numa hidratacao de pagina
+  // carregada direto (F5, link direto) — usePathname() sempre reflete a URL
+  // real do browser. Mesmo bug corrigido em produtos/[sku]/client.tsx.
+  const pathname = usePathname();
+  const id = Number(pathname?.split("/").filter(Boolean).pop() || 0);
   const [loja, setLoja] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<TabId>("geral");
