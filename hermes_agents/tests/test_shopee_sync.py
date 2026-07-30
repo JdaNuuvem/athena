@@ -167,6 +167,37 @@ class TestSyncProdutosGravaEstoque(unittest.TestCase):
     @patch("shopee_sync.get_item_base_info")
     @patch("shopee_sync.get_items")
     @patch("shopee_sync.get_db")
+    def test_sync_produtos_com_variacao_remove_registro_orfao_do_item_pai(self, mock_get_db, mock_get_items, mock_get_base, mock_get_models, mock_cfg):
+        """Sincronizacoes anteriores a este suporte gravavam o item pai como se
+        fosse produto simples (sku=item_sku, preco=0). Ao detectar has_model=True
+        agora, precisa remover essa linha orfa (anuncio_id = item_id puro), senao
+        ela fica pendurada na listagem mostrando R$ 0,00 pra sempre."""
+        mock_cfg.return_value = {"shop_id": "1782908877"}
+        mock_get_items.return_value = {"response": {"item": [{"item_id": 333}], "has_next_page": False, "next_offset": 0}}
+        mock_get_base.return_value = {"response": {"item_list": [{
+            "item_id": 333, "item_sku": "BEM-CALC-UN", "item_name": "Calcanheira",
+            "item_status": "NORMAL", "has_model": True,
+        }]}}
+        mock_get_models.return_value = {"response": {"model": [
+            {"model_id": 1, "model_name": "Azul,1UN", "model_sku": "BEM-CALC-AZUL-1UN",
+             "price_info": [{"current_price": 15.98}],
+             "stock_info_v2": {"summary_info": {"total_available_stock": 0}}},
+        ]}}
+        fake_db = AsyncMock()
+        fake_db.fetchval.return_value = 1
+        mock_get_db.return_value = fake_db
+
+        shopee_sync.run_async(shopee_sync.sync_produtos(loja_id=7))
+
+        deletes = [c for c in fake_db.execute.call_args_list if "DELETE FROM anuncios" in c.args[0]]
+        self.assertEqual(len(deletes), 1)
+        self.assertEqual(deletes[0].args[1:], ("1782908877", "333"))
+
+    @patch("shopee_sync.get_shopee_config")
+    @patch("shopee_sync.get_model_list")
+    @patch("shopee_sync.get_item_base_info")
+    @patch("shopee_sync.get_items")
+    @patch("shopee_sync.get_db")
     def test_sync_produtos_erro_no_get_model_list_nao_derruba_sync(self, mock_get_db, mock_get_items, mock_get_base, mock_get_models, mock_cfg):
         mock_cfg.return_value = {"shop_id": "1782908877"}
         mock_get_items.return_value = {"response": {"item": [{"item_id": 333}], "has_next_page": False, "next_offset": 0}}

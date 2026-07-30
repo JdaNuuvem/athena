@@ -121,6 +121,11 @@ async def sync_produtos(loja_id: int = None) -> dict:
                 # Produto com variacao: preco/estoque nao existem no nivel do item
                 # (fica 0 em price_info/stock_info_v2) — precisa buscar cada
                 # modelo (variacao) via get_model_list, 1 linha em anuncios por SKU.
+                # Remove eventual linha orfa do item pai (anuncio_id = item_id puro)
+                # gravada por uma sincronizacao anterior a esse suporte a variacao.
+                await db.execute(
+                    "DELETE FROM anuncios WHERE marketplace='shopee' AND shop_id=$1 AND anuncio_id=$2",
+                    shop_id, str(item_id))
                 modelos = get_model_list(item_id, loja_id=loja_id)
                 if modelos.get("error"):
                     erros.append(f"get_model_list item {item_id}: {modelos.get('message', modelos['error'])}")
