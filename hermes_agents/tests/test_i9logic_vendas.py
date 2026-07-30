@@ -1,6 +1,7 @@
 """Testes de integracao — sync de vendas PDV i9Logic -> Athena."""
 import sys, os, unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from datetime import date
 from unittest.mock import patch, AsyncMock, MagicMock
 
 async def _mp(*a, **kw):
@@ -15,6 +16,16 @@ patcher = patch("asyncpg.create_pool", side_effect=_mp)
 patcher.start()
 
 import core.i9logic_vendas as vendas_i9logic
+
+
+def _fake_db_com_conn(conn):
+    """db (pool) so' expoe acquire() - mesmo padrao de test_i9logic_catalogo.py:
+    se o codigo chamar db.fetchval/db.transaction direto por engano na pool
+    (em vez de conn.*), quebra com AttributeError em vez de passar batido."""
+    db = MagicMock(spec=["acquire"])
+    db.acquire.return_value = AsyncMock(
+        __aenter__=AsyncMock(return_value=conn), __aexit__=AsyncMock(return_value=None))
+    return db
 
 
 class TestBuscarDadosPedido(unittest.TestCase):
@@ -141,6 +152,7 @@ class TestSincronizarPedidos(unittest.TestCase):
 class TestGravarPedido(unittest.TestCase):
     def test_grava_pedido_novo_itens_e_pagamentos(self):
         execucoes = []
+        args_insert_pedido = []
         dados = {
             "pedido": {"id": 322643, "cancelado": "0", "valor_total": 25.97, "data": "2026-07-29"},
             "loja_athena": "Loja Matriz",
@@ -155,6 +167,7 @@ class TestGravarPedido(unittest.TestCase):
             if "SELECT id FROM vendas_pedidos WHERE id_i9logic" in query:
                 return None
             if "INSERT INTO vendas_pedidos" in query:
+                args_insert_pedido.extend(args)
                 return 55
             return None
         async def _execute(query, *args):
@@ -178,15 +191,56 @@ class TestGravarPedido(unittest.TestCase):
         # (conn.transaction = MagicMock(return_value=TxMock())).
         conn.transaction = MagicMock(return_value=AsyncMock(
             __aenter__=AsyncMock(return_value=None), __aexit__=AsyncMock(return_value=None)))
-        db = MagicMock(spec=["acquire"])
-        db.acquire.return_value = AsyncMock(
-            __aenter__=AsyncMock(return_value=conn), __aexit__=AsyncMock(return_value=None))
         with patch("core.i9logic_vendas.get_db") as mock_get_db:
-            mock_get_db.return_value = db
+            mock_get_db.return_value = _fake_db_com_conn(conn)
             resultado = vendas_i9logic._gravar_pedido(dados)
         self.assertTrue(resultado["ok"])
         self.assertTrue(any("vendas_itens" in q for q in execucoes))
         self.assertTrue(any("vendas_pagamentos" in q for q in execucoes))
+        # bug critical (review): asyncpg rejeita bind de str numa coluna DATE
+        # ("DataError: invalid input for query argument $4: '...' ('str'
+        # object has no attribute 'toordinal')"). Os fakes de fetchval/execute
+        # acima nao validam tipo (por isso o bug passou batido nos testes
+        # originais) - aqui checamos explicitamente que o 4o parametro do
+        # INSERT (data) chega como datetime.date de verdade, nao a string
+        # crua "2026-07-29" vinda da API i9Logic.
+        self.assertEqual(len(args_insert_pedido), 6)
+        self.assertIsInstance(args_insert_pedido[3], date)
+        self.assertNotIsInstance(args_insert_pedido[3], str)
+        self.assertEqual(args_insert_pedido[3], date(2026, 7, 29))
+
+    def test_pedido_com_data_invalida_nao_quebra_grava_data_nula(self):
+        """Fallback do mesmo fix: data malformada (ou ausente) na API nao
+        pode derrubar a gravacao do pedido inteiro - so' grava data=None em
+        vez de propagar erro de parsing pra fora de _gravar_pedido."""
+        args_insert_pedido = []
+        dados = {
+            "pedido": {"id": 322644, "cancelado": "0", "valor_total": 10, "data": "nao-e-uma-data"},
+            "loja_athena": "Loja Matriz",
+            "itens": [],
+            "pagamentos": [],
+        }
+        async def _fetchval(query, *args):
+            if "lojas" in query:
+                return 7
+            if "SELECT id FROM vendas_pedidos WHERE id_i9logic" in query:
+                return None
+            if "INSERT INTO vendas_pedidos" in query:
+                args_insert_pedido.extend(args)
+                return 56
+            return None
+        async def _execute(query, *args):
+            return "OK"
+        conn = AsyncMock()
+        conn.fetchval = _fetchval
+        conn.execute = _execute
+        conn.transaction = MagicMock(return_value=AsyncMock(
+            __aenter__=AsyncMock(return_value=None), __aexit__=AsyncMock(return_value=None)))
+        with patch("core.i9logic_vendas.get_db") as mock_get_db:
+            mock_get_db.return_value = _fake_db_com_conn(conn)
+            resultado = vendas_i9logic._gravar_pedido(dados)
+        self.assertTrue(resultado["ok"])
+        self.assertIsNone(args_insert_pedido[3])
 
 
 if __name__ == "__main__":

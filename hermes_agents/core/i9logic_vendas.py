@@ -68,8 +68,22 @@ def _gravar_pedido(dados: dict) -> dict:
     qualquer INSERT falhar no meio, nada deste pedido fica gravado, e ele
     continua elegivel pra retry no proximo ciclo (a janela rolante so' pula
     pedido cujo id_i9logic ja existe em vendas_pedidos - uma gravacao parcial
-    quebraria essa premissa)."""
+    quebraria essa premissa).
+
+    pedido["data"] vem da API i9Logic como string "YYYY-MM-DD", mas a coluna
+    vendas_pedidos.data e' DATE - asyncpg exige um datetime.date/datetime
+    nativo pro bind, nao aceita str (nem com ::date no SQL: o cast e' um
+    no-op quando a coluna ja e' DATE, o tipo do parametro e' resolvido pela
+    coluna e o bind falha antes disso com DataError). Mesmo precedente ja
+    usado em sincronizar_pedidos_shopee() (core/vendas.py), que converte
+    create_time pra .date() antes de bindar."""
     pedido = dados["pedido"]
+    data_pedido = None
+    if pedido.get("data"):
+        try:
+            data_pedido = datetime.strptime(pedido["data"], "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            data_pedido = None
     async def _go():
         db = await get_db()
         async with db.acquire() as conn:
@@ -88,7 +102,7 @@ def _gravar_pedido(dados: dict) -> dict:
                     pedido_id = await conn.fetchval("""
                         INSERT INTO vendas_pedidos (numero, status, total, data, origem, loja_id, id_i9logic)
                         VALUES ($1,$2,$3,$4,'i9logic_pdv',$5,$6) RETURNING id
-                    """, str(pedido["id"]), status, pedido.get("valor_total", 0), pedido.get("data"),
+                    """, str(pedido["id"]), status, pedido.get("valor_total", 0), data_pedido,
                         loja_id, pedido["id"])
                 for item in dados["itens"]:
                     qtd = float(item.get("qtd", 0) or 0)
