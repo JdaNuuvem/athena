@@ -744,3 +744,19 @@ class TestRotasI9Logic(unittest.TestCase):
                                   json={"sku": "SKU-X", "loja": "Loja1"})
         self.assertEqual(r.status_code, 400)
         self.assertIn("erro", r.get_json())
+
+    def test_importar_produtos_exige_estoque_editar(self):
+        headers = self._headers_com_permissao([])
+        with patch("core.rbac.usuario_tem_permissao", return_value=False):
+            r = self.client.post("/api/integrations/i9logic/produtos/importar", headers=headers)
+        self.assertEqual(r.status_code, 403)
+
+    def test_importar_produtos_com_permissao_libera(self):
+        headers = self._headers_com_permissao(["estoque.editar"])
+        with patch("core.rbac.usuario_tem_permissao", return_value=True), \
+             patch("routes.i9logic.sincronizar_catalogo_i9logic",
+                   return_value={"ok": True, "importados": 5, "erros_registro": []}) as mock_sync:
+            r = self.client.post("/api/integrations/i9logic/produtos/importar", headers=headers)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.get_json()["importados"], 5)
+        mock_sync.assert_called_once()

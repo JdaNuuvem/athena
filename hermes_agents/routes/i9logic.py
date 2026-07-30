@@ -6,6 +6,7 @@ from core.i9logic import (
     executar_coleta_todas_filiais, listar_itens_para_revisao, marcar_revisado,
     aplicar_ajuste_divergencia, comparar_com_athena, seed_inicial,
 )
+from core.i9logic_catalogo import sincronizar_catalogo_i9logic
 
 i9logic_bp = Blueprint("i9logic", __name__, url_prefix="/api/integrations/i9logic")
 
@@ -103,4 +104,14 @@ def i9logic_seed():
             eh_nao_encontrado = "nao encontrado" in erro or "sem snapshot" in erro
             return jsonify(resultado), (404 if eh_nao_encontrado else 400)
         return jsonify(resultado)
+    return _go()
+
+
+@i9logic_bp.route("/produtos/importar", methods=["POST"])
+def i9logic_importar_produtos():
+    """Importacao unica do catalogo inteiro (22k+ produtos) - disparo manual,
+    nao entra no job recorrente do scheduler."""
+    @requer_permissao("estoque.editar")
+    def _go():
+        return jsonify(sincronizar_catalogo_i9logic())
     return _go()
