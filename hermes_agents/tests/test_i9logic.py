@@ -745,14 +745,14 @@ class TestRotasI9Logic(unittest.TestCase):
         self.assertEqual(r.status_code, 400)
         self.assertIn("erro", r.get_json())
 
-    def test_importar_produtos_exige_estoque_editar(self):
+    def test_importar_produtos_exige_produtos_editar(self):
         headers = self._headers_com_permissao([])
         with patch("core.rbac.usuario_tem_permissao", return_value=False):
             r = self.client.post("/api/integrations/i9logic/produtos/importar", headers=headers)
         self.assertEqual(r.status_code, 403)
 
     def test_importar_produtos_com_permissao_libera(self):
-        headers = self._headers_com_permissao(["estoque.editar"])
+        headers = self._headers_com_permissao(["produtos.editar"])
         with patch("core.rbac.usuario_tem_permissao", return_value=True), \
              patch("routes.i9logic.sincronizar_catalogo_i9logic",
                    return_value={"ok": True, "importados": 5, "erros_registro": []}) as mock_sync:
@@ -761,14 +761,14 @@ class TestRotasI9Logic(unittest.TestCase):
         self.assertEqual(r.get_json()["importados"], 5)
         mock_sync.assert_called_once()
 
-    def test_sincronizar_vendas_exige_estoque_editar(self):
+    def test_sincronizar_vendas_exige_vendas_editar(self):
         headers = self._headers_com_permissao([])
         with patch("core.rbac.usuario_tem_permissao", return_value=False):
             r = self.client.post("/api/integrations/i9logic/vendas/sincronizar", headers=headers)
         self.assertEqual(r.status_code, 403)
 
     def test_sincronizar_vendas_com_permissao_libera(self):
-        headers = self._headers_com_permissao(["estoque.editar"])
+        headers = self._headers_com_permissao(["vendas.editar"])
         with patch("core.rbac.usuario_tem_permissao", return_value=True), \
              patch("routes.i9logic.sincronizar_pedidos_i9logic",
                    return_value={"ok": True, "sincronizados": 2}) as mock_sync:

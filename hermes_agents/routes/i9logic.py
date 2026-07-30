@@ -112,7 +112,7 @@ def i9logic_seed():
 def i9logic_importar_produtos():
     """Importacao unica do catalogo inteiro (22k+ produtos) - disparo manual,
     nao entra no job recorrente do scheduler."""
-    @requer_permissao("estoque.editar")
+    @requer_permissao("produtos.editar")
     def _go():
         return jsonify(sincronizar_catalogo_i9logic())
     return _go()
@@ -123,7 +123,7 @@ def i9logic_sincronizar_vendas():
     """Dispara um ciclo de sync de vendas PDV. Sem data_de/data_ate no corpo,
     usa a janela rolante padrao (mesma que o job recorrente do scheduler);
     com data_de/data_ate, serve de backfill manual de historico."""
-    @requer_permissao("estoque.editar")
+    @requer_permissao("vendas.editar")
     def _go():
         dados = request.get_json(silent=True) or {}
         return jsonify(sincronizar_pedidos_i9logic(

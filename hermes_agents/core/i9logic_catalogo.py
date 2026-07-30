@@ -27,7 +27,12 @@ async def _upsert_produto_async(conn, produto: dict) -> dict:
             INSERT INTO catalogo_produtos (sku, descricao, ean, ncm, unidade_padrao, peso_bruto, id_i9logic)
             VALUES ($1,$2,$3,$4,$5,$6,$7)
             ON CONFLICT (sku) DO UPDATE SET
-                descricao=$2, ean=$3, ncm=$4, unidade_padrao=$5, peso_bruto=$6, id_i9logic=$7,
+                descricao=COALESCE(NULLIF($2,''), catalogo_produtos.descricao),
+                ean=COALESCE($3, catalogo_produtos.ean),
+                ncm=COALESCE($4, catalogo_produtos.ncm),
+                unidade_padrao=COALESCE(NULLIF($5,''), catalogo_produtos.unidade_padrao),
+                peso_bruto=COALESCE(NULLIF($6,0), catalogo_produtos.peso_bruto),
+                id_i9logic=$7,
                 updated_at=NOW()
             RETURNING *
         """, sku, produto.get("descricao") or "", produto.get("ean") or None,
@@ -86,6 +91,7 @@ def sincronizar_catalogo_i9logic() -> dict:
     sku), nao duplica."""
     if not BASE_URL:
         return {"erro": "I9LOGIC_BASE_URL nao configurado - configure antes de importar"}
+    log(AGENT, "Iniciando import de catalogo i9Logic")
     importados = {"count": 0}
     erros_registro = []
 
@@ -97,6 +103,8 @@ def sincronizar_catalogo_i9logic() -> dict:
     try:
         _paginar("produtos", {}, on_pagina=_on_pagina)
     except I9LogicPaginaError as e:
+        log(AGENT, f"Import de catalogo falhou na pagina {e.pagina}: {importados['count']} importados ate a falha, {len(erros_registro)} erros")
         return {"erro": str(e), "pagina_falhou": e.pagina,
                 "importados_ate_agora": importados["count"], "erros_registro": erros_registro}
+    log(AGENT, f"Import de catalogo concluido: {importados['count']} importados, {len(erros_registro)} erros")
     return {"ok": True, "importados": importados["count"], "erros_registro": erros_registro}
