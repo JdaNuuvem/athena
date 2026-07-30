@@ -353,6 +353,57 @@ class TestRotasFlask(unittest.TestCase):
         resp = self.client.post("/api/shopee/produtos", json={"item_name": "X"}, headers=self._h())
         self.assertEqual(resp.status_code, 400)
 
+    @patch("shopee.init_tier_variation")
+    def test_rota_criar_variacoes(self, mock_init):
+        mock_init.return_value = {"response": {"item_id": 42}}
+        tier = [{"name": "Cor", "option_list": [{"option": "Azul"}]}]
+        modelos = [{"tier_index": [0], "original_price": 10.0, "model_sku": "SKU-AZUL", "normal_stock": 5}]
+        resp = self.client.post("/api/shopee/produtos/42/variacoes", json={
+            "loja_id": 1, "tier_variation": tier, "model_list": modelos,
+        }, headers=self._h())
+        self.assertEqual(resp.status_code, 200)
+        mock_init.assert_called_once_with(42, tier, modelos, loja_id=1)
+
+    def test_rota_criar_variacoes_sem_tier_variation(self):
+        resp = self.client.post("/api/shopee/produtos/42/variacoes", json={
+            "loja_id": 1, "model_list": [{"tier_index": [0]}],
+        }, headers=self._h())
+        self.assertEqual(resp.status_code, 400)
+
+    @patch("shopee.add_model")
+    def test_rota_adicionar_variacao(self, mock_add_model):
+        mock_add_model.return_value = {"response": {}}
+        novo = [{"tier_index": [1], "original_price": 10.0, "model_sku": "SKU-VERM", "normal_stock": 3}]
+        resp = self.client.post("/api/shopee/produtos/42/variacoes/adicionar", json={
+            "loja_id": 1, "model_list": novo,
+        }, headers=self._h())
+        self.assertEqual(resp.status_code, 200)
+        mock_add_model.assert_called_once_with(42, novo, loja_id=1)
+
+    @patch("shopee.update_tier_variation")
+    def test_rota_atualizar_variacoes(self, mock_update):
+        mock_update.return_value = {"response": {}}
+        tier = [{"name": "Cor", "option_list": [{"option": "Azul"}, {"option": "Preto"}]}]
+        mapeamento = [{"tier_index": [0], "model_id": 111}, {"tier_index": [1], "model_id": 222}]
+        resp = self.client.put("/api/shopee/produtos/42/variacoes", json={
+            "loja_id": 1, "tier_variation": tier, "model_list": mapeamento,
+        }, headers=self._h())
+        self.assertEqual(resp.status_code, 200)
+        mock_update.assert_called_once_with(42, tier, mapeamento, loja_id=1)
+
+    @patch("shopee.delete_model")
+    def test_rota_remover_variacao(self, mock_delete):
+        mock_delete.return_value = {"response": {}}
+        resp = self.client.delete("/api/shopee/produtos/42/variacoes", json={
+            "loja_id": 1, "model_id_list": [111, 222],
+        }, headers=self._h())
+        self.assertEqual(resp.status_code, 200)
+        mock_delete.assert_called_once_with(42, [111, 222], loja_id=1)
+
+    def test_rota_remover_variacao_sem_model_id_list(self):
+        resp = self.client.delete("/api/shopee/produtos/42/variacoes", json={"loja_id": 1}, headers=self._h())
+        self.assertEqual(resp.status_code, 400)
+
     @patch("shopee.listar_pedidos_shopee_detalhado")
     def test_rota_pedidos(self, mock_listar):
         mock_listar.return_value = {"pedidos": [{"order_sn": "SN1", "status": "READY_TO_SHIP"}]}

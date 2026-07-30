@@ -31,6 +31,43 @@ def get_model_list(item_id: int, loja_id: int = None) -> dict:
     return _request("product/get_model_list", {"item_id": item_id}, loja_id=loja_id)
 
 
+def init_tier_variation(item_id: int, tier_variation: list, model_list: list, loja_id: int = None) -> dict:
+    """Cria a estrutura de variacao (tiers + modelos) de um item ja publicado
+    sem variacao, OU redefine a estrutura de um item que ja tem variacao
+    (nesse segundo caso os model_id antigos ficam invalidos — chamar de novo
+    so' quando a propria estrutura de tiers muda, nao para add/editar modelo).
+    Recomendado esperar ~5s apos add_item antes de chamar isso (delay de
+    propagacao documentado pela Shopee)."""
+    return _request("product/init_tier_variation", {
+        "item_id": item_id, "tier_variation": tier_variation, "model": model_list,
+    }, method="POST", loja_id=loja_id)
+
+
+def add_model(item_id: int, model_list: list, loja_id: int = None) -> dict:
+    """Adiciona novo(s) modelo(s) (variacao) a um item que ja tem tier_variation
+    definida — usa as mesmas opcoes de tier ja existentes (tier_index)."""
+    return _request("product/add_model", {
+        "item_id": item_id, "model_list": model_list,
+    }, method="POST", loja_id=loja_id)
+
+
+def update_tier_variation(item_id: int, tier_variation: list, model_list: list, loja_id: int = None) -> dict:
+    """Adiciona/remove/reordena as OPCOES de um tier existente (ex: cores),
+    preservando os model_id ja criados — model_list mapeia tier_index atual
+    para o model_id correspondente. Para mudar a ESTRUTURA (ex: adicionar uma
+    dimensao nova tipo tamanho), usar init_tier_variation em vez disso."""
+    return _request("product/update_tier_variation", {
+        "item_id": item_id, "tier_variation": tier_variation, "model_list": model_list,
+    }, method="POST", loja_id=loja_id)
+
+
+def delete_model(item_id: int, model_id_list: list, loja_id: int = None) -> dict:
+    """Remove uma ou mais variacoes (models) de um item."""
+    return _request("product/delete_model", {
+        "item_id": item_id, "model_id_list": model_id_list,
+    }, method="POST", loja_id=loja_id)
+
+
 def check_stock(item_id: int, loja_id: int = None) -> dict:
     """Verifica estoque disponível de um item."""
     r = get_item_base_info([item_id], loja_id=loja_id)

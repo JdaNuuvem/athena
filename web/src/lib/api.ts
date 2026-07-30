@@ -194,6 +194,16 @@ export const api = {
     }),
   shopeeProdutosSincronizados: (lojaId: number) =>
     request<{ produtos: ShopeeProdutoSincronizado[]; error?: string }>(`/api/shopee/produtos-sincronizados?loja_id=${lojaId}`),
+  shopeeDuplicarProduto: (sku: string, novoSku: string) =>
+    request<{ success?: boolean; error?: string; produto?: { sku: string } }>(`/api/shopee/produtos/${sku}/duplicar`, {
+      method: "POST",
+      body: JSON.stringify({ novo_sku: novoSku }),
+    }),
+  shopeeClonarProdutoParaLoja: (itemId: number, origemLojaId: number, destinoLojaId: number) =>
+    request<{ error?: string; sucesso?: boolean; mensagem?: string }>(`/api/shopee/produtos/${itemId}/clonar-para-loja`, {
+      method: "POST",
+      body: JSON.stringify({ origem_loja_id: origemLojaId, destino_loja_id: destinoLojaId }),
+    }),
   shopeeEstoqueTodasLojas: (sku: string, quantidade: number) =>
     request<{ total: number; sucesso: number; erro?: string; resultados: Array<{ loja_id: number; loja_nome: string; resultado: Record<string, unknown> }> }>("/api/shopee/estoque/todas-lojas", {
       method: "POST",
@@ -671,6 +681,7 @@ export interface ShopeeProdutoSincronizado {
   estoque: number;
   status: string;
   anuncio_id: string;
+  imagem_url?: string | null;
   ultima_atualizacao: string | null;
 }
 

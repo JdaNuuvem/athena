@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { Fragment, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import type { ShopeeProdutoSincronizado } from "@/lib/api";
@@ -18,6 +18,62 @@ function statusColor(status: string) {
   return "text-amber-400";
 }
 
+function itemIdDoAnuncio(anuncioId: string): number | null {
+  const base = anuncioId.split("_")[0];
+  const n = Number(base);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function ProdutoThumb({ url, titulo }: { url?: string | null; titulo: string }) {
+  const [falhou, setFalhou] = useState(false);
+  if (!url || falhou) {
+    return (
+      <div className="w-8 h-8 rounded bg-neutral-800 border border-neutral-700 flex items-center justify-center text-[10px] text-neutral-500 shrink-0">
+        {titulo.charAt(0).toUpperCase() || "?"}
+      </div>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={url}
+      alt={titulo}
+      className="w-8 h-8 rounded object-cover border border-neutral-700 shrink-0"
+      onError={() => setFalhou(true)}
+    />
+  );
+}
+
+interface GrupoProduto {
+  itemId: string;
+  temVariacao: boolean;
+  variacoes: ShopeeProdutoSincronizado[];
+}
+
+// anuncio_id vem "item_id" (produto simples) ou "item_id_model_id" (1 linha
+// por variacao — ver shopee_sync.sync_produtos). Agrupar por item_id junta
+// as variacoes do mesmo produto pai na Shopee sob 1 cabecalho expansivel.
+function agruparPorProdutoPai(produtos: ShopeeProdutoSincronizado[]): GrupoProduto[] {
+  const porItemId = new Map<string, ShopeeProdutoSincronizado[]>();
+  for (const p of produtos) {
+    const itemId = p.anuncio_id.split("_")[0];
+    if (!porItemId.has(itemId)) porItemId.set(itemId, []);
+    porItemId.get(itemId)!.push(p);
+  }
+  return Array.from(porItemId.entries()).map(([itemId, variacoes]) => ({
+    itemId,
+    temVariacao: variacoes.length > 1 || variacoes.some(v => v.anuncio_id.includes("_")),
+    variacoes,
+  }));
+}
+
+// Nome comum das variacoes costuma vir como "Produto - Variacao" (ver
+// shopee_sync). Extrai so' o "Produto" (parte antes do primeiro " - ") pra
+// exibir no cabecalho do grupo, sem repetir a variacao no titulo geral.
+function nomeBaseProduto(titulo: string): string {
+  return titulo.split(" - ")[0];
+}
+
 export default function ShopeeProdutosPage() {
   const [lojas, setLojas] = useState<LojaShopee[]>([]);
   const [lojaId, setLojaId] = useState<number | "">("");
@@ -28,6 +84,19 @@ export default function ShopeeProdutosPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [enviando, setEnviando] = useState<string | null>(null);
   const [quantidades, setQuantidades] = useState<Record<string, string>>({});
+  const [gruposExpandidos, setGruposExpandidos] = useState<Set<string>>(new Set());
+  const [duplicando, setDuplicando] = useState<{ sku: string; novoSku: string } | null>(null);
+  const [salvandoDuplicata, setSalvandoDuplicata] = useState(false);
+  const [clonando, setClonando] = useState<{ sku: string; itemId: number; destino: number | "" } | null>(null);
+  const [clonandoEnviando, setClonandoEnviando] = useState(false);
+
+  const toggleGrupo = (itemId: string) => {
+    setGruposExpandidos(prev => {
+      const next = new Set(prev);
+      if (next.has(itemId)) next.delete(itemId); else next.add(itemId);
+      return next;
+    });
+  };
 
   useEffect(() => {
     api.shopeeLojas().then(r => {
@@ -88,6 +157,177 @@ export default function ShopeeProdutosPage() {
     }
   };
 
+  const confirmarDuplicar = async () => {
+    if (!duplicando || !duplicando.novoSku.trim()) return;
+    setSalvandoDuplicata(true);
+    setMsg(null);
+    setErro(null);
+    try {
+      const r = await api.shopeeDuplicarProduto(duplicando.sku, duplicando.novoSku.trim());
+      if (r.error) setErro(r.error);
+      else { setMsg(`Produto duplicado: ${r.produto?.sku}. Publique na aba Shopee dele.`); setDuplicando(null); }
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro ao duplicar produto");
+    } finally {
+      setSalvandoDuplicata(false);
+    }
+  };
+
+  const abrirClonar = (p: ShopeeProdutoSincronizado) => {
+    const itemId = itemIdDoAnuncio(p.anuncio_id);
+    if (!itemId) { setErro(`${p.sku}: anuncio_id invalido para clonagem`); return; }
+    setClonando({ sku: p.sku, itemId, destino: "" });
+  };
+
+  const confirmarClonar = async () => {
+    if (!clonando || !lojaId || clonando.destino === "") return;
+    setClonandoEnviando(true);
+    setMsg(null);
+    setErro(null);
+    try {
+      const r = await api.shopeeClonarProdutoParaLoja(clonando.itemId, Number(lojaId), Number(clonando.destino));
+      if (r.error) setErro(r.error);
+      else if (r.sucesso === false) setErro(r.mensagem || "Falha ao clonar produto");
+      else { setMsg(r.mensagem || `${clonando.sku}: clonado com sucesso`); setClonando(null); }
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro ao clonar produto para outra loja");
+    } finally {
+      setClonandoEnviando(false);
+    }
+  };
+
+  function LinhaProduto({ p, indentado }: { p: ShopeeProdutoSincronizado; indentado?: boolean }) {
+    return (
+      <>
+        <tr className={`border-b border-neutral-800/50 hover:bg-neutral-800/20 ${indentado ? "bg-neutral-950/30" : ""}`}>
+          <td className="pl-4 py-2.5">
+            <ProdutoThumb url={p.imagem_url} titulo={p.titulo} />
+          </td>
+          <td className={`px-4 py-2.5 font-mono text-xs text-neutral-500 ${indentado ? "pl-8" : ""}`}>
+            <Link href={`/produtos/${p.sku}`} className="hover:text-indigo-400">{p.sku}</Link>
+          </td>
+          <td className="px-4 py-2.5 text-neutral-300 max-w-xs truncate">{p.titulo}</td>
+          <td className="px-4 py-2.5 text-right text-neutral-300 numeric">R$ {Number(p.preco || 0).toFixed(2)}</td>
+          <td className="px-4 py-2.5 text-right numeric font-medium">
+            <span className={Number(p.estoque) <= 0 ? "text-red-400" : Number(p.estoque) < 10 ? "text-amber-400" : "text-emerald-400"}>
+              {Number(p.estoque)}
+            </span>
+          </td>
+          <td className={`px-4 py-2.5 text-xs font-medium capitalize ${statusColor(p.status)}`}>{p.status}</td>
+          <td className="px-4 py-2.5 text-center">
+            <Link
+              href={`/produtos/${p.sku}?tab=shopee`}
+              className="text-[10px] bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-2 py-1 rounded inline-block"
+            >
+              Editar
+            </Link>
+          </td>
+          <td className="px-4 py-2.5">
+            <div className="flex items-center justify-center gap-1">
+              <input
+                type="number"
+                placeholder={String(p.estoque)}
+                value={quantidades[p.sku] ?? ""}
+                onChange={(e) => setQuantidades(q => ({ ...q, [p.sku]: e.target.value }))}
+                onKeyDown={(e) => { if (e.key === "Enter" && quantidades[p.sku]) enviarEstoque(p.sku); }}
+                className="w-16 bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-xs text-right text-neutral-200"
+              />
+              <button
+                onClick={() => enviarEstoque(p.sku)}
+                disabled={enviando === p.sku || quantidades[p.sku] === undefined || quantidades[p.sku] === ""}
+                className="text-[10px] bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white px-2 py-1 rounded"
+              >
+                {enviando === p.sku ? "..." : "Enviar"}
+              </button>
+            </div>
+          </td>
+          <td className="px-4 py-2.5">
+            <div className="flex items-center justify-center gap-1">
+              <button
+                onClick={() => setDuplicando({ sku: p.sku, novoSku: "" })}
+                className="text-[10px] bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-2 py-1 rounded"
+              >
+                Duplicar
+              </button>
+              <button
+                onClick={() => abrirClonar(p)}
+                disabled={lojas.length < 2}
+                title={lojas.length < 2 ? "Conecte outra loja Shopee para clonar" : "Clonar este produto para outra loja Shopee"}
+                className="text-[10px] bg-indigo-700 hover:bg-indigo-600 disabled:opacity-40 text-white px-2 py-1 rounded"
+              >
+                Clonar p/ loja
+              </button>
+            </div>
+          </td>
+        </tr>
+        {duplicando?.sku === p.sku && (
+          <tr className="border-b border-neutral-800/50 bg-neutral-800/30">
+            <td colSpan={9} className="px-4 py-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-neutral-400">Novo SKU para a cópia de <span className="font-mono">{p.sku}</span>:</span>
+                <input
+                  type="text"
+                  autoFocus
+                  value={duplicando.novoSku}
+                  onChange={(e) => setDuplicando(d => d && { ...d, novoSku: e.target.value })}
+                  onKeyDown={(e) => { if (e.key === "Enter") confirmarDuplicar(); if (e.key === "Escape") setDuplicando(null); }}
+                  placeholder="ex: SKU-COPIA"
+                  className="bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-xs text-neutral-200 w-40"
+                />
+                <button
+                  onClick={confirmarDuplicar}
+                  disabled={salvandoDuplicata || !duplicando.novoSku.trim()}
+                  className="text-[10px] bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-2 py-1 rounded"
+                >
+                  {salvandoDuplicata ? "..." : "Confirmar"}
+                </button>
+                <button
+                  onClick={() => setDuplicando(null)}
+                  className="text-[10px] bg-neutral-700 hover:bg-neutral-600 text-neutral-300 px-2 py-1 rounded"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </td>
+          </tr>
+        )}
+        {clonando?.sku === p.sku && (
+          <tr className="border-b border-neutral-800/50 bg-neutral-800/30">
+            <td colSpan={9} className="px-4 py-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-neutral-400">Clonar <span className="font-mono">{p.sku}</span> para:</span>
+                <select
+                  autoFocus
+                  value={clonando.destino}
+                  onChange={(e) => setClonando(c => c && { ...c, destino: e.target.value ? Number(e.target.value) : "" })}
+                  className="bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-xs text-neutral-200"
+                >
+                  <option value="">Selecione a loja destino</option>
+                  {lojas.filter(l => l.id !== Number(lojaId)).map(l => (
+                    <option key={l.id} value={l.id}>{l.nome}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={confirmarClonar}
+                  disabled={clonandoEnviando || clonando.destino === ""}
+                  className="text-[10px] bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-2 py-1 rounded"
+                >
+                  {clonandoEnviando ? "..." : "Confirmar"}
+                </button>
+                <button
+                  onClick={() => setClonando(null)}
+                  className="text-[10px] bg-neutral-700 hover:bg-neutral-600 text-neutral-300 px-2 py-1 rounded"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </td>
+          </tr>
+        )}
+      </>
+    );
+  }
+
   return (
     <div className="p-6 space-y-4 max-w-5xl">
       <div className="flex items-start justify-between">
@@ -144,6 +384,7 @@ export default function ShopeeProdutosPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-neutral-800 text-neutral-500 text-xs uppercase">
+                  <th className="px-4 py-3 font-medium"></th>
                   <th className="text-left px-4 py-3 font-medium">SKU</th>
                   <th className="text-left px-4 py-3 font-medium">Título</th>
                   <th className="text-right px-4 py-3 font-medium">Preço</th>
@@ -151,50 +392,43 @@ export default function ShopeeProdutosPage() {
                   <th className="text-left px-4 py-3 font-medium">Status</th>
                   <th className="text-center px-4 py-3 font-medium">Editar</th>
                   <th className="text-center px-4 py-3 font-medium">Enviar estoque</th>
+                  <th className="text-center px-4 py-3 font-medium">Ações</th>
                 </tr>
               </thead>
               <tbody>
-                {produtos.map((p) => (
-                  <tr key={p.sku} className="border-b border-neutral-800/50 hover:bg-neutral-800/20">
-                    <td className="px-4 py-2.5 font-mono text-xs text-neutral-500">
-                      <Link href={`/produtos/${p.sku}`} className="hover:text-indigo-400">{p.sku}</Link>
-                    </td>
-                    <td className="px-4 py-2.5 text-neutral-300 max-w-xs truncate">{p.titulo}</td>
-                    <td className="px-4 py-2.5 text-right text-neutral-300 numeric">R$ {Number(p.preco || 0).toFixed(2)}</td>
-                    <td className="px-4 py-2.5 text-right numeric font-medium">
-                      <span className={Number(p.estoque) <= 0 ? "text-red-400" : Number(p.estoque) < 10 ? "text-amber-400" : "text-emerald-400"}>
-                        {Number(p.estoque)}
-                      </span>
-                    </td>
-                    <td className={`px-4 py-2.5 text-xs font-medium capitalize ${statusColor(p.status)}`}>{p.status}</td>
-                    <td className="px-4 py-2.5 text-center">
-                      <Link
-                        href={`/produtos/${p.sku}?tab=shopee`}
-                        className="text-[10px] bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-2 py-1 rounded inline-block"
+                {agruparPorProdutoPai(produtos).map((grupo) => {
+                  if (!grupo.temVariacao) {
+                    return <LinhaProduto key={grupo.itemId} p={grupo.variacoes[0]} />;
+                  }
+                  const expandido = gruposExpandidos.has(grupo.itemId);
+                  const estoqueTotal = grupo.variacoes.reduce((s, v) => s + Number(v.estoque || 0), 0);
+                  return (
+                    <Fragment key={grupo.itemId}>
+                      <tr
+                        onClick={() => toggleGrupo(grupo.itemId)}
+                        className="border-b border-neutral-800/50 hover:bg-neutral-800/30 cursor-pointer bg-neutral-800/10"
                       >
-                        Editar
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <div className="flex items-center justify-center gap-1">
-                        <input
-                          type="number"
-                          placeholder={String(p.estoque)}
-                          value={quantidades[p.sku] ?? ""}
-                          onChange={(e) => setQuantidades(q => ({ ...q, [p.sku]: e.target.value }))}
-                          className="w-16 bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-xs text-right text-neutral-200"
-                        />
-                        <button
-                          onClick={() => enviarEstoque(p.sku)}
-                          disabled={enviando === p.sku || quantidades[p.sku] === undefined || quantidades[p.sku] === ""}
-                          className="text-[10px] bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white px-2 py-1 rounded"
-                        >
-                          {enviando === p.sku ? "..." : "Enviar"}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                        <td className="px-4 py-2.5 text-neutral-500 text-xs" colSpan={3}>
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className={`text-neutral-600 transition-transform ${expandido ? "rotate-90" : ""}`}>›</span>
+                            <span className="text-neutral-200">{nomeBaseProduto(grupo.variacoes[0].titulo)}</span>
+                            <span className="text-[10px] bg-indigo-900/30 text-indigo-400 px-1.5 py-0.5 rounded-full shrink-0">
+                              {grupo.variacoes.length} variações
+                            </span>
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-neutral-600 numeric text-xs">—</td>
+                        <td className="px-4 py-2.5 text-right numeric font-medium text-xs">
+                          <span className={estoqueTotal <= 0 ? "text-red-400" : "text-neutral-400"}>{estoqueTotal} total</span>
+                        </td>
+                        <td colSpan={4}></td>
+                      </tr>
+                      {expandido && grupo.variacoes.map((v) => (
+                        <LinhaProduto key={v.sku} p={v} indentado />
+                      ))}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>

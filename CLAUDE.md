@@ -1,5 +1,12 @@
 # Claude Code Configuration - RuFlo V3
 
+## Escopo por Canal de Venda (REGRA OBRIGATÓRIA)
+
+- **i9Logic**: só mexer em código/integração i9Logic quando a tarefa for sobre **lojas físicas** (modificação, bug, feature relacionada ao físico)
+- **Shopee / API Shopee**: só mexer em código/integração Shopee quando a tarefa for sobre **lojas virtuais** (modificação, bug, feature relacionada ao virtual)
+- Se pedido não deixar claro o canal, perguntar antes de tocar em código de i9Logic ou Shopee
+- Não misturar: alteração pedida para loja física não deve tocar em módulos Shopee, e vice-versa
+
 ## Behavioral Rules (Always Enforced)
 
 - Do what has been asked; nothing more, nothing less

@@ -500,3 +500,142 @@ def shopee_unlist_produto(item_id):
     loja_id = data.get("loja_id")
     unlist = data.get("unlist", True)
     return jsonify(unlist_item([item_id], unlist=unlist, loja_id=loja_id))
+
+@shopee_bp.route('/produtos/<int:item_id>/clonar-para-loja', methods=['POST'])
+def shopee_clonar_produto_para_loja(item_id):
+    from shopee import clonar_item_para_loja
+    from core.rbac import requer_permissao
+
+    @requer_permissao("produtos.criar")
+    def _handler():
+        data = request.json or {}
+        origem_loja_id = data.get("origem_loja_id")
+        destino_loja_id = data.get("destino_loja_id")
+        if origem_loja_id is None or destino_loja_id is None:
+            return jsonify({"error": "origem_loja_id e destino_loja_id sao obrigatorios"}), 400
+        try:
+            return jsonify(clonar_item_para_loja(item_id, int(origem_loja_id), int(destino_loja_id)))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    return _handler()
+
+@shopee_bp.route('/produtos/<sku>/duplicar', methods=['POST'])
+def shopee_duplicar_produto(sku):
+    from core.catalogo import duplicar
+    from core.rbac import requer_permissao
+
+    @requer_permissao("produtos.criar")
+    def _handler():
+        data = request.json or {}
+        novo_sku = (data.get("novo_sku") or "").strip()
+        if not novo_sku:
+            return jsonify({"error": "novo_sku e obrigatorio"}), 400
+        resultado = duplicar(sku, novo_sku)
+        if resultado.get("error"):
+            status = 409 if "ja existe" in resultado["error"].lower() else 400
+            return jsonify(resultado), status
+        try:
+            from core.seguranca import auditar_alteracao
+            auditar_alteracao("criar", "produtos", "catalogo_produtos", resultado.get("id"), dados_depois={"sku": novo_sku, "duplicado_de": sku})
+        except Exception:
+            pass
+        return jsonify({"success": True, "produto": resultado}), 201
+
+    return _handler()
+
+# ===========================================================================
+# Variacoes (tier_variation / model) — criar produto com cor/tamanho etc.
+# ===========================================================================
+
+@shopee_bp.route('/produtos/<int:item_id>/variacoes', methods=['POST'])
+def shopee_criar_variacoes_produto(item_id):
+    """Cria a estrutura de variacao (tiers + modelos) de um item ja publicado
+    sem variacao — so' pode ser chamado 1x por item (ver init_tier_variation)."""
+    from shopee import init_tier_variation
+    from core.rbac import requer_permissao
+
+    @requer_permissao("produtos.criar")
+    def _handler():
+        data = request.json or {}
+        loja_id = data.get("loja_id")
+        tier_variation = data.get("tier_variation")
+        model_list = data.get("model_list")
+        if loja_id is None:
+            return jsonify({"error": "loja_id e obrigatorio"}), 400
+        if not tier_variation or not model_list:
+            return jsonify({"error": "tier_variation e model_list sao obrigatorios"}), 400
+        try:
+            return jsonify(init_tier_variation(item_id, tier_variation, model_list, loja_id=int(loja_id)))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    return _handler()
+
+@shopee_bp.route('/produtos/<int:item_id>/variacoes/adicionar', methods=['POST'])
+def shopee_adicionar_variacao_produto(item_id):
+    """Adiciona novo(s) modelo(s) a um item que ja tem tier_variation definida."""
+    from shopee import add_model
+    from core.rbac import requer_permissao
+
+    @requer_permissao("produtos.criar")
+    def _handler():
+        data = request.json or {}
+        loja_id = data.get("loja_id")
+        model_list = data.get("model_list")
+        if loja_id is None:
+            return jsonify({"error": "loja_id e obrigatorio"}), 400
+        if not model_list:
+            return jsonify({"error": "model_list e obrigatorio"}), 400
+        try:
+            return jsonify(add_model(item_id, model_list, loja_id=int(loja_id)))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    return _handler()
+
+@shopee_bp.route('/produtos/<int:item_id>/variacoes', methods=['PUT'])
+def shopee_atualizar_variacoes_produto(item_id):
+    """Adiciona/remove/reordena as opcoes de um tier existente, preservando os
+    model_id ja criados (model_list mapeia tier_index -> model_id)."""
+    from shopee import update_tier_variation
+    from core.rbac import requer_permissao
+
+    @requer_permissao("produtos.editar")
+    def _handler():
+        data = request.json or {}
+        loja_id = data.get("loja_id")
+        tier_variation = data.get("tier_variation")
+        model_list = data.get("model_list")
+        if loja_id is None:
+            return jsonify({"error": "loja_id e obrigatorio"}), 400
+        if not tier_variation or not model_list:
+            return jsonify({"error": "tier_variation e model_list sao obrigatorios"}), 400
+        try:
+            return jsonify(update_tier_variation(item_id, tier_variation, model_list, loja_id=int(loja_id)))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    return _handler()
+
+@shopee_bp.route('/produtos/<int:item_id>/variacoes', methods=['DELETE'])
+def shopee_remover_variacao_produto(item_id):
+    """Remove uma ou mais variacoes (models) de um item."""
+    from shopee import delete_model
+    from core.rbac import requer_permissao
+
+    @requer_permissao("produtos.editar")
+    def _handler():
+        data = request.json or {}
+        loja_id = data.get("loja_id")
+        model_id_list = data.get("model_id_list")
+        if loja_id is None:
+            return jsonify({"error": "loja_id e obrigatorio"}), 400
+        if not model_id_list:
+            return jsonify({"error": "model_id_list e obrigatorio"}), 400
+        try:
+            return jsonify(delete_model(item_id, model_id_list, loja_id=int(loja_id)))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    return _handler()

@@ -55,5 +55,67 @@ class TestGetItemBaseInfo(unittest.TestCase):
         self.assertEqual(params["item_id_list"], "58258804054")
 
 
+class TestInitTierVariation(unittest.TestCase):
+    """Cria a estrutura de variacao (tiers + modelos) de um item. Payload usa
+    a chave "model" (nao "model_list") — confirmado nos exemplos oficiais de
+    Creating product.md secao 7, diferente de update_tier_variation/add_model
+    que usam "model_list"."""
+
+    @patch("shopee.products._request")
+    def test_monta_payload_com_chave_model(self, mock_request):
+        mock_request.return_value = {"response": {}}
+        tier = [{"name": "Cor", "option_list": [{"option": "Azul"}, {"option": "Vermelho"}]}]
+        modelos = [
+            {"tier_index": [0], "original_price": 15.98, "model_sku": "SKU-AZUL", "normal_stock": 10},
+            {"tier_index": [1], "original_price": 15.98, "model_sku": "SKU-VERM", "normal_stock": 5},
+        ]
+        products.init_tier_variation(58262112365, tier, modelos, loja_id=7)
+        endpoint, params = mock_request.call_args[0][:2]
+        self.assertEqual(endpoint, "product/init_tier_variation")
+        self.assertEqual(params["item_id"], 58262112365)
+        self.assertEqual(params["tier_variation"], tier)
+        self.assertEqual(params["model"], modelos)
+        self.assertNotIn("model_list", params)
+        self.assertEqual(mock_request.call_args.kwargs.get("method"), "POST")
+
+
+class TestAddModel(unittest.TestCase):
+
+    @patch("shopee.products._request")
+    def test_monta_payload_com_chave_model_list(self, mock_request):
+        mock_request.return_value = {"response": {}}
+        novo_modelo = [{"tier_index": [2], "original_price": 15.98, "model_sku": "SKU-VERDE", "normal_stock": 8}]
+        products.add_model(58262112365, novo_modelo, loja_id=7)
+        endpoint, params = mock_request.call_args[0][:2]
+        self.assertEqual(endpoint, "product/add_model")
+        self.assertEqual(params["item_id"], 58262112365)
+        self.assertEqual(params["model_list"], novo_modelo)
+
+
+class TestUpdateTierVariation(unittest.TestCase):
+
+    @patch("shopee.products._request")
+    def test_preserva_model_id_existentes(self, mock_request):
+        mock_request.return_value = {"response": {}}
+        tier = [{"name": "Cor", "option_list": [{"option": "Azul"}, {"option": "Preto"}]}]
+        mapeamento = [{"tier_index": [0], "model_id": 111}, {"tier_index": [1], "model_id": 222}]
+        products.update_tier_variation(58262112365, tier, mapeamento, loja_id=7)
+        endpoint, params = mock_request.call_args[0][:2]
+        self.assertEqual(endpoint, "product/update_tier_variation")
+        self.assertEqual(params["model_list"], mapeamento)
+
+
+class TestDeleteModel(unittest.TestCase):
+
+    @patch("shopee.products._request")
+    def test_monta_payload_com_model_id_list(self, mock_request):
+        mock_request.return_value = {"response": {}}
+        products.delete_model(58262112365, [111, 222], loja_id=7)
+        endpoint, params = mock_request.call_args[0][:2]
+        self.assertEqual(endpoint, "product/delete_model")
+        self.assertEqual(params["item_id"], 58262112365)
+        self.assertEqual(params["model_id_list"], [111, 222])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

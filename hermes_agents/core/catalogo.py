@@ -258,6 +258,31 @@ def buscar_por_sku(sku: str) -> dict:
     try: return run_async(_go())
     except Exception as e: return {}
 
+def duplicar(sku_origem: str, novo_sku: str) -> dict:
+    """Cria um novo produto no catalogo copiando os campos cadastrais de sku_origem.
+    Nao copia id_bling/dados_brutos_bling (produto novo, nao sincronizado do Bling)."""
+    async def _go():
+        db = await get_db()
+        origem = await db.fetchrow("SELECT * FROM catalogo_produtos WHERE sku = $1", sku_origem)
+        if not origem:
+            return {"error": "Produto origem nao encontrado"}
+        campos = dict(origem)
+        for chave in ("id", "sku", "sku_pai", "id_bling", "dados_brutos_bling", "created_at", "updated_at"):
+            campos.pop(chave, None)
+        campos["sku"] = novo_sku
+        keys = list(campos.keys()); vals = list(campos.values())
+        ph = ", ".join(f"${i+1}" for i in range(len(keys)))
+        row = await db.fetchrow(
+            f"INSERT INTO catalogo_produtos ({', '.join(keys)}) VALUES ({ph}) RETURNING *", *vals)
+        return dict(row) if row else {"error": "insert failed"}
+    try:
+        return run_async(_go())
+    except Exception as e:
+        msg = str(e)
+        if "unique" in msg.lower() or "duplicate" in msg.lower():
+            return {"error": "SKU ja existe"}
+        return {"error": msg}
+
 def buscar_por_sku_ou_criar(sku: str, descricao: str = "") -> int:
     """Retorna o ID do produto, criando se nao existir."""
     async def _go():

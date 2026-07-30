@@ -219,9 +219,12 @@ def listar_produtos_sincronizados(loja_id: int) -> list:
         if not shop_id:
             return []
         rows = await db.fetch("""
-            SELECT sku, titulo, preco, estoque, status, anuncio_id, ultima_atualizacao
-            FROM anuncios WHERE marketplace = 'shopee' AND shop_id = $1
-            ORDER BY titulo
+            SELECT a.sku, a.titulo, a.preco, a.estoque, a.status, a.anuncio_id, a.ultima_atualizacao,
+                   c.imagem_url
+            FROM anuncios a
+            LEFT JOIN catalogo_produtos c ON c.sku = a.sku
+            WHERE a.marketplace = 'shopee' AND a.shop_id = $1
+            ORDER BY a.titulo
         """, shop_id)
         return [dict(r) for r in rows]
     try:

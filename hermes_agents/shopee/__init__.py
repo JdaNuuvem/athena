@@ -16,6 +16,7 @@ from .products import (
     get_items, get_item_base_info, get_model_list, check_stock,
     update_price, update_stock, add_item, update_item, delete_item_shopee,
     unlist_item, listar_produtos_shopee, sync_all_items,
+    init_tier_variation, add_model, update_tier_variation, delete_model,
 )
 from .images import upload_image
 from .categories import (
@@ -27,7 +28,7 @@ from .orders import (
     obter_pedidos_shopee, listar_pedidos_shopee_detalhado,
     webhook_shopee_pedido, get_logistics_channel_list,
 )
-from .replication import transferir_produtos_para_loja
+from .replication import transferir_produtos_para_loja, clonar_item_para_loja
 from .stock import (
     sincronizar_estoque_shopee, sincronizar_estoque_todas_lojas,
     sincronizar_estoque_todas_lojas_automatico,
