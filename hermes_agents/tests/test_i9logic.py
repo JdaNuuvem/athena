@@ -320,8 +320,9 @@ class TestExecutarColeta(unittest.TestCase):
             if tipoestoque == 1:
                 return [{"idproduto": 1, "codproduto": "A", "qtd": 10},
                         {"idproduto": 2, "codproduto": "B", "qtd": 20}]
-            return [{"idproduto": 1, "codproduto": "A", "qtd": 15},
-                    {"idproduto": 2, "codproduto": "B", "qtd": 20}]
+            # contabeis em ordem DIFERENTE de fisicos - prova que o pareamento nao e por posicao
+            return [{"idproduto": 2, "codproduto": "B", "qtd": 20},
+                    {"idproduto": 1, "codproduto": "A", "qtd": 15}]
         gravados = []
         def _gravar(idproduto, codproduto, filial, qtd_fisico, qtd_contabil, data_coleta=None):
             gravados.append((idproduto, qtd_fisico, qtd_contabil))
@@ -329,14 +330,14 @@ class TestExecutarColeta(unittest.TestCase):
         with patch("core.i9logic._paginar_estoques", side_effect=_paginar), \
              patch("core.i9logic.gravar_snapshot", side_effect=_gravar):
             resultado = i9logic.executar_coleta_filial(63)
-        self.assertEqual(resultado["fisicos"], 2)
         self.assertEqual(resultado["gravados"], 2)
         self.assertIn((1, 10, 15), gravados)
         self.assertIn((2, 20, 20), gravados)
 
     def test_coleta_filial_usa_mesmo_data_coleta_pra_todas_as_linhas(self):
         def _paginar(filial, tipoestoque):
-            return [{"idproduto": 1, "codproduto": "A", "qtd": 10}]
+            return [{"idproduto": 1, "codproduto": "A", "qtd": 10},
+                    {"idproduto": 2, "codproduto": "B", "qtd": 20}]
         datas_usadas = []
         def _gravar(idproduto, codproduto, filial, qtd_fisico, qtd_contabil, data_coleta=None):
             datas_usadas.append(data_coleta)
@@ -344,7 +345,29 @@ class TestExecutarColeta(unittest.TestCase):
         with patch("core.i9logic._paginar_estoques", side_effect=_paginar), \
              patch("core.i9logic.gravar_snapshot", side_effect=_gravar):
             i9logic.executar_coleta_filial(63)
-        self.assertIsNotNone(datas_usadas[0])
+        self.assertEqual(len(datas_usadas), 2)
+        self.assertEqual(datas_usadas[0], datas_usadas[1])
+
+    def test_coleta_filial_processa_produto_so_em_contabil_com_qtd_fisico_zero(self):
+        def _paginar(filial, tipoestoque):
+            if tipoestoque == 1:
+                # produto 1 em fisicos, mas nao 2
+                return [{"idproduto": 1, "codproduto": "A", "qtd": 10}]
+            # produto 2 so em contabeis, nao em fisicos - auditoria importante
+            return [{"idproduto": 1, "codproduto": "A", "qtd": 15},
+                    {"idproduto": 2, "codproduto": "B", "qtd": 50}]
+        gravados = []
+        def _gravar(idproduto, codproduto, filial, qtd_fisico, qtd_contabil, data_coleta=None):
+            gravados.append((idproduto, qtd_fisico, qtd_contabil))
+            return {"ok": True}
+        with patch("core.i9logic._paginar_estoques", side_effect=_paginar), \
+             patch("core.i9logic.gravar_snapshot", side_effect=_gravar):
+            resultado = i9logic.executar_coleta_filial(63)
+        self.assertEqual(resultado["gravados"], 2)
+        # produto 1: fisico 10, contabil 15
+        self.assertIn((1, 10, 15), gravados)
+        # produto 2: fisico 0 (nao existe em fisicos), contabil 50 (so em contabeis)
+        self.assertIn((2, 0, 50), gravados)
 
     def test_coleta_todas_filiais_itera_mapeamentos(self):
         with patch("core.i9logic.listar_mapeamentos", return_value=[

@@ -308,13 +308,16 @@ def executar_coleta_filial(filial_id_i9logic: int) -> dict:
     inicio_corrida = datetime.now()
     fisicos = _paginar_estoques(filial_id_i9logic, 1)
     contabeis = _paginar_estoques(filial_id_i9logic, 2)
+    fisico_por_produto = {r["idproduto"]: r for r in fisicos}
     contabil_por_produto = {r["idproduto"]: r for r in contabeis}
+    todos_ids = set(fisico_por_produto) | set(contabil_por_produto)
     gravados, erros = 0, 0
-    for f in fisicos:
-        idproduto = f["idproduto"]
+    for idproduto in todos_ids:
+        f = fisico_por_produto.get(idproduto, {})
         c = contabil_por_produto.get(idproduto, {})
+        codproduto = f.get("codproduto") or c.get("codproduto")
         r = gravar_snapshot(
-            idproduto, f.get("codproduto"), filial_id_i9logic,
+            idproduto, codproduto, filial_id_i9logic,
             f.get("qtd", 0), c.get("qtd", 0), data_coleta=inicio_corrida)
         if r.get("erro"): erros += 1
         else: gravados += 1
