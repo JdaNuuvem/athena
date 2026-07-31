@@ -5,6 +5,7 @@ Complementa catalogo_produtos (mestre, dados cadastrais globais) — ver
 docs/superpowers/specs/2026-07-28-produtos-catalogo-mestre-loja-reconciliacao-design.md"""
 from core import get_db, run_async, log
 from core.seguranca import auditar_alteracao, auditar_exclusao
+from core.lojas import _loja_efetiva_async, _log_erro
 
 AGENT = "Produtos Loja"
 
@@ -109,6 +110,17 @@ def listar_por_loja(loja: str, busca: str = "", pagina: int = 1, por_pagina: int
     _ensure()
     async def _go():
         db = await get_db()
+        loja_estoque = loja
+        try:
+            r = await _loja_efetiva_async(loja)
+            if isinstance(r, str) and r:
+                loja_estoque = r
+            else:
+                _log_erro(
+                    "produtos_loja.listar_por_loja: resolver_loja_efetiva",
+                    ValueError(f"loja '{loja}' -> valor invalido {r!r} (esperado str nao-vazia)"))
+        except Exception as e:
+            _log_erro("produtos_loja.listar_por_loja: resolver_loja_efetiva", e)
         where = ["pl.loja = $1"]
         params = [loja]
         if busca:
@@ -120,16 +132,17 @@ def listar_por_loja(loja: str, busca: str = "", pagina: int = 1, por_pagina: int
             f"LEFT JOIN catalogo_produtos c ON c.sku = pl.produto_mestre_sku "
             f"WHERE {sql_where}", *params)
         offset = (pagina - 1) * por_pagina
-        params_pag = params + [por_pagina, offset]
+        idx_loja_estoque = len(params) + 1
+        params_pag = params + [loja_estoque, por_pagina, offset]
         rows = await db.fetch(
             f"""SELECT pl.*, c.descricao AS nome_mestre, c.imagens,
                        COALESCE(el.quantidade, 0) AS estoque_atual
                 FROM produtos_loja pl
                 LEFT JOIN catalogo_produtos c ON c.sku = pl.produto_mestre_sku
-                LEFT JOIN estoque_lojas el ON el.sku = pl.sku AND el.loja = pl.loja
+                LEFT JOIN estoque_lojas el ON el.sku = pl.sku AND el.loja = ${idx_loja_estoque}
                 WHERE {sql_where}
                 ORDER BY pl.updated_at DESC, pl.id DESC
-                LIMIT ${len(params)+1} OFFSET ${len(params)+2}""",
+                LIMIT ${idx_loja_estoque+1} OFFSET ${idx_loja_estoque+2}""",
             *params_pag)
         return {"produtos": [dict(r) for r in rows], "total": total, "pagina": pagina}
     return run_async(_go())

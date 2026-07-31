@@ -389,5 +389,233 @@ class TestRegistrarResolveVinculo(unittest.TestCase):
         self.assertEqual(resultado["ajuste_status"], "aplicado")
 
 
+# ── Task 8 (vinculo fisica x virtual): core/produtos_loja.py::listar_por_loja(),
+# core/relatorios.py::_loja_where_estoque() e
+# core/repositories_postgres.py::PostgresEstoqueRepository.buscar_quantidade()
+# resolvem `loja`/`loja_id` (de uma loja virtual com vinculo ativo) pro nome
+# da fisica vinculada ANTES de montar o JOIN/WHERE — mesmo padrao ja'
+# estabelecido nas Tasks 3-7 (core/estoque_saldos.py, core/estoque.py,
+# core/estoque_analise.py, core/estoque_aprovacoes.py, core/estoque_contagem.py).
+#
+# listar_por_loja() e buscar_quantidade() sao closures async (`async def
+# _go()`) — resolvem via `_loja_efetiva_async` com o mesmo guard fail-open
+# manual (try/except + validacao isinstance(str) do valor de retorno) das
+# Tasks 3-7. Em listar_por_loja() especificamente, SO' o nome usado no JOIN
+# com estoque_lojas e' resolvido — `pl.loja = $1` no WHERE continua sendo o
+# nome LITERAL da loja pedida, de proposito: preco/promocao/min-max de
+# produtos_loja sao configurados por loja fisica/virtual individualmente,
+# mesmo quando ha' vinculo de estoque; so' o saldo (quantidade) e'
+# compartilhado.
+#
+# _loja_where_estoque() e' DIFERENTE das demais: e' uma funcao SINCRONA que
+# recebe um `loja_id` NUMERICO (nao um nome), entao resolve via a versao
+# SINCRONA `loja_efetiva()` (mesmo raciocinio de
+# estoque_contagem.py::registrar() na Task 7). O guard aqui precisa ser MAIS
+# RIGOROSO que o `isinstance(x, str) and x` usado em todo o resto do plano:
+# o proprio loja_efetiva() tem um fail-open interno (core/lojas.py:133-142)
+# que devolve o INPUT ORIGINAL quando algo da errado dentro dele — e o input
+# aqui e' `str(loja_id)`, um digito puro (ex.: "5"), NAO um nome de loja. Um
+# guard fraco aceitaria "5" como se fosse um nome valido, silenciosamente
+# quebrando o filtro (e.loja = '5' nunca bate com nenhuma loja real). Por
+# isso o guard extra `not nome_efetivo.isdigit()` — se o resolver devolver
+# uma string de digitos (com ou sem excecao), cai no MESMO fallback que o
+# caso de excecao: a subquery original `(SELECT nome FROM lojas WHERE id =
+# ...)`, que sempre funcionou (era o comportamento pre-vinculo). Ver
+# test_loja_where_estoque_resolver_devolve_digito_puro_usa_fallback_subquery
+# abaixo — esse teste falharia se o `.isdigit()` fosse removido (o resultado
+# passaria a ser " AND e.loja = '5'" em vez da subquery).
+#
+# Patch-target (mesmo cuidado das Tasks 3-7): os alvos sao
+# `core.produtos_loja._loja_efetiva_async`/`_log_erro`,
+# `core.relatorios.loja_efetiva`/`_log_erro` (NOME SINCRONO aqui, nao
+# `_loja_efetiva_async`) e
+# `core.repositories_postgres._loja_efetiva_async`/`_log_erro` — os NOMES
+# importados dentro DE CADA modulo consumidor via `from core.lojas import
+# ...`, NUNCA `core.lojas.*` diretamente.
+#
+# Assercoes de "qual loja foi usada" sempre rodam DEPOIS do bloco `with`
+# (via db.fetch.call_args/db.fetchval.call_args), nunca dentro de um
+# side_effect — mesmo cuidado documentado nas Tasks 5-7 acima.
+class TestProdutosLojaResolveVinculo(unittest.TestCase):
+    def test_listar_por_loja_join_estoque_usa_loja_resolvida(self):
+        db = AsyncMock()
+        db.fetchval.return_value = 2
+        db.fetch.return_value = []
+        with patch("core.produtos_loja.get_db", AsyncMock(return_value=db)), \
+             patch("core.produtos_loja._loja_efetiva_async",
+                   AsyncMock(return_value="Loja Fisica Central")) as mock_resolver:
+            import core.produtos_loja as pl
+            pl.listar_por_loja("Loja Virtual A")
+        mock_resolver.assert_called_once_with("Loja Virtual A")
+        args = db.fetch.call_args[0]
+        # nome resolvido chega no JOIN com estoque_lojas...
+        self.assertIn("Loja Fisica Central", args)
+        # ...e o nome literal da virtual continua presente tambem, ligado a
+        # pl.loja = $1 (config de produtos_loja e' por loja, nao por vinculo).
+        self.assertIn("Loja Virtual A", args)
+        self.assertNotEqual(args.index("Loja Virtual A"), args.index("Loja Fisica Central"))
+
+    def test_listar_por_loja_resolver_indisponivel_usa_loja_original_retorna_dado_real(self):
+        """Fail-open: o resolver real abre sua PROPRIA conexao via get_db(),
+        independente do `db` fakeado aqui — uma excecao precisa ser tratada
+        como no-op (o JOIN continua usando 'loja' original), nunca propagar
+        e derrubar a listagem inteira."""
+        db = AsyncMock()
+        db.fetchval.return_value = 1
+        db.fetch.return_value = [{"sku": "SKU1", "loja": "Loja Virtual A"}]
+        erro_original = RuntimeError("DB indisponivel")
+        with patch("core.produtos_loja.get_db", AsyncMock(return_value=db)), \
+             patch("core.produtos_loja._loja_efetiva_async",
+                   AsyncMock(side_effect=erro_original)) as mock_resolver, \
+             patch("core.produtos_loja._log_erro") as mock_log_erro:
+            import core.produtos_loja as pl
+            resultado = pl.listar_por_loja("Loja Virtual A")
+        mock_resolver.assert_called_once_with("Loja Virtual A")
+        self.assertEqual(resultado["produtos"], [{"sku": "SKU1", "loja": "Loja Virtual A"}])
+        args = db.fetch.call_args[0]
+        self.assertIn("Loja Virtual A", args)
+        self.assertNotIn("Loja Fisica Central", args)
+        mock_log_erro.assert_called_once()
+        onde, exc = mock_log_erro.call_args[0]
+        self.assertIn("resolver_loja_efetiva", onde)
+        self.assertIs(exc, erro_original)
+
+    def test_listar_por_loja_resolver_devolve_valor_invalido_usa_loja_original_retorna_dado_real(self):
+        """Outra face da regression acima: resolver que NAO levanta excecao
+        mas devolve algo que nao e' um nome de loja valido (None)."""
+        db = AsyncMock()
+        db.fetchval.return_value = 1
+        db.fetch.return_value = [{"sku": "SKU1", "loja": "Loja Virtual A"}]
+        with patch("core.produtos_loja.get_db", AsyncMock(return_value=db)), \
+             patch("core.produtos_loja._loja_efetiva_async",
+                   AsyncMock(return_value=None)) as mock_resolver, \
+             patch("core.produtos_loja._log_erro") as mock_log_erro:
+            import core.produtos_loja as pl
+            resultado = pl.listar_por_loja("Loja Virtual A")
+        mock_resolver.assert_called_once_with("Loja Virtual A")
+        self.assertEqual(resultado["produtos"], [{"sku": "SKU1", "loja": "Loja Virtual A"}])
+        args = db.fetch.call_args[0]
+        self.assertIn("Loja Virtual A", args)
+        mock_log_erro.assert_called_once()
+        onde, exc = mock_log_erro.call_args[0]
+        self.assertIn("resolver_loja_efetiva", onde)
+        self.assertIsInstance(exc, Exception)
+
+
+class TestRelatoriosResolveVinculo(unittest.TestCase):
+    """Testa _loja_where_estoque() DIRETAMENTE (helper sincrono, sem tocar o
+    banco) — mais simples e preciso que passar por estoque() + mockar
+    db.fetchval, que nem sequer garantiria ver o WHERE clause montado."""
+
+    def test_loja_where_estoque_happy_path_resolve_para_fisica(self):
+        with patch("core.relatorios.loja_efetiva",
+                   return_value="Loja Fisica Central") as mock_resolver:
+            import core.relatorios as relatorios
+            resultado = relatorios._loja_where_estoque(5)
+        mock_resolver.assert_called_once_with("5")
+        self.assertEqual(resultado, " AND e.loja = 'Loja Fisica Central'")
+
+    def test_loja_where_estoque_resolver_indisponivel_usa_fallback_subquery(self):
+        """Resolver levanta excecao -> volta pro comportamento ORIGINAL
+        (pre-vinculo): subquery resolvendo o id direto em SQL, nao um nome
+        de loja quebrado."""
+        erro_original = RuntimeError("DB indisponivel")
+        with patch("core.relatorios.loja_efetiva",
+                   side_effect=erro_original) as mock_resolver, \
+             patch("core.relatorios._log_erro") as mock_log_erro:
+            import core.relatorios as relatorios
+            resultado = relatorios._loja_where_estoque(5)
+        mock_resolver.assert_called_once_with("5")
+        self.assertEqual(resultado, " AND e.loja = (SELECT nome FROM lojas WHERE id = 5)")
+        mock_log_erro.assert_called_once()
+        onde, exc = mock_log_erro.call_args[0]
+        self.assertIn("resolver_loja_efetiva", onde)
+        self.assertIs(exc, erro_original)
+
+    def test_loja_where_estoque_resolver_devolve_digito_puro_usa_fallback_subquery(self):
+        """O gap especifico que este guard protege: loja_efetiva() pode
+        devolver o proprio id (string de digitos) SEM levantar excecao,
+        por causa do fail-open INTERNO dela mesma (core/lojas.py:133-142),
+        que devolve o input original — aqui, str(loja_id) — quando algo da
+        errado. Um guard fraco tipo `isinstance(x, str) and x` (usado em
+        todo o resto do plano) NAO pegaria isso, porque "5" passa numa
+        checagem dessas tranquilamente. Por isso o guard extra
+        `not nome_efetivo.isdigit()`: sem ele, este teste falharia (o
+        resultado seria " AND e.loja = '5'" em vez da subquery abaixo)."""
+        with patch("core.relatorios.loja_efetiva",
+                   return_value="5") as mock_resolver, \
+             patch("core.relatorios._log_erro") as mock_log_erro:
+            import core.relatorios as relatorios
+            resultado = relatorios._loja_where_estoque(5)
+        mock_resolver.assert_called_once_with("5")
+        self.assertEqual(resultado, " AND e.loja = (SELECT nome FROM lojas WHERE id = 5)")
+        mock_log_erro.assert_called_once()
+        onde, exc = mock_log_erro.call_args[0]
+        self.assertIn("resolver_loja_efetiva", onde)
+        self.assertIsInstance(exc, Exception)
+
+
+class TestRepositoriesPostgresResolveVinculo(unittest.TestCase):
+    """buscar_quantidade() nao tinha nenhuma cobertura antes desta task.
+    Mesmo formato fail-open-triplo das demais classes deste arquivo. Usa
+    retorno NAO-zero no mock de fetchval para distinguir "usou a loja
+    original e leu dado real" de "excecao engolida silenciosamente pelo
+    try/except externo (que devolveria 0)"."""
+
+    def test_buscar_quantidade_usa_loja_resolvida(self):
+        db = AsyncMock()
+        db.fetchval.return_value = 42
+        with patch("core.repositories_postgres.get_db", AsyncMock(return_value=db)), \
+             patch("core.repositories_postgres._loja_efetiva_async",
+                   AsyncMock(return_value="Loja Fisica Central")) as mock_resolver:
+            import core.repositories_postgres as repo_mod
+            repo = repo_mod.PostgresEstoqueRepository()
+            resultado = repo_mod.run_async(repo.buscar_quantidade("SKU-1", "Loja Virtual A"))
+        mock_resolver.assert_called_once_with("Loja Virtual A")
+        self.assertEqual(resultado, 42)
+        args = db.fetchval.call_args[0]
+        self.assertIn("Loja Fisica Central", args)
+        self.assertNotIn("Loja Virtual A", args)
+
+    def test_buscar_quantidade_resolver_indisponivel_usa_loja_original_retorna_dado_real(self):
+        db = AsyncMock()
+        db.fetchval.return_value = 17
+        erro_original = RuntimeError("DB indisponivel")
+        with patch("core.repositories_postgres.get_db", AsyncMock(return_value=db)), \
+             patch("core.repositories_postgres._loja_efetiva_async",
+                   AsyncMock(side_effect=erro_original)) as mock_resolver, \
+             patch("core.repositories_postgres._log_erro") as mock_log_erro:
+            import core.repositories_postgres as repo_mod
+            repo = repo_mod.PostgresEstoqueRepository()
+            resultado = repo_mod.run_async(repo.buscar_quantidade("SKU-1", "Loja Virtual A"))
+        mock_resolver.assert_called_once_with("Loja Virtual A")
+        self.assertEqual(resultado, 17)
+        args = db.fetchval.call_args[0]
+        self.assertIn("Loja Virtual A", args)
+        mock_log_erro.assert_called_once()
+        onde, exc = mock_log_erro.call_args[0]
+        self.assertIn("resolver_loja_efetiva", onde)
+        self.assertIs(exc, erro_original)
+
+    def test_buscar_quantidade_resolver_devolve_valor_invalido_usa_loja_original_retorna_dado_real(self):
+        db = AsyncMock()
+        db.fetchval.return_value = 9
+        with patch("core.repositories_postgres.get_db", AsyncMock(return_value=db)), \
+             patch("core.repositories_postgres._loja_efetiva_async",
+                   AsyncMock(return_value=None)) as mock_resolver, \
+             patch("core.repositories_postgres._log_erro") as mock_log_erro:
+            import core.repositories_postgres as repo_mod
+            repo = repo_mod.PostgresEstoqueRepository()
+            resultado = repo_mod.run_async(repo.buscar_quantidade("SKU-1", "Loja Virtual A"))
+        mock_resolver.assert_called_once_with("Loja Virtual A")
+        self.assertEqual(resultado, 9)
+        args = db.fetchval.call_args[0]
+        self.assertIn("Loja Virtual A", args)
+        mock_log_erro.assert_called_once()
+        onde, exc = mock_log_erro.call_args[0]
+        self.assertIn("resolver_loja_efetiva", onde)
+        self.assertIsInstance(exc, Exception)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

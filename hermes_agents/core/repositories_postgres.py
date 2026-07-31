@@ -13,6 +13,7 @@ from core.repositories import (
     Produto, Loja, AnuncioConcorrente, ParVendas, EstoqueLoja, ReceitaLoja,
 )
 from core import get_db, run_async, log
+from core.lojas import _loja_efetiva_async, _log_erro
 
 AGENT = "Repository Postgres"
 
@@ -153,7 +154,18 @@ class PostgresEstoqueRepository(EstoqueRepository):
     async def buscar_quantidade(self, sku: str, loja: str) -> int:
         async def _go():
             db = await get_db()
-            r = await db.fetchval("SELECT SUM(quantidade) FROM estoque_lojas WHERE sku = $1 AND loja = $2", sku, loja)
+            loja_resolvida = loja
+            try:
+                r = await _loja_efetiva_async(loja)
+                if isinstance(r, str) and r:
+                    loja_resolvida = r
+                else:
+                    _log_erro(
+                        "repositories_postgres.buscar_quantidade: resolver_loja_efetiva",
+                        ValueError(f"loja '{loja}' -> valor invalido {r!r} (esperado str nao-vazia)"))
+            except Exception as e:
+                _log_erro("repositories_postgres.buscar_quantidade: resolver_loja_efetiva", e)
+            r = await db.fetchval("SELECT SUM(quantidade) FROM estoque_lojas WHERE sku = $1 AND loja = $2", sku, loja_resolvida)
             return int(r or 0)
         try: return run_async(_go())
         except Exception: return 0
