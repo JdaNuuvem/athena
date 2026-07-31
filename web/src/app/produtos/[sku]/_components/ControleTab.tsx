@@ -52,6 +52,8 @@ export default function ControleTab({ produto }: Props) {
   const [precos, setPrecos] = useState<Record<string, string>>({});
   const [atualizandoPreco, setAtualizandoPreco] = useState<string | null>(null);
   const [pausando, setPausando] = useState<string | null>(null);
+  const [excluindo, setExcluindo] = useState<string | null>(null);
+  const [excluidos, setExcluidos] = useState<Set<string>>(new Set());
   const [variacoesAbertas, setVariacoesAbertas] = useState<string | null>(null);
   const [variacoes, setVariacoes] = useState<Variacao[]>([]);
   const [carregandoVariacoes, setCarregandoVariacoes] = useState<string | null>(null);
@@ -92,6 +94,28 @@ export default function ControleTab({ produto }: Props) {
       setMsg(e instanceof Error ? e.message : "Erro ao alterar status do anúncio");
     } finally {
       setPausando(null);
+      setTimeout(() => setMsg(""), 4000);
+    }
+  };
+
+  const excluirDaShopee = async (anuncio: AnuncioShopee) => {
+    const itemId = Number(anuncio.anuncio_id);
+    const lojaId = lojaIdPorShopId(anuncio.shop_id);
+    if (!itemId || !lojaId) { setMsg("Loja não vinculada"); return; }
+    if (!window.confirm(`Excluir definitivamente o anúncio item_id ${itemId} da Shopee? Esta ação não pode ser desfeita.`)) return;
+    setExcluindo(anuncio.anuncio_id || null); setMsg("");
+    try {
+      const r = await api.shopeeDeletarProdutoShopee(itemId, lojaId);
+      if (r.error) {
+        setMsg(`Erro: ${r.error}`);
+      } else {
+        setMsg("Anúncio excluído da Shopee");
+        setExcluidos(prev => new Set(prev).add(anuncio.anuncio_id || ""));
+      }
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Erro ao excluir anúncio");
+    } finally {
+      setExcluindo(null);
       setTimeout(() => setMsg(""), 4000);
     }
   };
@@ -254,7 +278,7 @@ export default function ControleTab({ produto }: Props) {
         <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 space-y-3">
           <h3 className="text-sm font-medium text-neutral-200">Anúncios na Shopee</h3>
           <div className="space-y-3">
-            {anunciosShopee.map((a) => {
+            {anunciosShopee.filter(a => !excluidos.has(a.anuncio_id || "")).map((a) => {
               const anuncioId = a.anuncio_id || "";
               const pausado = a.status === "unlist" || a.status === "pausado";
               const lojaId = lojaIdPorShopId(a.shop_id);
@@ -294,6 +318,13 @@ export default function ControleTab({ produto }: Props) {
                         className="text-[10px] bg-neutral-700 hover:bg-neutral-600 disabled:opacity-50 text-white px-2.5 py-1.5 rounded-lg"
                       >
                         {carregandoVariacoes === anuncioId ? "Carregando..." : variacoesAbertas === anuncioId ? "Ocultar variações" : "Ver variações"}
+                      </button>
+                      <button
+                        onClick={() => excluirDaShopee(a)}
+                        disabled={excluindo === anuncioId || !lojaId}
+                        className="text-[10px] bg-red-900/60 hover:bg-red-900 disabled:opacity-50 text-red-200 px-2.5 py-1.5 rounded-lg"
+                      >
+                        {excluindo === anuncioId ? "Excluindo..." : "Excluir"}
                       </button>
                     </div>
                   </div>

@@ -106,6 +106,32 @@ def _request(endpoint: str, params: dict = None, method: str = "GET", loja_id: i
         return {"error": str(e)}
 
 
+def _request_binary(endpoint: str, params: dict = None, loja_id: int = None) -> dict:
+    """POST autenticado cuja resposta de sucesso e' binaria (ex: PDF de etiqueta em
+    logistics/download_shipping_document), nao JSON. Retorna {"content": bytes,
+    "content_type": str} em sucesso, ou {"error": ...} (a Shopee retorna erro como JSON
+    normal mesmo nesses endpoints)."""
+    if not configurado(loja_id):
+        return {"error": "Shopee não configurado"}
+    path = f"/api/v2/{endpoint}"
+    sig = _sign(path, loja_id)
+    url = f"{_base_url()}/{endpoint}"
+    default_params = {
+        "partner_id": sig["partner_id"], "timestamp": sig["timestamp"],
+        "access_token": sig["access_token"], "shop_id": sig["shop_id"], "sign": sig["sign"],
+    }
+    try:
+        r = requests.post(url, params=default_params, json=params or {}, timeout=60)
+        content_type = r.headers.get("Content-Type", "")
+        if "application/json" in content_type:
+            return r.json()
+        r.raise_for_status()
+        return {"content": r.content, "content_type": content_type or "application/pdf"}
+    except Exception as e:
+        log(AGENT, f"Erro binary {endpoint}: {e}")
+        return {"error": str(e)}
+
+
 # ── OAuth2 Authorization Flow ──
 
 def get_auth_url(redirect_uri: str = "", sandbox: bool = None, loja_id: int = None) -> str:

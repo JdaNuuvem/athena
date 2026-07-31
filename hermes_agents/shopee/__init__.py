@@ -36,6 +36,22 @@ from .stock import (
 from .stores import listar_todas_lojas_shopee
 from .kits import sugerir_kits
 from .concorrencia import analisar_consistencia_precos
+from .account_health import (
+    get_shop_performance, get_metric_source_detail, get_penalty_point_history,
+    get_punishment_history, get_listings_with_issues, get_late_orders,
+)
+from .logistics import (
+    get_shipping_parameter, mass_ship_order, get_tracking_number,
+    get_shipping_document_parameter, create_shipping_document,
+    get_shipping_document_result, download_shipping_document, get_tracking_info,
+)
+from .discount import (
+    add_discount, add_discount_item, update_discount, update_discount_item,
+    delete_discount, delete_discount_item, end_discount, get_discount, get_discount_list,
+)
+from .voucher import (
+    add_voucher, update_voucher, get_voucher, get_voucher_list, end_voucher, delete_voucher,
+)
 
 MENSAGENS_SHOPEE = {
     "produtos": "📦 Produtos sincronizados com Shopee.",

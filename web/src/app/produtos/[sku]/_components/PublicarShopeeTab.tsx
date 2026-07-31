@@ -9,6 +9,10 @@ interface Props {
 }
 
 interface Breadcrumb { id: number; nome: string; }
+interface ImagemAnuncio { id: string; preview: string; }
+interface FaixaAtacado { min: string; max: string; preco: string; }
+
+const MAX_IMAGENS = 9;
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return <fieldset className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 space-y-4"><legend className="text-sm font-medium text-neutral-300 px-1">{title}</legend>{children}</fieldset>;
@@ -32,17 +36,23 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
   const [categoriaSelecionada, setCategoriaSelecionada] = useState<ShopeeCategoria | null>(null);
   const [carregandoCategorias, setCarregandoCategorias] = useState(false);
 
-  // ── Atributos e marca ──
+  // ── Atributos e marca (compartilhado entre criação e edição) ──
   const [atributos, setAtributos] = useState<ShopeeAtributo[]>([]);
   const [valoresAtributos, setValoresAtributos] = useState<Record<number, string>>({});
   const [marcas, setMarcas] = useState<ShopeeMarca[]>([]);
   const [marcaObrigatoria, setMarcaObrigatoria] = useState(false);
   const [marcaId, setMarcaId] = useState<number>(0);
 
-  // ── Imagem ──
-  const [imagemId, setImagemId] = useState<string>("");
-  const [imagemPreview, setImagemPreview] = useState<string>("");
+  // ── Imagens (compartilhado — lista, ate MAX_IMAGENS) ──
+  const [imagens, setImagens] = useState<ImagemAnuncio[]>([]);
   const [enviandoImagem, setEnviandoImagem] = useState(false);
+
+  // ── Campos adicionais da Shopee ──
+  const [condicao, setCondicao] = useState<"NEW" | "USED">("NEW");
+  const [preOrderAtivo, setPreOrderAtivo] = useState(false);
+  const [diasParaEnvio, setDiasParaEnvio] = useState("7");
+  const [wholesale, setWholesale] = useState<FaixaAtacado[]>([]);
+  const [gtinCode, setGtinCode] = useState("");
 
   // ── Dados finais ──
   const [form, setForm] = useState({
@@ -60,8 +70,28 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
   const [ehVariacao, setEhVariacao] = useState(false);
   const [modoEdicao, setModoEdicao] = useState(false);
   const [carregandoEdicao, setCarregandoEdicao] = useState(false);
-  const [formEdicao, setFormEdicao] = useState({ nome: "", descricao: "", preco: "", estoque: "", peso: "" });
+  const [formEdicao, setFormEdicao] = useState({ nome: "", descricao: "", preco: "", estoque: "", peso: "", largura: "", altura: "", profundidade: "" });
   const [salvandoEdicao, setSalvandoEdicao] = useState(false);
+  const [estoqueReservado, setEstoqueReservado] = useState<number | null>(null);
+  const [excluindo, setExcluindo] = useState(false);
+
+  const carregarAtributosMarcas = useCallback(async (categoryId: number, lojaAtual?: number | null) => {
+    const [attrR, brandR] = await Promise.all([
+      api.shopeeAtributos(categoryId, lojaAtual ?? lojaId ?? undefined),
+      api.shopeeMarcas(categoryId, lojaAtual ?? lojaId ?? undefined),
+    ]);
+    setAtributos(attrR.atributos || []);
+    setMarcas(brandR.marcas || []);
+    setMarcaObrigatoria(brandR.obrigatorio);
+    // ponytail: tenta casar com a marca ja cadastrada no catalogo interno (Bling),
+    // pra nao obrigar o usuario a re-escolher uma marca que ja existe no produto.
+    const nomeMarcaCadastro = String(p?.marca || "").trim().toLowerCase();
+    if (nomeMarcaCadastro) {
+      const match = (brandR.marcas || []).find(m => m.original_brand_name.trim().toLowerCase() === nomeMarcaCadastro);
+      if (match) setMarcaId(match.brand_id);
+    }
+    return { atributos: attrR.atributos || [], marcas: brandR.marcas || [] };
+  }, [lojaId, p?.marca]);
 
   useEffect(() => {
     api.shopeeLojas().then(r => {
@@ -86,14 +116,18 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
       altura: String(p?.altura || ""),
       profundidade: String(p?.profundidade || ""),
     }));
-    // ponytail: imagem_url do catalogo local (Bling) — reaproveitada com 1 clique, sem re-upload manual
-    if (p?.imagem_url) setImagemPreview(String(p.imagem_url));
+    setGtinCode(String(p?.codigo_barras || ""));
   }, [p]);
 
   // Detecta se o produto ja esta publicado na loja selecionada (via estoque_lojas do detalhe)
   useEffect(() => {
     setItemIdExistente(null);
     setModoEdicao(false);
+    setAtributos([]);
+    setMarcas([]);
+    setMarcaId(0);
+    setImagens([]);
+    setEstoqueReservado(null);
     if (!lojaId) return;
     const shopId = lojasComShopId[lojaId];
     if (!shopId) return;
@@ -109,10 +143,11 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
     setEhVariacao(!!modelIdStr);
     setModoEdicao(true);
     setCarregandoEdicao(true);
-    api.shopeeDetalheProduto(itemId, lojaId).then(r => {
+    api.shopeeDetalheProduto(itemId, lojaId).then(async (r) => {
       const item = r.item || {};
       const priceInfo = (item.price_info as Array<{ current_price?: number }> | undefined)?.[0];
-      const stockInfo = (item.stock_info_v2 as { summary_info?: { total_available_stock?: number } } | undefined)?.summary_info;
+      const stockInfo = (item.stock_info_v2 as { summary_info?: { total_available_stock?: number; total_reserved_stock?: number } } | undefined)?.summary_info;
+      const dimension = (item.dimension as { package_length?: number; package_width?: number; package_height?: number } | undefined) || {};
       // Produto com variacao: price_info/stock_info_v2 do item pai vem
       // zerado (o real esta no model). Usa o estoque desse SKU especifico
       // (ja correto) direto do catalogo interno em vez do item pai.
@@ -122,9 +157,51 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
         preco: modelIdStr ? "" : String(priceInfo?.current_price ?? ""),
         estoque: modelIdStr ? String(p?.estoque_atual ?? "") : String(stockInfo?.total_available_stock ?? ""),
         peso: String(item.weight ?? ""),
+        largura: String(dimension.package_length ?? ""),
+        altura: String(dimension.package_height ?? ""),
+        profundidade: String(dimension.package_width ?? ""),
       });
+      setEstoqueReservado(typeof stockInfo?.total_reserved_stock === "number" ? stockInfo.total_reserved_stock : null);
+
+      const image = (item.image as { image_id_list?: string[]; image_url_list?: string[] } | undefined) || {};
+      const ids = image.image_id_list || [];
+      const urls = image.image_url_list || [];
+      setImagens(ids.map((id, i) => ({ id, preview: urls[i] || "" })));
+
+      const categoryId = Number(item.category_id || 0);
+      if (categoryId) {
+        await carregarAtributosMarcas(categoryId, lojaId);
+        const attributeList = (item.attribute_list as Array<{ attribute_id: number; attribute_value_list?: Array<{ value_id?: number; original_value_name?: string }> }> | undefined) || [];
+        const valores: Record<number, string> = {};
+        for (const a of attributeList) {
+          const v = a.attribute_value_list?.[0];
+          if (v) valores[a.attribute_id] = v.value_id != null ? String(v.value_id) : String(v.original_value_name || "");
+        }
+        setValoresAtributos(valores);
+        const brandId = (item.brand as { brand_id?: number } | undefined)?.brand_id;
+        setMarcaId(brandId || 0);
+      }
     }).catch(() => {}).finally(() => setCarregandoEdicao(false));
-  }, [lojaId, lojasComShopId, p]);
+  }, [lojaId, lojasComShopId, p, carregarAtributosMarcas]);
+
+  const buildAttributeList = () => atributos
+    .filter(a => valoresAtributos[a.attribute_id])
+    .map(a => {
+      const valor = valoresAtributos[a.attribute_id];
+      if (a.attribute_value_list?.length) {
+        return { attribute_id: a.attribute_id, attribute_value_list: [{ value_id: Number(valor) }] };
+      }
+      return { attribute_id: a.attribute_id, attribute_value_list: [{ original_value_name: valor }] };
+    });
+
+  const buildDimension = (largura: string, altura: string, profundidade: string) => {
+    if (!largura && !altura && !profundidade) return undefined;
+    return {
+      package_length: Number(largura) || 1,
+      package_width: Number(profundidade) || 1,
+      package_height: Number(altura) || 1,
+    };
+  };
 
   const salvarEdicao = async () => {
     if (!lojaId || !itemIdExistente) return;
@@ -136,6 +213,15 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
         description: formEdicao.descricao,
         weight: Number(formEdicao.peso) || undefined,
       };
+      const dimension = buildDimension(formEdicao.largura, formEdicao.altura, formEdicao.profundidade);
+      if (dimension) payload.dimension = dimension;
+      if (!ehVariacao) {
+        const attributeList = buildAttributeList();
+        if (attributeList.length) payload.attribute_list = attributeList;
+        if (marcaId) payload.brand = { brand_id: marcaId };
+        if (imagens.length) payload.image = { image_id_list: imagens.map(i => i.id) };
+        if (gtinCode.trim()) payload.gtin_code = gtinCode.trim();
+      }
       const r = await api.shopeeEditarProdutoShopee(itemIdExistente, lojaId, payload);
       if (r.error) {
         setResultado({ ok: false, texto: r.error });
@@ -153,6 +239,26 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
       setResultado({ ok: false, texto: e instanceof Error ? e.message : "Erro ao salvar alterações" });
     } finally {
       setSalvandoEdicao(false);
+    }
+  };
+
+  const excluirDaShopee = async () => {
+    if (!lojaId || !itemIdExistente) return;
+    if (!window.confirm(`Excluir definitivamente o anúncio item_id ${itemIdExistente} da Shopee? Esta ação não pode ser desfeita.`)) return;
+    setExcluindo(true);
+    setResultado(null);
+    try {
+      const r = await api.shopeeDeletarProdutoShopee(itemIdExistente, lojaId);
+      if (r.error) setResultado({ ok: false, texto: r.error });
+      else {
+        setResultado({ ok: true, texto: "Anúncio excluído da Shopee." });
+        setModoEdicao(false);
+        setItemIdExistente(null);
+      }
+    } catch (e) {
+      setResultado({ ok: false, texto: e instanceof Error ? e.message : "Erro ao excluir anúncio" });
+    } finally {
+      setExcluindo(false);
     }
   };
 
@@ -189,13 +295,7 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
     }
     // Categoria-folha: seleciona e busca atributos/marcas
     setCategoriaSelecionada(c);
-    const [attrR, brandR] = await Promise.all([
-      api.shopeeAtributos(c.category_id, lojaId ?? undefined),
-      api.shopeeMarcas(c.category_id, lojaId ?? undefined),
-    ]);
-    setAtributos(attrR.atributos || []);
-    setMarcas(brandR.marcas || []);
-    setMarcaObrigatoria(brandR.obrigatorio);
+    await carregarAtributosMarcas(c.category_id);
   };
 
   const voltarBreadcrumb = (index: number) => {
@@ -212,26 +312,25 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
     setBreadcrumb([]);
   };
 
-  const enviarImagemDoCatalogo = async () => {
-    if (!lojaId || !p?.imagem_url) return;
+  const adicionarImagemDoCatalogo = async () => {
+    if (!lojaId || !p?.imagem_url || imagens.length >= MAX_IMAGENS) return;
     setEnviandoImagem(true);
     try {
       const r = await api.shopeeUploadImagem(lojaId, String(p.imagem_url));
-      if (r.image_id) { setImagemId(r.image_id); setResultado(null); }
+      if (r.image_id) { setImagens(imgs => [...imgs, { id: r.image_id!, preview: r.image_url || String(p.imagem_url) }]); setResultado(null); }
       else setResultado({ ok: false, texto: r.erro || "Falha ao enviar imagem" });
     } finally {
       setEnviandoImagem(false);
     }
   };
 
-  const enviarImagemArquivo = async (file: File) => {
-    if (!lojaId) return;
+  const adicionarImagemArquivo = async (file: File) => {
+    if (!lojaId || imagens.length >= MAX_IMAGENS) return;
     setEnviandoImagem(true);
     try {
       const r = await api.shopeeUploadImagem(lojaId, file);
       if (r.image_id) {
-        setImagemId(r.image_id);
-        setImagemPreview(URL.createObjectURL(file));
+        setImagens(imgs => [...imgs, { id: r.image_id!, preview: URL.createObjectURL(file) }]);
       } else {
         setResultado({ ok: false, texto: r.erro || "Falha ao enviar imagem" });
       }
@@ -240,7 +339,14 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
     }
   };
 
-  const prontoParaPublicar = !!(lojaId && categoriaSelecionada && imagemId && form.nome && form.preco);
+  const removerImagem = (index: number) => setImagens(imgs => imgs.filter((_, i) => i !== index));
+
+  const adicionarFaixaAtacado = () => setWholesale(w => [...w, { min: "", max: "", preco: "" }]);
+  const atualizarFaixaAtacado = (index: number, campo: keyof FaixaAtacado, valor: string) =>
+    setWholesale(w => w.map((f, i) => i === index ? { ...f, [campo]: valor } : f));
+  const removerFaixaAtacado = (index: number) => setWholesale(w => w.filter((_, i) => i !== index));
+
+  const prontoParaPublicar = !!(lojaId && categoriaSelecionada && imagens.length > 0 && form.nome && form.preco);
 
   const publicar = async (forcarPublicacao = false) => {
     if (!lojaId || !categoriaSelecionada) return;
@@ -251,16 +357,6 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
       const canaisR = await api.shopeeCanaisLogistica(lojaId);
       const canaisHabilitados = (canaisR.canais || []).filter(c => c.enabled);
 
-      const attributeList = atributos
-        .filter(a => valoresAtributos[a.attribute_id])
-        .map(a => {
-          const valor = valoresAtributos[a.attribute_id];
-          if (a.attribute_value_list?.length) {
-            return { attribute_id: a.attribute_id, attribute_value_list: [{ value_id: Number(valor) }] };
-          }
-          return { attribute_id: a.attribute_id, attribute_value_list: [{ original_value_name: valor }] };
-        });
-
       const payload: Record<string, unknown> = {
         item_name: form.nome,
         description: form.descricao || form.nome,
@@ -268,18 +364,25 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
         category_id: categoriaSelecionada.category_id,
         original_price: Number(form.preco),
         weight: Number(form.peso) || 0.1,
-        dimension: {
-          package_length: Number(form.largura) || 1,
-          package_width: Number(form.profundidade) || 1,
-          package_height: Number(form.altura) || 1,
-        },
-        image: { image_id_list: [imagemId] },
+        dimension: buildDimension(form.largura, form.altura, form.profundidade) || { package_length: 1, package_width: 1, package_height: 1 },
+        image: { image_id_list: imagens.map(i => i.id) },
         brand: marcaId ? { brand_id: marcaId } : { brand_id: 0, original_brand_name: "No Brand" },
-        attribute_list: attributeList,
+        attribute_list: buildAttributeList(),
         logistic_info: canaisHabilitados.map(c => ({ logistic_id: c.logistic_id, enabled: true })),
         seller_stock: [{ stock: Number(form.estoque) || 0 }],
+        condition: condicao,
         forcar_publicacao: forcarPublicacao,
       };
+      if (gtinCode.trim()) payload.gtin_code = gtinCode.trim();
+      if (preOrderAtivo) payload.pre_order = { is_pre_order: true, days_to_ship: Number(diasParaEnvio) || 7 };
+      const faixasValidas = wholesale.filter(w => w.min && w.preco);
+      if (faixasValidas.length) {
+        payload.wholesale = faixasValidas.map(w => ({
+          min_count: Number(w.min),
+          ...(w.max ? { max_count: Number(w.max) } : {}),
+          unit_price: Number(w.preco),
+        }));
+      }
 
       const r = await api.shopeeCriarProduto(lojaId, payload);
       if (r.response?.item_id) {
@@ -325,15 +428,24 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
         <Section title="Produto já publicado nesta loja">
           <div className="flex items-center justify-between">
             <p className="text-xs text-neutral-500">item_id: <span className="font-mono text-neutral-400">{itemIdExistente}</span></p>
-            <button onClick={() => setModoEdicao(false)} className="text-xs text-indigo-400 hover:text-indigo-300">
-              Publicar como novo anúncio em vez disso
-            </button>
+            <div className="flex items-center gap-3">
+              <button onClick={() => setModoEdicao(false)} className="text-xs text-indigo-400 hover:text-indigo-300">
+                Publicar como novo anúncio em vez disso
+              </button>
+              <button
+                onClick={excluirDaShopee}
+                disabled={excluindo}
+                className="text-[10px] bg-red-900/60 hover:bg-red-900 disabled:opacity-50 text-red-200 px-2.5 py-1.5 rounded-lg"
+              >
+                {excluindo ? "Excluindo..." : "Excluir da Shopee"}
+              </button>
+            </div>
           </div>
           {ehVariacao && (
             <div className="bg-amber-950/40 border border-amber-900/50 rounded-lg p-3 text-xs text-amber-300 space-y-1">
               <p className="font-medium">⚠ Este SKU é uma variação de um produto com múltiplos modelos.</p>
               <p className="text-amber-400/80">
-                Nome e descrição abaixo são do produto pai (afetam todas as variações). Estoque desta
+                Nome, descrição, atributos, marca e imagens abaixo são do produto pai (afetam todas as variações). Estoque desta
                 variação já é enviado corretamente por este formulário. Preço por variação: ajuste em{" "}
                 <span className="font-mono">Integrações → Shopee → Produtos</span> (o campo abaixo está desativado).
               </p>
@@ -354,10 +466,76 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
               <InputGroup label="Descrição">
                 <textarea rows={3} value={formEdicao.descricao} onChange={e => setFormEdicao({ ...formEdicao, descricao: e.target.value })} className={inputCls} />
               </InputGroup>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <InputGroup label="Estoque"><input type="number" value={formEdicao.estoque} onChange={e => setFormEdicao({ ...formEdicao, estoque: e.target.value })} className={inputCls} /></InputGroup>
                 <InputGroup label="Peso (kg)"><input type="number" value={formEdicao.peso} onChange={e => setFormEdicao({ ...formEdicao, peso: e.target.value })} className={inputCls} /></InputGroup>
+                <InputGroup label="Dimensões (cm)">
+                  <div className="flex gap-1">
+                    <input type="number" placeholder="L" value={formEdicao.largura} onChange={e => setFormEdicao({ ...formEdicao, largura: e.target.value })} className={inputCls} />
+                    <input type="number" placeholder="A" value={formEdicao.altura} onChange={e => setFormEdicao({ ...formEdicao, altura: e.target.value })} className={inputCls} />
+                    <input type="number" placeholder="P" value={formEdicao.profundidade} onChange={e => setFormEdicao({ ...formEdicao, profundidade: e.target.value })} className={inputCls} />
+                  </div>
+                </InputGroup>
+                <InputGroup label="Estoque reservado (pedidos)">
+                  <input value={estoqueReservado ?? "—"} disabled className={`${inputCls} opacity-60`} />
+                </InputGroup>
               </div>
+
+              {!ehVariacao && (
+                <>
+                  {marcas.length > 0 && (
+                    <InputGroup label={`Marca${marcaObrigatoria ? " (obrigatório)" : " (opcional)"}`}>
+                      <select value={marcaId} onChange={e => setMarcaId(Number(e.target.value))} className={inputCls}>
+                        <option value={0}>Sem marca</option>
+                        {marcas.map(m => <option key={m.brand_id} value={m.brand_id}>{m.original_brand_name}</option>)}
+                      </select>
+                    </InputGroup>
+                  )}
+                  {atributos.length > 0 && atributos.map(a => (
+                    <InputGroup key={a.attribute_id} label={`${a.original_attribute_name}${a.is_mandatory ? " *" : ""}`}>
+                      {a.attribute_value_list?.length ? (
+                        <select
+                          value={valoresAtributos[a.attribute_id] || ""}
+                          onChange={e => setValoresAtributos(v => ({ ...v, [a.attribute_id]: e.target.value }))}
+                          className={inputCls}
+                        >
+                          <option value="">Selecione...</option>
+                          {a.attribute_value_list.map(v => <option key={v.value_id} value={v.value_id}>{v.original_value_name}</option>)}
+                        </select>
+                      ) : (
+                        <input
+                          value={valoresAtributos[a.attribute_id] || ""}
+                          onChange={e => setValoresAtributos(v => ({ ...v, [a.attribute_id]: e.target.value }))}
+                          className={inputCls}
+                        />
+                      )}
+                    </InputGroup>
+                  ))}
+                  <InputGroup label="Código de barras / GTIN">
+                    <input value={gtinCode} onChange={e => setGtinCode(e.target.value)} className={inputCls} />
+                  </InputGroup>
+                  <InputGroup label={`Imagens (${imagens.length}/${MAX_IMAGENS})`}>
+                    <div className="flex items-start gap-2 flex-wrap">
+                      {imagens.map((img, i) => (
+                        <div key={img.id} className="relative">
+                          {img.preview
+                            ? <img src={img.preview} alt="" className="w-16 h-16 object-cover rounded-lg border border-neutral-700" />
+                            : <div className="w-16 h-16 rounded-lg border border-neutral-700 bg-neutral-800 flex items-center justify-center text-neutral-500 text-[10px]">#{i + 1}</div>}
+                          <button onClick={() => removerImagem(i)} className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-600 hover:bg-red-500 text-white text-[10px] leading-none">×</button>
+                        </div>
+                      ))}
+                      {imagens.length < MAX_IMAGENS && (
+                        <label className="w-16 h-16 flex items-center justify-center rounded-lg border border-dashed border-neutral-700 text-neutral-500 text-xs cursor-pointer hover:border-indigo-500 hover:text-indigo-400">
+                          {enviandoImagem ? "..." : "+"}
+                          <input type="file" accept="image/*" className="hidden" disabled={!lojaId || enviandoImagem}
+                            onChange={e => e.target.files?.[0] && adicionarImagemArquivo(e.target.files[0])} />
+                        </label>
+                      )}
+                    </div>
+                  </InputGroup>
+                </>
+              )}
+
               <button
                 onClick={salvarEdicao}
                 disabled={salvandoEdicao || !formEdicao.nome}
@@ -442,29 +620,38 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
                 )}
               </InputGroup>
             ))}
+            <InputGroup label="Código de barras / GTIN (opcional)">
+              <input value={gtinCode} onChange={e => setGtinCode(e.target.value)} className={inputCls} />
+            </InputGroup>
           </Section>
 
-          <Section title="4. Imagem">
-            <div className="flex items-start gap-4">
-              {imagemPreview ? (
-                <img src={imagemPreview} alt="" className="w-20 h-20 object-cover rounded-lg border border-neutral-700" />
-              ) : (
-                <div className="w-20 h-20 rounded-lg border border-neutral-700 bg-neutral-800 flex items-center justify-center text-neutral-500 text-xs">Sem foto</div>
-              )}
+          <Section title="4. Imagens">
+            <div className="flex items-start gap-2 flex-wrap">
+              {imagens.map((img, i) => (
+                <div key={img.id} className="relative">
+                  {img.preview
+                    ? <img src={img.preview} alt="" className="w-20 h-20 object-cover rounded-lg border border-neutral-700" />
+                    : <div className="w-20 h-20 rounded-lg border border-neutral-700 bg-neutral-800 flex items-center justify-center text-neutral-500 text-xs">#{i + 1}</div>}
+                  <button onClick={() => removerImagem(i)} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-600 hover:bg-red-500 text-white text-xs leading-none">×</button>
+                </div>
+              ))}
               <div className="space-y-2">
-                {p?.imagem_url && !imagemId && (
-                  <button onClick={enviarImagemDoCatalogo} disabled={!lojaId || enviandoImagem} className="block px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs rounded-lg">
+                {p?.imagem_url && imagens.length < MAX_IMAGENS && (
+                  <button onClick={adicionarImagemDoCatalogo} disabled={!lojaId || enviandoImagem} className="block px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs rounded-lg">
                     {enviandoImagem ? "Enviando..." : "Usar imagem já cadastrada"}
                   </button>
                 )}
-                <label className="block px-3 py-1.5 bg-neutral-700 hover:bg-neutral-600 text-white text-xs rounded-lg cursor-pointer w-fit">
-                  {enviandoImagem ? "Enviando..." : "Enviar outra imagem"}
-                  <input type="file" accept="image/*" className="hidden" disabled={!lojaId || enviandoImagem}
-                    onChange={e => e.target.files?.[0] && enviarImagemArquivo(e.target.files[0])} />
-                </label>
-                {imagemId && <p className="text-[10px] text-emerald-500">✓ Imagem pronta para publicar</p>}
+                {imagens.length < MAX_IMAGENS && (
+                  <label className="block px-3 py-1.5 bg-neutral-700 hover:bg-neutral-600 text-white text-xs rounded-lg cursor-pointer w-fit">
+                    {enviandoImagem ? "Enviando..." : "Enviar outra imagem"}
+                    <input type="file" accept="image/*" className="hidden" disabled={!lojaId || enviandoImagem}
+                      onChange={e => e.target.files?.[0] && adicionarImagemArquivo(e.target.files[0])} />
+                  </label>
+                )}
+                {imagens.length > 0 && <p className="text-[10px] text-emerald-500">✓ {imagens.length}/{MAX_IMAGENS} imagens prontas</p>}
               </div>
             </div>
+            <p className="text-[10px] text-neutral-600">Vídeo e tabela de medidas não são suportados aqui (a Shopee exige um fluxo de upload próprio, em várias etapas) — gerencie esses dois pelo Seller Center da Shopee.</p>
           </Section>
 
           <Section title="5. Dados do Anúncio">
@@ -483,7 +670,37 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
                   <input type="number" placeholder="P" value={form.profundidade} onChange={e => setForm({ ...form, profundidade: e.target.value })} className={inputCls} />
                 </div>
               </InputGroup>
+              <InputGroup label="Condição">
+                <select value={condicao} onChange={e => setCondicao(e.target.value as "NEW" | "USED")} className={inputCls}>
+                  <option value="NEW">Novo</option>
+                  <option value="USED">Usado</option>
+                </select>
+              </InputGroup>
             </div>
+          </Section>
+
+          <Section title="6. Sob encomenda (opcional)">
+            <label className="flex items-center gap-2 text-sm text-neutral-300">
+              <input type="checkbox" checked={preOrderAtivo} onChange={e => setPreOrderAtivo(e.target.checked)} className="rounded" />
+              Este produto é sob encomenda (pré-venda)
+            </label>
+            {preOrderAtivo && (
+              <InputGroup label="Dias para envio">
+                <input type="number" value={diasParaEnvio} onChange={e => setDiasParaEnvio(e.target.value)} className={inputCls} />
+              </InputGroup>
+            )}
+          </Section>
+
+          <Section title="7. Preço por atacado (opcional)">
+            {wholesale.map((f, i) => (
+              <div key={i} className="grid grid-cols-4 gap-2 items-end">
+                <InputGroup label="Qtd. mínima"><input type="number" value={f.min} onChange={e => atualizarFaixaAtacado(i, "min", e.target.value)} className={inputCls} /></InputGroup>
+                <InputGroup label="Qtd. máxima (opcional)"><input type="number" value={f.max} onChange={e => atualizarFaixaAtacado(i, "max", e.target.value)} className={inputCls} /></InputGroup>
+                <InputGroup label="Preço unitário (R$)"><input type="number" value={f.preco} onChange={e => atualizarFaixaAtacado(i, "preco", e.target.value)} className={inputCls} /></InputGroup>
+                <button onClick={() => removerFaixaAtacado(i)} className="text-xs text-red-400 hover:text-red-300 pb-2">Remover</button>
+              </div>
+            ))}
+            <button onClick={adicionarFaixaAtacado} className="text-xs text-indigo-400 hover:text-indigo-300">+ Adicionar faixa de atacado</button>
           </Section>
 
           {bloqueioMargem && (
