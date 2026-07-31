@@ -66,13 +66,17 @@ class FakeDBProdutosLoja:
 
     async def fetch(self, query, *params):
         # Extract pagination and search params
-        # params structure: [loja, (optional)busca_pattern, ..., por_pagina, offset]
+        # params structure: [loja, (optional)busca_pattern, (optional)loja_estoque_resolvida, ..., por_pagina, offset]
+        # Nao da' pra inferir a presenca de busca por contagem de params (Task 8
+        # do vinculo fisica x virtual acrescentou um bind param extra pro JOIN
+        # com estoque_lojas, deslocando a contagem independente de haver busca
+        # ou nao) — em vez disso, identifica pelo formato: busca sempre vem
+        # como "%termo%" (a producao envolve com % nos dois lados), enquanto
+        # loja/loja_estoque_resolvida sao nomes literais de loja, sem %.
         loja = params[0]
-
-        # Check if busca pattern is present (if params length > 1, and not last two which are pagina/offset)
-        busca = None
-        if len(params) > 3:  # loja + busca + por_pagina + offset
-            busca = params[1]
+        busca = next(
+            (p for p in params[1:-2] if isinstance(p, str) and p.startswith("%") and p.endswith("%")),
+            None)
 
         # Extract pagination params (last two elements)
         por_pagina = params[-2]
