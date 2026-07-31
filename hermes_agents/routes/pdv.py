@@ -114,6 +114,13 @@ def pdv_relatorio_descontos():
 
 @pdv_bp.route('/quebras-caixa', methods=['GET'])
 def pdv_quebras_caixa():
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        return _pdv_quebras_caixa_impl()
+    return _handler()
+
+def _pdv_quebras_caixa_impl():
     from core.pdv import historico_quebras
     from core.rbac import usuario_atual_da_request
     from core.rbac_lojas import lojas_permitidas

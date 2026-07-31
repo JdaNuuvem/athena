@@ -31,6 +31,12 @@ interface Usuario {
   ativo: boolean;
 }
 
+interface LojaOpcao {
+  id: number;
+  nome: string;
+  ativa: boolean;
+}
+
 const TABS = [
   { key: "cargos", label: "Cargos" },
   { key: "usuarios", label: "Usuários" },
@@ -41,16 +47,18 @@ export default function RolesPage() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const [lojas, setLojas] = useState<LojaOpcao[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const carregar = () => {
     setLoading(true);
-    Promise.all([api.roles(), api.permissions(), api.rbacListUsuarios()])
-      .then(([rolesData, permsData, usersData]) => {
+    Promise.all([api.roles(), api.permissions(), api.rbacListUsuarios(), api.lojasManage()])
+      .then(([rolesData, permsData, usersData, lojasData]) => {
         setRoles(rolesData.roles || []);
         setPermissions(permsData.permissoes || []);
         setUsuarios(usersData.usuarios || []);
+        setLojas(lojasData.lojas || []);
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
@@ -80,7 +88,7 @@ export default function RolesPage() {
         <CargosTab roles={roles} permissions={permissions} onChanged={carregar} setError={setError} />
       )}
       {tab === "usuarios" && (
-        <UsuariosTab usuarios={usuarios} roles={roles} nomeDoRole={nomeDoRole} onChanged={carregar} setError={setError} />
+        <UsuariosTab usuarios={usuarios} roles={roles} lojas={lojas} nomeDoRole={nomeDoRole} onChanged={carregar} setError={setError} />
       )}
     </div>
   );
@@ -263,8 +271,8 @@ function CargosTab({ roles, permissions, onChanged, setError }: {
   );
 }
 
-function UsuariosTab({ usuarios, roles, nomeDoRole, onChanged, setError }: {
-  usuarios: Usuario[]; roles: Role[]; nomeDoRole: (id: number | null) => string; onChanged: () => void; setError: (e: string | null) => void;
+function UsuariosTab({ usuarios, roles, lojas, nomeDoRole, onChanged, setError }: {
+  usuarios: Usuario[]; roles: Role[]; lojas: LojaOpcao[]; nomeDoRole: (id: number | null) => string; onChanged: () => void; setError: (e: string | null) => void;
 }) {
   const [criando, setCriando] = useState(false);
   const [novo, setNovo] = useState({ nome: "", email: "", senha: "", role: "" });
@@ -275,6 +283,11 @@ function UsuariosTab({ usuarios, roles, nomeDoRole, onChanged, setError }: {
   const [pinAlvo, setPinAlvo] = useState<Usuario | null>(null);
   const [pin, setPin] = useState("");
   const [crachaGerado, setCrachaGerado] = useState<{ usuario: string; codigo: string } | null>(null);
+
+  const [lojasAlvo, setLojasAlvo] = useState<Usuario | null>(null);
+  const [lojasSelecionadas, setLojasSelecionadas] = useState<Set<number>>(new Set());
+  const [carregandoLojas, setCarregandoLojas] = useState(false);
+  const [salvandoLojas, setSalvandoLojas] = useState(false);
 
   const abrirCriar = () => { setNovo({ nome: "", email: "", senha: "", role: roles[0]?.nome || "" }); setCriando(true); };
 
@@ -338,6 +351,42 @@ function UsuariosTab({ usuarios, roles, nomeDoRole, onChanged, setError }: {
     }
   };
 
+  const abrirLojas = async (u: Usuario) => {
+    setLojasAlvo(u);
+    setLojasSelecionadas(new Set());
+    setCarregandoLojas(true);
+    try {
+      const r = await api.rbacListarLojasUsuario(u.id);
+      if (r.error) { setError(r.error); return; }
+      setLojasSelecionadas(new Set((r.lojas || []).map(l => l.id)));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setCarregandoLojas(false);
+    }
+  };
+
+  const toggleLoja = (id: number) => {
+    const next = new Set(lojasSelecionadas);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setLojasSelecionadas(next);
+  };
+
+  const salvarLojas = async () => {
+    if (!lojasAlvo) return;
+    setSalvandoLojas(true);
+    try {
+      const r = await api.rbacDefinirLojasUsuario(lojasAlvo.id, [...lojasSelecionadas]);
+      if (r.error) { setError(r.error); return; }
+      setLojasAlvo(null);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSalvandoLojas(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <Can permission="roles:manage">
@@ -373,6 +422,7 @@ function UsuariosTab({ usuarios, roles, nomeDoRole, onChanged, setError }: {
                 <td className="px-4 py-3 text-right space-x-3 whitespace-nowrap">
                   <Can permission="roles:manage">
                     <button onClick={() => abrirEditar(u)} className="text-indigo-400 hover:text-indigo-300 text-xs font-medium">Trocar cargo</button>
+                    <button onClick={() => abrirLojas(u)} className="text-indigo-400 hover:text-indigo-300 text-xs font-medium">Lojas</button>
                     <button onClick={() => abrirPin(u)} className="text-amber-400 hover:text-amber-300 text-xs font-medium">Definir PIN</button>
                     <button onClick={() => gerarCracha(u)} className="text-amber-400 hover:text-amber-300 text-xs font-medium">Gerar crachá</button>
                     <button onClick={() => alternarAtivo(u)} className="text-neutral-400 hover:text-neutral-200 text-xs font-medium">
@@ -421,6 +471,44 @@ function UsuariosTab({ usuarios, roles, nomeDoRole, onChanged, setError }: {
             <div className="flex justify-end gap-3 mt-4">
               <button onClick={() => setEditando(null)} className="px-4 py-2 text-sm text-neutral-400 hover:text-neutral-200">Cancelar</button>
               <button onClick={salvarRole} className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium">Salvar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {lojasAlvo && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setLojasAlvo(null)}>
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl w-full max-w-sm p-6 max-h-[80vh] overflow-auto" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-semibold text-neutral-200 mb-1">Lojas — {lojasAlvo.nome}</h3>
+            <p className="text-[11px] text-neutral-500 mb-3">
+              Marque as lojas que esta pessoa pode ver. Sem nenhuma marcada, ela não vê dado de loja nenhuma
+              (a menos que o cargo dela tenha a permissão &quot;Ver todas as lojas&quot;).
+            </p>
+            {carregandoLojas ? (
+              <LoadingState />
+            ) : (
+              <div className="space-y-1">
+                {lojas.map(l => (
+                  <label key={l.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-neutral-800/50 cursor-pointer text-sm">
+                    <input
+                      type="checkbox"
+                      checked={lojasSelecionadas.has(l.id)}
+                      onChange={() => toggleLoja(l.id)}
+                      className="rounded border-neutral-700 bg-neutral-800 text-indigo-600 focus:ring-indigo-600"
+                    />
+                    <span className="text-neutral-300">{l.nome}</span>
+                    {!l.ativa && <span className="text-neutral-600 text-xs ml-auto">inativa</span>}
+                  </label>
+                ))}
+                {lojas.length === 0 && <p className="text-xs text-neutral-500">Nenhuma loja cadastrada.</p>}
+              </div>
+            )}
+            <div className="flex justify-end gap-3 mt-4">
+              <button onClick={() => setLojasAlvo(null)} className="px-4 py-2 text-sm text-neutral-400 hover:text-neutral-200">Cancelar</button>
+              <button onClick={salvarLojas} disabled={salvandoLojas || carregandoLojas}
+                className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg font-medium">
+                {salvandoLojas ? "Salvando..." : "Salvar"}
+              </button>
             </div>
           </div>
         </div>

@@ -162,13 +162,17 @@ def shopee_oauth_callback():
 
 @shopee_bp.route('/auth-url', methods=['GET'])
 def shopee_auth_url():
-    from shopee import get_auth_url
-    sandbox = request.args.get("sandbox", "").lower() == "true"
-    loja_id = request.args.get("loja_id", type=int)
-    url = get_auth_url(sandbox=sandbox, loja_id=loja_id)
-    if not url:
-        return jsonify({"error": "Partner ID nao configurado"}), 400
-    return jsonify({"url": url})
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import get_auth_url
+        sandbox = request.args.get("sandbox", "").lower() == "true"
+        loja_id = request.args.get("loja_id", type=int)
+        url = get_auth_url(sandbox=sandbox, loja_id=loja_id)
+        if not url:
+            return jsonify({"error": "Partner ID nao configurado"}), 400
+        return jsonify({"url": url})
+    return _handler()
 
 @shopee_bp.route('/lojas', methods=['GET'])
 def shopee_listar_lojas():
@@ -177,25 +181,37 @@ def shopee_listar_lojas():
 
 @shopee_bp.route('/lojas/<int:loja_id>/conectar', methods=['POST'])
 def shopee_conectar_loja(loja_id):
-    from shopee import get_auth_url
-    sandbox = (request.json or {}).get("sandbox", False) if request.is_json else False
-    url = get_auth_url(sandbox=sandbox, loja_id=loja_id)
-    if not url:
-        return jsonify({"error": "Partner ID nao configurado"}), 400
-    return jsonify({"url": url})
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler(loja_id):
+        from shopee import get_auth_url
+        sandbox = (request.json or {}).get("sandbox", False) if request.is_json else False
+        url = get_auth_url(sandbox=sandbox, loja_id=loja_id)
+        if not url:
+            return jsonify({"error": "Partner ID nao configurado"}), 400
+        return jsonify({"url": url})
+    return _handler(loja_id=loja_id)
 
 @shopee_bp.route('/lojas/<int:loja_id>/renovar-token', methods=['POST'])
 def shopee_renovar_token(loja_id):
-    from shopee import refresh_shopee_token
-    try:
-        return jsonify(refresh_shopee_token(loja_id=loja_id))
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler(loja_id):
+        from shopee import refresh_shopee_token
+        try:
+            return jsonify(refresh_shopee_token(loja_id=loja_id))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return _handler(loja_id=loja_id)
 
 @shopee_bp.route('/lojas/<int:loja_id>', methods=['DELETE'])
 def shopee_desconectar_loja(loja_id):
-    from core.lojas import desconectar_shopee
-    return jsonify(desconectar_shopee(loja_id))
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler(loja_id):
+        from core.lojas import desconectar_shopee
+        return jsonify(desconectar_shopee(loja_id))
+    return _handler(loja_id=loja_id)
 
 @shopee_bp.route('/sync-log', methods=['GET'])
 def shopee_sync_log():
@@ -204,22 +220,30 @@ def shopee_sync_log():
 
 @shopee_bp.route('/produtos-sincronizados', methods=['GET'])
 def shopee_produtos_sincronizados():
-    from shopee_sync import listar_produtos_sincronizados
-    loja_id = request.args.get("loja_id", type=int)
-    if not loja_id:
-        return jsonify({"error": "loja_id obrigatorio"}), 400
-    return jsonify({"produtos": listar_produtos_sincronizados(loja_id)})
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee_sync import listar_produtos_sincronizados
+        loja_id = request.args.get("loja_id", type=int)
+        if not loja_id:
+            return jsonify({"error": "loja_id obrigatorio"}), 400
+        return jsonify({"produtos": listar_produtos_sincronizados(loja_id)})
+    return _handler()
 
 @shopee_bp.route('/pedidos', methods=['GET'])
 def shopee_listar_pedidos():
-    from shopee import listar_pedidos_shopee_detalhado
-    loja_id = request.args.get("loja_id", type=int)
-    dias = request.args.get("dias", 7, type=int)
-    status = request.args.get("status") or None
-    try:
-        return jsonify(listar_pedidos_shopee_detalhado(dias, loja_id=loja_id, status=status))
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import listar_pedidos_shopee_detalhado
+        loja_id = request.args.get("loja_id", type=int)
+        dias = request.args.get("dias", 7, type=int)
+        status = request.args.get("status") or None
+        try:
+            return jsonify(listar_pedidos_shopee_detalhado(dias, loja_id=loja_id, status=status))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return _handler()
 
 @shopee_bp.route('/dashboard', methods=['GET'])
 def shopee_dashboard_consolidado():
@@ -290,16 +314,20 @@ def shopee_sincronizar_estoque_todas():
 
 @shopee_bp.route('/margem', methods=['GET'])
 def shopee_verificar_margem():
-    from shopee import calcular_margem_produto
-    sku = request.args.get("sku", "")
-    preco = float(request.args.get("preco", 0))
-    loja_id = request.args.get("loja_id", type=int)
-    if not sku or not preco:
-        return jsonify({"error": "SKU e preco obrigatorios"}), 400
-    try:
-        return jsonify(calcular_margem_produto(sku, preco, loja_id=loja_id))
-    except Exception as e:
-        return jsonify({"error": str(e)})
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import calcular_margem_produto
+        sku = request.args.get("sku", "")
+        preco = float(request.args.get("preco", 0))
+        loja_id = request.args.get("loja_id", type=int)
+        if not sku or not preco:
+            return jsonify({"error": "SKU e preco obrigatorios"}), 400
+        try:
+            return jsonify(calcular_margem_produto(sku, preco, loja_id=loja_id))
+        except Exception as e:
+            return jsonify({"error": str(e)})
+    return _handler()
 
 @shopee_bp.route('/consistencia-precos', methods=['GET'])
 def shopee_consistencia_precos():
@@ -321,38 +349,50 @@ def shopee_sugestao_kits():
 
 @shopee_bp.route('/produtos/<int:item_id>/preco', methods=['POST'])
 def shopee_atualizar_preco(item_id):
-    from shopee import update_price
-    data = request.json or {}
-    loja_id = data.get("loja_id")
-    preco = data.get("price")
-    if preco is None:
-        return jsonify({"error": "price e obrigatorio"}), 400
-    try:
-        return jsonify(update_price(item_id, float(preco), loja_id=loja_id))
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import update_price
+        data = request.json or {}
+        loja_id = data.get("loja_id")
+        preco = data.get("price")
+        if preco is None:
+            return jsonify({"error": "price e obrigatorio"}), 400
+        try:
+            return jsonify(update_price(item_id, float(preco), loja_id=loja_id))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return _handler()
 
 @shopee_bp.route('/produtos/<int:item_id>/variacoes', methods=['GET'])
 def shopee_variacoes_produto(item_id):
-    from shopee import get_model_list
-    loja_id = request.args.get("loja_id", type=int)
-    try:
-        return jsonify(get_model_list(item_id, loja_id=loja_id))
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import get_model_list
+        loja_id = request.args.get("loja_id", type=int)
+        try:
+            return jsonify(get_model_list(item_id, loja_id=loja_id))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return _handler()
 
 @shopee_bp.route('/produtos/<sku>/estoque', methods=['PUT'])
 def shopee_atualizar_estoque_produto(sku):
-    from shopee import sincronizar_estoque_shopee
-    data = request.json or {}
-    loja_id = data.get("loja_id")
-    quantidade = data.get("quantidade")
-    if loja_id is None or quantidade is None:
-        return jsonify({"error": "loja_id e quantidade sao obrigatorios"}), 400
-    try:
-        return jsonify(sincronizar_estoque_shopee(sku, int(quantidade), loja_id=int(loja_id)))
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import sincronizar_estoque_shopee
+        data = request.json or {}
+        loja_id = data.get("loja_id")
+        quantidade = data.get("quantidade")
+        if loja_id is None or quantidade is None:
+            return jsonify({"error": "loja_id e quantidade sao obrigatorios"}), 400
+        try:
+            return jsonify(sincronizar_estoque_shopee(sku, int(quantidade), loja_id=int(loja_id)))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return _handler()
 
 @shopee_bp.route('/estoque/todas-lojas', methods=['POST'])
 def shopee_estoque_todas_lojas():
@@ -377,48 +417,64 @@ def shopee_categorias():
 
 @shopee_bp.route('/categorias/sincronizar', methods=['POST'])
 def shopee_categorias_sincronizar():
-    from shopee import sincronizar_categorias
-    data = request.json or {}
-    return jsonify(sincronizar_categorias(data.get("loja_id")))
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import sincronizar_categorias
+        data = request.json or {}
+        return jsonify(sincronizar_categorias(data.get("loja_id")))
+    return _handler()
 
 @shopee_bp.route('/categorias/<int:category_id>/atributos', methods=['GET'])
 def shopee_categoria_atributos(category_id):
-    from shopee import get_attribute_tree
-    loja_id = request.args.get("loja_id", type=int)
-    r = get_attribute_tree(category_id, loja_id=loja_id)
-    lista = r.get("response", {}).get("list", [])
-    brutos = lista[0].get("attribute_tree", []) if lista else []
-    atributos = [{
-        "attribute_id": a.get("attribute_id"),
-        "original_attribute_name": a.get("name", ""),
-        "is_mandatory": bool(a.get("mandatory", False)),
-        "attribute_value_list": [
-            {"value_id": v.get("value_id"), "original_value_name": v.get("name", "")}
-            for v in (a.get("attribute_value_list") or [])
-        ],
-    } for a in brutos]
-    return jsonify({"atributos": atributos, "erro": r.get("error") or None})
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import get_attribute_tree
+        loja_id = request.args.get("loja_id", type=int)
+        r = get_attribute_tree(category_id, loja_id=loja_id)
+        lista = r.get("response", {}).get("list", [])
+        brutos = lista[0].get("attribute_tree", []) if lista else []
+        atributos = [{
+            "attribute_id": a.get("attribute_id"),
+            "original_attribute_name": a.get("name", ""),
+            "is_mandatory": bool(a.get("mandatory", False)),
+            "attribute_value_list": [
+                {"value_id": v.get("value_id"), "original_value_name": v.get("name", "")}
+                for v in (a.get("attribute_value_list") or [])
+            ],
+        } for a in brutos]
+        return jsonify({"atributos": atributos, "erro": r.get("error") or None})
+    return _handler()
 
 @shopee_bp.route('/categorias/<int:category_id>/marcas', methods=['GET'])
 def shopee_categoria_marcas(category_id):
-    from shopee import get_brand_list
-    loja_id = request.args.get("loja_id", type=int)
-    r = get_brand_list(category_id, loja_id=loja_id)
-    resp = r.get("response", {})
-    return jsonify({"marcas": resp.get("brand_list", []), "obrigatorio": resp.get("is_mandatory", False), "erro": r.get("error") or None})
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import get_brand_list
+        loja_id = request.args.get("loja_id", type=int)
+        r = get_brand_list(category_id, loja_id=loja_id)
+        resp = r.get("response", {})
+        return jsonify({"marcas": resp.get("brand_list", []), "obrigatorio": resp.get("is_mandatory", False), "erro": r.get("error") or None})
+    return _handler()
 
 @shopee_bp.route('/logistica/canais', methods=['GET'])
 def shopee_logistica_canais():
-    from shopee import get_logistics_channel_list
-    loja_id = request.args.get("loja_id", type=int)
-    r = get_logistics_channel_list(loja_id=loja_id)
-    canais_brutos = r.get("response", {}).get("logistics_channel_list", [])
-    canais = [{
-        "logistic_id": c.get("logistics_channel_id"),
-        "logistic_name": c.get("logistics_channel_name", ""),
-        "enabled": bool(c.get("enabled", False)),
-    } for c in canais_brutos]
-    return jsonify({"canais": canais, "erro": r.get("error") or None})
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import get_logistics_channel_list
+        loja_id = request.args.get("loja_id", type=int)
+        r = get_logistics_channel_list(loja_id=loja_id)
+        canais_brutos = r.get("response", {}).get("logistics_channel_list", [])
+        canais = [{
+            "logistic_id": c.get("logistics_channel_id"),
+            "logistic_name": c.get("logistics_channel_name", ""),
+            "enabled": bool(c.get("enabled", False)),
+        } for c in canais_brutos]
+        return jsonify({"canais": canais, "erro": r.get("error") or None})
+    return _handler()
 
 @shopee_bp.route('/upload-imagem', methods=['POST'])
 def shopee_upload_imagem():
@@ -451,55 +507,75 @@ def shopee_upload_imagem():
 
 @shopee_bp.route('/produtos', methods=['POST'])
 def shopee_criar_produto():
-    from shopee import add_item, calcular_margem_produto
-    data = request.json or {}
-    loja_id = data.pop("loja_id", None)
-    if loja_id is None:
-        return jsonify({"error": "loja_id e obrigatorio"}), 400
-    forcar = bool(data.pop("forcar_publicacao", False))
-    sku = data.get("item_sku", "")
-    preco = data.get("original_price", 0)
-    if sku and preco and not forcar:
-        margem = calcular_margem_produto(sku, float(preco), loja_id=int(loja_id))
-        if not margem.get("ok"):
-            return jsonify({"error": margem["mensagem"], "margem": margem, "bloqueado_por_margem": True}), 400
-    return jsonify(add_item(data, loja_id=int(loja_id)))
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import add_item, calcular_margem_produto
+        data = request.json or {}
+        loja_id = data.pop("loja_id", None)
+        if loja_id is None:
+            return jsonify({"error": "loja_id e obrigatorio"}), 400
+        forcar = bool(data.pop("forcar_publicacao", False))
+        sku = data.get("item_sku", "")
+        preco = data.get("original_price", 0)
+        if sku and preco and not forcar:
+            margem = calcular_margem_produto(sku, float(preco), loja_id=int(loja_id))
+            if not margem.get("ok"):
+                return jsonify({"error": margem["mensagem"], "margem": margem, "bloqueado_por_margem": True}), 400
+        return jsonify(add_item(data, loja_id=int(loja_id)))
+    return _handler()
 
 @shopee_bp.route('/produtos/<int:item_id>', methods=['GET'])
 def shopee_detalhe_produto(item_id):
-    from shopee import get_item_base_info
-    loja_id = request.args.get("loja_id", type=int)
-    try:
-        r = get_item_base_info([item_id], loja_id=loja_id)
-        itens = (r.get("response", {}) or {}).get("item_list", [])
-        if not itens:
-            return jsonify({"error": "Item nao encontrado"}), 404
-        return jsonify({"item": itens[0]})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import get_item_base_info
+        loja_id = request.args.get("loja_id", type=int)
+        try:
+            r = get_item_base_info([item_id], loja_id=loja_id)
+            itens = (r.get("response", {}) or {}).get("item_list", [])
+            if not itens:
+                return jsonify({"error": "Item nao encontrado"}), 404
+            return jsonify({"item": itens[0]})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return _handler()
 
 @shopee_bp.route('/produtos/<int:item_id>', methods=['PUT'])
 def shopee_editar_produto(item_id):
-    from shopee import update_item
-    data = request.json or {}
-    loja_id = data.pop("loja_id", None)
-    if loja_id is None:
-        return jsonify({"error": "loja_id e obrigatorio"}), 400
-    return jsonify(update_item(item_id, data, loja_id=int(loja_id)))
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import update_item
+        data = request.json or {}
+        loja_id = data.pop("loja_id", None)
+        if loja_id is None:
+            return jsonify({"error": "loja_id e obrigatorio"}), 400
+        return jsonify(update_item(item_id, data, loja_id=int(loja_id)))
+    return _handler()
 
 @shopee_bp.route('/produtos/<int:item_id>', methods=['DELETE'])
 def shopee_deletar_produto(item_id):
-    from shopee import delete_item_shopee
-    loja_id = request.args.get("loja_id", type=int)
-    return jsonify(delete_item_shopee(item_id, loja_id=loja_id))
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import delete_item_shopee
+        loja_id = request.args.get("loja_id", type=int)
+        return jsonify(delete_item_shopee(item_id, loja_id=loja_id))
+    return _handler()
 
 @shopee_bp.route('/produtos/<int:item_id>/unlist', methods=['POST'])
 def shopee_unlist_produto(item_id):
-    from shopee import unlist_item
-    data = request.json or {}
-    loja_id = data.get("loja_id")
-    unlist = data.get("unlist", True)
-    return jsonify(unlist_item([item_id], unlist=unlist, loja_id=loja_id))
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import unlist_item
+        data = request.json or {}
+        loja_id = data.get("loja_id")
+        unlist = data.get("unlist", True)
+        return jsonify(unlist_item([item_id], unlist=unlist, loja_id=loja_id))
+    return _handler()
 
 @shopee_bp.route('/produtos/<int:item_id>/clonar-para-loja', methods=['POST'])
 def shopee_clonar_produto_para_loja(item_id):
@@ -553,8 +629,9 @@ def shopee_criar_variacoes_produto(item_id):
     """Cria a estrutura de variacao (tiers + modelos) de um item ja publicado
     sem variacao — so' pode ser chamado 1x por item (ver init_tier_variation)."""
     from shopee import init_tier_variation
-    from core.rbac import requer_permissao
+    from core.rbac import requer_permissao, requer_acesso_loja
 
+    @requer_acesso_loja
     @requer_permissao("produtos.criar")
     def _handler():
         data = request.json or {}
@@ -576,8 +653,9 @@ def shopee_criar_variacoes_produto(item_id):
 def shopee_adicionar_variacao_produto(item_id):
     """Adiciona novo(s) modelo(s) a um item que ja tem tier_variation definida."""
     from shopee import add_model
-    from core.rbac import requer_permissao
+    from core.rbac import requer_permissao, requer_acesso_loja
 
+    @requer_acesso_loja
     @requer_permissao("produtos.criar")
     def _handler():
         data = request.json or {}
@@ -599,8 +677,9 @@ def shopee_atualizar_variacoes_produto(item_id):
     """Adiciona/remove/reordena as opcoes de um tier existente, preservando os
     model_id ja criados (model_list mapeia tier_index -> model_id)."""
     from shopee import update_tier_variation
-    from core.rbac import requer_permissao
+    from core.rbac import requer_permissao, requer_acesso_loja
 
+    @requer_acesso_loja
     @requer_permissao("produtos.editar")
     def _handler():
         data = request.json or {}
@@ -640,6 +719,559 @@ def shopee_remover_variacao_produto(item_id):
             resultados = [{"model_id": mid, **delete_model(item_id, mid, loja_id=int(loja_id))} for mid in model_id_list]
             erros = [r for r in resultados if r.get("error")]
             return jsonify({"resultados": resultados, "sucesso": len(resultados) - len(erros), "total": len(resultados)})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    return _handler()
+
+
+# ===========================================================================
+# Account Health — saude da loja (100% leitura)
+# ===========================================================================
+
+@shopee_bp.route('/saude/performance', methods=['GET'])
+def shopee_saude_performance():
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import get_shop_performance
+        loja_id = request.args.get("loja_id", type=int)
+        try:
+            return jsonify(get_shop_performance(loja_id=loja_id))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return _handler()
+
+@shopee_bp.route('/saude/metrica/<int:metric_id>', methods=['GET'])
+def shopee_saude_metrica(metric_id):
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import get_metric_source_detail
+        loja_id = request.args.get("loja_id", type=int)
+        page_no = request.args.get("page_no", 1, type=int)
+        page_size = request.args.get("page_size", 20, type=int)
+        try:
+            return jsonify(get_metric_source_detail(metric_id, page_no=page_no, page_size=page_size, loja_id=loja_id))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return _handler()
+
+@shopee_bp.route('/saude/penalidades', methods=['GET'])
+def shopee_saude_penalidades():
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import get_penalty_point_history
+        loja_id = request.args.get("loja_id", type=int)
+        page_no = request.args.get("page_no", 1, type=int)
+        page_size = request.args.get("page_size", 10, type=int)
+        violation_type = request.args.get("violation_type", type=int)
+        try:
+            return jsonify(get_penalty_point_history(page_no=page_no, page_size=page_size, violation_type=violation_type, loja_id=loja_id))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return _handler()
+
+@shopee_bp.route('/saude/punicoes', methods=['GET'])
+def shopee_saude_punicoes():
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import get_punishment_history
+        loja_id = request.args.get("loja_id", type=int)
+        punishment_status = request.args.get("punishment_status", 1, type=int)
+        page_no = request.args.get("page_no", 1, type=int)
+        page_size = request.args.get("page_size", 10, type=int)
+        try:
+            return jsonify(get_punishment_history(punishment_status, page_no=page_no, page_size=page_size, loja_id=loja_id))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return _handler()
+
+@shopee_bp.route('/saude/anuncios-com-problema', methods=['GET'])
+def shopee_saude_listagens():
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import get_listings_with_issues
+        loja_id = request.args.get("loja_id", type=int)
+        page_no = request.args.get("page_no", 1, type=int)
+        page_size = request.args.get("page_size", 20, type=int)
+        try:
+            return jsonify(get_listings_with_issues(page_no=page_no, page_size=page_size, loja_id=loja_id))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return _handler()
+
+@shopee_bp.route('/saude/pedidos-atrasados', methods=['GET'])
+def shopee_saude_pedidos_atrasados():
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import get_late_orders
+        loja_id = request.args.get("loja_id", type=int)
+        page_no = request.args.get("page_no", 1, type=int)
+        page_size = request.args.get("page_size", 20, type=int)
+        try:
+            return jsonify(get_late_orders(page_no=page_no, page_size=page_size, loja_id=loja_id))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return _handler()
+
+
+# ===========================================================================
+# Logistics — etiqueta de envio e rastreio
+# ===========================================================================
+
+@shopee_bp.route('/logistica/parametro-envio', methods=['GET'])
+def shopee_logistica_parametro_envio():
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import get_shipping_parameter
+        loja_id = request.args.get("loja_id", type=int)
+        order_sn = request.args.get("order_sn", "")
+        package_number = request.args.get("package_number")
+        if not order_sn:
+            return jsonify({"error": "order_sn e obrigatorio"}), 400
+        try:
+            return jsonify(get_shipping_parameter(order_sn, loja_id=loja_id, package_number=package_number))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return _handler()
+
+@shopee_bp.route('/logistica/despachar', methods=['POST'])
+def shopee_logistica_despachar():
+    """Aciona coleta/dropoff/postagem REAL — irreversivel (a Shopee rejeita
+    'ja despachado' se chamado 2x pro mesmo pacote)."""
+    from shopee import mass_ship_order
+    from core.rbac import requer_permissao, requer_acesso_loja
+
+    @requer_acesso_loja
+    @requer_permissao("produtos.editar")
+    def _handler():
+        data = request.json or {}
+        loja_id = data.get("loja_id")
+        package_list = data.get("package_list")
+        if loja_id is None:
+            return jsonify({"error": "loja_id e obrigatorio"}), 400
+        if not package_list:
+            return jsonify({"error": "package_list e obrigatorio"}), 400
+        try:
+            return jsonify(mass_ship_order(
+                package_list, loja_id=int(loja_id),
+                logistics_channel_id=data.get("logistics_channel_id"),
+                product_location_id=data.get("product_location_id"),
+            ))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    return _handler()
+
+@shopee_bp.route('/logistica/numero-rastreio', methods=['GET'])
+def shopee_logistica_numero_rastreio():
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import get_tracking_number
+        loja_id = request.args.get("loja_id", type=int)
+        order_sn = request.args.get("order_sn", "")
+        package_number = request.args.get("package_number")
+        if not order_sn:
+            return jsonify({"error": "order_sn e obrigatorio"}), 400
+        try:
+            return jsonify(get_tracking_number(order_sn, loja_id=loja_id, package_number=package_number))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return _handler()
+
+@shopee_bp.route('/logistica/parametro-documento', methods=['POST'])
+def shopee_logistica_parametro_documento():
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import get_shipping_document_parameter
+        data = request.json or {}
+        loja_id = data.get("loja_id")
+        order_list = data.get("order_list")
+        if loja_id is None or not order_list:
+            return jsonify({"error": "loja_id e order_list sao obrigatorios"}), 400
+        try:
+            return jsonify(get_shipping_document_parameter(order_list, loja_id=int(loja_id)))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return _handler()
+
+@shopee_bp.route('/logistica/criar-documento', methods=['POST'])
+def shopee_logistica_criar_documento():
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import create_shipping_document
+        data = request.json or {}
+        loja_id = data.get("loja_id")
+        order_list = data.get("order_list")
+        if loja_id is None or not order_list:
+            return jsonify({"error": "loja_id e order_list sao obrigatorios"}), 400
+        try:
+            return jsonify(create_shipping_document(order_list, loja_id=int(loja_id), shipping_document_type=data.get("shipping_document_type")))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return _handler()
+
+@shopee_bp.route('/logistica/status-documento', methods=['POST'])
+def shopee_logistica_status_documento():
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import get_shipping_document_result
+        data = request.json or {}
+        loja_id = data.get("loja_id")
+        order_list = data.get("order_list")
+        if loja_id is None or not order_list:
+            return jsonify({"error": "loja_id e order_list sao obrigatorios"}), 400
+        try:
+            return jsonify(get_shipping_document_result(order_list, loja_id=int(loja_id)))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return _handler()
+
+@shopee_bp.route('/logistica/baixar-documento', methods=['POST'])
+def shopee_logistica_baixar_documento():
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import download_shipping_document
+        data = request.json or {}
+        loja_id = data.get("loja_id")
+        order_list = data.get("order_list")
+        if loja_id is None or not order_list:
+            return jsonify({"error": "loja_id e order_list sao obrigatorios"}), 400
+        try:
+            r = download_shipping_document(order_list, loja_id=int(loja_id))
+            if r.get("error"):
+                return jsonify(r), 400
+            from flask import Response
+            return Response(r["content"], mimetype=r.get("content_type", "application/pdf"))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return _handler()
+
+@shopee_bp.route('/logistica/rastreio', methods=['GET'])
+def shopee_logistica_rastreio():
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import get_tracking_info
+        loja_id = request.args.get("loja_id", type=int)
+        order_sn = request.args.get("order_sn", "")
+        package_number = request.args.get("package_number")
+        if not order_sn:
+            return jsonify({"error": "order_sn e obrigatorio"}), 400
+        try:
+            return jsonify(get_tracking_info(order_sn, loja_id=loja_id, package_number=package_number))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return _handler()
+
+
+# ===========================================================================
+# Discount — desconto por item com janela de tempo
+# ===========================================================================
+
+@shopee_bp.route('/descontos', methods=['GET'])
+def shopee_listar_descontos():
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import get_discount_list
+        loja_id = request.args.get("loja_id", type=int)
+        status = request.args.get("status", "all")
+        page_no = request.args.get("page_no", 1, type=int)
+        page_size = request.args.get("page_size", 50, type=int)
+        try:
+            return jsonify(get_discount_list(status, page_no=page_no, page_size=page_size, loja_id=loja_id))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return _handler()
+
+@shopee_bp.route('/descontos/<int:discount_id>', methods=['GET'])
+def shopee_detalhe_desconto(discount_id):
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import get_discount
+        loja_id = request.args.get("loja_id", type=int)
+        page_no = request.args.get("page_no", 1, type=int)
+        page_size = request.args.get("page_size", 50, type=int)
+        try:
+            return jsonify(get_discount(discount_id, page_no=page_no, page_size=page_size, loja_id=loja_id))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return _handler()
+
+@shopee_bp.route('/descontos', methods=['POST'])
+def shopee_criar_desconto():
+    from shopee import add_discount
+    from core.rbac import requer_permissao, requer_acesso_loja
+
+    @requer_acesso_loja
+    @requer_permissao("produtos.criar")
+    def _handler():
+        data = request.json or {}
+        loja_id = data.get("loja_id")
+        discount_name = data.get("discount_name", "")
+        start_time = data.get("start_time")
+        end_time = data.get("end_time")
+        if loja_id is None or not discount_name or not start_time or not end_time:
+            return jsonify({"error": "loja_id, discount_name, start_time e end_time sao obrigatorios"}), 400
+        try:
+            return jsonify(add_discount(discount_name, int(start_time), int(end_time), loja_id=int(loja_id)))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    return _handler()
+
+@shopee_bp.route('/descontos/<int:discount_id>/itens', methods=['POST'])
+def shopee_adicionar_item_desconto(discount_id):
+    from shopee import add_discount_item
+    from core.rbac import requer_permissao, requer_acesso_loja
+
+    @requer_acesso_loja
+    @requer_permissao("produtos.criar")
+    def _handler():
+        data = request.json or {}
+        loja_id = data.get("loja_id")
+        item_list = data.get("item_list")
+        if loja_id is None or not item_list:
+            return jsonify({"error": "loja_id e item_list sao obrigatorios"}), 400
+        try:
+            return jsonify(add_discount_item(discount_id, item_list, loja_id=int(loja_id)))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    return _handler()
+
+@shopee_bp.route('/descontos/<int:discount_id>', methods=['PUT'])
+def shopee_atualizar_desconto(discount_id):
+    from shopee import update_discount
+    from core.rbac import requer_permissao, requer_acesso_loja
+
+    @requer_acesso_loja
+    @requer_permissao("produtos.editar")
+    def _handler():
+        data = request.json or {}
+        loja_id = data.get("loja_id")
+        if loja_id is None:
+            return jsonify({"error": "loja_id e obrigatorio"}), 400
+        try:
+            return jsonify(update_discount(
+                discount_id, loja_id=int(loja_id), discount_name=data.get("discount_name"),
+                start_time=data.get("start_time"), end_time=data.get("end_time"),
+            ))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    return _handler()
+
+@shopee_bp.route('/descontos/<int:discount_id>/itens', methods=['PUT'])
+def shopee_atualizar_item_desconto(discount_id):
+    from shopee import update_discount_item
+    from core.rbac import requer_permissao, requer_acesso_loja
+
+    @requer_acesso_loja
+    @requer_permissao("produtos.editar")
+    def _handler():
+        data = request.json or {}
+        loja_id = data.get("loja_id")
+        item_list = data.get("item_list")
+        if loja_id is None or not item_list:
+            return jsonify({"error": "loja_id e item_list sao obrigatorios"}), 400
+        try:
+            return jsonify(update_discount_item(discount_id, item_list, loja_id=int(loja_id)))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    return _handler()
+
+@shopee_bp.route('/descontos/<int:discount_id>', methods=['DELETE'])
+def shopee_deletar_desconto(discount_id):
+    """So' funciona em desconto 'upcoming'. Irreversivel."""
+    from shopee import delete_discount
+    from core.rbac import requer_permissao, requer_acesso_loja
+
+    @requer_acesso_loja
+    @requer_permissao("produtos.editar")
+    def _handler():
+        loja_id = request.args.get("loja_id", type=int)
+        if loja_id is None:
+            return jsonify({"error": "loja_id e obrigatorio"}), 400
+        try:
+            return jsonify(delete_discount(discount_id, loja_id=loja_id))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    return _handler()
+
+@shopee_bp.route('/descontos/<int:discount_id>/itens/<int:item_id>', methods=['DELETE'])
+def shopee_deletar_item_desconto(discount_id, item_id):
+    from shopee import delete_discount_item
+    from core.rbac import requer_permissao, requer_acesso_loja
+
+    @requer_acesso_loja
+    @requer_permissao("produtos.editar")
+    def _handler():
+        loja_id = request.args.get("loja_id", type=int)
+        model_id = request.args.get("model_id", 0, type=int)
+        if loja_id is None:
+            return jsonify({"error": "loja_id e obrigatorio"}), 400
+        try:
+            return jsonify(delete_discount_item(discount_id, item_id, loja_id=loja_id, model_id=model_id))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    return _handler()
+
+@shopee_bp.route('/descontos/<int:discount_id>/encerrar', methods=['POST'])
+def shopee_encerrar_desconto(discount_id):
+    """TERMINAL/IRREVERSIVEL — depois de encerrado, a Shopee nao aceita mais update
+    nem delete neste desconto. A UI precisa exigir confirmacao explicita antes de chamar."""
+    from shopee import end_discount
+    from core.rbac import requer_permissao, requer_acesso_loja
+
+    @requer_acesso_loja
+    @requer_permissao("produtos.editar")
+    def _handler():
+        data = request.json or {}
+        loja_id = data.get("loja_id")
+        if loja_id is None:
+            return jsonify({"error": "loja_id e obrigatorio"}), 400
+        try:
+            return jsonify(end_discount(discount_id, loja_id=int(loja_id)))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    return _handler()
+
+
+# ===========================================================================
+# Voucher — cupom de loja/produto
+# ===========================================================================
+
+@shopee_bp.route('/vouchers', methods=['GET'])
+def shopee_listar_vouchers():
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import get_voucher_list
+        loja_id = request.args.get("loja_id", type=int)
+        status = request.args.get("status", "all")
+        page_no = request.args.get("page_no", 1, type=int)
+        page_size = request.args.get("page_size", 20, type=int)
+        try:
+            return jsonify(get_voucher_list(status, page_no=page_no, page_size=page_size, loja_id=loja_id))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return _handler()
+
+@shopee_bp.route('/vouchers/<int:voucher_id>', methods=['GET'])
+def shopee_detalhe_voucher(voucher_id):
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee import get_voucher
+        loja_id = request.args.get("loja_id", type=int)
+        try:
+            return jsonify(get_voucher(voucher_id, loja_id=loja_id))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return _handler()
+
+@shopee_bp.route('/vouchers', methods=['POST'])
+def shopee_criar_voucher():
+    from shopee import add_voucher
+    from core.rbac import requer_permissao, requer_acesso_loja
+
+    @requer_acesso_loja
+    @requer_permissao("produtos.criar")
+    def _handler():
+        data = request.json or {}
+        loja_id = data.get("loja_id")
+        campos_obrigatorios = ["voucher_name", "voucher_code", "start_time", "end_time",
+                                "voucher_type", "reward_type", "usage_quantity", "min_basket_price"]
+        faltando = [c for c in campos_obrigatorios if data.get(c) in (None, "")]
+        if loja_id is None or faltando:
+            return jsonify({"error": f"loja_id e obrigatorio; campos faltando: {faltando}" if faltando else "loja_id e obrigatorio"}), 400
+        try:
+            return jsonify(add_voucher(
+                data["voucher_name"], data["voucher_code"], int(data["start_time"]), int(data["end_time"]),
+                int(data["voucher_type"]), int(data["reward_type"]), int(data["usage_quantity"]),
+                float(data["min_basket_price"]), loja_id=int(loja_id),
+                discount_amount=data.get("discount_amount"), percentage=data.get("percentage"),
+                max_price=data.get("max_price"), display_channel_list=data.get("display_channel_list"),
+                item_id_list=data.get("item_id_list"), display_start_time=data.get("display_start_time"),
+            ))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    return _handler()
+
+@shopee_bp.route('/vouchers/<int:voucher_id>', methods=['PUT'])
+def shopee_atualizar_voucher(voucher_id):
+    from shopee import update_voucher
+    from core.rbac import requer_permissao, requer_acesso_loja
+
+    @requer_acesso_loja
+    @requer_permissao("produtos.editar")
+    def _handler():
+        data = request.json or {}
+        loja_id = data.get("loja_id")
+        if loja_id is None:
+            return jsonify({"error": "loja_id e obrigatorio"}), 400
+        try:
+            campos = {k: v for k, v in data.items() if k != "loja_id"}
+            return jsonify(update_voucher(voucher_id, loja_id=int(loja_id), **campos))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    return _handler()
+
+@shopee_bp.route('/vouchers/<int:voucher_id>/encerrar', methods=['POST'])
+def shopee_encerrar_voucher(voucher_id):
+    """TERMINAL/IRREVERSIVEL — vira 'expired' pra sempre. A UI precisa exigir
+    confirmacao explicita antes de chamar."""
+    from shopee import end_voucher
+    from core.rbac import requer_permissao, requer_acesso_loja
+
+    @requer_acesso_loja
+    @requer_permissao("produtos.editar")
+    def _handler():
+        data = request.json or {}
+        loja_id = data.get("loja_id")
+        if loja_id is None:
+            return jsonify({"error": "loja_id e obrigatorio"}), 400
+        try:
+            return jsonify(end_voucher(voucher_id, loja_id=int(loja_id)))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    return _handler()
+
+@shopee_bp.route('/vouchers/<int:voucher_id>', methods=['DELETE'])
+def shopee_deletar_voucher(voucher_id):
+    """So' funciona em voucher 'upcoming'. Irreversivel."""
+    from shopee import delete_voucher
+    from core.rbac import requer_permissao, requer_acesso_loja
+
+    @requer_acesso_loja
+    @requer_permissao("produtos.editar")
+    def _handler():
+        loja_id = request.args.get("loja_id", type=int)
+        if loja_id is None:
+            return jsonify({"error": "loja_id e obrigatorio"}), 400
+        try:
+            return jsonify(delete_voucher(voucher_id, loja_id=loja_id))
         except Exception as e:
             return jsonify({"error": str(e)}), 500
 

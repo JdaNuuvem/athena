@@ -77,6 +77,31 @@ def rbac_gerar_codigo_barras(id):
     return jsonify(gerar_codigo_barras_usuario(id))
 
 
+@rbac_bp.route("/usuarios/<int:id>/lojas", methods=["GET"])
+@requer_permissao("configuracoes.ver")
+def rbac_listar_lojas_usuario(id):
+    from core.usuario_lojas import listar_lojas_do_usuario
+    return jsonify({"lojas": listar_lojas_do_usuario(id)})
+
+
+@rbac_bp.route("/usuarios/<int:id>/lojas", methods=["PUT"])
+@requer_permissao("configuracoes.editar")
+def rbac_definir_lojas_usuario(id):
+    data = request.json or {}
+    from core.usuario_lojas import substituir_vinculos
+    loja_ids = data.get("loja_ids")
+    if not isinstance(loja_ids, list):
+        return jsonify({"error": "loja_ids deve ser uma lista"}), 400
+    try:
+        loja_ids = [int(v) for v in loja_ids]
+    except (TypeError, ValueError):
+        return jsonify({"error": "loja_ids deve conter apenas numeros"}), 400
+    resultado = substituir_vinculos(id, loja_ids)
+    if resultado.get("error"):
+        return jsonify(resultado), 500
+    return jsonify(resultado)
+
+
 @rbac_bp.route("/autorizar", methods=["POST"])
 def rbac_autorizar():
     """Resolve uma autorizacao gerencial (PIN ou cracha) para uma permissao

@@ -5,33 +5,49 @@ relatorios_bp = Blueprint("relatorios", __name__, url_prefix="/api/relatorios")
 
 @relatorios_bp.route("/vendas", methods=["GET"])
 def rel_vendas():
-    from core.relatorios import vendas
-    dias = request.args.get("dias", 30, type=int)
-    loja_id = request.args.get("loja_id", type=int) or request.args.get("loja", type=int)
-    return jsonify(vendas(dias, loja_id))
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from core.relatorios import vendas
+        dias = request.args.get("dias", 30, type=int)
+        loja_id = request.args.get("loja_id", type=int) or request.args.get("loja", type=int)
+        return jsonify(vendas(dias, loja_id))
+    return _handler()
 
 
 @relatorios_bp.route("/lucro", methods=["GET"])
 def rel_lucro():
-    from core.relatorios import lucro_margem
-    dias = request.args.get("dias", 30, type=int)
-    loja_id = request.args.get("loja_id", type=int) or request.args.get("loja", type=int)
-    return jsonify(lucro_margem(dias, loja_id))
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from core.relatorios import lucro_margem
+        dias = request.args.get("dias", 30, type=int)
+        loja_id = request.args.get("loja_id", type=int) or request.args.get("loja", type=int)
+        return jsonify(lucro_margem(dias, loja_id))
+    return _handler()
 
 
 @relatorios_bp.route("/estoque", methods=["GET"])
 def rel_estoque():
-    from core.relatorios import estoque
-    loja_id = request.args.get("loja_id", type=int) or request.args.get("loja", type=int)
-    return jsonify(estoque(loja_id))
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from core.relatorios import estoque
+        loja_id = request.args.get("loja_id", type=int) or request.args.get("loja", type=int)
+        return jsonify(estoque(loja_id))
+    return _handler()
 
 
 @relatorios_bp.route("/clientes", methods=["GET"])
 def rel_clientes():
-    from core.relatorios import clientes
-    dias = request.args.get("dias", 90, type=int)
-    loja_id = request.args.get("loja_id", type=int) or request.args.get("loja", type=int)
-    return jsonify(clientes(dias, loja_id))
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from core.relatorios import clientes
+        dias = request.args.get("dias", 90, type=int)
+        loja_id = request.args.get("loja_id", type=int) or request.args.get("loja", type=int)
+        return jsonify(clientes(dias, loja_id))
+    return _handler()
 
 
 @relatorios_bp.route("/fornecedores", methods=["GET"])
@@ -48,34 +64,50 @@ def rel_aging():
 
 @relatorios_bp.route("/fluxo-caixa", methods=["GET"])
 def rel_fluxo():
-    from core.relatorios import fluxo_caixa
-    dias = request.args.get("dias", 30, type=int)
-    loja_id = request.args.get("loja_id", type=int) or request.args.get("loja", type=int)
-    return jsonify(fluxo_caixa(dias, loja_id))
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from core.relatorios import fluxo_caixa
+        dias = request.args.get("dias", 30, type=int)
+        loja_id = request.args.get("loja_id", type=int) or request.args.get("loja", type=int)
+        return jsonify(fluxo_caixa(dias, loja_id))
+    return _handler()
 
 
 @relatorios_bp.route("/ticket-medio", methods=["GET"])
 def rel_ticket():
-    from core.relatorios import ticket_medio
-    dias = request.args.get("dias", 30, type=int)
-    loja_id = request.args.get("loja_id", type=int) or request.args.get("loja", type=int)
-    return jsonify(ticket_medio(dias, loja_id))
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from core.relatorios import ticket_medio
+        dias = request.args.get("dias", 30, type=int)
+        loja_id = request.args.get("loja_id", type=int) or request.args.get("loja", type=int)
+        return jsonify(ticket_medio(dias, loja_id))
+    return _handler()
 
 
 @relatorios_bp.route("/dre", methods=["GET"])
 def rel_dre():
-    from core.relatorios import dre
-    dias = request.args.get("dias", 30, type=int)
-    loja_id = request.args.get("loja_id", type=int) or request.args.get("loja", type=int)
-    return jsonify(dre(dias, loja_id))
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from core.relatorios import dre
+        dias = request.args.get("dias", 30, type=int)
+        loja_id = request.args.get("loja_id", type=int) or request.args.get("loja", type=int)
+        return jsonify(dre(dias, loja_id))
+    return _handler()
 
 
 @relatorios_bp.route("/previsao", methods=["GET"])
 def rel_previsao():
-    from core.relatorios import previsao
-    dias = request.args.get("dias", 30, type=int)
-    loja_id = request.args.get("loja_id", type=int) or request.args.get("loja", type=int)
-    return jsonify(previsao(dias, loja_id))
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from core.relatorios import previsao
+        dias = request.args.get("dias", 30, type=int)
+        loja_id = request.args.get("loja_id", type=int) or request.args.get("loja", type=int)
+        return jsonify(previsao(dias, loja_id))
+    return _handler()
 
 
 @relatorios_bp.route("/compras", methods=["GET"])

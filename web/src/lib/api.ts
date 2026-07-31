@@ -294,6 +294,105 @@ export const api = {
   shopeeDashboard: (dias?: number) =>
     request<{ lojas: ShopeeDashboardLoja[]; dias: number; error?: string }>(`/api/shopee/dashboard${dias ? `?dias=${dias}` : ""}`),
 
+  // Shopee — Account Health (saude da loja, 100% leitura)
+  shopeeSaudePerformance: (lojaId: number) =>
+    request<{ response?: ShopeeShopPerformance; error?: string }>(`/api/shopee/saude/performance?loja_id=${lojaId}`),
+  shopeeSaudeMetrica: (lojaId: number, metricId: number, pageNo = 1, pageSize = 20) =>
+    request<{ response?: Record<string, unknown>; error?: string }>(`/api/shopee/saude/metrica/${metricId}?loja_id=${lojaId}&page_no=${pageNo}&page_size=${pageSize}`),
+  shopeeSaudePenalidades: (lojaId: number, pageNo = 1, pageSize = 10) =>
+    request<{ response?: { total_count: number; penalty_point_list: ShopeePenaltyPoint[] }; error?: string }>(`/api/shopee/saude/penalidades?loja_id=${lojaId}&page_no=${pageNo}&page_size=${pageSize}`),
+  shopeeSaudePunicoes: (lojaId: number, punishmentStatus: 1 | 2 = 1, pageNo = 1, pageSize = 10) =>
+    request<{ response?: { total_count: number; punishment_list: ShopeePunishment[] }; error?: string }>(`/api/shopee/saude/punicoes?loja_id=${lojaId}&punishment_status=${punishmentStatus}&page_no=${pageNo}&page_size=${pageSize}`),
+  shopeeSaudeAnunciosComProblema: (lojaId: number, pageNo = 1, pageSize = 20) =>
+    request<{ response?: { total_count: number; listing_list: Array<{ item_id: number; reason: number }> }; error?: string }>(`/api/shopee/saude/anuncios-com-problema?loja_id=${lojaId}&page_no=${pageNo}&page_size=${pageSize}`),
+  shopeeSaudePedidosAtrasados: (lojaId: number, pageNo = 1, pageSize = 20) =>
+    request<{ response?: { total_count: number; late_order_list: Array<{ order_sn: string; shipping_deadline: number; late_by_days: number }> }; error?: string }>(`/api/shopee/saude/pedidos-atrasados?loja_id=${lojaId}&page_no=${pageNo}&page_size=${pageSize}`),
+
+  // Shopee — Logistica (etiqueta e rastreio)
+  shopeeLogisticaParametroEnvio: (lojaId: number, orderSn: string, packageNumber?: string) =>
+    request<{ response?: ShopeeShippingParameter; error?: string }>(`/api/shopee/logistica/parametro-envio?loja_id=${lojaId}&order_sn=${orderSn}${packageNumber ? `&package_number=${packageNumber}` : ""}`),
+  shopeeLogisticaDespachar: (lojaId: number, packageList: Record<string, unknown>[], logisticsChannelId?: number, productLocationId?: string) =>
+    request<{ response?: { success_list?: unknown[]; fail_list?: unknown[] }; error?: string }>("/api/shopee/logistica/despachar", {
+      method: "POST",
+      body: JSON.stringify({ loja_id: lojaId, package_list: packageList, logistics_channel_id: logisticsChannelId, product_location_id: productLocationId }),
+    }),
+  shopeeLogisticaNumeroRastreio: (lojaId: number, orderSn: string, packageNumber?: string) =>
+    request<{ response?: { tracking_number?: string; hint?: string }; error?: string }>(`/api/shopee/logistica/numero-rastreio?loja_id=${lojaId}&order_sn=${orderSn}${packageNumber ? `&package_number=${packageNumber}` : ""}`),
+  shopeeLogisticaCriarDocumento: (lojaId: number, orderList: Array<{ order_sn: string; package_number?: string }>) =>
+    request<{ response?: { result_list?: unknown[] }; error?: string }>("/api/shopee/logistica/criar-documento", {
+      method: "POST",
+      body: JSON.stringify({ loja_id: lojaId, order_list: orderList }),
+    }),
+  shopeeLogisticaStatusDocumento: (lojaId: number, orderList: Array<{ order_sn: string; package_number?: string }>) =>
+    request<{ response?: { result_list?: Array<{ order_sn: string; status: "READY" | "FAILED" | "PROCESSING" }> }; error?: string }>("/api/shopee/logistica/status-documento", {
+      method: "POST",
+      body: JSON.stringify({ loja_id: lojaId, order_list: orderList }),
+    }),
+  shopeeLogisticaBaixarDocumento: async (lojaId: number, orderList: Array<{ order_sn: string; package_number?: string }>) => {
+    const res = await fetch("/api/shopee/logistica/baixar-documento", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ loja_id: lojaId, order_list: orderList }),
+    });
+    if (!res.ok) {
+      const erro = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      return { error: erro.error || `HTTP ${res.status}` } as { error: string };
+    }
+    return { blob: await res.blob() } as { blob: Blob };
+  },
+  shopeeLogisticaRastreio: (lojaId: number, orderSn: string, packageNumber?: string) =>
+    request<{ response?: ShopeeTrackingInfo; error?: string }>(`/api/shopee/logistica/rastreio?loja_id=${lojaId}&order_sn=${orderSn}${packageNumber ? `&package_number=${packageNumber}` : ""}`),
+
+  // Shopee — Discount (desconto por item)
+  shopeeListarDescontos: (lojaId: number, status: "upcoming" | "ongoing" | "expired" | "all" = "all", pageNo = 1, pageSize = 50) =>
+    request<{ response?: { discount_list: ShopeeDiscountResumo[]; more: boolean }; error?: string }>(`/api/shopee/descontos?loja_id=${lojaId}&status=${status}&page_no=${pageNo}&page_size=${pageSize}`),
+  shopeeDetalheDesconto: (lojaId: number, discountId: number, pageNo = 1, pageSize = 50) =>
+    request<{ response?: ShopeeDiscountDetalhe; error?: string }>(`/api/shopee/descontos/${discountId}?loja_id=${lojaId}&page_no=${pageNo}&page_size=${pageSize}`),
+  shopeeCriarDesconto: (lojaId: number, discountName: string, startTime: number, endTime: number) =>
+    request<{ response?: { discount_id: number }; error?: string }>("/api/shopee/descontos", {
+      method: "POST",
+      body: JSON.stringify({ loja_id: lojaId, discount_name: discountName, start_time: startTime, end_time: endTime }),
+    }),
+  shopeeAdicionarItemDesconto: (lojaId: number, discountId: number, itemList: Record<string, unknown>[]) =>
+    request<{ response?: { count: number; error_list?: unknown[] }; error?: string }>(`/api/shopee/descontos/${discountId}/itens`, {
+      method: "POST",
+      body: JSON.stringify({ loja_id: lojaId, item_list: itemList }),
+    }),
+  shopeeAtualizarDesconto: (lojaId: number, discountId: number, dados: Record<string, unknown>) =>
+    request<{ response?: unknown; error?: string }>(`/api/shopee/descontos/${discountId}`, {
+      method: "PUT",
+      body: JSON.stringify({ ...dados, loja_id: lojaId }),
+    }),
+  shopeeDeletarDesconto: (lojaId: number, discountId: number) =>
+    request<{ response?: unknown; error?: string }>(`/api/shopee/descontos/${discountId}?loja_id=${lojaId}`, { method: "DELETE" }),
+  shopeeEncerrarDesconto: (lojaId: number, discountId: number) =>
+    request<{ response?: unknown; error?: string }>(`/api/shopee/descontos/${discountId}/encerrar`, {
+      method: "POST",
+      body: JSON.stringify({ loja_id: lojaId }),
+    }),
+
+  // Shopee — Voucher (cupom de loja/produto)
+  shopeeListarVouchers: (lojaId: number, status: "upcoming" | "ongoing" | "expired" | "all" = "all", pageNo = 1, pageSize = 20) =>
+    request<{ response?: { voucher_list: ShopeeVoucherResumo[]; more: boolean }; error?: string }>(`/api/shopee/vouchers?loja_id=${lojaId}&status=${status}&page_no=${pageNo}&page_size=${pageSize}`),
+  shopeeDetalheVoucher: (lojaId: number, voucherId: number) =>
+    request<{ response?: ShopeeVoucherDetalhe; error?: string }>(`/api/shopee/vouchers/${voucherId}?loja_id=${lojaId}`),
+  shopeeCriarVoucher: (lojaId: number, dados: Record<string, unknown>) =>
+    request<{ response?: { voucher_id: number }; error?: string }>("/api/shopee/vouchers", {
+      method: "POST",
+      body: JSON.stringify({ ...dados, loja_id: lojaId }),
+    }),
+  shopeeAtualizarVoucher: (lojaId: number, voucherId: number, dados: Record<string, unknown>) =>
+    request<{ response?: unknown; error?: string }>(`/api/shopee/vouchers/${voucherId}`, {
+      method: "PUT",
+      body: JSON.stringify({ ...dados, loja_id: lojaId }),
+    }),
+  shopeeEncerrarVoucher: (lojaId: number, voucherId: number) =>
+    request<{ response?: unknown; error?: string }>(`/api/shopee/vouchers/${voucherId}/encerrar`, {
+      method: "POST",
+      body: JSON.stringify({ loja_id: lojaId }),
+    }),
+  shopeeDeletarVoucher: (lojaId: number, voucherId: number) =>
+    request<{ response?: unknown; error?: string }>(`/api/shopee/vouchers/${voucherId}?loja_id=${lojaId}`, { method: "DELETE" }),
+
   // Hermes
   hermesAgents: () => request<unknown[]>("/api/hermes/agents"),
   hermesOpportunities: () => request<unknown[]>("/api/hermes/opportunities"),
@@ -633,6 +732,9 @@ export const api = {
   rbacGerarCodigoBarras: (id: number) => request<{ ok?: boolean; codigo_barras?: string; error?: string }>(`/api/rbac/usuarios/${id}/codigo-barras`, { method: "POST" }),
   rbacAutorizar: (payload: { permissao: string; usuario_pin_id?: number | null; pin?: string; codigo_barras?: string }) =>
     request<{ ok?: boolean; id?: number; nome?: string; error?: string }>("/api/rbac/autorizar", { method: "POST", body: JSON.stringify(payload) }),
+  rbacListarLojasUsuario: (id: number) => request<{ lojas: { id: number; nome: string }[]; error?: string }>(`/api/rbac/usuarios/${id}/lojas`),
+  rbacDefinirLojasUsuario: (id: number, lojaIds: number[]) =>
+    request<{ usuario_id?: number; loja_ids?: number[]; error?: string }>(`/api/rbac/usuarios/${id}/lojas`, { method: "PUT", body: JSON.stringify({ loja_ids: lojaIds }) }),
 };
 
 // Types — SSOT re-exports from lib/types/domain (removes duplicate definitions)
@@ -717,6 +819,90 @@ export interface ShopeeDashboardLoja {
   anuncios_total: number;
   anuncios_ativos: number;
   produtos_estoque_baixo: number;
+}
+
+export interface ShopeeShopPerformance {
+  overall_performance: {
+    rating: number; // 1=Poor 2=ImprovementNeeded 3=Good 4=Excellent
+    fulfillment_failed: number;
+    listing_failed: number;
+    custom_service_failed: number;
+  };
+  metric_list: Array<{
+    metric_type: number; // 1=Fulfillment 2=Listing 3=CustomerService
+    metric_id: number;
+    parent_metric_id: number;
+    metric_name: string;
+    current_period: number;
+    last_period: number;
+    unit: number; // 1=Number 2=Percentage 3=Second 4=Day 5=Hour
+    target?: { value: number; comparator: string };
+    exemption_end_date?: number;
+  }>;
+}
+
+export interface ShopeePenaltyPoint {
+  issue_time: number;
+  original_point_num: number;
+  latest_point_num: number;
+  violation_type: number;
+  reference_id: string;
+}
+
+export interface ShopeePunishment {
+  issue_time: number;
+  start_time: number;
+  end_time: number;
+  punishment_type: number;
+  reason: number;
+  reference_id: string;
+  listing_limit?: number;
+  order_limit?: number;
+}
+
+export interface ShopeeShippingParameter {
+  info_needed: { dropoff?: string[]; pickup?: string[]; non_integrated?: string[] };
+  dropoff?: { branch_list: Array<{ branch_id: number; address?: string }> };
+  pickup?: { address_list: Array<{ address_id: number; address_flag?: string[]; time_slot_list: Array<{ pickup_time_id: string; date: string; flags?: string[] }> }> };
+}
+
+export interface ShopeeTrackingInfo {
+  logistics_status: string;
+  tracking_info: Array<{ update_time: number; description: string; logistics_status: string }>;
+}
+
+export interface ShopeeDiscountResumo {
+  discount_id: number;
+  discount_name: string;
+  status: string;
+  start_time: number;
+  end_time: number;
+  source: number; // 0=seller 1=admin 7=livestream
+}
+
+export interface ShopeeDiscountDetalhe extends ShopeeDiscountResumo {
+  item_list: Array<{ item_id: number; item_name?: string; item_promotion_price?: number; item_promotion_stock?: number }>;
+}
+
+export interface ShopeeVoucherResumo {
+  voucher_id: number;
+  voucher_name: string;
+  voucher_code: string;
+  status: string;
+  start_time: number;
+  end_time: number;
+  voucher_type: number;
+  reward_type: number;
+  usage_quantity: number;
+  current_usage?: number;
+  min_basket_price: number;
+}
+
+export interface ShopeeVoucherDetalhe extends ShopeeVoucherResumo {
+  discount_amount?: number;
+  percentage?: number;
+  max_price?: number;
+  item_id_list?: number[];
 }
 
 export interface EstoqueAprovacao {

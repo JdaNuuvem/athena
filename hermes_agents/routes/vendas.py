@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from core.rbac import requer_permissao, usuario_atual_da_request
+from core.rbac import requer_permissao, requer_acesso_loja, usuario_atual_da_request
 
 vendas_bp = Blueprint("vendas", __name__, url_prefix="/api/vendas")
 
@@ -87,6 +87,7 @@ def vendas_delete(tabela, id):
 def vendas_criar_pedido():
     data = request.json or {}
 
+    @requer_acesso_loja
     @requer_permissao("vendas.criar")
     def _go():
         from core.vendas import criar_pedido
@@ -132,7 +133,10 @@ def vendas_sync_bling():
 
 @vendas_bp.route("/sync/shopee", methods=["POST"])
 def vendas_sync_shopee():
-    from core.vendas import sincronizar_pedidos_shopee
-    data = request.json or {}
-    return jsonify(sincronizar_pedidos_shopee(
-        dias=data.get("dias", 30), loja_id=data.get("loja_id")))
+    @requer_acesso_loja
+    def _handler():
+        from core.vendas import sincronizar_pedidos_shopee
+        data = request.json or {}
+        return jsonify(sincronizar_pedidos_shopee(
+            dias=data.get("dias", 30), loja_id=data.get("loja_id")))
+    return _handler()

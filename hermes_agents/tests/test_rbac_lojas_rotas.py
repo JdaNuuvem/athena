@@ -7,6 +7,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from unittest.mock import patch, AsyncMock
 
 _TEST_TOKEN = "test-master-token-32-bytes-long!!"
+os.environ.setdefault("ATHENA_TOKEN", _TEST_TOKEN)
 
 
 async def _mp(*a, **kw):
@@ -59,15 +60,32 @@ class TestPdvQuebrasCaixaComRestricao(unittest.TestCase):
         self.client = _app()
         self.headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
 
-    def test_loja_id_explicito_ignora_restricao(self):
-        """Pedido explicito de uma loja especifica sempre e' honrado — modo
-        suave nao bloqueia, so' restringe o "todas"."""
+    def test_master_com_loja_id_explicito_bypassa_restricao(self):
+        """Token master sempre passa, mesmo pedindo uma loja especifica —
+        requer_acesso_loja da' bypass total antes de qualquer checagem."""
         with patch("core.pdv.historico_quebras", return_value=[]) as mock_hist, \
              patch("core.rbac_lojas.lojas_permitidas") as mock_permitidas:
             r = self.client.get("/api/pdv/quebras-caixa?loja_id=5", headers=self.headers)
         self.assertEqual(r.status_code, 200)
         mock_permitidas.assert_not_called()
         self.assertEqual(mock_hist.call_args.kwargs.get("loja_ids"), None)
+
+    @patch("core.rbac.verificar_token_sessao", return_value={"user_id": 7, "email": "a@b.com", "role": "Vendedor"})
+    @patch("core.rbac_lojas.lojas_permitidas", return_value=[3, 4])
+    def test_usuario_comum_loja_id_permitida_passa(self, mock_permitidas, mock_verif):
+        """Desde a correcao de seguranca, loja_id explicito de usuario comum
+        e' validado contra lojas_permitidas() em vez de ignorado."""
+        with patch("core.pdv.historico_quebras", return_value=[]):
+            r = self.client.get("/api/pdv/quebras-caixa?loja_id=3", headers={"Authorization": "Bearer qualquer"})
+        self.assertEqual(r.status_code, 200)
+
+    @patch("core.rbac.verificar_token_sessao", return_value={"user_id": 7, "email": "a@b.com", "role": "Vendedor"})
+    @patch("core.rbac_lojas.lojas_permitidas", return_value=[3, 4])
+    def test_usuario_comum_loja_id_fora_da_lista_bloqueia_403(self, mock_permitidas, mock_verif):
+        """Buraco de seguranca corrigido: usuario comum nao pode mais ver
+        quebras de caixa de uma loja fora da sua lista so' passando o ID."""
+        r = self.client.get("/api/pdv/quebras-caixa?loja_id=999", headers={"Authorization": "Bearer qualquer"})
+        self.assertEqual(r.status_code, 403)
 
     def test_sem_loja_id_aplica_restricao(self):
         with patch("core.pdv.historico_quebras", return_value=[]) as mock_hist, \

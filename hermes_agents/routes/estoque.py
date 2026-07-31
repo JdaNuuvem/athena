@@ -31,6 +31,13 @@ def _origem_requisicao() -> tuple:
 @estoque_bp.route('/lojas', methods=['GET'])
 def estoque_por_loja():
     """Lista estoque por deposito com filtro de loja e busca."""
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        return _estoque_por_loja_impl()
+    return _handler()
+
+def _estoque_por_loja_impl():
     from core.rbac import usuario_atual_da_request
     from core.rbac_lojas import lojas_permitidas
     loja = request.args.get("loja", "")
@@ -310,6 +317,13 @@ def estoque_transferir():
 
 @estoque_bp.route('/transferencias', methods=['GET'])
 def estoque_listar_transferencias():
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        return _estoque_listar_transferencias_impl()
+    return _handler()
+
+def _estoque_listar_transferencias_impl():
     from core.estoque_transferencias import listar
     from core.rbac import usuario_atual_da_request
     from core.rbac_lojas import lojas_permitidas
@@ -394,6 +408,13 @@ def estoque_contagem_registrar():
 
 @estoque_bp.route('/contagem/historico', methods=['GET'])
 def estoque_contagem_historico():
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        return _estoque_contagem_historico_impl()
+    return _handler()
+
+def _estoque_contagem_historico_impl():
     from core.estoque_contagem import historico
     from core.rbac import usuario_atual_da_request
     from core.rbac_lojas import lojas_permitidas
@@ -407,6 +428,28 @@ def estoque_relatorio_discrepancias():
     from core.estoque_relatorios import por_loja, por_operador
     dias = request.args.get("dias", 30, type=int)
     return jsonify({"por_loja": por_loja(dias), "por_operador": por_operador(dias)})
+
+
+@estoque_bp.route('/analise/giro', methods=['GET'])
+def estoque_analise_giro():
+    from core.estoque_analise import giro
+    loja = request.args.get("loja", "")
+    dias = request.args.get("dias", 30, type=int)
+    return jsonify({"data": giro(loja, dias)})
+
+
+@estoque_bp.route('/analise/ruptura', methods=['GET'])
+def estoque_analise_ruptura():
+    from core.estoque_analise import ruptura
+    loja = request.args.get("loja", "")
+    return jsonify({"data": ruptura(loja)})
+
+
+@estoque_bp.route('/analise/cobertura', methods=['GET'])
+def estoque_analise_cobertura():
+    from core.estoque_analise import cobertura
+    loja = request.args.get("loja", "")
+    return jsonify({"data": cobertura(loja)})
 
 
 @estoque_bp.route('/sugestao-rotacao', methods=['GET'])
@@ -446,6 +489,13 @@ def estoque_ratear():
 @estoque_bp.route('/movimentacoes', methods=['GET'])
 def estoque_movimentacoes():
     """Lista movimentacoes de estoque."""
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        return _estoque_movimentacoes_impl()
+    return _handler()
+
+def _estoque_movimentacoes_impl():
     from core.estoque import movimentacoes as est_movs
     from core.rbac import usuario_atual_da_request
     from core.rbac_lojas import lojas_permitidas

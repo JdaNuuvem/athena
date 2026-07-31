@@ -162,6 +162,7 @@ def _ensure_tables():
                     await db.execute("INSERT INTO rbac_permissoes (codigo,descricao,modulo,acao) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING", codigo, descricao, modulo, acao)
             await db.execute("INSERT INTO rbac_permissoes (codigo,descricao,modulo,acao) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING", "pdv.operar", "Operar PDV", "pdv", "operar")
             await db.execute("INSERT INTO rbac_permissoes (codigo,descricao,modulo,acao) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING", "bling.sincronizar", "Sincronizar Bling", "bling", "sincronizar")
+            await db.execute("INSERT INTO rbac_permissoes (codigo,descricao,modulo,acao) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING", "lojas.ver_todas", "Ver todas as lojas (ignora restricao de usuario_lojas)", "lojas", "ver_todas")
         # Seed roles
         count_r = await db.fetchval("SELECT COUNT(*) FROM rbac_roles")
         if count_r == 0:
@@ -183,6 +184,21 @@ def _ensure_tables():
                         p_row = await db.fetchrow("SELECT id FROM rbac_permissoes WHERE codigo=$1", codigo)
                         if p_row:
                             await db.execute("INSERT INTO rbac_role_permissoes (role_id,permissao_id) VALUES ($1,$2)", role_id, p_row["id"])
+        # Fix-up idempotente: garante que "lojas.ver_todas" exista e esteja
+        # no Admin mesmo em bancos onde o seed de roles ja rodou antes dela
+        # existir. Sem isso, o Admin ficaria restrito por usuario_lojas igual
+        # qualquer outro usuario assim que essa fase for ativada.
+        try:
+            await db.execute("INSERT INTO rbac_permissoes (codigo,descricao,modulo,acao) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING",
+                              "lojas.ver_todas", "Ver todas as lojas (ignora restricao de usuario_lojas)", "lojas", "ver_todas")
+            admin_role = await db.fetchrow("SELECT id FROM rbac_roles WHERE nome = 'Admin'")
+            perm_ver_todas = await db.fetchrow("SELECT id FROM rbac_permissoes WHERE codigo = 'lojas.ver_todas'")
+            if admin_role and perm_ver_todas:
+                await db.execute("INSERT INTO rbac_role_permissoes (role_id,permissao_id) VALUES ($1,$2) ON CONFLICT DO NOTHING",
+                                  admin_role["id"], perm_ver_todas["id"])
+        except Exception as e:
+            log(AGENT, f"Fix-up lojas.ver_todas falhou: {e}")
+
         # Fix-up idempotente: garante permissoes novas no role Gerente mesmo em
         # bancos onde o seed de roles ja rodou antes delas existirem
         # (o bloco acima so' roda "if count_r == 0", nao repete em bancos existentes).
@@ -577,6 +593,48 @@ def requer_permissao(codigo: str):
             return jsonify({"error": "Permissao negada", "required": codigo}), 403
         return wrapper
     return decorator
+
+
+def _loja_id_da_request(kwargs) -> int:
+    """Acha o loja_id da chamada atual, na ordem: path param da rota Flask
+    (<int:loja_id>), query string (?loja_id= ou ?loja=), corpo JSON."""
+    if kwargs.get("loja_id") is not None:
+        return kwargs["loja_id"]
+    v = request.args.get("loja_id", type=int)
+    if v is not None:
+        return v
+    v = request.args.get("loja", type=int)
+    if v is not None:
+        return v
+    if request.is_json:
+        body = request.get_json(silent=True) or {}
+        v = body.get("loja_id")
+        if v is not None:
+            try: return int(v)
+            except (TypeError, ValueError): return None
+    return None
+
+
+def requer_acesso_loja(f):
+    """Bloqueia com 403 quando a request pede uma loja fora das permitidas
+    pro usuario (usuario_lojas — ver core/rbac_lojas.py). Sem loja_id
+    identificavel na request, deixa passar (rota nao e' escopada por loja).
+    Token master e usuarios com "lojas.ver_todas" sempre passam."""
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        loja_id = _loja_id_da_request(kwargs)
+        if loja_id is None:
+            return f(*args, **kwargs)
+        usuario = usuario_atual_da_request()
+        if usuario["is_master"] or not usuario["user_id"]:
+            return f(*args, **kwargs)
+        from core.rbac_lojas import lojas_permitidas
+        permitidas = lojas_permitidas(usuario["user_id"])
+        if permitidas is not None and int(loja_id) not in permitidas:
+            return jsonify({"error": "Sem acesso a esta loja", "loja_id": loja_id}), 403
+        return f(*args, **kwargs)
+    return wrapper
+
 
 if __name__ == "__main__":
     log(AGENT, "Auto-teste RBAC")
