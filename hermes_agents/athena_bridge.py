@@ -1601,9 +1601,10 @@ def listar_produtos():
             params.extend([f"%{busca}%", f"%{busca}%"])
         if loja:
             if loja.isdigit():
-                # Loja fÃ­sica: filtra via estoque_lojas usando nome da tabela lojas
-                where.append("EXISTS(SELECT 1 FROM lojas l JOIN estoque_lojas e ON e.loja = l.nome WHERE e.sku = c.sku AND l.id = %s)")
-                params.append(int(loja))
+                from core.lojas import loja_efetiva_sync
+                nome_efetivo = loja_efetiva_sync(cur, loja)
+                where.append("EXISTS(SELECT 1 FROM estoque_lojas e WHERE e.sku = c.sku AND e.loja = %s)")
+                params.append(nome_efetivo)
             else:
                 # Marketplace: filtra via anuncios
                 where.append("EXISTS(SELECT 1 FROM anuncios a WHERE a.sku=c.sku AND a.marketplace=%s)")

@@ -43,12 +43,10 @@ def estoque_por_loja():
         where = ["1=1"]
         params = []
         if loja and loja != "todas":
-            if loja.isdigit():
-                where.append("e.loja = (SELECT nome FROM lojas WHERE id = %s)")
-                params.append(int(loja))
-            else:
-                where.append("e.loja = %s")
-                params.append(loja)
+            from core.lojas import loja_efetiva_sync
+            loja = loja_efetiva_sync(cur, loja)
+            where.append("e.loja = %s")
+            params.append(loja)
         else:
             # Fase 4 (RBAC por loja, modo suave): so' restringe quando o
             # usuario tem vinculo ativo em loja_responsaveis. Sem vinculo,
