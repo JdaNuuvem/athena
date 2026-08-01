@@ -18,7 +18,7 @@ LIMITE_APROVACAO_UNIDADES = 10
 # Motivos de lista fechada — texto livre vira ruido que ninguem analisa depois;
 # lista fechada permite relatorio de discrepancia por motivo/loja/operador.
 MOTIVOS_ENTRADA = ["compra_fornecedor", "devolucao_cliente", "producao_interna", "ajuste_inventario", "import_i9logic", "outro"]
-MOTIVOS_SAIDA = ["quebra", "perda", "devolucao_fornecedor", "uso_interno", "furto_identificado", "ajuste_inventario", "outro"]
+MOTIVOS_SAIDA = ["quebra", "perda", "devolucao_fornecedor", "uso_interno", "furto_identificado", "ajuste_inventario", "venda_pdv", "outro"]
 MOTIVOS_TRANSFERENCIA = ["reposicao_entre_lojas", "redistribuicao_estoque_parado", "solicitacao_loja_destino", "outro"]
 
 # O schema de estoque_movimentacoes (colunas de auditoria + a coluna aditiva
@@ -44,6 +44,7 @@ _MAPA_MOVIMENTO_SAIDA = {
     "uso_interno": "ajuste",
     "furto_identificado": "roubo",
     "ajuste_inventario": "ajuste",
+    "venda_pdv": "venda",
     "outro": "ajuste",
 }
 
