@@ -254,5 +254,53 @@ class TestRealizarVendaBaixaEstoque(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.fake.vendas), 1)
 
 
+class TestCancelarVendaRestauraEstoque(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.fake = FakeDBPdv()
+        self.fake.caixas[1] = {"loja_id": 5}
+        self.fake.lojas[5] = "Loja Fisica Central"
+        self.fake.vendas[10] = {"id": 10, "caixa_id": 1, "cliente": "", "cliente_id": None,
+                                 "total": 25.0, "desconto": 0, "operador": "Joao", "status": "finalizada",
+                                 "data": "2026-07-31", "observacoes": None, "tipo": "venda", "numero": None}
+        self.fake.itens[1] = {"id": 1, "venda_id": 10, "produto_codigo": "SKU1", "descricao": "Produto 1",
+                               "quantidade": 2, "valor_unitario": 10.0, "desconto": 0, "valor_total": 20.0}
+        self.fake.itens[2] = {"id": 2, "venda_id": 10, "produto_codigo": "SKU2", "descricao": "Produto 2",
+                               "quantidade": 1, "valor_unitario": 5.0, "desconto": 0, "valor_total": 5.0}
+        async def _get_db(_fake=self.fake):
+            return _fake
+        self.patch_db = patch("core.pdv.get_db", side_effect=_get_db)
+        self.patch_db.start()
+        self.patch_autoriza = patch("core.pdv._autorizar_gerencial",
+                                     return_value={"ok": True, "id": 9, "nome": "Gerente", "role": "gerente"})
+        self.patch_autoriza.start()
+
+    def tearDown(self):
+        self.patch_db.stop()
+        self.patch_autoriza.stop()
+
+    async def test_cancelar_restaura_quantidade_de_todos_os_itens(self):
+        from core.pdv import cancelar_venda
+        chamadas = []
+        async def fake_entrada(conn, sku, loja, quantidade, motivo, usuario_id=None, usuario_nome="", ip=None, dispositivo=None):
+            chamadas.append((sku, loja, quantidade, motivo))
+            return {"ok": True, "sku": sku, "loja": loja, "quantidade": quantidade, "anterior": 0, "atual": quantidade}
+        with patch("core.pdv.entrada_async", side_effect=fake_entrada):
+            r = cancelar_venda(10, motivo="Cliente desistiu", operador_id=9)
+        self.assertTrue(r.get("success"))
+        self.assertEqual(sorted(chamadas), sorted([
+            ("SKU1", "Loja Fisica Central", 2, "devolucao_cliente"),
+            ("SKU2", "Loja Fisica Central", 1, "devolucao_cliente"),
+        ]))
+        self.assertEqual(self.fake.vendas[10]["status"], "cancelada")
+
+    async def test_venda_ja_cancelada_nao_restaura_de_novo(self):
+        from core.pdv import cancelar_venda
+        self.fake.vendas[10]["status"] = "cancelada"
+        with patch("core.pdv.entrada_async", new=AsyncMock()) as mock_entrada:
+            r = cancelar_venda(10, motivo="tentativa dupla", operador_id=9)
+        self.assertIn("error", r)
+        mock_entrada.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

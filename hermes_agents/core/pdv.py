@@ -601,16 +601,28 @@ def cancelar_venda(venda_id: int, motivo: str = "", operador: str = "", operador
     if autorizador.get("error"): return autorizador
     operador_registro = autorizador.get("nome") or operador
     async def _go():
+        await _ensure_saldos_async()
         db = await get_db()
-        venda = await db.fetchrow("SELECT * FROM pdv_vendas WHERE id = $1", venda_id)
-        if not venda: return {"error": "Venda nao encontrada"}
-        if venda["status"] == "cancelada": return {"error": "Venda ja cancelada"}
-        await db.execute("UPDATE pdv_vendas SET status = 'cancelada', observacoes = $2 WHERE id = $1", venda_id, f"Cancelada: {motivo}" if motivo else "Cancelada")
-        # Registrar devolucao
-        await db.execute("INSERT INTO pdv_devolucoes (venda_id, motivo, valor, operador) VALUES ($1,$2,$3,$4)",
-            venda_id, motivo, float(venda["total"] or 0), operador_registro)
-        return {"success": True, "venda_id": venda_id}
+        async with db.acquire() as conn:
+            async with conn.transaction():
+                venda = await conn.fetchrow("SELECT * FROM pdv_vendas WHERE id = $1", venda_id)
+                if not venda: return {"error": "Venda nao encontrada"}
+                if venda["status"] == "cancelada": return {"error": "Venda ja cancelada"}
+                itens = await conn.fetch("SELECT produto_codigo, quantidade FROM pdv_itens WHERE venda_id = $1", venda_id)
+                loja = await _resolver_loja_da_venda(conn, venda["caixa_id"])
+                if loja:
+                    for item in itens:
+                        r = await entrada_async(conn, item["produto_codigo"], loja, item["quantidade"], "devolucao_cliente",
+                                                usuario_id=autorizador.get("id"), usuario_nome=operador_registro)
+                        if r.get("erro"):
+                            raise SaldoError(f"Erro ao restaurar estoque de {item['produto_codigo']}: {r['erro']}")
+                await conn.execute("UPDATE pdv_vendas SET status = 'cancelada', observacoes = $2 WHERE id = $1", venda_id, f"Cancelada: {motivo}" if motivo else "Cancelada")
+                # Registrar devolucao
+                await conn.execute("INSERT INTO pdv_devolucoes (venda_id, motivo, valor, operador) VALUES ($1,$2,$3,$4)",
+                    venda_id, motivo, float(venda["total"] or 0), operador_registro)
+                return {"success": True, "venda_id": venda_id}
     try: return run_async(_go())
+    except SaldoError as e: return {"error": str(e)}
     except Exception as e: return {"error": str(e)}
 
 def devolver_item_venda(item_id: int, quantidade: float, motivo: str = "", operador: str = "", operador_id: int = None, senha: str = "",
