@@ -342,6 +342,9 @@ class TestPDVPinGerencial(unittest.IsolatedAsyncioTestCase):
         p = patch("core.pdv.get_db", side_effect=_get_db)
         p.start()
         self._patches.append(p)
+        p_ensure = patch("core.pdv._ensure_saldos_async", new=AsyncMock(return_value=None))
+        p_ensure.start()
+        self._patches.append(p_ensure)
         import core.pdv as m
         m._ensure_tables = lambda: None
         self.fake.operadores[1] = {"id": 1, "nome": "gerente1", "role": "gerente", "ativo": True, "senha": None, "pin_hash": None}
@@ -386,7 +389,7 @@ class TestPDVPinGerencial(unittest.IsolatedAsyncioTestCase):
                 (oid,) = params
                 return self.fake.operadores.get(oid)
             if "FROM pdv_vendas WHERE id" in q:
-                return {"id": 10, "status": "finalizada", "total": 50}
+                return {"id": 10, "status": "finalizada", "total": 50, "caixa_id": None}
             return None
         self.fake.fetchrow = fetchrow_venda
         r = cancelar_venda(venda_id=10, motivo="cliente desistiu", operador="op2", operador_id=2,
