@@ -573,6 +573,8 @@ export const api = {
     request<Record<string, unknown>>(`/api/relatorios/fluxo-caixa?dias=${dias}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
   relatorioClientes: (dias: number, lojaId?: string) =>
     request<Record<string, unknown>>(`/api/relatorios/clientes?dias=${dias}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
+  relatorioRankingProdutos: (dias: number) =>
+    request<{ itens: RankingProdutoItem[]; periodo_dias: number }>(`/api/relatorios/ranking-produtos?dias=${dias}`),
 
   // Chat Interno
   chat: {
@@ -1586,3 +1588,18 @@ export const sincronizarProdutoLojaDoMestre = (loja: string, sku: string, campos
   request<{ ok?: boolean; erro?: string }>(`/api/produtos-loja/${encodeURIComponent(loja)}/${encodeURIComponent(sku)}/sincronizar-mestre`, {
     method: "POST", body: JSON.stringify({ campos }),
   });
+
+// ── Ranking de produtos (lucro/vendas, todos os canais) ──
+
+export interface RankingProdutoItem {
+  sku: string;
+  descricao: string;
+  quantidade: number;
+  receita: number;
+  custo: number;
+  comissao: number;
+  frete: number;
+  lucro: number;
+  margem_pct: number;
+  custo_cadastrado: boolean;
+}

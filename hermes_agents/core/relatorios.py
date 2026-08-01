@@ -294,6 +294,73 @@ def produtos(dias=30):
     try: return run_async(_go())
     except Exception as e: return []
 
+# ── 18b. Ranking de produtos por lucro/vendas (todos os canais) ──
+
+SHOPEE_COMISSAO_PCT = 12  # mesma taxa default de shopee/pricing.calcular_margem_produto
+
+def ranking_produtos(dias=30):
+    """Lucro/vendas por SKU somando Bling+marketplaces (vendas_itens/vendas_pedidos,
+    mesma fonte unificada de produtos()/curvas() acima) e PDV loja fisica
+    (pdv_itens/pdv_vendas, canal direto sem sync). Comissao de marketplace so'
+    e' deduzida do canal 'shopee' (taxa conhecida via env var/config); demais
+    marketplaces sincronizados via Bling entram brutos de comissao por falta
+    de taxa cadastrada por canal — nao inventa numero. PDV e' de fato sem
+    comissao (venda direta), entao 0 ali e' o valor correto, nao uma lacuna."""
+    async def _go():
+        db = await get_db()
+        vendas_rows = await db.fetch(f"""
+            SELECT sku, SUM(quantidade) AS quantidade, SUM(valor_total) AS receita,
+                   SUM(CASE WHEN canal = 'shopee' THEN valor_total * {SHOPEE_COMISSAO_PCT} / 100.0 ELSE 0 END) AS comissao,
+                   SUM(frete_alocado) AS frete
+            FROM (
+                SELECT vi.sku AS sku, vi.quantidade AS quantidade, vi.valor_total AS valor_total,
+                       COALESCE(vp.marketplace, 'bling') AS canal,
+                       CASE WHEN vp.total > 0 THEN vi.valor_total / vp.total * COALESCE(vp.frete, 0) ELSE 0 END AS frete_alocado
+                FROM vendas_itens vi JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
+                WHERE vp.data >= CURRENT_DATE - $1 AND vp.status != 'cancelado'
+                UNION ALL
+                SELECT pi.produto_codigo AS sku, pi.quantidade AS quantidade, pi.valor_total AS valor_total,
+                       'pdv' AS canal, 0 AS frete_alocado
+                FROM pdv_itens pi JOIN pdv_vendas pv ON pv.id = pi.venda_id
+                WHERE pv.data >= CURRENT_DATE - $1 AND pv.status != 'cancelada'
+            ) unificado
+            WHERE sku IS NOT NULL AND sku != ''
+            GROUP BY sku
+        """, dias)
+        if not vendas_rows:
+            return []
+        skus = [r["sku"] for r in vendas_rows]
+        custo_rows = await db.fetch(
+            "SELECT sku, descricao, COALESCE(preco_custo, 0) AS preco_custo FROM catalogo_produtos WHERE sku = ANY($1::text[])",
+            skus)
+        custos = {r["sku"]: r for r in custo_rows}
+        itens = []
+        for r in vendas_rows:
+            sku = r["sku"]
+            info = custos.get(sku, {})
+            receita = float(r["receita"] or 0)
+            quantidade = float(r["quantidade"] or 0)
+            custo_unit = float(info.get("preco_custo", 0) or 0)
+            custo_total = round(custo_unit * quantidade, 2)
+            comissao = round(float(r["comissao"] or 0), 2)
+            frete = round(float(r["frete"] or 0), 2)
+            lucro = round(receita - custo_total - comissao - frete, 2)
+            itens.append({
+                "sku": sku,
+                "descricao": info.get("descricao") or sku,
+                "quantidade": quantidade,
+                "receita": round(receita, 2),
+                "custo": custo_total,
+                "comissao": comissao,
+                "frete": frete,
+                "lucro": lucro,
+                "margem_pct": round((lucro / receita * 100) if receita > 0 else 0, 1),
+                "custo_cadastrado": custo_unit > 0,
+            })
+        return itens
+    try: return run_async(_go())
+    except Exception as e: return []
+
 # ── 19. Financeiro ──
 
 def financeiro(dias=30):

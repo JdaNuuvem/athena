@@ -165,6 +165,13 @@ def rel_produtos():
     return jsonify(produtos(dias))
 
 
+@relatorios_bp.route("/ranking-produtos", methods=["GET"])
+def rel_ranking_produtos():
+    from core.relatorios import ranking_produtos
+    dias = request.args.get("dias", 30, type=int)
+    return jsonify({"itens": ranking_produtos(dias), "periodo_dias": dias})
+
+
 @relatorios_bp.route("/financeiro", methods=["GET"])
 def rel_financeiro():
     from core.relatorios import financeiro

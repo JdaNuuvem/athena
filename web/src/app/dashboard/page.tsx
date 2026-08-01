@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from "recharts";
 import { api, type KPIOverview, type Agent } from "@/lib/api";
 import { useStore } from "@/lib/store-context";
+import RankingProdutosModal from "@/app/_components/RankingProdutosModal";
 
 const fmtBRL = (v: number) => "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
 
@@ -70,6 +71,7 @@ export default function DashboardPage() {
   const [dash, setDash] = useState<DashboardData>({ vendasDia: 0, vendasMes: 0, vendasMesChart: [], estoqueCritico: 0, estoqueTotal: 0, fluxoCaixa: 0, clientesNovos: 0, clientesTotal: 0, vendasHoje: 0, vendasQtd: 0, topProdutos: [], alertas: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showRanking, setShowRanking] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -192,7 +194,16 @@ export default function DashboardPage() {
 
       {dash.topProdutos.length > 0 && (
         <section className="instrument p-4">
-          <h2 className="text-[10px] uppercase tracking-[0.12em] mb-3" style={{ color: "var(--ink-500)" }}>Top produtos</h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-[10px] uppercase tracking-[0.12em]" style={{ color: "var(--ink-500)" }}>Top produtos</h2>
+            <button
+              onClick={() => setShowRanking(true)}
+              className="text-[11px] transition-colors hover:opacity-80"
+              style={{ color: "var(--accent-400)" }}
+            >
+              Ver ranking completo →
+            </button>
+          </div>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={dash.topProdutos.slice(0, 8)} layout="vertical" margin={{ left: 120 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--panel-border)" />
@@ -231,6 +242,8 @@ export default function DashboardPage() {
           </div>
         </section>
       )}
+
+      {showRanking && <RankingProdutosModal onClose={() => setShowRanking(false)} />}
     </div>
   );
 }

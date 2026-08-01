@@ -29,4 +29,50 @@ class TestRelatorios(unittest.TestCase):
         self.assertGreaterEqual(r["total"],0)
         self.assertEqual(r["periodo_dias"],99999)
 
+    @patch("core.relatorios.get_db")
+    def test_ranking_produtos_calcula_lucro_com_comissao_so_shopee(self, mock_get_db):
+        """Comissao de marketplace so' e' deduzida quando o SQL classificou o canal
+        como 'shopee' (unica taxa conhecida) — os $ ja vem agregados do SQL, o
+        Python so' junta com o custo do catalogo e calcula lucro final."""
+        fake_db = AsyncMock()
+        fake_db.fetch.side_effect = [
+            [{"sku": "SKU-A", "quantidade": 10, "receita": 1000.0, "comissao": 120.0, "frete": 20.0}],
+            [{"sku": "SKU-A", "descricao": "Produto A", "preco_custo": 30.0}],
+        ]
+        mock_get_db.return_value = fake_db
+
+        itens = rel.ranking_produtos(30)
+
+        self.assertEqual(len(itens), 1)
+        item = itens[0]
+        self.assertEqual(item["sku"], "SKU-A")
+        self.assertEqual(item["custo"], 300.0)  # 30 * 10
+        self.assertEqual(item["lucro"], 560.0)  # 1000 - 300 - 120 - 20
+        self.assertTrue(item["custo_cadastrado"])
+
+    @patch("core.relatorios.get_db")
+    def test_ranking_produtos_sem_custo_cadastrado_marca_flag(self, mock_get_db):
+        """SKU vendido mas sem preco_custo em catalogo_produtos (ou nunca
+        cadastrado la') precisa ficar sinalizado — lucro sem custo real e'
+        enganoso, a UI precisa poder avisar em vez de mostrar como certeza."""
+        fake_db = AsyncMock()
+        fake_db.fetch.side_effect = [
+            [{"sku": "SKU-B", "quantidade": 5, "receita": 200.0, "comissao": 0.0, "frete": 0.0}],
+            [],
+        ]
+        mock_get_db.return_value = fake_db
+
+        itens = rel.ranking_produtos(30)
+
+        self.assertEqual(itens[0]["custo"], 0)
+        self.assertFalse(itens[0]["custo_cadastrado"])
+
+    @patch("core.relatorios.get_db")
+    def test_ranking_produtos_sem_vendas_retorna_vazio(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = []
+        mock_get_db.return_value = fake_db
+
+        self.assertEqual(rel.ranking_produtos(30), [])
+
 if __name__=="__main__":unittest.main(verbosity=2)

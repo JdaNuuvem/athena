@@ -5,12 +5,14 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import type { ShopeeDashboardLoja } from "@/lib/api";
 import Icon from "@/app/_components/Icon";
+import RankingProdutosModal from "@/app/_components/RankingProdutosModal";
 
 export default function ShopeeDashboardPage() {
   const [lojas, setLojas] = useState<ShopeeDashboardLoja[]>([]);
   const [dias, setDias] = useState(30);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  const [showRanking, setShowRanking] = useState(false);
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -58,6 +60,12 @@ export default function ShopeeDashboardPage() {
           className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg transition-colors"
         >
           {loading ? "Carregando..." : "Atualizar"}
+        </button>
+        <button
+          onClick={() => setShowRanking(true)}
+          className="bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm px-4 py-2 rounded-lg transition-colors ml-auto"
+        >
+          Ranking de produtos
         </button>
       </div>
 
@@ -133,6 +141,8 @@ export default function ShopeeDashboardPage() {
           </div>
         ))}
       </div>
+
+      {showRanking && <RankingProdutosModal onClose={() => setShowRanking(false)} />}
     </div>
   );
 }
