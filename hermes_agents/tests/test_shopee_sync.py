@@ -120,6 +120,62 @@ class TestSyncProdutosGravaEstoque(unittest.TestCase):
         self.assertEqual(mock_get_base.call_count, 2)  # lotes de 50 + 25
 
     @patch("shopee_sync.get_shopee_config")
+    @patch("shopee_sync.get_item_base_info")
+    @patch("shopee_sync.get_items")
+    @patch("shopee_sync.get_db")
+    def test_sync_produtos_grava_imagem_do_item(self, mock_get_db, mock_get_items, mock_get_base, mock_cfg):
+        """A aba Produtos da Shopee nao mostrava nenhuma foto porque sync_produtos
+        nunca lia o campo "image" da resposta do get_item_base_info — a imagem_url
+        gravada em anuncios so' vinha (por acaso) do catalogo interno via JOIN."""
+        mock_cfg.return_value = {"shop_id": "1782908877"}
+        mock_get_items.return_value = {"response": {"item": [{"item_id": 444}], "has_next_page": False, "next_offset": 0}}
+        mock_get_base.return_value = {"response": {"item_list": [{
+            "item_id": 444, "item_sku": "SKU-FOTO", "item_name": "Produto Com Foto",
+            "item_status": "NORMAL",
+            "price_info": [{"current_price": 19.9}],
+            "stock_info_v2": {"summary_info": {"total_available_stock": 5}},
+            "image": {"image_url_list": ["https://cf.shopee.com.br/file/abc123"], "image_id_list": ["abc123"]},
+        }]}}
+        fake_db = AsyncMock()
+        fake_db.fetchval.return_value = 1
+        mock_get_db.return_value = fake_db
+
+        shopee_sync.run_async(shopee_sync.sync_produtos(loja_id=7))
+
+        insert_call = next(c for c in fake_db.execute.call_args_list if "INSERT INTO anuncios" in c.args[0])
+        self.assertIn("https://cf.shopee.com.br/file/abc123", insert_call.args)
+
+    @patch("shopee_sync.get_shopee_config")
+    @patch("shopee_sync.get_model_list")
+    @patch("shopee_sync.get_item_base_info")
+    @patch("shopee_sync.get_items")
+    @patch("shopee_sync.get_db")
+    def test_sync_produtos_com_variacao_grava_imagem_do_item_pai_em_cada_modelo(self, mock_get_db, mock_get_items, mock_get_base, mock_get_models, mock_cfg):
+        """Shopee guarda a foto no nivel do item pai, nao por variacao — cada
+        linha de modelo deve herdar essa mesma imagem_url."""
+        mock_cfg.return_value = {"shop_id": "1782908877"}
+        mock_get_items.return_value = {"response": {"item": [{"item_id": 555}], "has_next_page": False, "next_offset": 0}}
+        mock_get_base.return_value = {"response": {"item_list": [{
+            "item_id": 555, "item_sku": "BAR-FOTO-MASTER", "item_name": "Lamina Com Foto",
+            "item_status": "NORMAL", "has_model": True,
+            "price_info": [{"current_price": 0}],
+            "image": {"image_url_list": ["https://cf.shopee.com.br/file/pai999"]},
+        }]}}
+        mock_get_models.return_value = {"response": {"model": [
+            {"model_id": 1, "model_name": "1 Unidade", "model_sku": "BAR-FOTO-MASTER-1UN",
+             "price_info": [{"current_price": 27.99}],
+             "stock_info_v2": {"summary_info": {"total_available_stock": 10}}},
+        ]}}
+        fake_db = AsyncMock()
+        fake_db.fetchval.return_value = 1
+        mock_get_db.return_value = fake_db
+
+        shopee_sync.run_async(shopee_sync.sync_produtos(loja_id=7))
+
+        insert_call = next(c for c in fake_db.execute.call_args_list if "INSERT INTO anuncios" in c.args[0])
+        self.assertIn("https://cf.shopee.com.br/file/pai999", insert_call.args)
+
+    @patch("shopee_sync.get_shopee_config")
     @patch("shopee_sync.get_model_list")
     @patch("shopee_sync.get_item_base_info")
     @patch("shopee_sync.get_items")
@@ -233,6 +289,22 @@ class TestListarProdutosSincronizados(unittest.TestCase):
         self.assertEqual(len(r), 1)
         self.assertEqual(r[0]["sku"], "SKU-1")
         self.assertEqual(r[0]["estoque"], 25)
+
+    @patch("shopee_sync.get_shopee_config")
+    @patch("shopee_sync.get_db")
+    def test_lista_produtos_prefere_imagem_da_shopee_sobre_catalogo_interno(self, mock_get_db, mock_cfg):
+        """imagem_url deve vir da propria Shopee (coluna gravada por sync_produtos)
+        quando disponivel — o catalogo interno (catalogo_produtos) e' so' fallback
+        pra SKUs que a Shopee ainda nao tem foto."""
+        mock_cfg.return_value = {"shop_id": "1782908877"}
+        fake_db = AsyncMock()
+        mock_get_db.return_value = fake_db
+
+        shopee_sync.listar_produtos_sincronizados(7)
+
+        query = fake_db.fetch.call_args.args[0]
+        self.assertIn("a.imagem_url", query)
+        self.assertIn("COALESCE", query)
 
     @patch("shopee_sync.get_shopee_config", return_value={})
     def test_loja_sem_shop_id_retorna_vazio(self, mock_cfg):

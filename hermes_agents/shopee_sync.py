@@ -70,15 +70,16 @@ async def _init_tables():
         pass
 
 async def _upsert_anuncio(db, shop_id: str, sku: str, anuncio_id: str, titulo: str,
-                           preco: float, estoque: int, status: str, agora: datetime) -> None:
+                           preco: float, estoque: int, status: str, agora: datetime,
+                           imagem_url: str = None) -> None:
     """Upsert de 1 linha em anuncios (produto simples OU 1 variacao de um produto
     com modelos) + garante a linha correspondente em fichas_tecnicas."""
     await db.execute("""
-        INSERT INTO anuncios (sku, marketplace, shop_id, anuncio_id, titulo, preco, estoque, status, ultima_atualizacao)
-        VALUES ($1, 'shopee', $2, $3::text, $4, $5, $6, $7, $8)
+        INSERT INTO anuncios (sku, marketplace, shop_id, anuncio_id, titulo, preco, estoque, status, ultima_atualizacao, imagem_url)
+        VALUES ($1, 'shopee', $2, $3::text, $4, $5, $6, $7, $8, $9)
         ON CONFLICT (sku, marketplace, shop_id)
-        DO UPDATE SET anuncio_id = $3, titulo = $4, preco = $5, estoque = $6, status = $7, ultima_atualizacao = $8
-    """, sku, shop_id, anuncio_id, titulo, preco, estoque, status, agora)
+        DO UPDATE SET anuncio_id = $3, titulo = $4, preco = $5, estoque = $6, status = $7, ultima_atualizacao = $8, imagem_url = $9
+    """, sku, shop_id, anuncio_id, titulo, preco, estoque, status, agora, imagem_url)
     await db.execute("""
         INSERT INTO fichas_tecnicas (sku, descricao) VALUES ($1, $2)
         ON CONFLICT (sku) DO NOTHING
@@ -117,6 +118,9 @@ async def sync_produtos(loja_id: int = None) -> dict:
             item_name = d.get("item_name", "")
             status = d.get("item_status", "NORMAL").lower()
             agora = datetime.now()
+            # Shopee guarda a foto no nivel do item pai, nao por variacao — get_model_list
+            # nao traz imagem propria do modelo, entao toda variacao usa essa mesma foto.
+            imagem_url = ((d.get("image") or {}).get("image_url_list") or [None])[0]
             if d.get("has_model"):
                 # Produto com variacao: preco/estoque nao existem no nivel do item
                 # (fica 0 em price_info/stock_info_v2) — precisa buscar cada
@@ -139,7 +143,7 @@ async def sync_produtos(loja_id: int = None) -> dict:
                         titulo = f"{item_name} - {nome_variacao}" if nome_variacao else item_name
                         await _upsert_anuncio(db, shop_id, sku, f"{item_id}_{m['model_id']}", titulo,
                                                price_info.get("current_price", 0),
-                                               s.get("total_available_stock", 0), status, agora)
+                                               s.get("total_available_stock", 0), status, agora, imagem_url)
                         total += 1
                     except Exception as e:
                         erros.append(f"item {item_id} modelo {m.get('model_id')}: {e}")
@@ -150,7 +154,7 @@ async def sync_produtos(loja_id: int = None) -> dict:
                 price_info = (d.get("price_info") or [{}])[0] or {}
                 await _upsert_anuncio(db, shop_id, sku, str(item_id), item_name,
                                        price_info.get("current_price", 0),
-                                       s.get("total_available_stock", 0), status, agora)
+                                       s.get("total_available_stock", 0), status, agora, imagem_url)
                 total += 1
             except Exception as e:
                 erros.append(f"item {item_id}: {e}")
@@ -220,7 +224,7 @@ def listar_produtos_sincronizados(loja_id: int) -> list:
             return []
         rows = await db.fetch("""
             SELECT a.sku, a.titulo, a.preco, a.estoque, a.status, a.anuncio_id, a.ultima_atualizacao,
-                   c.imagem_url
+                   COALESCE(a.imagem_url, c.imagem_url) AS imagem_url
             FROM anuncios a
             LEFT JOIN catalogo_produtos c ON c.sku = a.sku
             WHERE a.marketplace = 'shopee' AND a.shop_id = $1

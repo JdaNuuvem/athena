@@ -169,6 +169,7 @@ def _ensure_tables():
         # (ex: 2 contas Shopee). marketplaces de conta unica (bling) usam shop_id = '' ──
         await db.execute("ALTER TABLE anuncios ADD COLUMN IF NOT EXISTS shop_id VARCHAR(50) NOT NULL DEFAULT ''")
         await db.execute("ALTER TABLE anuncios ADD COLUMN IF NOT EXISTS estoque INT DEFAULT 0")
+        await db.execute("ALTER TABLE anuncios ADD COLUMN IF NOT EXISTS imagem_url TEXT")
 
         # ── Covering indexes for PDV subqueries ──
         try:

@@ -1,9 +1,12 @@
 "use client";
 
-import { Fragment, useState, useEffect, useCallback } from "react";
+import { Fragment, useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import type { ShopeeProdutoSincronizado } from "@/lib/api";
+
+type EstoqueFiltro = "todos" | "zerado" | "baixo" | "normal";
+type ModoVisualizacao = "cards" | "lista";
 
 interface LojaShopee {
   id: number;
@@ -18,6 +21,36 @@ function statusColor(status: string) {
   return "text-amber-400";
 }
 
+function statusPillClasses(status: string) {
+  if (status === "normal") return "bg-emerald-950/40 border-emerald-900/50 text-emerald-400";
+  if (status === "unlist" || status === "banned") return "bg-red-950/40 border-red-900/50 text-red-400";
+  return "bg-amber-950/40 border-amber-900/50 text-amber-400";
+}
+
+function estoqueTextColor(estoque: number) {
+  return estoque <= 0 ? "text-red-400" : estoque < 10 ? "text-amber-400" : "text-emerald-400";
+}
+
+function faixaPreco(variacoes: ShopeeProdutoSincronizado[]): string {
+  const precos = variacoes.map(v => Number(v.preco || 0));
+  const min = Math.min(...precos);
+  const max = Math.max(...precos);
+  return min === max ? `R$ ${min.toFixed(2)}` : `R$ ${min.toFixed(2)} – R$ ${max.toFixed(2)}`;
+}
+
+function classificarEstoque(estoque: number): EstoqueFiltro {
+  if (estoque <= 0) return "zerado";
+  if (estoque < 10) return "baixo";
+  return "normal";
+}
+
+const ROTULO_ESTOQUE: Record<EstoqueFiltro, string> = {
+  todos: "Todos",
+  zerado: "Sem estoque",
+  baixo: "Baixo estoque (<10)",
+  normal: "Estoque normal (≥10)",
+};
+
 function itemIdDoAnuncio(anuncioId: string): number | null {
   const base = anuncioId.split("_")[0];
   const n = Number(base);
@@ -28,7 +61,7 @@ function ProdutoThumb({ url, titulo }: { url?: string | null; titulo: string }) 
   const [falhou, setFalhou] = useState(false);
   if (!url || falhou) {
     return (
-      <div className="w-8 h-8 rounded bg-neutral-800 border border-neutral-700 flex items-center justify-center text-[10px] text-neutral-500 shrink-0">
+      <div className="w-10 h-10 rounded bg-neutral-800 border border-neutral-700 flex items-center justify-center text-xs text-neutral-500 shrink-0">
         {titulo.charAt(0).toUpperCase() || "?"}
       </div>
     );
@@ -38,9 +71,27 @@ function ProdutoThumb({ url, titulo }: { url?: string | null; titulo: string }) 
     <img
       src={url}
       alt={titulo}
-      className="w-8 h-8 rounded object-cover border border-neutral-700 shrink-0"
+      className="w-10 h-10 rounded object-cover border border-neutral-700 shrink-0"
       onError={() => setFalhou(true)}
     />
+  );
+}
+
+function EstoqueHealthBar({ variacoes }: { variacoes: ShopeeProdutoSincronizado[] }) {
+  const total = variacoes.length;
+  if (total <= 1) return null;
+  const zerado = variacoes.filter(v => classificarEstoque(Number(v.estoque)) === "zerado").length;
+  const baixo = variacoes.filter(v => classificarEstoque(Number(v.estoque)) === "baixo").length;
+  const normal = total - zerado - baixo;
+  return (
+    <div
+      className="flex h-1.5 w-20 rounded-full overflow-hidden bg-neutral-800 shrink-0"
+      title={`${normal} normal · ${baixo} baixo · ${zerado} sem estoque`}
+    >
+      {normal > 0 && <div className="bg-emerald-500" style={{ width: `${(normal / total) * 100}%` }} />}
+      {baixo > 0 && <div className="bg-amber-500" style={{ width: `${(baixo / total) * 100}%` }} />}
+      {zerado > 0 && <div className="bg-red-500" style={{ width: `${(zerado / total) * 100}%` }} />}
+    </div>
   );
 }
 
@@ -74,6 +125,14 @@ function nomeBaseProduto(titulo: string): string {
   return titulo.split(" - ")[0];
 }
 
+// Complemento de nomeBaseProduto: a parte depois do primeiro " - ", que
+// identifica a variacao (ex: "Azul - 38"). Sem esse separador, o titulo
+// inteiro nao segue a convencao — mostra ele mesmo como fallback.
+function sufixoVariacao(titulo: string): string {
+  const partes = titulo.split(" - ");
+  return partes.length > 1 ? partes.slice(1).join(" - ") : titulo;
+}
+
 export default function ShopeeProdutosPage() {
   const [lojas, setLojas] = useState<LojaShopee[]>([]);
   const [lojaId, setLojaId] = useState<number | "">("");
@@ -89,6 +148,33 @@ export default function ShopeeProdutosPage() {
   const [salvandoDuplicata, setSalvandoDuplicata] = useState(false);
   const [clonando, setClonando] = useState<{ sku: string; itemId: number; destino: number | "" } | null>(null);
   const [clonandoEnviando, setClonandoEnviando] = useState(false);
+  const [busca, setBusca] = useState("");
+  const [statusFiltro, setStatusFiltro] = useState("");
+  const [estoqueFiltro, setEstoqueFiltro] = useState<EstoqueFiltro>("todos");
+  const [somenteVariacao, setSomenteVariacao] = useState(false);
+  const [viewMode, setViewMode] = useState<ModoVisualizacao>("cards");
+
+  const statusDisponiveis = useMemo(
+    () => Array.from(new Set(produtos.map(p => p.status))).sort(),
+    [produtos]
+  );
+
+  const filtroAtivo = busca.trim() !== "" || statusFiltro !== "" || estoqueFiltro !== "todos";
+
+  const gruposFiltrados = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    const bateFiltro = (p: ShopeeProdutoSincronizado) =>
+      (q === "" || p.sku.toLowerCase().includes(q) || p.titulo.toLowerCase().includes(q)) &&
+      (statusFiltro === "" || p.status === statusFiltro) &&
+      (estoqueFiltro === "todos" || classificarEstoque(Number(p.estoque)) === estoqueFiltro);
+
+    return agruparPorProdutoPai(produtos)
+      .filter(g => !somenteVariacao || g.temVariacao)
+      .map(g => ({ ...g, variacoesFiltradas: g.variacoes.filter(bateFiltro) }))
+      .filter(g => g.variacoesFiltradas.length > 0);
+  }, [produtos, busca, statusFiltro, estoqueFiltro, somenteVariacao]);
+
+  const totalLinhasFiltradas = gruposFiltrados.reduce((s, g) => s + g.variacoesFiltradas.length, 0);
 
   const toggleGrupo = (itemId: string) => {
     setGruposExpandidos(prev => {
@@ -196,25 +282,31 @@ export default function ShopeeProdutosPage() {
     }
   };
 
-  function LinhaProduto({ p, indentado }: { p: ShopeeProdutoSincronizado; indentado?: boolean }) {
+  function LinhaProduto({ p, indentado, variacaoLabel }: { p: ShopeeProdutoSincronizado; indentado?: boolean; variacaoLabel?: string }) {
     return (
       <>
-        <tr className={`border-b border-neutral-800/50 hover:bg-neutral-800/20 ${indentado ? "bg-neutral-950/30" : ""}`}>
-          <td className="pl-4 py-2.5">
+        <tr className={`border-b border-neutral-800/50 hover:bg-neutral-800/30 transition-colors ${indentado ? "bg-neutral-950/30" : ""}`}>
+          <td className="pl-4 py-3">
             <ProdutoThumb url={p.imagem_url} titulo={p.titulo} />
           </td>
-          <td className={`px-4 py-2.5 font-mono text-xs text-neutral-500 ${indentado ? "pl-8" : ""}`}>
+          <td className={`px-4 py-3 font-mono text-xs text-neutral-500 ${indentado ? "pl-8" : ""}`}>
             <Link href={`/produtos/${p.sku}`} className="hover:text-indigo-400">{p.sku}</Link>
           </td>
-          <td className="px-4 py-2.5 text-neutral-300 max-w-xs truncate">{p.titulo}</td>
-          <td className="px-4 py-2.5 text-right text-neutral-300 numeric">R$ {Number(p.preco || 0).toFixed(2)}</td>
-          <td className="px-4 py-2.5 text-right numeric font-medium">
+          <td className="px-4 py-3 max-w-xs truncate" title={p.titulo}>
+            {variacaoLabel ? (
+              <span className="text-neutral-400">{variacaoLabel}</span>
+            ) : (
+              <span className="text-neutral-300">{p.titulo}</span>
+            )}
+          </td>
+          <td className="px-4 py-3 text-right text-neutral-300 numeric">R$ {Number(p.preco || 0).toFixed(2)}</td>
+          <td className="px-4 py-3 text-right numeric font-medium">
             <span className={Number(p.estoque) <= 0 ? "text-red-400" : Number(p.estoque) < 10 ? "text-amber-400" : "text-emerald-400"}>
               {Number(p.estoque)}
             </span>
           </td>
-          <td className={`px-4 py-2.5 text-xs font-medium capitalize ${statusColor(p.status)}`}>{p.status}</td>
-          <td className="px-4 py-2.5 text-center">
+          <td className={`px-4 py-3 text-xs font-medium capitalize ${statusColor(p.status)}`}>{p.status}</td>
+          <td className="px-4 py-3 text-center">
             <Link
               href={`/produtos/${p.sku}?tab=shopee`}
               className="text-[10px] bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-2 py-1 rounded inline-block"
@@ -222,7 +314,7 @@ export default function ShopeeProdutosPage() {
               Editar
             </Link>
           </td>
-          <td className="px-4 py-2.5">
+          <td className="px-4 py-3">
             <div className="flex items-center justify-center gap-1">
               <input
                 type="number"
@@ -241,7 +333,7 @@ export default function ShopeeProdutosPage() {
               </button>
             </div>
           </td>
-          <td className="px-4 py-2.5">
+          <td className="px-4 py-3">
             <div className="flex items-center justify-center gap-1">
               <button
                 onClick={() => setDuplicando({ sku: p.sku, novoSku: "" })}
@@ -328,8 +420,135 @@ export default function ShopeeProdutosPage() {
     );
   }
 
+  function ProdutoAcoes({ p }: { p: ShopeeProdutoSincronizado }) {
+    return (
+      <div className="flex flex-wrap items-center gap-1.5">
+        <input
+          type="number"
+          placeholder={String(p.estoque)}
+          value={quantidades[p.sku] ?? ""}
+          onChange={(e) => setQuantidades(q => ({ ...q, [p.sku]: e.target.value }))}
+          onKeyDown={(e) => { if (e.key === "Enter" && quantidades[p.sku]) enviarEstoque(p.sku); }}
+          className="w-14 bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-xs text-right text-neutral-200"
+        />
+        <button
+          onClick={() => enviarEstoque(p.sku)}
+          disabled={enviando === p.sku || quantidades[p.sku] === undefined || quantidades[p.sku] === ""}
+          className="text-[10px] bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white px-2 py-1 rounded"
+        >
+          {enviando === p.sku ? "..." : "Enviar"}
+        </button>
+        <Link
+          href={`/produtos/${p.sku}?tab=shopee`}
+          className="text-[10px] bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-2 py-1 rounded"
+        >
+          Editar
+        </Link>
+        <button
+          onClick={() => setDuplicando({ sku: p.sku, novoSku: "" })}
+          className="text-[10px] bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-2 py-1 rounded"
+        >
+          Duplicar
+        </button>
+        <button
+          onClick={() => abrirClonar(p)}
+          disabled={lojas.length < 2}
+          title={lojas.length < 2 ? "Conecte outra loja Shopee para clonar" : "Clonar este produto para outra loja Shopee"}
+          className="text-[10px] bg-indigo-700 hover:bg-indigo-600 disabled:opacity-40 text-white px-2 py-1 rounded"
+        >
+          Clonar p/ loja
+        </button>
+      </div>
+    );
+  }
+
+  function PainelAcoesExtra({ p }: { p: ShopeeProdutoSincronizado }) {
+    if (duplicando?.sku === p.sku) {
+      return (
+        <div className="flex items-center gap-2 flex-wrap bg-neutral-800/50 rounded-lg p-2">
+          <span className="text-xs text-neutral-400">Novo SKU para a cópia de <span className="font-mono">{p.sku}</span>:</span>
+          <input
+            type="text"
+            autoFocus
+            value={duplicando.novoSku}
+            onChange={(e) => setDuplicando(d => d && { ...d, novoSku: e.target.value })}
+            onKeyDown={(e) => { if (e.key === "Enter") confirmarDuplicar(); if (e.key === "Escape") setDuplicando(null); }}
+            placeholder="ex: SKU-COPIA"
+            className="bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-xs text-neutral-200 w-36"
+          />
+          <button
+            onClick={confirmarDuplicar}
+            disabled={salvandoDuplicata || !duplicando.novoSku.trim()}
+            className="text-[10px] bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-2 py-1 rounded"
+          >
+            {salvandoDuplicata ? "..." : "Confirmar"}
+          </button>
+          <button
+            onClick={() => setDuplicando(null)}
+            className="text-[10px] bg-neutral-700 hover:bg-neutral-600 text-neutral-300 px-2 py-1 rounded"
+          >
+            Cancelar
+          </button>
+        </div>
+      );
+    }
+    if (clonando?.sku === p.sku) {
+      return (
+        <div className="flex items-center gap-2 flex-wrap bg-neutral-800/50 rounded-lg p-2">
+          <span className="text-xs text-neutral-400">Clonar <span className="font-mono">{p.sku}</span> para:</span>
+          <select
+            autoFocus
+            value={clonando.destino}
+            onChange={(e) => setClonando(c => c && { ...c, destino: e.target.value ? Number(e.target.value) : "" })}
+            className="bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-xs text-neutral-200"
+          >
+            <option value="">Selecione a loja destino</option>
+            {lojas.filter(l => l.id !== Number(lojaId)).map(l => (
+              <option key={l.id} value={l.id}>{l.nome}</option>
+            ))}
+          </select>
+          <button
+            onClick={confirmarClonar}
+            disabled={clonandoEnviando || clonando.destino === ""}
+            className="text-[10px] bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-2 py-1 rounded"
+          >
+            {clonandoEnviando ? "..." : "Confirmar"}
+          </button>
+          <button
+            onClick={() => setClonando(null)}
+            className="text-[10px] bg-neutral-700 hover:bg-neutral-600 text-neutral-300 px-2 py-1 rounded"
+          >
+            Cancelar
+          </button>
+        </div>
+      );
+    }
+    return null;
+  }
+
+  function LinhaCard({ p, variacaoLabel }: { p: ShopeeProdutoSincronizado; variacaoLabel?: string }) {
+    return (
+      <div className="p-3 flex flex-col gap-2">
+        <div className="flex items-center gap-3">
+          <ProdutoThumb url={p.imagem_url} titulo={p.titulo} />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-neutral-200 truncate" title={p.titulo}>{variacaoLabel ?? p.titulo}</p>
+            <Link href={`/produtos/${p.sku}`} className="font-mono text-xs text-neutral-500 hover:text-indigo-400">{p.sku}</Link>
+          </div>
+          <div className="text-right shrink-0">
+            <p className="numeric text-sm text-neutral-300">R$ {Number(p.preco || 0).toFixed(2)}</p>
+            <p className={`numeric text-xs font-medium ${estoqueTextColor(Number(p.estoque))}`}>{Number(p.estoque)} un</p>
+          </div>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full border capitalize shrink-0 ${statusPillClasses(p.status)}`}>{p.status}</span>
+        </div>
+        <ProdutoAcoes p={p} />
+        <PainelAcoesExtra p={p} />
+      </div>
+    );
+  }
+
   return (
-    <div className="p-6 space-y-4 max-w-5xl">
+    <div className="p-6 space-y-5 max-w-6xl">
       <div className="flex items-start justify-between">
         <div>
           <Link href="/integracoes/shopee" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors">← Shopee</Link>
@@ -379,60 +598,167 @@ export default function ShopeeProdutosPage() {
           Nenhum produto sincronizado ainda. Clique em &quot;Sincronizar com a Shopee&quot;.
         </div>
       ) : produtos.length > 0 && (
-        <div className="bg-neutral-900 border border-neutral-800 rounded-lg overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-neutral-800 text-neutral-500 text-xs uppercase">
-                  <th className="px-4 py-3 font-medium"></th>
-                  <th className="text-left px-4 py-3 font-medium">SKU</th>
-                  <th className="text-left px-4 py-3 font-medium">Título</th>
-                  <th className="text-right px-4 py-3 font-medium">Preço</th>
-                  <th className="text-right px-4 py-3 font-medium">Estoque</th>
-                  <th className="text-left px-4 py-3 font-medium">Status</th>
-                  <th className="text-center px-4 py-3 font-medium">Editar</th>
-                  <th className="text-center px-4 py-3 font-medium">Enviar estoque</th>
-                  <th className="text-center px-4 py-3 font-medium">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {agruparPorProdutoPai(produtos).map((grupo) => {
-                  if (!grupo.temVariacao) {
-                    return <LinhaProduto key={grupo.itemId} p={grupo.variacoes[0]} />;
-                  }
-                  const expandido = gruposExpandidos.has(grupo.itemId);
-                  const estoqueTotal = grupo.variacoes.reduce((s, v) => s + Number(v.estoque || 0), 0);
-                  return (
-                    <Fragment key={grupo.itemId}>
-                      <tr
-                        onClick={() => toggleGrupo(grupo.itemId)}
-                        className="border-b border-neutral-800/50 hover:bg-neutral-800/30 cursor-pointer bg-neutral-800/10"
-                      >
-                        <td className="px-4 py-2.5 text-neutral-500 text-xs" colSpan={3}>
-                          <span className="inline-flex items-center gap-1.5">
-                            <span className={`text-neutral-600 transition-transform ${expandido ? "rotate-90" : ""}`}>›</span>
-                            <span className="text-neutral-200">{nomeBaseProduto(grupo.variacoes[0].titulo)}</span>
-                            <span className="text-[10px] bg-indigo-900/30 text-indigo-400 px-1.5 py-0.5 rounded-full shrink-0">
-                              {grupo.variacoes.length} variações
-                            </span>
-                          </span>
-                        </td>
-                        <td className="px-4 py-2.5 text-right text-neutral-600 numeric text-xs">—</td>
-                        <td className="px-4 py-2.5 text-right numeric font-medium text-xs">
-                          <span className={estoqueTotal <= 0 ? "text-red-400" : "text-neutral-400"}>{estoqueTotal} total</span>
-                        </td>
-                        <td colSpan={4}></td>
-                      </tr>
-                      {expandido && grupo.variacoes.map((v) => (
-                        <LinhaProduto key={v.sku} p={v} indentado />
-                      ))}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
+        <>
+          <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 flex flex-wrap items-center gap-3">
+            <input
+              type="text"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar por SKU ou título..."
+              className="bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-neutral-200 w-56 placeholder:text-neutral-500"
+            />
+            <select
+              value={statusFiltro}
+              onChange={(e) => setStatusFiltro(e.target.value)}
+              className="bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-neutral-200 capitalize"
+            >
+              <option value="">Todos os status</option>
+              {statusDisponiveis.map(s => <option key={s} value={s} className="capitalize">{s}</option>)}
+            </select>
+            <select
+              value={estoqueFiltro}
+              onChange={(e) => setEstoqueFiltro(e.target.value as EstoqueFiltro)}
+              className="bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-neutral-200"
+            >
+              {(Object.keys(ROTULO_ESTOQUE) as EstoqueFiltro[]).map(k => (
+                <option key={k} value={k}>{ROTULO_ESTOQUE[k]}</option>
+              ))}
+            </select>
+            <label className="flex items-center gap-2 text-sm text-neutral-400 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={somenteVariacao}
+                onChange={(e) => setSomenteVariacao(e.target.checked)}
+                className="accent-indigo-500"
+              />
+              Só com variação
+            </label>
+            <div className="flex items-center gap-3 ml-auto">
+              <div className="flex items-center bg-neutral-800 border border-neutral-700 rounded-lg p-0.5">
+                <button
+                  onClick={() => setViewMode("cards")}
+                  className={`text-xs px-3 py-1.5 rounded-md transition-colors ${viewMode === "cards" ? "bg-neutral-700 text-neutral-100" : "text-neutral-500 hover:text-neutral-300"}`}
+                >
+                  Cards
+                </button>
+                <button
+                  onClick={() => setViewMode("lista")}
+                  className={`text-xs px-3 py-1.5 rounded-md transition-colors ${viewMode === "lista" ? "bg-neutral-700 text-neutral-100" : "text-neutral-500 hover:text-neutral-300"}`}
+                >
+                  Lista
+                </button>
+              </div>
+              <span className="text-xs text-neutral-500">
+                {totalLinhasFiltradas} de {produtos.length} produtos
+              </span>
+            </div>
           </div>
-        </div>
+
+          {gruposFiltrados.length === 0 ? (
+            <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-6 text-center text-neutral-500 text-sm">
+              Nenhum produto encontrado com esses filtros.
+            </div>
+          ) : viewMode === "cards" ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {gruposFiltrados.map((grupo) => {
+                if (!grupo.temVariacao) {
+                  return (
+                    <div key={grupo.itemId} className="bg-neutral-900 border border-neutral-800 rounded-xl hover:border-neutral-700 transition-colors">
+                      <LinhaCard p={grupo.variacoesFiltradas[0]} />
+                    </div>
+                  );
+                }
+                const parcial = grupo.variacoesFiltradas.length < grupo.variacoes.length;
+                const expandido = gruposExpandidos.has(grupo.itemId) || (filtroAtivo && parcial);
+                const estoqueTotal = grupo.variacoesFiltradas.reduce((s, v) => s + Number(v.estoque || 0), 0);
+                return (
+                  <div key={grupo.itemId} className="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden hover:border-neutral-700 transition-colors">
+                    <div onClick={() => toggleGrupo(grupo.itemId)} className="p-3 flex items-center gap-3 cursor-pointer">
+                      <ProdutoThumb url={grupo.variacoesFiltradas[0].imagem_url} titulo={grupo.variacoesFiltradas[0].titulo} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-neutral-200 truncate">{nomeBaseProduto(grupo.variacoesFiltradas[0].titulo)}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[10px] bg-indigo-900/30 text-indigo-400 px-1.5 py-0.5 rounded-full shrink-0">
+                            {parcial ? `${grupo.variacoesFiltradas.length} de ${grupo.variacoes.length} variações` : `${grupo.variacoes.length} variações`}
+                          </span>
+                          <span className="text-xs text-neutral-500 numeric">{faixaPreco(grupo.variacoesFiltradas)}</span>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <span className={`numeric text-xs font-medium ${estoqueTotal <= 0 ? "text-red-400" : "text-neutral-400"}`}>{estoqueTotal} un total</span>
+                        <EstoqueHealthBar variacoes={grupo.variacoesFiltradas} />
+                      </div>
+                      <span className={`text-neutral-600 transition-transform shrink-0 ${expandido ? "rotate-90" : ""}`}>›</span>
+                    </div>
+                    {expandido && (
+                      <div className="border-t border-neutral-800 divide-y divide-neutral-800/70 bg-neutral-950/30">
+                        {grupo.variacoesFiltradas.map((v) => (
+                          <LinhaCard key={v.sku} p={v} variacaoLabel={sufixoVariacao(v.titulo)} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="bg-neutral-900 border border-neutral-800 rounded-lg overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-neutral-800 text-neutral-500 text-xs uppercase">
+                      <th className="px-4 py-3 font-medium"></th>
+                      <th className="text-left px-4 py-3 font-medium">SKU</th>
+                      <th className="text-left px-4 py-3 font-medium">Título</th>
+                      <th className="text-right px-4 py-3 font-medium">Preço</th>
+                      <th className="text-right px-4 py-3 font-medium">Estoque</th>
+                      <th className="text-left px-4 py-3 font-medium">Status</th>
+                      <th className="text-center px-4 py-3 font-medium">Editar</th>
+                      <th className="text-center px-4 py-3 font-medium">Enviar estoque</th>
+                      <th className="text-center px-4 py-3 font-medium">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {gruposFiltrados.map((grupo) => {
+                      if (!grupo.temVariacao) {
+                        return <LinhaProduto key={grupo.itemId} p={grupo.variacoesFiltradas[0]} />;
+                      }
+                      const parcial = grupo.variacoesFiltradas.length < grupo.variacoes.length;
+                      const expandido = gruposExpandidos.has(grupo.itemId) || (filtroAtivo && parcial);
+                      const estoqueTotal = grupo.variacoesFiltradas.reduce((s, v) => s + Number(v.estoque || 0), 0);
+                      return (
+                        <Fragment key={grupo.itemId}>
+                          <tr
+                            onClick={() => toggleGrupo(grupo.itemId)}
+                            className="border-b border-neutral-800/50 hover:bg-neutral-800/40 cursor-pointer bg-neutral-800/10"
+                          >
+                            <td className="px-4 py-3 text-neutral-500 text-xs" colSpan={3}>
+                              <span className="inline-flex items-center gap-1.5">
+                                <span className={`text-neutral-600 transition-transform ${expandido ? "rotate-90" : ""}`}>›</span>
+                                <span className="text-neutral-200">{nomeBaseProduto(grupo.variacoesFiltradas[0].titulo)}</span>
+                                <span className="text-[10px] bg-indigo-900/30 text-indigo-400 px-1.5 py-0.5 rounded-full shrink-0">
+                                  {parcial ? `${grupo.variacoesFiltradas.length} de ${grupo.variacoes.length} variações` : `${grupo.variacoes.length} variações`}
+                                </span>
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right text-neutral-600 numeric text-xs">—</td>
+                            <td className="px-4 py-3 text-right numeric font-medium text-xs">
+                              <span className={estoqueTotal <= 0 ? "text-red-400" : "text-neutral-400"}>{estoqueTotal} total</span>
+                            </td>
+                            <td colSpan={4}></td>
+                          </tr>
+                          {expandido && grupo.variacoesFiltradas.map((v) => (
+                            <LinhaProduto key={v.sku} p={v} indentado variacaoLabel={sufixoVariacao(v.titulo)} />
+                          ))}
+                        </Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
