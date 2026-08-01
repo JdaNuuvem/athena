@@ -189,3 +189,24 @@ def dashboard() -> dict:
         }
     try: return run_async(_go())
     except Exception as e: return {"tickets_abertos":0,"tickets_pendentes":0,"hoje":0,"tempo_medio_resposta":0,"canais":[],"slas":[]}
+
+def listar_tickets_filtrado(status=None, prioridade=None, canal=None, atendente_id=None, q=None, de=None, ate=None) -> list:
+    where = []
+    params = []
+    def _add(cond, val):
+        params.append(val)
+        where.append(cond.format(n=len(params)))
+    if status: _add("status = ${n}", status)
+    if prioridade: _add("prioridade = ${n}", prioridade)
+    if canal: _add("canal = ${n}", canal)
+    if atendente_id: _add("atendente_id = ${n}", int(atendente_id))
+    if q: _add("(cliente ILIKE ${n} OR assunto ILIKE ${n} OR numero ILIKE ${n})", f"%{q}%")
+    if de: _add("data_abertura >= ${n}", de)
+    if ate: _add("data_abertura <= ${n}", ate)
+    where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch(f"SELECT * FROM atend_tickets {where_sql} ORDER BY id DESC LIMIT 200", *params)
+        return [dict(r) for r in rows]
+    try: return run_async(_go())
+    except Exception as e: log(AGENT, f"listar_tickets_filtrado: {e}"); return []

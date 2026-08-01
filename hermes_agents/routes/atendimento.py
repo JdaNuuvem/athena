@@ -52,6 +52,23 @@ def atend_reabrir(id):
     return _go()
 
 
+@atendimento_bp.route("/tickets", methods=["GET"])
+def atend_listar_tickets():
+    @requer_permissao("atendimento.ver")
+    def _go():
+        from core.atendimento import listar_tickets_filtrado
+        return jsonify({"data": listar_tickets_filtrado(
+            status=request.args.get("status") or None,
+            prioridade=request.args.get("prioridade") or None,
+            canal=request.args.get("canal") or None,
+            atendente_id=request.args.get("atendente_id") or None,
+            q=request.args.get("q") or None,
+            de=request.args.get("de") or None,
+            ate=request.args.get("ate") or None,
+        )})
+    return _go()
+
+
 @atendimento_bp.route("/<tabela>", methods=["GET"])
 def atend_list(tabela):
     from core.atendimento import list as al, TABLES
