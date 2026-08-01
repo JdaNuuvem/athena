@@ -71,6 +71,35 @@ class TestSyncProdutosGravaEstoque(unittest.TestCase):
     @patch("shopee_sync.get_item_base_info")
     @patch("shopee_sync.get_items")
     @patch("shopee_sync.get_db")
+    def test_sync_produtos_grava_fichas_tecnicas_antes_de_anuncio(self, mock_get_db, mock_get_items, mock_get_base, mock_cfg):
+        """Bug real em producao: anuncios.sku tem FK pra fichas_tecnicas(sku)
+        (ver hermes_agents/sql/schema.sql). _upsert_anuncio inseria em anuncios
+        ANTES de fichas_tecnicas — pra SKU nunca sincronizado antes (ainda nao
+        existe em fichas_tecnicas), o INSERT em anuncios violava a FK e o
+        produto nunca gravava. Precisa gravar fichas_tecnicas primeiro."""
+        mock_cfg.return_value = {"shop_id": "1782908877"}
+        mock_get_items.return_value = {"response": {"item": [{"item_id": 999}], "has_next_page": False, "next_offset": 0}}
+        mock_get_base.return_value = {"response": {"item_list": [{
+            "item_id": 999, "item_sku": "SKU-NOVO", "item_name": "Produto Nunca Sincronizado",
+            "item_status": "NORMAL",
+            "price_info": [{"current_price": 15.0}],
+            "stock_info_v2": {"summary_info": {"total_available_stock": 3}},
+        }]}}
+        fake_db = AsyncMock()
+        fake_db.fetchval.return_value = 1
+        mock_get_db.return_value = fake_db
+
+        shopee_sync.run_async(shopee_sync.sync_produtos(loja_id=7))
+
+        chamadas = fake_db.execute.call_args_list
+        idx_fichas = next(i for i, c in enumerate(chamadas) if "INSERT INTO fichas_tecnicas" in c.args[0])
+        idx_anuncio = next(i for i, c in enumerate(chamadas) if "INSERT INTO anuncios" in c.args[0])
+        self.assertLess(idx_fichas, idx_anuncio, "fichas_tecnicas precisa ser gravado antes de anuncios (FK anuncios_sku_fkey)")
+
+    @patch("shopee_sync.get_shopee_config")
+    @patch("shopee_sync.get_item_base_info")
+    @patch("shopee_sync.get_items")
+    @patch("shopee_sync.get_db")
     def test_sync_produtos_sem_estoque_grava_zero(self, mock_get_db, mock_get_items, mock_get_base, mock_cfg):
         mock_cfg.return_value = {"shop_id": "1782908877"}
         mock_get_items.return_value = {"response": {"item": [{"item_id": 222}], "has_next_page": False, "next_offset": 0}}

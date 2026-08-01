@@ -73,17 +73,21 @@ async def _upsert_anuncio(db, shop_id: str, sku: str, anuncio_id: str, titulo: s
                            preco: float, estoque: int, status: str, agora: datetime,
                            imagem_url: str = None) -> None:
     """Upsert de 1 linha em anuncios (produto simples OU 1 variacao de um produto
-    com modelos) + garante a linha correspondente em fichas_tecnicas."""
+    com modelos) + garante a linha correspondente em fichas_tecnicas.
+
+    fichas_tecnicas precisa ser gravado ANTES de anuncios — anuncios.sku tem
+    FK pra fichas_tecnicas(sku) (ver sql/schema.sql), e SKU sincronizado pela
+    primeira vez ainda nao existe la'."""
+    await db.execute("""
+        INSERT INTO fichas_tecnicas (sku, descricao) VALUES ($1, $2)
+        ON CONFLICT (sku) DO NOTHING
+    """, sku, titulo)
     await db.execute("""
         INSERT INTO anuncios (sku, marketplace, shop_id, anuncio_id, titulo, preco, estoque, status, ultima_atualizacao, imagem_url)
         VALUES ($1, 'shopee', $2, $3::text, $4, $5, $6, $7, $8, $9)
         ON CONFLICT (sku, marketplace, shop_id)
         DO UPDATE SET anuncio_id = $3, titulo = $4, preco = $5, estoque = $6, status = $7, ultima_atualizacao = $8, imagem_url = $9
     """, sku, shop_id, anuncio_id, titulo, preco, estoque, status, agora, imagem_url)
-    await db.execute("""
-        INSERT INTO fichas_tecnicas (sku, descricao) VALUES ($1, $2)
-        ON CONFLICT (sku) DO NOTHING
-    """, sku, titulo)
 
 
 async def sync_produtos(loja_id: int = None) -> dict:
