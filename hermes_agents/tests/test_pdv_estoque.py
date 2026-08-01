@@ -273,10 +273,13 @@ class TestCancelarVendaRestauraEstoque(unittest.IsolatedAsyncioTestCase):
         self.patch_autoriza = patch("core.pdv._autorizar_gerencial",
                                      return_value={"ok": True, "id": 9, "nome": "Gerente", "role": "gerente"})
         self.patch_autoriza.start()
+        self.patch_ensure = patch("core.pdv._ensure_saldos_async", new=AsyncMock(return_value=None))
+        self.patch_ensure.start()
 
     def tearDown(self):
         self.patch_db.stop()
         self.patch_autoriza.stop()
+        self.patch_ensure.stop()
 
     async def test_cancelar_restaura_quantidade_de_todos_os_itens(self):
         from core.pdv import cancelar_venda
@@ -300,6 +303,26 @@ class TestCancelarVendaRestauraEstoque(unittest.IsolatedAsyncioTestCase):
             r = cancelar_venda(10, motivo="tentativa dupla", operador_id=9)
         self.assertIn("error", r)
         mock_entrada.assert_not_called()
+
+    async def test_item_com_erro_ao_restaurar_estoque_desfaz_cancelamento_inteiro(self):
+        from core.pdv import cancelar_venda
+        chamadas = []
+        async def fake_entrada(conn, sku, loja, quantidade, motivo, usuario_id=None, usuario_nome="", ip=None, dispositivo=None):
+            chamadas.append(sku)
+            if sku == "SKU2":
+                return {"erro": "Erro ao restaurar estoque"}
+            return {"ok": True, "sku": sku, "loja": loja, "quantidade": quantidade, "anterior": 0, "atual": quantidade}
+        with patch("core.pdv.entrada_async", side_effect=fake_entrada):
+            r = cancelar_venda(10, motivo="Cliente desistiu", operador_id=9)
+        self.assertIn("error", r)
+        self.assertIn("SKU2", r["error"])
+        # ou tudo e revertido junto, ou nada: venda continua finalizada, nenhuma
+        # devolucao foi registrada -- mesmo o item SKU1, cujo entrada_async ja
+        # tinha "sucedido" antes do SKU2 falhar, nao fica com restauracao parcial
+        # commitada (a UPDATE/INSERT que fechariam o cancelamento nunca rodam).
+        self.assertEqual(self.fake.vendas[10]["status"], "finalizada")
+        self.assertEqual(self.fake.devolucoes, [])
+        self.assertEqual(chamadas, ["SKU1", "SKU2"])
 
 
 if __name__ == "__main__":
