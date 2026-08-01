@@ -1,5 +1,6 @@
 """PDV Core — Vendas, Caixa, Pagamentos, Sangria, Suprimento, Fechamento, NFCe"""
-from core import get_db, run_async, log, hoje
+from datetime import datetime
+from core import get_db, run_async, log
 from core.estoque import saida_async, entrada_async
 from core.estoque_saldos import SaldoError, _ensure_async as _ensure_saldos_async
 import hashlib, hmac, os as _os
@@ -435,7 +436,7 @@ async def _resolver_loja_da_venda(conn, caixa_id):
 def abrir_caixa(operador: str, saldo_inicial: float = 0, operador_id: int = None, senha: str = "", loja_id: int = None) -> dict:
     erro = _exigir_operador(operador_id, senha)
     if erro: return erro
-    campos = {"operador": operador, "saldo_inicial": saldo_inicial, "status": "aberto", "data_abertura": hoje()}
+    campos = {"operador": operador, "saldo_inicial": saldo_inicial, "status": "aberto", "data_abertura": datetime.now()}
     if loja_id:
         campos["loja_id"] = loja_id
     return create("caixas", campos)
@@ -561,11 +562,11 @@ def resumo_fechamento(caixa_id: int) -> dict:
 
 def abrir_turno(caixa_id: int, operador_id: int = None, operador_nome: str = "", saldo_abertura: float = 0) -> dict:
     return create("turnos", {"caixa_id": caixa_id, "operador_id": operador_id, "operador": operador_nome,
-        "saldo_abertura": saldo_abertura, "status": "aberto", "aberto_em": hoje()})
+        "saldo_abertura": saldo_abertura, "status": "aberto", "aberto_em": datetime.now()})
 
 def fechar_turno(turno_id: int, saldo_fechamento: float, observacoes: str = "") -> dict:
     return update("turnos", turno_id, {"status": "fechado", "saldo_fechamento": saldo_fechamento,
-        "fechado_em": hoje(), "observacoes": observacoes})
+        "fechado_em": datetime.now(), "observacoes": observacoes})
 
 def buscar_produtos(q: str, limit: int = 15) -> list:
     async def _go():
@@ -786,7 +787,7 @@ def realizar_venda(caixa_id: int, itens: list, pagamentos: list, cliente="", cli
                 loja = await _resolver_loja_da_venda(conn, caixa_id)
                 row = await conn.fetchrow("""INSERT INTO pdv_vendas (caixa_id, cliente, cliente_id, total, desconto, operador, data, estoque_baixado)
                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *""",
-                    caixa_id, cliente, cliente_id, total, desconto, operador, hoje(), bool(loja))
+                    caixa_id, cliente, cliente_id, total, desconto, operador, datetime.now(), bool(loja))
                 vid = row["id"]
                 for item in itens:
                     item_desconto = item.get("desconto",0) or 0
@@ -893,7 +894,7 @@ def criar_orcamento(cliente: str = "", cliente_id=None, itens: list = None, oper
             async with conn.transaction():
                 row = await conn.fetchrow("""INSERT INTO pdv_vendas (cliente, cliente_id, total, desconto, operador, status, tipo, data)
                     VALUES ($1,$2,$3,$4,$5,'orcamento','orcamento',$6) RETURNING *""",
-                    cliente, cliente_id, total, desconto, operador, hoje())
+                    cliente, cliente_id, total, desconto, operador, datetime.now())
                 vid = row["id"]
                 for item in (itens or []):
                     item_desconto = item.get("desconto",0) or 0

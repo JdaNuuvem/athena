@@ -8,6 +8,7 @@ import sys, os, unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from unittest.mock import patch, AsyncMock
 from decimal import Decimal
+from datetime import datetime
 
 
 class FakeDBPdv:
@@ -38,6 +39,14 @@ class FakeDBPdv:
         if q.startswith("INSERT INTO pdv_vendas") and "RETURNING *" in q:
             vid = self._next_venda_id; self._next_venda_id += 1
             caixa_id, cliente, cliente_id, total, desconto, operador, data, estoque_baixado = params
+            # asyncpg exige datetime.date/datetime.datetime real pra coluna TIMESTAMP --
+            # uma string (ex.: retorno antigo de core.hoje()) falha em producao com
+            # "invalid input for query argument: expected a datetime.date or
+            # datetime.datetime instance, got 'str'". FakeDB nao valida tipo por
+            # padrao, entao essa checagem existe so' pra nao deixar essa classe de
+            # bug passar despercebida de novo (achado real via smoke test).
+            assert isinstance(data, datetime), \
+                f"data deve ser datetime.datetime (asyncpg exige tipo nativo), veio {type(data)}: {data!r}"
             venda = {"id": vid, "caixa_id": caixa_id, "cliente": cliente, "cliente_id": cliente_id,
                      "total": total, "desconto": desconto, "operador": operador, "status": "finalizada",
                      "data": data, "observacoes": None, "tipo": "venda", "numero": None,
