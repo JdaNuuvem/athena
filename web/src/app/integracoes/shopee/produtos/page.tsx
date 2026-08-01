@@ -11,9 +11,9 @@ type ModoVisualizacao = "cards" | "lista";
 type Densidade = "compacto" | "padrao" | "grande";
 
 const DENSIDADE_CARDS: Record<Densidade, { rotulo: string; grid: string; thumb: string; padding: string; titulo: string }> = {
-  compacto: { rotulo: "Compacto", grid: "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5", thumb: "w-8 h-8", padding: "p-2", titulo: "text-xs" },
-  padrao: { rotulo: "Padrão", grid: "grid-cols-1 md:grid-cols-2 xl:grid-cols-3", thumb: "w-10 h-10", padding: "p-3", titulo: "text-sm" },
-  grande: { rotulo: "Grande", grid: "grid-cols-1 sm:grid-cols-2 xl:grid-cols-2", thumb: "w-14 h-14", padding: "p-4", titulo: "text-base" },
+  compacto: { rotulo: "Compacto", grid: "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5", thumb: "w-10 h-10", padding: "p-2", titulo: "text-xs" },
+  padrao: { rotulo: "Padrão", grid: "grid-cols-1 md:grid-cols-2 xl:grid-cols-3", thumb: "w-12 h-12", padding: "p-3", titulo: "text-sm" },
+  grande: { rotulo: "Grande", grid: "grid-cols-1 sm:grid-cols-2 xl:grid-cols-2", thumb: "w-16 h-16", padding: "p-4", titulo: "text-base" },
 };
 
 interface LojaShopee {
@@ -66,7 +66,7 @@ function itemIdDoAnuncio(anuncioId: string): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-function ProdutoThumb({ url, titulo, tamanho = "w-10 h-10" }: { url?: string | null; titulo: string; tamanho?: string }) {
+function ProdutoThumb({ url, titulo, tamanho = "w-12 h-12" }: { url?: string | null; titulo: string; tamanho?: string }) {
   const [falhou, setFalhou] = useState(false);
   if (!url || falhou) {
     return (
