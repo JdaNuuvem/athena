@@ -743,11 +743,13 @@ def realizar_venda(caixa_id: int, itens: list, pagamentos: list, cliente="", cli
     erro = _validar_desconto_operador(operador_id, itens, desconto, total_itens, gerente_pin_id, pin, codigo_barras)
     if erro: return erro
 
-    # ponytail: transacao atomica — se item/pgto falhar, venda inteira rollback
+    # ponytail: transacao atomica — se item/pgto/baixa-de-estoque falhar, venda inteira rollback
     async def _go():
+        await _ensure_saldos_async()
         db = await get_db()
         async with db.acquire() as conn:
             async with conn.transaction():
+                loja = await _resolver_loja_da_venda(conn, caixa_id)
                 row = await conn.fetchrow("""INSERT INTO pdv_vendas (caixa_id, cliente, cliente_id, total, desconto, operador, data)
                     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *""",
                     caixa_id, cliente, cliente_id, total, desconto, operador, hoje())
@@ -759,11 +761,20 @@ def realizar_venda(caixa_id: int, itens: list, pagamentos: list, cliente="", cli
                         vid, item.get("codigo",""), item.get("descricao",""),
                         item.get("quantidade",1), item.get("valor_unitario",0),
                         item_desconto, item_total)
+                    if loja:
+                        sku = item.get("codigo","")
+                        r = await saida_async(conn, sku, loja, item.get("quantidade",1) or 1, "venda_pdv",
+                                              usuario_id=operador_id, usuario_nome=operador)
+                        if r.get("erro"):
+                            raise SaldoError(f"Estoque insuficiente para {sku}: {r['erro']}")
                 for pg in pagamentos:
                     await conn.execute("INSERT INTO pdv_pagamentos (venda_id, forma, valor, parcelas) VALUES ($1,$2,$3,$4)",
                         vid, pg.get("forma","dinheiro"), pg.get("valor",total), pg.get("parcelas",1))
                 return {"venda": dict(row), "total": total}
-    result = run_async(_go())
+    try:
+        result = run_async(_go())
+    except SaldoError as e:
+        return {"error": str(e)}
     if result and not result.get("error"):
         try:
             from core.automacoes import disparar_webhooks

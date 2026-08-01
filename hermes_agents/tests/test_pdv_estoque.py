@@ -190,5 +190,69 @@ class TestResolverLojaDaVenda(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(loja)
 
 
+class TestRealizarVendaBaixaEstoque(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.fake = FakeDBPdv()
+        self.fake.caixas[1] = {"loja_id": 5}
+        self.fake.lojas[5] = "Loja Fisica Central"
+        async def _get_db(_fake=self.fake):
+            return _fake
+        self.patch_db = patch("core.pdv.get_db", side_effect=_get_db)
+        self.patch_db.start()
+        self.patch_ensure = patch("core.pdv._ensure_saldos_async", new=AsyncMock(return_value=None))
+        self.patch_ensure.start()
+
+    def tearDown(self):
+        self.patch_db.stop()
+        self.patch_ensure.stop()
+
+    async def test_venda_com_estoque_suficiente_decrementa_cada_item(self):
+        from core.pdv import realizar_venda
+        chamadas = []
+        async def fake_saida(conn, sku, loja, quantidade, motivo, usuario_id=None, usuario_nome="", ip=None, dispositivo=None):
+            chamadas.append((sku, loja, quantidade, motivo))
+            return {"ok": True, "sku": sku, "loja": loja, "quantidade": quantidade, "anterior": 10, "atual": 10 - quantidade}
+        with patch("core.pdv.saida_async", side_effect=fake_saida):
+            r = realizar_venda(1, itens=[
+                {"codigo": "SKU1", "descricao": "Produto 1", "quantidade": 2, "valor_unitario": 10.0},
+                {"codigo": "SKU2", "descricao": "Produto 2", "quantidade": 1, "valor_unitario": 5.0},
+            ], pagamentos=[{"forma": "dinheiro", "valor": 25.0}], operador="Joao", operador_id=1)
+        self.assertNotIn("error", r)
+        self.assertEqual(sorted(chamadas), sorted([
+            ("SKU1", "Loja Fisica Central", 2, "venda_pdv"),
+            ("SKU2", "Loja Fisica Central", 1, "venda_pdv"),
+        ]))
+        self.assertEqual(len(self.fake.vendas), 1)
+        self.assertEqual(len(self.fake.itens), 2)
+
+    async def test_item_sem_saldo_suficiente_desfaz_venda_inteira(self):
+        from core.pdv import realizar_venda
+        async def fake_saida(conn, sku, loja, quantidade, motivo, usuario_id=None, usuario_nome="", ip=None, dispositivo=None):
+            if sku == "SKU2":
+                return {"erro": "Saldo insuficiente em 'disponivel' (0 disponivel, 1 solicitado)"}
+            return {"ok": True, "sku": sku, "loja": loja, "quantidade": quantidade, "anterior": 10, "atual": 10 - quantidade}
+        with patch("core.pdv.saida_async", side_effect=fake_saida):
+            r = realizar_venda(1, itens=[
+                {"codigo": "SKU1", "descricao": "Produto 1", "quantidade": 2, "valor_unitario": 10.0},
+                {"codigo": "SKU2", "descricao": "Produto 2", "quantidade": 1, "valor_unitario": 5.0},
+            ], pagamentos=[{"forma": "dinheiro", "valor": 25.0}], operador="Joao", operador_id=1)
+        self.assertIn("error", r)
+        self.assertIn("SKU2", r["error"])
+        self.assertEqual(len(self.fake.vendas), 0)
+        self.assertEqual(len(self.fake.itens), 0)
+        self.assertEqual(len(self.fake.pagamentos), 0)
+
+    async def test_caixa_sem_loja_id_nao_bloqueia_venda_nem_baixa_estoque(self):
+        from core.pdv import realizar_venda
+        self.fake.caixas[1] = {"loja_id": None}
+        with patch("core.pdv.saida_async", new=AsyncMock()) as mock_saida:
+            r = realizar_venda(1, itens=[
+                {"codigo": "SKU1", "descricao": "Produto 1", "quantidade": 2, "valor_unitario": 10.0},
+            ], pagamentos=[{"forma": "dinheiro", "valor": 20.0}], operador="Joao", operador_id=1)
+        self.assertNotIn("error", r)
+        mock_saida.assert_not_called()
+        self.assertEqual(len(self.fake.vendas), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
