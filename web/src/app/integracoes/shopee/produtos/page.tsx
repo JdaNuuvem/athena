@@ -42,7 +42,8 @@ function faixaPreco(variacoes: ShopeeProdutoSincronizado[]): string {
   const precos = variacoes.map(v => Number(v.preco || 0));
   const min = Math.min(...precos);
   const max = Math.max(...precos);
-  return min === max ? `R$ ${min.toFixed(2)}` : `R$ ${min.toFixed(2)} – R$ ${max.toFixed(2)}`;
+  const fmt = (n: number) => n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return min === max ? `R$ ${fmt(min)}` : `R$ ${fmt(min)} – R$ ${fmt(max)}`;
 }
 
 function classificarEstoque(estoque: number): EstoqueFiltro {
@@ -307,7 +308,7 @@ export default function ShopeeProdutosPage() {
               <span className="text-neutral-300">{p.titulo}</span>
             )}
           </td>
-          <td className="px-4 py-3 text-right text-neutral-300 numeric">R$ {Number(p.preco || 0).toFixed(2)}</td>
+          <td className="px-4 py-3 text-right text-neutral-300 numeric">R$ {Number(p.preco || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
           <td className="px-4 py-3 text-right numeric font-medium">
             <span className={Number(p.estoque) <= 0 ? "text-red-400" : Number(p.estoque) < 10 ? "text-amber-400" : "text-emerald-400"}>
               {Number(p.estoque)}
@@ -317,7 +318,7 @@ export default function ShopeeProdutosPage() {
           <td className="px-4 py-3 text-center">
             <Link
               href={`/produtos/${p.sku}?tab=shopee`}
-              className="text-[10px] bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-2 py-1 rounded inline-block"
+              className="text-xs bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-2 py-1 rounded inline-block"
             >
               Editar
             </Link>
@@ -335,7 +336,7 @@ export default function ShopeeProdutosPage() {
               <button
                 onClick={() => enviarEstoque(p.sku)}
                 disabled={enviando === p.sku || quantidades[p.sku] === undefined || quantidades[p.sku] === ""}
-                className="text-[10px] bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white px-2 py-1 rounded"
+                className="text-xs bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white px-2 py-1 rounded"
               >
                 {enviando === p.sku ? "..." : "Enviar"}
               </button>
@@ -345,7 +346,7 @@ export default function ShopeeProdutosPage() {
             <div className="flex items-center justify-center gap-1">
               <button
                 onClick={() => setDuplicando({ sku: p.sku, novoSku: "" })}
-                className="text-[10px] bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-2 py-1 rounded"
+                className="text-xs bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-2 py-1 rounded"
               >
                 Duplicar
               </button>
@@ -353,7 +354,7 @@ export default function ShopeeProdutosPage() {
                 onClick={() => abrirClonar(p)}
                 disabled={lojas.length < 2}
                 title={lojas.length < 2 ? "Conecte outra loja Shopee para clonar" : "Clonar este produto para outra loja Shopee"}
-                className="text-[10px] bg-indigo-700 hover:bg-indigo-600 disabled:opacity-40 text-white px-2 py-1 rounded"
+                className="text-xs bg-indigo-700 hover:bg-indigo-600 disabled:opacity-40 text-white px-2 py-1 rounded"
               >
                 Clonar p/ loja
               </button>
@@ -377,13 +378,13 @@ export default function ShopeeProdutosPage() {
                 <button
                   onClick={confirmarDuplicar}
                   disabled={salvandoDuplicata || !duplicando.novoSku.trim()}
-                  className="text-[10px] bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-2 py-1 rounded"
+                  className="text-xs bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-2 py-1 rounded"
                 >
                   {salvandoDuplicata ? "..." : "Confirmar"}
                 </button>
                 <button
                   onClick={() => setDuplicando(null)}
-                  className="text-[10px] bg-neutral-700 hover:bg-neutral-600 text-neutral-300 px-2 py-1 rounded"
+                  className="text-xs bg-neutral-700 hover:bg-neutral-600 text-neutral-300 px-2 py-1 rounded"
                 >
                   Cancelar
                 </button>
@@ -410,13 +411,13 @@ export default function ShopeeProdutosPage() {
                 <button
                   onClick={confirmarClonar}
                   disabled={clonandoEnviando || clonando.destino === ""}
-                  className="text-[10px] bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-2 py-1 rounded"
+                  className="text-xs bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-2 py-1 rounded"
                 >
                   {clonandoEnviando ? "..." : "Confirmar"}
                 </button>
                 <button
                   onClick={() => setClonando(null)}
-                  className="text-[10px] bg-neutral-700 hover:bg-neutral-600 text-neutral-300 px-2 py-1 rounded"
+                  className="text-xs bg-neutral-700 hover:bg-neutral-600 text-neutral-300 px-2 py-1 rounded"
                 >
                   Cancelar
                 </button>
@@ -442,19 +443,19 @@ export default function ShopeeProdutosPage() {
         <button
           onClick={() => enviarEstoque(p.sku)}
           disabled={enviando === p.sku || quantidades[p.sku] === undefined || quantidades[p.sku] === ""}
-          className="text-[10px] bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white px-2 py-1 rounded"
+          className="text-xs bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white px-2 py-1 rounded"
         >
           {enviando === p.sku ? "..." : "Enviar"}
         </button>
         <Link
           href={`/produtos/${p.sku}?tab=shopee`}
-          className="text-[10px] bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-2 py-1 rounded"
+          className="text-xs bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-2 py-1 rounded"
         >
           Editar
         </Link>
         <button
           onClick={() => setDuplicando({ sku: p.sku, novoSku: "" })}
-          className="text-[10px] bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-2 py-1 rounded"
+          className="text-xs bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-2 py-1 rounded"
         >
           Duplicar
         </button>
@@ -462,7 +463,7 @@ export default function ShopeeProdutosPage() {
           onClick={() => abrirClonar(p)}
           disabled={lojas.length < 2}
           title={lojas.length < 2 ? "Conecte outra loja Shopee para clonar" : "Clonar este produto para outra loja Shopee"}
-          className="text-[10px] bg-indigo-700 hover:bg-indigo-600 disabled:opacity-40 text-white px-2 py-1 rounded"
+          className="text-xs bg-indigo-700 hover:bg-indigo-600 disabled:opacity-40 text-white px-2 py-1 rounded"
         >
           Clonar p/ loja
         </button>
@@ -487,13 +488,13 @@ export default function ShopeeProdutosPage() {
           <button
             onClick={confirmarDuplicar}
             disabled={salvandoDuplicata || !duplicando.novoSku.trim()}
-            className="text-[10px] bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-2 py-1 rounded"
+            className="text-xs bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-2 py-1 rounded"
           >
             {salvandoDuplicata ? "..." : "Confirmar"}
           </button>
           <button
             onClick={() => setDuplicando(null)}
-            className="text-[10px] bg-neutral-700 hover:bg-neutral-600 text-neutral-300 px-2 py-1 rounded"
+            className="text-xs bg-neutral-700 hover:bg-neutral-600 text-neutral-300 px-2 py-1 rounded"
           >
             Cancelar
           </button>
@@ -518,13 +519,13 @@ export default function ShopeeProdutosPage() {
           <button
             onClick={confirmarClonar}
             disabled={clonandoEnviando || clonando.destino === ""}
-            className="text-[10px] bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-2 py-1 rounded"
+            className="text-xs bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-2 py-1 rounded"
           >
             {clonandoEnviando ? "..." : "Confirmar"}
           </button>
           <button
             onClick={() => setClonando(null)}
-            className="text-[10px] bg-neutral-700 hover:bg-neutral-600 text-neutral-300 px-2 py-1 rounded"
+            className="text-xs bg-neutral-700 hover:bg-neutral-600 text-neutral-300 px-2 py-1 rounded"
           >
             Cancelar
           </button>
@@ -545,10 +546,10 @@ export default function ShopeeProdutosPage() {
             <Link href={`/produtos/${p.sku}`} className="font-mono text-xs text-neutral-500 hover:text-indigo-400">{p.sku}</Link>
           </div>
           <div className="text-right shrink-0">
-            <p className="numeric text-sm text-neutral-300">R$ {Number(p.preco || 0).toFixed(2)}</p>
+            <p className="numeric text-sm text-neutral-300">R$ {Number(p.preco || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
             <p className={`numeric text-xs font-medium ${estoqueTextColor(Number(p.estoque))}`}>{Number(p.estoque)} un</p>
           </div>
-          <span className={`text-[10px] px-2 py-0.5 rounded-full border capitalize shrink-0 ${statusPillClasses(p.status)}`}>{p.status}</span>
+          <span className={`text-xs px-2 py-0.5 rounded-full border capitalize shrink-0 ${statusPillClasses(p.status)}`}>{p.status}</span>
         </div>
         <ProdutoAcoes p={p} />
         <PainelAcoesExtra p={p} />
@@ -702,7 +703,7 @@ export default function ShopeeProdutosPage() {
                       <div className="flex-1 min-w-0">
                         <p className={`${cfg.titulo} text-neutral-200 truncate`}>{nomeBaseProduto(grupo.variacoesFiltradas[0].titulo)}</p>
                         <div className="flex items-center gap-2 mt-1">
-                          <span className="text-[10px] bg-indigo-900/30 text-indigo-400 px-1.5 py-0.5 rounded-full shrink-0">
+                          <span className="text-xs bg-indigo-900/30 text-indigo-400 px-1.5 py-0.5 rounded-full shrink-0">
                             {parcial ? `${grupo.variacoesFiltradas.length} de ${grupo.variacoes.length} variações` : `${grupo.variacoes.length} variações`}
                           </span>
                           <span className="text-xs text-neutral-500 numeric">{faixaPreco(grupo.variacoesFiltradas)}</span>
@@ -760,7 +761,7 @@ export default function ShopeeProdutosPage() {
                               <span className="inline-flex items-center gap-1.5">
                                 <span className={`text-neutral-600 transition-transform ${expandido ? "rotate-90" : ""}`}>›</span>
                                 <span className="text-neutral-200">{nomeBaseProduto(grupo.variacoesFiltradas[0].titulo)}</span>
-                                <span className="text-[10px] bg-indigo-900/30 text-indigo-400 px-1.5 py-0.5 rounded-full shrink-0">
+                                <span className="text-xs bg-indigo-900/30 text-indigo-400 px-1.5 py-0.5 rounded-full shrink-0">
                                   {parcial ? `${grupo.variacoesFiltradas.length} de ${grupo.variacoes.length} variações` : `${grupo.variacoes.length} variações`}
                                 </span>
                               </span>
