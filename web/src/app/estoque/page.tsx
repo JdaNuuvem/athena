@@ -7,6 +7,7 @@ import {
   listarBlingProdutos, listarBlingDepositos, obterSaldoDeposito,
   atualizarEstoqueDeposito, BlingDeposito,
 } from "@/lib/api";
+import EstoqueMultiLojaModal from "./_components/EstoqueMultiLojaModal";
 
 interface LojaInfo { id: number; nome: string; ativa: boolean; bling_id?: number | null; }
 interface EstoqueRow {
@@ -26,6 +27,7 @@ export default function EstoquePage() {
   const [stockFilter, setStockFilter] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [lojaAtiva, setLojaAtiva] = useState<LojaInfo | null>(null);
+  const [editandoLojas, setEditandoLojas] = useState<EstoqueRow | null>(null);
 
   const carregar = useCallback(async () => {
     try {
@@ -242,13 +244,34 @@ export default function EstoquePage() {
                   <td className="p-2 text-neutral-400 max-w-[140px] truncate" title={r.fornecedorNome}>{r.fornecedorNome || "—"}</td>
                   <td className="p-2 text-right text-emerald-400">R$ {(r.preco || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
                   <td className="p-2 text-center">
-                    <span className={`px-1.5 py-0.5 rounded text-[9px] ${r.situacao === "A" ? "bg-emerald-900/30 text-emerald-400" : "bg-neutral-700 text-neutral-400"}`}>{r.situacao === "A" ? "Ativo" : "Inativo"}</span>
+                    <div className="flex items-center justify-center gap-1.5">
+                      <span className={`px-1.5 py-0.5 rounded text-[9px] ${r.situacao === "A" ? "bg-emerald-900/30 text-emerald-400" : "bg-neutral-700 text-neutral-400"}`}>{r.situacao === "A" ? "Ativo" : "Inativo"}</span>
+                      <button
+                        onClick={() => setEditandoLojas(r)}
+                        disabled={depositos.length === 0}
+                        title="Editar estoque em várias lojas"
+                        className="text-[10px] bg-teal-600 hover:bg-teal-500 disabled:opacity-40 text-white px-1.5 py-0.5 rounded"
+                      >
+                        Lojas
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      )}
+      {editandoLojas && (
+        <EstoqueMultiLojaModal
+          produtoId={editandoLojas.id}
+          sku={editandoLojas.sku}
+          nome={editandoLojas.nome}
+          depositos={depositos}
+          estoqueAtual={editandoLojas.estoques}
+          onClose={() => setEditandoLojas(null)}
+          onSucesso={() => carregar()}
+        />
       )}
     </div>
   );
