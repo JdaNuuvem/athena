@@ -54,6 +54,22 @@ class TestGetItemBaseInfo(unittest.TestCase):
         params = mock_request.call_args[0][1]
         self.assertEqual(params["item_id_list"], "58258804054")
 
+    @patch("shopee.products._request")
+    def test_solicita_response_optional_fields_incluindo_image(self, mock_request):
+        """Regressao de bug real: sem response_optional_fields, a API v2 da
+        Shopee devolve so' os campos basicos (item_status) — "image",
+        "price_info" e "stock_info_v2" ficam ausentes do response, nao
+        vazios/zerados, mascarados ate' agora por .get() com default em
+        shopee_sync.py. Sintoma visivel: produto sincronizado sem foto na
+        aba Shopee, mesmo tendo foto cadastrada na Shopee de verdade."""
+        mock_request.return_value = {"response": {"item_list": []}}
+        products.get_item_base_info([58258804054], loja_id=7)
+        params = mock_request.call_args[0][1]
+        campos = params["response_optional_fields"].split(",")
+        self.assertIn("image", campos)
+        self.assertIn("price_info", campos)
+        self.assertIn("stock_info_v2", campos)
+
 
 class TestInitTierVariation(unittest.TestCase):
     """Cria a estrutura de variacao (tiers + modelos) de um item. Payload usa

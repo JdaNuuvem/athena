@@ -20,9 +20,16 @@ def get_items(status: str = "NORMAL", offset: int = 0, page_size: int = 100, loj
 def get_item_base_info(item_ids: list, loja_id: int = None) -> dict:
     """Detalhes de itens específicos. item_id_list e' string de IDs separados por
     virgula (nao array JSON) — a Shopee rejeita '[id1, id2]' com
-    'strconv.ParseUint: parsing "[id1": invalid syntax'."""
+    'strconv.ParseUint: parsing "[id1": invalid syntax'.
+
+    response_optional_fields e' obrigatorio pra API v2 devolver campos alem do
+    basico (item_status) — sem isso "image"/"price_info"/"stock_info_v2" vem
+    ausentes do response, nao vazios/zerados (mascarado ate' agora por .get()
+    com default em shopee_sync.py, que so' faz a foto do produto nunca
+    aparecer — achado real, produto sincronizado sem foto na aba Shopee)."""
     return _request("product/get_item_base_info", {
         "item_id_list": ",".join(str(i) for i in item_ids),
+        "response_optional_fields": "image,price_info,stock_info_v2,item_status",
     }, loja_id=loja_id)
 
 
