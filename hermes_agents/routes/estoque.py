@@ -70,7 +70,7 @@ def _estoque_por_loja_impl():
         total = cur.fetchone()[0]
         offset = (pagina - 1) * por_pagina
         cur.execute(f"""
-            SELECT e.id, e.sku, c.descricao AS nome, e.loja, e.quantidade, e.data_atualizacao, e.sync_status
+            SELECT e.id, e.sku, c.descricao AS nome, e.loja, e.quantidade, e.data_atualizacao
             FROM estoque_lojas e
             JOIN catalogo_produtos c ON c.sku = e.sku
             WHERE {sql_where}
