@@ -90,7 +90,7 @@
       { "name": "The Status-Only Rule", "body": "Verde, âmbar e vermelho só aparecem para reportar estado real. Nunca usados como cor de marca ou decoração.", "section": "colors" },
       { "name": "The Tabular Rule", "body": "Todo número exibido ao usuário usa .numeric (tabular-nums). Nenhum número solto em fonte proporcional.", "section": "typography" },
       { "name": "The Five-Step Rule", "body": "Todo texto do sistema cai em um dos cinco degraus da escala (28/13/11/10/9px). Um tamanho arbitrário fora dessa escala é drift, não uma decisão de design.", "section": "typography" },
-      { "name": "The One Radius Rule", "body": "rounded-lg é o único raio de card do sistema (6px, sobrescrito no tema do Tailwind, igual ao .instrument). Não introduza rounded-xl/rounded-2xl num card novo.", "section": "shapes" },
+      { "name": "The One Radius Rule", "body": "Todo card do sistema renderiza a 6px, igual ao .instrument — rounded-lg e rounded-xl foram unificados no tema do Tailwind, não existe mais uma segunda escala de raio pra card. Não introduza rounded-2xl/rounded-3xl num card novo.", "section": "shapes" },
       { "name": "The No-Drop-Shadow Rule", "body": "Profundidade vem de camadas tonais e borda, nunca de box-shadow projetada para fora, exceto o halo reservado a .instrument-lit.", "section": "elevation" }
     ],
     "dos": [
