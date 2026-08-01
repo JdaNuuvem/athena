@@ -68,7 +68,7 @@ const NAV_GROUPS: NavGroup[] = [
           { href: "/pdv", label: "Caixa (Terminal)" },
           { href: "/pdv/aprovacoes", label: "Aprovações de Sangria" },
           { href: "/pdv/quebra-caixa", label: "Quebra de Caixa" },
-          { href: "/pdv/operadores", label: "Operadores (PIN/Crachá)" },
+          { href: "/pdv/operadores", label: "Operadores" },
         ],
       },
       { href: "/vendas", label: "Vendas", icon: "vendas" },

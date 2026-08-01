@@ -70,6 +70,16 @@ def pdv_fechar_caixa(id):
     return jsonify(fechar_caixa(id, float(data.get("saldo_final",0)), data.get("operador_id"), data.get("senha",""),
         data.get("gerente_pin_id"), data.get("pin",""), data.get("codigo_barras","")))
 
+@pdv_bp.route('/operadores/<int:id>/senha', methods=['PUT'])
+def pdv_definir_senha(id):
+    from core.rbac import requer_permissao
+    from core.pdv import definir_senha
+    @requer_permissao("configuracoes.editar")
+    def _go():
+        data = request.json or {}
+        return jsonify(definir_senha(id, str(data.get("senha", ""))))
+    return _go()
+
 @pdv_bp.route('/operadores/<int:id>/pin', methods=['PUT'])
 def pdv_definir_pin(id):
     from core.rbac import requer_permissao

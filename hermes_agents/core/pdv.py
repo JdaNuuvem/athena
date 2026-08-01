@@ -88,6 +88,26 @@ def verificar_operador(operador_id: int, senha: str = "") -> dict:
     except Exception as e: return {"error": str(e)}
 
 
+def definir_senha(operador_id: int, senha: str) -> dict:
+    """Define/atualiza a senha de login de um operador. So' pode ser chamada
+    por quem ja' tem sessao autenticada no sistema principal (rota gated por
+    configuracoes.editar) — e' o unico jeito de destravar um operador recem
+    criado ou recem-seedado, que nasce sem senha de proposito (ver comentario
+    do seed do Admin em _ensure_tabelas)."""
+    if not senha or len(senha) < 6:
+        return {"error": "Senha deve ter no minimo 6 caracteres"}
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow("SELECT id FROM pdv_operadores WHERE id = $1 AND ativo = TRUE", operador_id)
+        if not row:
+            return {"error": "Operador nao encontrado ou inativo"}
+        salt, senha_hash = _hash_senha(senha)
+        await db.execute("UPDATE pdv_operadores SET senha = $1 WHERE id = $2", f"{salt}:{senha_hash}", operador_id)
+        return {"ok": True}
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
+
+
 def definir_pin(operador_id: int, pin: str) -> dict:
     """Define/atualiza o PIN numerico de um operador (tipicamente Gerente/Admin)."""
     if not pin or not pin.isdigit() or not (4 <= len(pin) <= 6):
@@ -384,19 +404,44 @@ def _delete(t: str, id: int) -> dict:
     except Exception as e: return {"error": str(e)}
 
 TABLES = ["caixas","vendas","itens","pagamentos","sangrias","suprimentos","nfce","operadores","turnos","devolucoes"]
+
+# operadores guarda hash de senha/PIN/codigo de barras — o CRUD generico nunca
+# pode ler nem escrever esses campos direto (leitura vazaria hash pro cliente;
+# escrita gravaria senha em texto puro, sem hash, corrompendo o login). Senha/
+# PIN/codigo tem rotas dedicadas (definir_senha, definir_pin, gerar_codigo_barras)
+# que fazem o hash corretamente.
+_OPERADOR_CAMPOS_SENSIVEIS = {"senha", "pin_hash", "codigo_barras_hash"}
+_OPERADOR_CAMPOS_EDITAVEIS = {"nome", "role", "desconto_maximo_percent", "ativo"}
+
+def _operador_sem_sensiveis(d: dict) -> dict:
+    if not isinstance(d, dict):
+        return d
+    return {k: v for k, v in d.items() if k not in _OPERADOR_CAMPOS_SENSIVEIS}
+
 def list(t: str):
     extra = {"operadores":"pdv_operadores","turnos":"pdv_turnos","devolucoes":"pdv_devolucoes"}
     tbl = extra.get(t, f"pdv_{t}")
+    if t == "operadores":
+        return _list(tbl, cols="id, nome, role, ativo, desconto_maximo_percent, created_at, "
+                               "(senha IS NOT NULL) AS tem_senha, (pin_hash IS NOT NULL) AS tem_pin, "
+                               "(codigo_barras_hash IS NOT NULL) AS tem_codigo_barras")
     return _list(tbl)
 def get(t: str, i: int):
     extra = {"operadores":"pdv_operadores","turnos":"pdv_turnos","devolucoes":"pdv_devolucoes"}
-    return _get(extra.get(t, f"pdv_{t}"), i)
+    r = _get(extra.get(t, f"pdv_{t}"), i)
+    return _operador_sem_sensiveis(r) if t == "operadores" else r
 def create(t: str, d: dict):
     extra = {"operadores":"pdv_operadores","turnos":"pdv_turnos","devolucoes":"pdv_devolucoes"}
-    return _create(extra.get(t, f"pdv_{t}"), d)
+    if t == "operadores":
+        d = {k: v for k, v in d.items() if k in _OPERADOR_CAMPOS_EDITAVEIS}
+    r = _create(extra.get(t, f"pdv_{t}"), d)
+    return _operador_sem_sensiveis(r) if t == "operadores" else r
 def update(t: str, i: int, d: dict):
     extra = {"operadores":"pdv_operadores","turnos":"pdv_turnos","devolucoes":"pdv_devolucoes"}
-    return _update(extra.get(t, f"pdv_{t}"), i, d)
+    if t == "operadores":
+        d = {k: v for k, v in d.items() if k in _OPERADOR_CAMPOS_EDITAVEIS}
+    r = _update(extra.get(t, f"pdv_{t}"), i, d)
+    return _operador_sem_sensiveis(r) if t == "operadores" else r
 def delete(t: str, i: int):
     extra = {"operadores":"pdv_operadores","turnos":"pdv_turnos","devolucoes":"pdv_devolucoes"}
     return _delete(extra.get(t, f"pdv_{t}"), i)

@@ -27,7 +27,9 @@ export function LoginForm({ onLogin, error }: { onLogin: (nome: string, senha: s
             Entrar
           </button>
         </div>
-        <p className="text-[10px] text-neutral-600 mt-4 text-center">Operador padrao: Admin / admin</p>
+        <p className="text-[10px] text-neutral-600 mt-4 text-center">
+          Sem acesso? Peça a um gerente para definir sua senha em PDV &gt; Operadores.
+        </p>
       </div>
     </div>
   );
