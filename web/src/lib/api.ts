@@ -426,6 +426,11 @@ export const api = {
     request<{ success?: boolean; error?: string }>(`/api/lojas/manage/${id}/virtual`, { method: "PUT", body: JSON.stringify(campos) }),
   lojasDeliveryAtualizar: (id: number, campos: Record<string, unknown>) =>
     request<{ success?: boolean; error?: string }>(`/api/lojas/manage/${id}/delivery`, { method: "PUT", body: JSON.stringify(campos) }),
+  lojasVincularEstoque: (id: number, lojaFisicaId: number | null) =>
+    request<{ ok?: boolean; erro?: string; loja_virtual?: string; loja_fisica?: string; skus_copiados?: number }>(
+      `/api/lojas/manage/${id}/vinculo-estoque`,
+      { method: "PUT", body: JSON.stringify({ loja_fisica_id: lojaFisicaId }) },
+    ),
 
   lojasResponsaveisListar: (id: number) =>
     request<{ responsaveis: Array<Record<string, unknown>> }>(`/api/lojas/manage/${id}/responsaveis`),

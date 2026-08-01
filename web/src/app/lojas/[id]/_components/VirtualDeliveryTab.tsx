@@ -16,6 +16,11 @@ export default function VirtualDeliveryTab({ id, loja }: { id: number; loja: Rec
   const [saving, setSaving] = useState<string>("");
   const [msg, setMsg] = useState<Record<string, string>>({});
   const [erro, setErro] = useState("");
+  const [lojasFisicas, setLojasFisicas] = useState<{ id: number; nome: string }[]>([]);
+  const [lojaFisicaSelecionada, setLojaFisicaSelecionada] = useState<string>("");
+  const [vinculoMsg, setVinculoMsg] = useState("");
+  const [vinculoErro, setVinculoErro] = useState("");
+  const [salvandoVinculo, setSalvandoVinculo] = useState(false);
 
   useEffect(() => {
     const todos = [...CAMPOS_VIRTUAL, ...CAMPOS_DELIVERY];
@@ -23,6 +28,34 @@ export default function VirtualDeliveryTab({ id, loja }: { id: number; loja: Rec
     for (const c of todos) inicial[c] = strVal(loja, c);
     setForm(inicial);
   }, [loja]);
+
+  useEffect(() => {
+    api.lojasManage().then((r) => {
+      const fisicas = ((r.lojas ?? []) as unknown as Record<string, unknown>[])
+        .filter((l) => l.tipo === "fisica")
+        .map((l) => ({ id: l.id as number, nome: l.nome as string }));
+      setLojasFisicas(fisicas);
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    setLojaFisicaSelecionada(loja?.loja_vinculada_id ? String(loja.loja_vinculada_id) : "");
+  }, [loja]);
+
+  const salvarVinculo = async () => {
+    setSalvandoVinculo(true); setVinculoErro(""); setVinculoMsg("");
+    try {
+      const lojaFisicaId = lojaFisicaSelecionada ? Number(lojaFisicaSelecionada) : null;
+      const r = await api.lojasVincularEstoque(id, lojaFisicaId);
+      if (r.erro) { setVinculoErro(r.erro); return; }
+      setVinculoMsg(lojaFisicaId ? `Vinculado a ${r.loja_fisica}` : `Desvinculado (${r.skus_copiados ?? 0} SKUs copiados)`);
+      setTimeout(() => setVinculoMsg(""), 3500);
+    } catch (e) {
+      setVinculoErro(e instanceof Error ? e.message : "Erro ao salvar vinculo");
+    } finally {
+      setSalvandoVinculo(false);
+    }
+  };
 
   const set = (campo: string) => (v: string) => setForm((p) => ({ ...p, [campo]: v }));
 
@@ -66,6 +99,21 @@ export default function VirtualDeliveryTab({ id, loja }: { id: number; loja: Rec
   return (
     <div className="space-y-4">
       {erro && <p className="text-xs text-red-400">{erro}</p>}
+
+      <Section title="Vínculo de estoque com loja física" onSave={salvarVinculo} saving={salvandoVinculo} msg={vinculoMsg}>
+        {vinculoErro && <p className="text-xs text-red-400 mb-2">{vinculoErro}</p>}
+        <label className="block text-xs text-neutral-400 mb-1">Loja física vinculada</label>
+        <select
+          className="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-sm"
+          value={lojaFisicaSelecionada}
+          onChange={(e) => setLojaFisicaSelecionada(e.target.value)}
+        >
+          <option value="">Nenhuma (estoque independente)</option>
+          {lojasFisicas.map((l) => (
+            <option key={l.id} value={l.id}>{l.nome}</option>
+          ))}
+        </select>
+      </Section>
 
       <Section title="Loja virtual" onSave={salvarVirtual} saving={saving === "virtual"} msg={msg.virtual}>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
