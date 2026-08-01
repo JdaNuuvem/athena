@@ -7,6 +7,7 @@ os argumentos certos, e que erro de saldo aborta a transacao inteira."""
 import sys, os, unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from unittest.mock import patch, AsyncMock
+from decimal import Decimal
 
 
 class FakeDBPdv:
@@ -36,13 +37,14 @@ class FakeDBPdv:
             return {"nome": nome} if nome is not None else None
         if q.startswith("INSERT INTO pdv_vendas") and "RETURNING *" in q:
             vid = self._next_venda_id; self._next_venda_id += 1
-            caixa_id, cliente, cliente_id, total, desconto, operador, data = params
+            caixa_id, cliente, cliente_id, total, desconto, operador, data, estoque_baixado = params
             venda = {"id": vid, "caixa_id": caixa_id, "cliente": cliente, "cliente_id": cliente_id,
                      "total": total, "desconto": desconto, "operador": operador, "status": "finalizada",
-                     "data": data, "observacoes": None, "tipo": "venda", "numero": None}
+                     "data": data, "observacoes": None, "tipo": "venda", "numero": None,
+                     "estoque_baixado": estoque_baixado}
             self.vendas[vid] = dict(venda)
             return dict(venda)
-        if q == "SELECT * FROM pdv_vendas WHERE id = $1":
+        if q.startswith("SELECT * FROM pdv_vendas WHERE id = $1"):
             v = self.vendas.get(params[0])
             return dict(v) if v else None
         if "FROM pdv_itens i JOIN pdv_vendas v ON v.id = i.venda_id WHERE i.id" in q:
@@ -53,6 +55,7 @@ class FakeDBPdv:
             out = dict(item)
             out["venda_status"] = venda["status"] if venda else None
             out["caixa_id"] = venda["caixa_id"] if venda else None
+            out["estoque_baixado"] = venda.get("estoque_baixado") if venda else None
             return out
         if q.startswith("UPDATE pdv_itens SET quantidade") and "RETURNING quantidade" in q:
             quantidade, item_id = params
@@ -224,6 +227,8 @@ class TestRealizarVendaBaixaEstoque(unittest.IsolatedAsyncioTestCase):
         ]))
         self.assertEqual(len(self.fake.vendas), 1)
         self.assertEqual(len(self.fake.itens), 2)
+        vid = r["venda"]["id"]
+        self.assertTrue(self.fake.vendas[vid]["estoque_baixado"])
 
     async def test_item_sem_saldo_suficiente_desfaz_venda_inteira(self):
         from core.pdv import realizar_venda
@@ -252,6 +257,8 @@ class TestRealizarVendaBaixaEstoque(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("error", r)
         mock_saida.assert_not_called()
         self.assertEqual(len(self.fake.vendas), 1)
+        vid = r["venda"]["id"]
+        self.assertFalse(self.fake.vendas[vid]["estoque_baixado"])
 
 
 class TestCancelarVendaRestauraEstoque(unittest.IsolatedAsyncioTestCase):
@@ -261,11 +268,15 @@ class TestCancelarVendaRestauraEstoque(unittest.IsolatedAsyncioTestCase):
         self.fake.lojas[5] = "Loja Fisica Central"
         self.fake.vendas[10] = {"id": 10, "caixa_id": 1, "cliente": "", "cliente_id": None,
                                  "total": 25.0, "desconto": 0, "operador": "Joao", "status": "finalizada",
-                                 "data": "2026-07-31", "observacoes": None, "tipo": "venda", "numero": None}
+                                 "data": "2026-07-31", "observacoes": None, "tipo": "venda", "numero": None,
+                                 "estoque_baixado": True}
+        # quantidade como Decimal (mesmo tipo que asyncpg devolve para colunas DECIMAL(12,3))
+        # -- ver test_cancelar_restaura_quantidade_de_todos_os_itens, que trava a regressao
+        # de cancelar_venda passar Decimal em vez de float para entrada_async.
         self.fake.itens[1] = {"id": 1, "venda_id": 10, "produto_codigo": "SKU1", "descricao": "Produto 1",
-                               "quantidade": 2, "valor_unitario": 10.0, "desconto": 0, "valor_total": 20.0}
+                               "quantidade": Decimal("2.000"), "valor_unitario": 10.0, "desconto": 0, "valor_total": 20.0}
         self.fake.itens[2] = {"id": 2, "venda_id": 10, "produto_codigo": "SKU2", "descricao": "Produto 2",
-                               "quantidade": 1, "valor_unitario": 5.0, "desconto": 0, "valor_total": 5.0}
+                               "quantidade": Decimal("1.000"), "valor_unitario": 5.0, "desconto": 0, "valor_total": 5.0}
         async def _get_db(_fake=self.fake):
             return _fake
         self.patch_db = patch("core.pdv.get_db", side_effect=_get_db)
@@ -285,6 +296,7 @@ class TestCancelarVendaRestauraEstoque(unittest.IsolatedAsyncioTestCase):
         from core.pdv import cancelar_venda
         chamadas = []
         async def fake_entrada(conn, sku, loja, quantidade, motivo, usuario_id=None, usuario_nome="", ip=None, dispositivo=None):
+            assert isinstance(quantidade, float), f"quantidade deve ser float (nao {type(quantidade).__name__}) -- entrada_async/_mover_saldo_async fazem float + Decimal, que estoura TypeError"
             chamadas.append((sku, loja, quantidade, motivo))
             return {"ok": True, "sku": sku, "loja": loja, "quantidade": quantidade, "anterior": 0, "atual": quantidade}
         with patch("core.pdv.entrada_async", side_effect=fake_entrada):
@@ -308,6 +320,7 @@ class TestCancelarVendaRestauraEstoque(unittest.IsolatedAsyncioTestCase):
         from core.pdv import cancelar_venda
         chamadas = []
         async def fake_entrada(conn, sku, loja, quantidade, motivo, usuario_id=None, usuario_nome="", ip=None, dispositivo=None):
+            assert isinstance(quantidade, float), f"quantidade deve ser float (nao {type(quantidade).__name__})"
             chamadas.append(sku)
             if sku == "SKU2":
                 return {"erro": "Erro ao restaurar estoque"}
@@ -324,6 +337,18 @@ class TestCancelarVendaRestauraEstoque(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.fake.devolucoes, [])
         self.assertEqual(chamadas, ["SKU1", "SKU2"])
 
+    async def test_venda_sem_estoque_baixado_nao_restaura_estoque(self):
+        """Venda anterior a esta feature (ou cujo loja nao resolveu no momento
+        da venda) nunca decrementou estoque real -- cancelar essa venda nao
+        pode credita-lo, mesmo que loja_id do caixa resolva normalmente agora."""
+        from core.pdv import cancelar_venda
+        self.fake.vendas[10]["estoque_baixado"] = False
+        with patch("core.pdv.entrada_async", new=AsyncMock()) as mock_entrada:
+            r = cancelar_venda(10, motivo="Cliente desistiu", operador_id=9)
+        self.assertTrue(r.get("success"))
+        mock_entrada.assert_not_called()
+        self.assertEqual(self.fake.vendas[10]["status"], "cancelada")
+
 
 class TestDevolverItemVendaRestauraParcial(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
@@ -332,7 +357,8 @@ class TestDevolverItemVendaRestauraParcial(unittest.IsolatedAsyncioTestCase):
         self.fake.lojas[5] = "Loja Fisica Central"
         self.fake.vendas[10] = {"id": 10, "caixa_id": 1, "cliente": "", "cliente_id": None,
                                  "total": 30.0, "desconto": 0, "operador": "Joao", "status": "finalizada",
-                                 "data": "2026-07-31", "observacoes": None, "tipo": "venda", "numero": None}
+                                 "data": "2026-07-31", "observacoes": None, "tipo": "venda", "numero": None,
+                                 "estoque_baixado": True}
         self.fake.itens[1] = {"id": 1, "venda_id": 10, "produto_codigo": "SKU1", "descricao": "Produto 1",
                                "quantidade": 5, "valor_unitario": 6.0, "desconto": 0, "valor_total": 30.0}
         async def _get_db(_fake=self.fake):
@@ -391,6 +417,18 @@ class TestDevolverItemVendaRestauraParcial(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.fake.vendas[10]["total"], 30.0)
         self.assertEqual(self.fake.devolucoes, [])
         self.assertEqual(chamadas, ["SKU1"])
+
+    async def test_item_sem_estoque_baixado_nao_restaura_estoque(self):
+        """Item de uma venda anterior a esta feature (estoque_baixado=False/ausente)
+        nunca teve seu estoque decrementado -- a devolucao ainda deve funcionar
+        (ajusta quantidade/total/devolucoes normalmente), mas sem creditar estoque."""
+        from core.pdv import devolver_item_venda
+        self.fake.vendas[10]["estoque_baixado"] = False
+        with patch("core.pdv.entrada_async", new=AsyncMock()) as mock_entrada:
+            r = devolver_item_venda(1, quantidade=2, motivo="Defeito", operador_id=9)
+        self.assertTrue(r.get("success"))
+        mock_entrada.assert_not_called()
+        self.assertEqual(self.fake.itens[1]["quantidade"], 3)
 
 
 if __name__ == "__main__":

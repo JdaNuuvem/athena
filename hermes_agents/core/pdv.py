@@ -231,6 +231,13 @@ def _ensure_tables():
         )""")
         try: await db.execute("ALTER TABLE pdv_vendas ADD COLUMN IF NOT EXISTS cliente_id INT")
         except Exception as e: pass
+        # Marca se a baixa de estoque real foi de fato executada na venda (loja_id
+        # resolvido no momento da venda) -- sem isso, vendas antigas (anteriores a
+        # esta feature, que nunca decrementaram estoque) ficariam elegiveis para
+        # restauracao assim que loja_id passasse a ser preenchido em caixas novos,
+        # inflando estoque no cancelamento/devolucao de vendas pre-existentes.
+        try: await db.execute("ALTER TABLE pdv_vendas ADD COLUMN IF NOT EXISTS estoque_baixado BOOLEAN DEFAULT FALSE")
+        except Exception as e: pass
         await db.execute("""CREATE TABLE IF NOT EXISTS pdv_itens (
             id SERIAL PRIMARY KEY, venda_id INT REFERENCES pdv_vendas(id),
             produto_codigo VARCHAR(50), descricao VARCHAR(200),
@@ -425,10 +432,13 @@ async def _resolver_loja_da_venda(conn, caixa_id):
     loja_row = await conn.fetchrow("SELECT nome FROM lojas WHERE id = $1", caixa["loja_id"])
     return loja_row["nome"] if loja_row else None
 
-def abrir_caixa(operador: str, saldo_inicial: float = 0, operador_id: int = None, senha: str = "") -> dict:
+def abrir_caixa(operador: str, saldo_inicial: float = 0, operador_id: int = None, senha: str = "", loja_id: int = None) -> dict:
     erro = _exigir_operador(operador_id, senha)
     if erro: return erro
-    return create("caixas", {"operador": operador, "saldo_inicial": saldo_inicial, "status": "aberto", "data_abertura": hoje()})
+    campos = {"operador": operador, "saldo_inicial": saldo_inicial, "status": "aberto", "data_abertura": hoje()}
+    if loja_id:
+        campos["loja_id"] = loja_id
+    return create("caixas", campos)
 
 def fechar_caixa(caixa_id: int, saldo_final: float, operador_id: int = None, senha: str = "",
                   gerente_pin_id: int = None, pin: str = "", codigo_barras: str = "") -> dict:
@@ -605,14 +615,14 @@ def cancelar_venda(venda_id: int, motivo: str = "", operador: str = "", operador
         db = await get_db()
         async with db.acquire() as conn:
             async with conn.transaction():
-                venda = await conn.fetchrow("SELECT * FROM pdv_vendas WHERE id = $1", venda_id)
+                venda = await conn.fetchrow("SELECT * FROM pdv_vendas WHERE id = $1 FOR UPDATE", venda_id)
                 if not venda: return {"error": "Venda nao encontrada"}
                 if venda["status"] == "cancelada": return {"error": "Venda ja cancelada"}
                 itens = await conn.fetch("SELECT produto_codigo, quantidade FROM pdv_itens WHERE venda_id = $1", venda_id)
                 loja = await _resolver_loja_da_venda(conn, venda["caixa_id"])
-                if loja:
+                if loja and venda.get("estoque_baixado"):
                     for item in itens:
-                        r = await entrada_async(conn, item["produto_codigo"], loja, item["quantidade"], "devolucao_cliente",
+                        r = await entrada_async(conn, item["produto_codigo"], loja, float(item["quantidade"]), "devolucao_cliente",
                                                 usuario_id=autorizador.get("id"), usuario_nome=operador_registro)
                         if r.get("erro"):
                             raise SaldoError(f"Erro ao restaurar estoque de {item['produto_codigo']}: {r['erro']}")
@@ -644,7 +654,7 @@ def devolver_item_venda(item_id: int, quantidade: float, motivo: str = "", opera
         async with db.acquire() as conn:
             async with conn.transaction():
                 item = await conn.fetchrow(
-                    "SELECT i.*, v.status AS venda_status, v.caixa_id FROM pdv_itens i JOIN pdv_vendas v ON v.id = i.venda_id WHERE i.id = $1", item_id)
+                    "SELECT i.*, v.status AS venda_status, v.caixa_id, v.estoque_baixado FROM pdv_itens i JOIN pdv_vendas v ON v.id = i.venda_id WHERE i.id = $1", item_id)
                 if not item: return {"error": "Item nao encontrado"}
                 if item["venda_status"] == "cancelada": return {"error": "Venda ja cancelada"}
                 valor_unitario = float(item["valor_unitario"] or 0)
@@ -667,7 +677,7 @@ def devolver_item_venda(item_id: int, quantidade: float, motivo: str = "", opera
                     item["venda_id"], f"Item #{item_id}: {motivo}" if motivo else f"Devolucao parcial item #{item_id}",
                     valor_devolvido, operador_registro)
                 loja = await _resolver_loja_da_venda(conn, item["caixa_id"])
-                if loja:
+                if loja and item.get("estoque_baixado"):
                     r = await entrada_async(conn, item["produto_codigo"], loja, quantidade, "devolucao_cliente",
                                             usuario_id=autorizador.get("id"), usuario_nome=operador_registro)
                     if r.get("erro"):
@@ -774,9 +784,9 @@ def realizar_venda(caixa_id: int, itens: list, pagamentos: list, cliente="", cli
         async with db.acquire() as conn:
             async with conn.transaction():
                 loja = await _resolver_loja_da_venda(conn, caixa_id)
-                row = await conn.fetchrow("""INSERT INTO pdv_vendas (caixa_id, cliente, cliente_id, total, desconto, operador, data)
-                    VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *""",
-                    caixa_id, cliente, cliente_id, total, desconto, operador, hoje())
+                row = await conn.fetchrow("""INSERT INTO pdv_vendas (caixa_id, cliente, cliente_id, total, desconto, operador, data, estoque_baixado)
+                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *""",
+                    caixa_id, cliente, cliente_id, total, desconto, operador, hoje(), bool(loja))
                 vid = row["id"]
                 for item in itens:
                     item_desconto = item.get("desconto",0) or 0

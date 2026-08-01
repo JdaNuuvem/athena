@@ -61,7 +61,7 @@ def pdv_abrir_caixa():
     data = request.json or {}
     from core.pdv import abrir_caixa
     return jsonify(abrir_caixa(data.get("operador","Admin"), float(data.get("saldo_inicial",0)),
-        data.get("operador_id"), data.get("senha","")))
+        data.get("operador_id"), data.get("senha",""), data.get("loja_id")))
 
 @pdv_bp.route('/caixa/<int:id>/fechar', methods=['POST'])
 def pdv_fechar_caixa(id):

@@ -41,13 +41,13 @@ export default function PDVPage() {
 
   const handleLogout = () => { setOperador(null); setOperadorSenha(""); setCaixa(null); };
 
-  const abrirCaixa = async (saldoInicial: number) => {
+  const abrirCaixa = async (saldoInicial: number, lojaId: number | null) => {
     if (!operador) return;
     try {
       const r = await fetch("/api/pdv/caixa/abrir", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ operador: operador.nome, saldo_inicial: saldoInicial,
-          operador_id: operador.id, senha: operadorSenha }),
+          operador_id: operador.id, senha: operadorSenha, loja_id: lojaId }),
       });
       const d = await r.json();
       if (d.error) { notify(d.error, "error"); return; }
