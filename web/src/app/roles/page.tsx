@@ -6,6 +6,7 @@ import { Can } from "@/lib/auth";
 import PageHeader from "@/app/_components/PageHeader";
 import LoadingState from "@/app/_components/LoadingState";
 import ErrorAlert from "@/app/_components/ErrorAlert";
+import Icon from "@/app/_components/Icon";
 
 interface Role {
   id: number;
@@ -234,7 +235,7 @@ function CargosTab({ roles, permissions, onChanged, setError }: {
                 <h2 className="text-lg font-semibold text-neutral-100">Permissões: {selectedRole.nome}</h2>
                 <p className="text-xs text-neutral-500 mt-1">Marque o que este cargo pode fazer, módulo a módulo.</p>
               </div>
-              <button onClick={() => setSelectedRole(null)} className="text-neutral-500 hover:text-neutral-300 text-lg">✕</button>
+              <button onClick={() => setSelectedRole(null)} className="text-neutral-500 hover:text-neutral-300"><Icon name="close" size={16} /></button>
             </div>
             <div className="p-6 space-y-6">
               {Object.entries(groupedPerms).map(([mod, perms]) => (

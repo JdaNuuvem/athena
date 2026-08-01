@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { CategoriaVenda, ProdutoVenda } from "../types";
 import { formatCurrency } from "../types";
+import Icon from "@/app/_components/Icon";
 
 interface DrillDownTableProps {
   categorias: CategoriaVenda[];
@@ -33,7 +34,9 @@ export default function DrillDownTable({ categorias }: DrillDownTableProps) {
                     i % 2 === 0 ? "bg-neutral-800" : "bg-neutral-800/50"
                   } ${expandida === cat.categoria ? "!bg-neutral-750" : ""}`}
                 >
-                  <td className="p-3 text-indigo-400">{expandida === cat.categoria ? "▼" : "▶"}</td>
+                  <td className="p-3 text-indigo-400">
+                    {expandida === cat.categoria ? <Icon name="chevronDown" size={14} /> : <Icon name="chevronRight" size={14} />}
+                  </td>
                   <td className="p-3 text-neutral-200 font-medium">{cat.categoria}</td>
                   <td className="p-3 text-right text-emerald-400 font-mono">{formatCurrency(cat.valor)}</td>
                   <td className="p-3 text-right text-neutral-300">{cat.percentual}%</td>

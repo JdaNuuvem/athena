@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import Icon from "@/app/_components/Icon";
 import SelectComCriacao from "./SelectComCriacao";
 
 interface Fornecedor { id: number; nome: string; }
@@ -156,7 +157,14 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
           ) : (
             <>
               <button onClick={startEdit} className="px-3 py-1 bg-indigo-600 text-white text-xs rounded-lg">Editar</button>
-              <Link href={"/pdv?sku=" + sku} className="px-3 py-1 bg-amber-600 hover:bg-amber-500 text-white text-xs rounded-lg">🛒 Vender</Link>
+              <Link href={"/pdv?sku=" + sku} className="px-3 py-1 bg-amber-600 hover:bg-amber-500 text-white text-xs rounded-lg inline-flex items-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="9" cy="21" r="1" />
+                  <circle cx="20" cy="21" r="1" />
+                  <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                </svg>
+                Vender
+              </Link>
             </>
           )}
         </div>
@@ -171,8 +179,17 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
             <div className="w-24 h-24 rounded-lg border border-neutral-700 bg-neutral-800 flex items-center justify-center text-neutral-500 text-xs">Sem foto</div>
           )}
           <div>
-            <button onClick={() => fileRef.current?.click()} disabled={uploading} className="px-3 py-1.5 bg-neutral-700 hover:bg-neutral-600 text-white text-xs rounded-lg">
-              {uploading ? "Enviando..." : "📤 Upload Imagem"}
+            <button onClick={() => fileRef.current?.click()} disabled={uploading} className="px-3 py-1.5 bg-neutral-700 hover:bg-neutral-600 text-white text-xs rounded-lg inline-flex items-center gap-1">
+              {uploading ? "Enviando..." : (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                    <path d="M17 8l-5-5-5 5" />
+                    <path d="M12 3v12" />
+                  </svg>
+                  Upload Imagem
+                </>
+              )}
             </button>
             <input ref={fileRef} type="file" accept="image/*" onChange={e => handleImageUpload(e.target.files)} className="hidden" />
             <p className="text-[10px] text-neutral-600 mt-1">JPG, PNG, WebP</p>
@@ -341,7 +358,12 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
 
       <div className="text-xs text-neutral-600 space-y-1">
         <div>ID: {String(p?.id || "—")} | Bling ID: {idBling || "—"} | Variacoes: {(p?.variacoes as any[])?.length || 0}</div>
-        {idBling && <div className="text-emerald-600">✓ Sincronizado com Bling (two-way)</div>}
+        {idBling && (
+          <div className="text-emerald-600 flex items-center gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7" /></svg>
+            Sincronizado com Bling (two-way)
+          </div>
+        )}
       </div>
     </div>
   );

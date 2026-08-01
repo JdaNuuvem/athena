@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { api, type EstoqueTransferencia } from "@/lib/api";
 import { useStore } from "@/lib/store-context";
 import { useAuth } from "@/lib/auth";
+import Icon from "@/app/_components/Icon";
 
 const LABEL_MOTIVO: Record<string, string> = {
   reposicao_entre_lojas: "Reposição entre lojas",
@@ -198,8 +199,10 @@ export default function TransferenciasEstoquePage() {
                   </div>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full ${st.cls}`}>{st.label}</span>
                 </div>
-                <div className="text-xs text-neutral-500">
-                  {t.loja_origem} → {t.loja_destino} · {t.quantidade_solicitada} un solicitadas
+                <div className="text-xs text-neutral-500 flex items-center flex-wrap gap-x-1">
+                  <span>{t.loja_origem}</span>
+                  <Icon name="chevronRight" size={12} className="inline-block align-middle" />
+                  <span>{t.loja_destino} · {t.quantidade_solicitada} un solicitadas</span>
                   {t.quantidade_recebida != null && ` · ${t.quantidade_recebida} un recebidas`}
                   {" · "}{LABEL_MOTIVO[t.motivo] || t.motivo}
                 </div>

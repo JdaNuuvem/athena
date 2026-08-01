@@ -74,12 +74,12 @@ export default function BlingVendasTab() {
             {resumo.vendas_diarias.map(([data, valor]) => {
               const altura = Math.max((valor / maxValor) * 100, 2);
               return (
-                <div key={data} className="flex-1 min-w-[4px] group relative" title={`${data}: R$ ${valor.toFixed(2)}`}>
+                <div key={data} className="flex-1 min-w-[4px] group relative" title={`${data}: R$ ${valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}>
                   <div className="w-full bg-indigo-500 rounded-t-sm hover:bg-indigo-400 transition-colors" style={{ height: `${altura}%` }} />
                   <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block z-10">
                     <div className="bg-neutral-900 border border-neutral-600 rounded px-2 py-1 text-[10px] whitespace-nowrap">
                       <p className="text-neutral-200">{data}</p>
-                      <p className="text-emerald-400">R$ {valor.toFixed(2)}</p>
+                      <p className="text-emerald-400">R$ {valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                     </div>
                   </div>
                 </div>

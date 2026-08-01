@@ -20,15 +20,66 @@ const ENTIDADES = [
   { value: "funcionario", label: "Funcionario" },
 ];
 
-const ICONS: Record<string, string> = {
-  pdf: "📄", image: "🖼️", xml: "📋", spreadsheet: "📊", default: "📁",
-};
-function mimeIcon(mime: string) {
-  if (mime.includes("pdf")) return ICONS.pdf;
-  if (mime.includes("image")) return ICONS.image;
-  if (mime.includes("xml")) return ICONS.xml;
-  if (mime.includes("sheet") || mime.includes("excel")) return ICONS.spreadsheet;
-  return ICONS.default;
+function mimeIconType(mime: string): "pdf" | "image" | "xml" | "spreadsheet" | "default" {
+  if (mime.includes("pdf")) return "pdf";
+  if (mime.includes("image")) return "image";
+  if (mime.includes("xml")) return "xml";
+  if (mime.includes("sheet") || mime.includes("excel")) return "spreadsheet";
+  return "default";
+}
+
+function DocFileIcon({ type, size = 24 }: { type: string; size?: number }) {
+  const common = {
+    xmlns: "http://www.w3.org/2000/svg" as const,
+    width: size,
+    height: size,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.5,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+  };
+  switch (type) {
+    case "pdf":
+      return (
+        <svg {...common}>
+          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+          <path d="M14 2v6h6" />
+          <path d="M9 17v-4h1.4a1.3 1.3 0 010 2.6H9m4-2.6v4m3-4h-2v4m0-2h1.6" />
+        </svg>
+      );
+    case "image":
+      return (
+        <svg {...common}>
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <circle cx="8.5" cy="8.5" r="1.5" />
+          <path d="M21 15l-5-5L5 21" />
+        </svg>
+      );
+    case "xml":
+      return (
+        <svg {...common}>
+          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+          <path d="M14 2v6h6" />
+          <path d="M9.5 13l-1.5 1.5 1.5 1.5M14.5 13l1.5 1.5-1.5 1.5" />
+        </svg>
+      );
+    case "spreadsheet":
+      return (
+        <svg {...common}>
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M3 9h18M3 15h18M9 3v18M15 3v18" />
+        </svg>
+      );
+    default:
+      return (
+        <svg {...common}>
+          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+          <path d="M14 2v6h6" />
+        </svg>
+      );
+  }
 }
 function fmtSize(bytes: number) {
   if (bytes < 1024) return bytes + " B";
@@ -115,7 +166,12 @@ export default function DocumentosPage() {
           </div>
         ) : (
           <div>
-            <p className="text-3xl mb-2">📤</p>
+            <div className="flex justify-center mb-2 text-neutral-500">
+              <svg xmlns="http://www.w3.org/2000/svg" width={32} height={32} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 3v12m0 0l-4-4m4 4l4-4" />
+                <path d="M20 17v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2" />
+              </svg>
+            </div>
             <p className="text-sm text-neutral-300">Arraste arquivos aqui ou clique para selecionar</p>
             <p className="text-xs text-neutral-600 mt-1">PDF, XML, imagens, planilhas</p>
           </div>
@@ -154,7 +210,7 @@ export default function DocumentosPage() {
             <div key={doc.id}
               className="bg-neutral-800 border border-neutral-700 rounded-lg p-4 hover:border-neutral-600 transition-colors group">
               <div className="flex items-start gap-3">
-                <span className="text-2xl">{mimeIcon(doc.mime_type)}</span>
+                <span className="text-neutral-400 shrink-0"><DocFileIcon type={mimeIconType(doc.mime_type)} size={28} /></span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-neutral-200 truncate" title={doc.nome_original}>{doc.nome_original}</p>
                   <p className="text-[10px] text-neutral-500 mt-0.5">

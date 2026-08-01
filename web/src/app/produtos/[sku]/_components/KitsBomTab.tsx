@@ -55,7 +55,7 @@ function KitPanel() {
               <span className="text-xs text-neutral-500 ml-2 font-mono">{k.sku}</span>
             </div>
             <div className="text-right">
-              <p className="text-sm text-neutral-200 numeric">R$ {k.precoKit.toFixed(2)}</p>
+              <p className="text-sm text-neutral-200 numeric">R$ {k.precoKit.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
               <p className="text-xs text-neutral-500">Estoque: {k.estoque} un</p>
             </div>
           </div>
@@ -90,8 +90,8 @@ function ComboPanel() {
               <span className="text-xs text-neutral-500 ml-2 font-mono">{c.sku}</span>
             </div>
             <div className="text-right">
-              <p className="text-xs text-neutral-500 line-through">R$ {c.precoOriginal.toFixed(2)}</p>
-              <p className="text-sm text-green-400 numeric font-medium">R$ {c.precoCombo.toFixed(2)}</p>
+              <p className="text-xs text-neutral-500 line-through">R$ {c.precoOriginal.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              <p className="text-sm text-green-400 numeric font-medium">R$ {c.precoCombo.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
             </div>
           </div>
           <div className="border-t border-neutral-800 pt-2">

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import StatusBadge from "@/app/_components/StatusBadge";
 import LoadingState from "@/app/_components/LoadingState";
+import Icon from "@/app/_components/Icon";
 
 interface FuncRow { id: number; nome: string; cargo: string; departamento: string; email: string; status: string; data_admissao: string; }
 interface FuncDetail { funcionario: FuncRow; ponto: unknown[]; ferias: unknown[]; folha: unknown[]; beneficios: unknown[]; escala: Record<string, unknown> | null; }
@@ -46,7 +47,7 @@ export default function FuncionariosPage() {
             <div className="bg-neutral-800 border border-blue-700 rounded-lg p-4 space-y-3">
               <div className="flex justify-between">
                 <h3 className="text-sm font-semibold text-neutral-200">{detail.funcionario.nome}</h3>
-                <button onClick={() => setDetail(null)} className="text-xs text-neutral-500 hover:text-neutral-300">✕</button>
+                <button onClick={() => setDetail(null)} className="text-xs text-neutral-500 hover:text-neutral-300"><Icon name="close" size={14} /></button>
               </div>
               <div className="text-xs text-neutral-400 space-y-1">
                 <p>Cargo: {detail.funcionario.cargo}</p>
@@ -62,7 +63,7 @@ export default function FuncionariosPage() {
               </div>
 
               <div><h4 className="text-xs font-semibold text-neutral-400 mb-1">Folha recente</h4>
-                {(detail.folha as Array<{mes:string;liquido:number}>).slice(0,3).map((f,i) => <div key={i} className="flex justify-between text-[10px] text-neutral-300"><span>{f.mes}</span><span className="text-emerald-400">R$ {Number(f.liquido).toFixed(2)}</span></div>)}
+                {(detail.folha as Array<{mes:string;liquido:number}>).slice(0,3).map((f,i) => <div key={i} className="flex justify-between text-[10px] text-neutral-300"><span>{f.mes}</span><span className="text-emerald-400">R$ {Number(f.liquido).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>)}
               </div>
             </div>
           )}

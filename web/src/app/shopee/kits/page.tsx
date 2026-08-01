@@ -51,7 +51,7 @@ export default function KitsConsistenciaPage() {
             {consistencia.mensagem}
             {consistencia.total_anuncios > 0 && (
               <div className="mt-1 text-neutral-500">
-                Média: R$ {consistencia.preco_medio?.toFixed(2)} · {consistencia.total_anuncios} anúncios seus · {consistencia.preco_acima_pct}% {consistencia.preco_acima_pct >= 0 ? "acima" : "abaixo"} da média
+                Média: R$ {consistencia.preco_medio?.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · {consistencia.total_anuncios} anúncios seus · {consistencia.preco_acima_pct}% {consistencia.preco_acima_pct >= 0 ? "acima" : "abaixo"} da média
               </div>
             )}
           </div>

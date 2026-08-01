@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Icon from "@/app/_components/Icon";
 
 const WORKFLOWS = [
   { id: "lote_para_estoque", label: "Lote → Inspeção → Estoque", input: "lote_id" },
@@ -57,7 +58,14 @@ export default function WorkflowsPage() {
           <div key={wf.id} className="bg-neutral-900 border border-neutral-800 rounded-lg p-4">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1 min-w-0">
-                <h3 className="text-sm font-medium text-neutral-200">{wf.label}</h3>
+                <h3 className="text-sm font-medium text-neutral-200 flex flex-wrap items-center gap-1">
+                  {wf.label.split(" → ").map((parte, i, arr) => (
+                    <span key={i} className="inline-flex items-center gap-1">
+                      {parte}
+                      {i < arr.length - 1 && <Icon name="chevronRight" size={12} />}
+                    </span>
+                  ))}
+                </h3>
                 <span className="text-[10px] text-neutral-500 font-mono mt-0.5 block">{wf.id}</span>
 
                 {wf.input && (

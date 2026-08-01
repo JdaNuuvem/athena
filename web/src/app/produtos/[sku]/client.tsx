@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
+import Icon from "@/app/_components/Icon";
 import VisaoGeralTab from "./_components/VisaoGeralTab";
 import CadastroTab from "./_components/CadastroTab";
 import VariacoesTab from "./_components/VariacoesTab";
@@ -68,8 +69,8 @@ export default function ProdutoClientPage() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <Link href="/produtos" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors">
-          ← Produtos
+        <Link href="/produtos" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors inline-flex items-center gap-0.5">
+          <Icon name="chevronLeft" size={12} /> Produtos
         </Link>
         <h1 className="text-lg font-light text-neutral-300 mt-1">
           {String(produto.descricao || produto.nome || sku)}

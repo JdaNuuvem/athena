@@ -63,8 +63,8 @@ export function HistoricoTab({ operador, operadorSenha }: { operador: Operador; 
                           <td className="py-1 text-neutral-400 font-mono">{it.produto_codigo}</td>
                           <td className="py-1 text-neutral-300">{it.descricao}</td>
                           <td className="py-1 text-right text-neutral-300">{Number(it.quantidade)}</td>
-                          <td className="py-1 text-right text-neutral-400">R$ {Number(it.valor_unitario || 0).toFixed(2)}</td>
-                          <td className="py-1 text-right text-emerald-400">R$ {Number(it.valor_total || 0).toFixed(2)}</td>
+                          <td className="py-1 text-right text-neutral-400">R$ {Number(it.valor_unitario || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                          <td className="py-1 text-right text-emerald-400">R$ {Number(it.valor_total || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                           <td className="py-1 text-right">
                             <button onClick={() => setDevolverItem({ itemId: it.id, qtd: 1, motivo: "" })}
                               className="text-[10px] text-red-400 hover:text-red-300">Devolver</button>

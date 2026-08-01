@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { estoqueRatear, type RateioResult } from "@/lib/api";
 import Link from "next/link";
+import Icon from "@/app/_components/Icon";
 
 export default function RateioPage() {
   const [sku, setSku] = useState("");
@@ -47,8 +48,8 @@ export default function RateioPage() {
   return (
     <div className="p-6 space-y-6 max-w-3xl">
       <div>
-        <Link href="/estoque/lojas" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors">
-          ← Estoque por Depósito
+        <Link href="/estoque/lojas" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors inline-flex items-center gap-1">
+          <Icon name="chevronLeft" size={12} /> Estoque por Depósito
         </Link>
         <h1 className="text-lg font-light text-neutral-300 mt-1">Rateio de Estoque</h1>
         <p className="text-xs text-neutral-500 mt-0.5">
@@ -171,7 +172,7 @@ export default function RateioPage() {
                     {l.quantidade.toLocaleString("pt-BR", { minimumFractionDigits: 3 })}
                   </td>
                   <td className="px-3 py-2 text-right font-mono numeric text-neutral-400">
-                    {l.percentual.toFixed(2)}%
+                    {l.percentual.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%
                   </td>
                 </tr>
               ))}

@@ -11,7 +11,7 @@ const posicoesMock = [
 const ruas = [...new Set(posicoesMock.map((p) => p.rua))].sort();
 
 function getRuaColor(rua: string) {
-  const colors = ["border-l-indigo-500", "border-l-emerald-500", "border-l-amber-500"];
+  const colors = ["bg-indigo-500", "bg-emerald-500", "bg-amber-500"];
   return colors[ruas.indexOf(rua) % colors.length];
 }
 
@@ -27,8 +27,11 @@ export default function LocalizacaoTab() {
         <h2 className="text-sm font-medium text-neutral-400 mb-3">Visão do Armazém</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {totalPorRua.map((r) => (
-            <div key={r.rua} className={`bg-neutral-900 border border-neutral-800 border-l-4 ${getRuaColor(r.rua)} rounded-lg p-4`}>
-              <p className="text-xs text-neutral-500 uppercase">Rua {r.rua}</p>
+            <div key={r.rua} className="bg-neutral-900 border border-neutral-800 rounded-lg p-4">
+              <div className="flex items-center gap-1.5">
+                <span className={`inline-block w-1.5 h-1.5 rounded-full ${getRuaColor(r.rua)}`} />
+                <p className="text-xs text-neutral-500 uppercase">Rua {r.rua}</p>
+              </div>
               <p className="text-lg font-medium text-neutral-200 numeric mt-1">{r.total} un</p>
               <p className="text-[10px] text-neutral-600">{posicoesMock.filter((p) => p.rua === r.rua).length} posições</p>
             </div>

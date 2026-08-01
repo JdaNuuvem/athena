@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
+import Icon from "@/app/_components/Icon";
 
 export default function ShopeeAdsPage() {
   const [campaigns, setCampaigns] = useState<Record<string, unknown>[]>([]);
@@ -17,7 +18,7 @@ export default function ShopeeAdsPage() {
   return (
     <div className="p-6 space-y-6 max-w-4xl">
       <div>
-        <Link href="/integracoes" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors">← Integrações</Link>
+        <Link href="/integracoes" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors inline-flex items-center gap-1"><Icon name="chevronLeft" size={14} /> Integrações</Link>
         <h1 className="text-lg font-light text-neutral-300 mt-1">Shopee Ads</h1>
       </div>
 
@@ -40,7 +41,7 @@ export default function ShopeeAdsPage() {
                 </div>
                 {Boolean(c.daily_budget) && (
                   <div className="mt-2 text-xs text-neutral-500">
-                    Budget diário: <span className="text-neutral-300 numeric">R$ {Number(c.daily_budget ?? 0).toFixed(2)}</span>
+                    Budget diário: <span className="text-neutral-300 numeric">R$ {Number(c.daily_budget ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 )}
               </div>

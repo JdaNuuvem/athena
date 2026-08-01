@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Icon from "@/app/_components/Icon";
 import Alert from "./shared/Alert";
 import { criarBlingProduto, atualizarBlingProduto, BlingProduto } from "@/lib/api";
 
@@ -49,7 +50,7 @@ export default function ProductFormModal({ produto, onClose, onSaved }: ProductF
       <div className="bg-neutral-850 border border-neutral-700 rounded-xl w-full max-w-md mx-4 shadow-2xl">
         <div className="flex items-center justify-between p-4 border-b border-neutral-700">
           <h3 className="text-sm font-semibold text-neutral-100">{isEdit ? "Editar Produto" : "Novo Produto"}</h3>
-          <button onClick={onClose} className="text-neutral-500 hover:text-neutral-300 text-lg leading-none">✕</button>
+          <button onClick={onClose} className="text-neutral-500 hover:text-neutral-300 leading-none"><Icon name="close" size={16} /></button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 space-y-4">

@@ -109,7 +109,7 @@ export default function AprovacoesPDVPage() {
                   <span className="font-mono text-xs text-neutral-400">#{a.id}</span>
                   <span className="text-sm text-neutral-200 font-medium ml-2">Caixa {a.caixa_numero || `#${a.caixa_id}`}</span>
                 </div>
-                <span className="text-xs text-amber-400 font-medium">R$ {Number(a.valor).toFixed(2)}</span>
+                <span className="text-xs text-amber-400 font-medium">R$ {Number(a.valor).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
               <div className="text-xs text-neutral-500">Motivo: {LABEL_MOTIVO[a.motivo] || a.motivo}</div>
               <div className="text-[10px] text-neutral-600">

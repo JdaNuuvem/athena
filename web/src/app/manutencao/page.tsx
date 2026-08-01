@@ -86,7 +86,8 @@ export default function ManutencaoPage() {
           <h2 className="text-sm font-semibold text-neutral-300 mb-3">Alertas</h2>
           <div className="space-y-2">
             {alertas.map((a: any, i: number) => (
-              <div key={i} className="bg-neutral-900 border border-neutral-800 border-l-4 border-l-red-500 rounded-lg px-4 py-2 flex items-center gap-3">
+              <div key={i} className="bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-2 flex items-center gap-3">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
                 <span className="bg-red-500/10 text-red-400 border border-red-500/30 px-2 py-0.5 rounded text-[10px]">{a.tipo || "alerta"}</span>
                 <span className="text-xs text-neutral-300 flex-1">{a.mensagem}</span>
                 <span className="text-[10px] text-neutral-500">{a.data?.slice(0, 10) || ""}</span>

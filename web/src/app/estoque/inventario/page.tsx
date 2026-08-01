@@ -7,6 +7,7 @@ import KpiCard from "@/app/_components/KpiCard";
 import TabBar from "@/app/_components/TabBar";
 import DataTable from "@/app/_components/DataTable";
 import StatusBadge from "@/app/_components/StatusBadge";
+import Icon from "@/app/_components/Icon";
 import type { Inventario, ItemInventario, TipoInventario } from "@/lib/types/domain";
 import type { StatusBadgeVariant } from "@/lib/types/ui";
 import { TIPOS_INVENTARIO } from "@/lib/types/domain";
@@ -49,8 +50,8 @@ export default function InventarioPage() {
     { key: "acuracia_pct", label: "Acurácia", align: "center", render: (v) => <span className={`font-medium ${(v as number) >= 95 ? "text-emerald-400" : (v as number) >= 85 ? "text-amber-400" : "text-red-400"}`}>{v as number}%</span> },
     { key: "responsavel", label: "Responsável", render: (v) => <span className="text-neutral-500">{v as string}</span> },
     { key: "id", label: "", align: "center", render: (_, row) => (
-      <button onClick={() => setExpandedId(expandedId === row.id ? null : row.id)} className="text-xs text-indigo-400 hover:text-indigo-300">
-        {expandedId === row.id ? "▲" : "▼"}
+      <button onClick={() => setExpandedId(expandedId === row.id ? null : row.id)} className="text-xs text-indigo-400 hover:text-indigo-300 inline-flex items-center justify-center">
+        <Icon name="chevronDown" size={14} style={expandedId === row.id ? { transform: "rotate(180deg)" } : undefined} />
       </button>
     )},
   ];
@@ -60,7 +61,7 @@ export default function InventarioPage() {
     { key: "produto", label: "Produto" },
     { key: "saldo_sistema", label: "Sistema", align: "right", render: (v) => <span className="font-mono text-neutral-400">{v as number}</span> },
     { key: "saldo_contado", label: "Contado", align: "right", render: (v) => <span className="font-mono text-neutral-200">{v as number}</span> },
-    { key: "divergencia", label: "Divergência", align: "right", render: (v) => (v as number) !== 0 ? <span className={`font-mono ${(v as number) > 0 ? "text-emerald-400" : "text-red-400"}`}>{(v as number) > 0 ? "+" : ""}{v as number}</span> : <span className="text-emerald-400">✓</span> },
+    { key: "divergencia", label: "Divergência", align: "right", render: (v) => (v as number) !== 0 ? <span className={`font-mono ${(v as number) > 0 ? "text-emerald-400" : "text-red-400"}`}>{(v as number) > 0 ? "+" : ""}{v as number}</span> : <span className="text-emerald-400 inline-flex justify-end"><svg xmlns="http://www.w3.org/2000/svg" width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7" /></svg></span> },
     { key: "custo_unitario", label: "Custo Unit.", align: "right", render: (v) => <span className="text-neutral-500">{formatCurrency(v as number)}</span> },
     { key: "divergencia_valor", label: "Valor Diverg.", align: "right", render: (v) => (v as number) !== 0 ? <span className={`font-mono text-xs ${(v as number) > 0 ? "text-emerald-400" : "text-red-400"}`}>{formatCurrency(v as number)}</span> : <span className="text-neutral-600">R$ 0,00</span> },
   ];
@@ -78,7 +79,7 @@ export default function InventarioPage() {
         <div className="space-y-2 mt-4 border-t border-neutral-700 pt-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-neutral-300">Itens do Inventário #{expandedId}</h3>
-            <button onClick={() => setExpandedId(null)} className="text-xs text-neutral-500 hover:text-neutral-300">Fechar ✕</button>
+            <button onClick={() => setExpandedId(null)} className="text-xs text-neutral-500 hover:text-neutral-300 inline-flex items-center gap-1">Fechar <Icon name="close" size={12} /></button>
           </div>
           <DataTable columns={ITEM_COLUMNS} data={itensExpandidos} keyExtractor={item => item.id}
             countLabel={`${itensExpandidos.length} itens contados`}

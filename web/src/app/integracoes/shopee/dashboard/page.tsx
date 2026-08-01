@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import type { ShopeeDashboardLoja } from "@/lib/api";
+import Icon from "@/app/_components/Icon";
 
 export default function ShopeeDashboardPage() {
   const [lojas, setLojas] = useState<ShopeeDashboardLoja[]>([]);
@@ -36,7 +37,7 @@ export default function ShopeeDashboardPage() {
   return (
     <div className="p-6 space-y-4 max-w-5xl">
       <div>
-        <Link href="/integracoes/shopee" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors">← Shopee</Link>
+        <Link href="/integracoes/shopee" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors inline-flex items-center gap-1"><Icon name="chevronLeft" size={14} /> Shopee</Link>
         <h1 className="text-lg font-light text-neutral-300 mt-1">Painel Consolidado Shopee</h1>
         <p className="text-xs text-neutral-500 mt-0.5">Comparativo entre todas as lojas Shopee conectadas.</p>
       </div>
@@ -74,7 +75,7 @@ export default function ShopeeDashboardPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-3">
             <p className="text-[10px] text-neutral-500 uppercase tracking-wider">Receita Total</p>
-            <p className="text-lg text-emerald-400 numeric font-medium">R$ {totalReceita.toFixed(2)}</p>
+            <p className="text-lg text-emerald-400 numeric font-medium">R$ {totalReceita.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
           </div>
           <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-3">
             <p className="text-[10px] text-neutral-500 uppercase tracking-wider">Unidades Vendidas</p>
@@ -97,11 +98,16 @@ export default function ShopeeDashboardPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <p className="text-sm text-neutral-200 font-medium">{l.nome}</p>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${l.tem_token ? "bg-green-900/40 text-green-400" : "bg-red-900/40 text-red-400"}`}>
-                  {l.tem_token ? "● Ativa" : "✗ Sem token"}
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium inline-flex items-center gap-1 ${l.tem_token ? "bg-green-900/40 text-green-400" : "bg-red-900/40 text-red-400"}`}>
+                  {l.tem_token ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" width={8} height={8} viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10" /></svg>
+                  ) : (
+                    <Icon name="close" size={10} />
+                  )}
+                  {l.tem_token ? "Ativa" : "Sem token"}
                 </span>
               </div>
-              <span className="text-sm text-emerald-400 numeric font-medium">R$ {Number(l.receita || 0).toFixed(2)}</span>
+              <span className="text-sm text-emerald-400 numeric font-medium">R$ {Number(l.receita || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
             <div className="w-full bg-neutral-800 rounded-full h-1.5 overflow-hidden">
               <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${Math.round((Number(l.receita || 0) / maiorReceita) * 100)}%` }} />

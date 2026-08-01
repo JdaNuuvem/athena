@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import Icon from "@/app/_components/Icon";
 
 interface Card {
   id: number; titulo: string; subtitulo: string; extras?: string;
@@ -9,11 +10,11 @@ interface Card {
 }
 
 const COLUNAS = [
-  { id: "solicitacoes", titulo: "Solicitacoes", cor: "border-t-amber-500", bg: "bg-amber-500" },
-  { id: "cotacoes", titulo: "Cotacoes", cor: "border-t-purple-500", bg: "bg-purple-500" },
-  { id: "pedidos", titulo: "Pedidos", cor: "border-t-emerald-500", bg: "bg-emerald-500" },
-  { id: "recebimentos", titulo: "Recebimento", cor: "border-t-teal-500", bg: "bg-teal-500" },
-  { id: "notas", titulo: "Notas Entrada", cor: "border-t-pink-500", bg: "bg-pink-500" },
+  { id: "solicitacoes", titulo: "Solicitacoes", bg: "bg-amber-500" },
+  { id: "cotacoes", titulo: "Cotacoes", bg: "bg-purple-500" },
+  { id: "pedidos", titulo: "Pedidos", bg: "bg-emerald-500" },
+  { id: "recebimentos", titulo: "Recebimento", bg: "bg-teal-500" },
+  { id: "notas", titulo: "Notas Entrada", bg: "bg-pink-500" },
 ] as const;
 
 const API_MAP: Record<string, { list: string; create: string }> = {
@@ -89,14 +90,24 @@ export default function ComprasKanban() {
       <div className="flex items-center justify-between mb-3 shrink-0">
         <div>
           <h1 className="text-lg font-bold text-neutral-100">Compras</h1>
-          <p className="text-xs text-neutral-500 mt-1">Pipeline: Solicitacao → Cotacao → Pedido → Recebimento → Nota</p>
+          <p className="text-xs text-neutral-500 mt-1 flex items-center gap-1 flex-wrap">
+            <span>Pipeline: Solicitacao</span>
+            <Icon name="chevronRight" size={10} />
+            <span>Cotacao</span>
+            <Icon name="chevronRight" size={10} />
+            <span>Pedido</span>
+            <Icon name="chevronRight" size={10} />
+            <span>Recebimento</span>
+            <Icon name="chevronRight" size={10} />
+            <span>Nota</span>
+          </p>
         </div>
         <Link href="/compras/fornecedores" className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-500">Fornecedores</Link>
       </div>
 
       <div className="flex-1 flex gap-3 overflow-x-auto pb-2">
         {COLUNAS.map(col => (
-          <div key={col.id} className={"flex-1 min-w-[220px] bg-neutral-900 border border-neutral-800 rounded-lg flex flex-col " + col.cor + " border-t-2"}>
+          <div key={col.id} className="flex-1 min-w-[220px] bg-neutral-900 border border-neutral-800 rounded-lg flex flex-col">
             <div className="flex items-center justify-between px-3 py-2 border-b border-neutral-800">
               <span className="text-xs font-semibold text-neutral-300">{col.titulo}</span>
               <span className={"text-[10px] text-white px-1.5 py-0.5 rounded-full " + col.bg}>{(board[col.id] || []).length}</span>

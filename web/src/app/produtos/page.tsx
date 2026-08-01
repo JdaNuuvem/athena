@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, type Product } from "@/lib/api";
 import { useStore } from "@/lib/store-context";
+import Icon from "@/app/_components/Icon";
 
 const POR_PAGINA = 30;
 
@@ -55,9 +56,9 @@ function Pagination({ pagina, total, onChange }: { pagina: number; total: number
       <button
         disabled={pagina <= 1}
         onClick={() => onChange(pagina - 1)}
-        className="px-2 py-1 text-xs rounded bg-neutral-800 text-neutral-400 hover:bg-neutral-700 disabled:opacity-30"
+        className="px-2 py-1 text-xs rounded bg-neutral-800 text-neutral-400 hover:bg-neutral-700 disabled:opacity-30 inline-flex items-center justify-center"
       >
-        ‹
+        <Icon name="chevronLeft" size={14} />
       </button>
       {paginas.map((p, i) =>
         p === -1 ? (
@@ -79,9 +80,9 @@ function Pagination({ pagina, total, onChange }: { pagina: number; total: number
       <button
         disabled={pagina >= totalPaginas}
         onClick={() => onChange(pagina + 1)}
-        className="px-2 py-1 text-xs rounded bg-neutral-800 text-neutral-400 hover:bg-neutral-700 disabled:opacity-30"
+        className="px-2 py-1 text-xs rounded bg-neutral-800 text-neutral-400 hover:bg-neutral-700 disabled:opacity-30 inline-flex items-center justify-center"
       >
-        ›
+        <Icon name="chevronRight" size={14} />
       </button>
     </div>
   );
@@ -270,16 +271,22 @@ export default function ProdutosPage() {
                   </div>
 
                   <div className="flex flex-col items-center gap-1">
-                    <Link href={"/pdv?sku=" + p.sku} onClick={e => e.stopPropagation()} className="px-2 py-1 bg-amber-600 hover:bg-amber-500 text-white text-[10px] rounded-lg shrink-0" title="Vender este produto">🛒</Link>
+                    <Link href={"/pdv?sku=" + p.sku} onClick={e => e.stopPropagation()} className="px-2 py-1 bg-amber-600 hover:bg-amber-500 text-white text-[10px] rounded-lg shrink-0 inline-flex items-center justify-center" title="Vender este produto">
+                      <svg xmlns="http://www.w3.org/2000/svg" width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="9" cy="21" r="1" />
+                        <circle cx="20" cy="21" r="1" />
+                        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                      </svg>
+                    </Link>
                     <Link
                       href={`/estoque/lojas?busca=${encodeURIComponent(p.sku)}`}
                       onClick={e => e.stopPropagation()}
-                      className="text-[11px] text-blue-400 hover:underline whitespace-nowrap"
+                      className="text-[11px] text-blue-400 hover:underline whitespace-nowrap inline-flex items-center gap-0.5"
                     >
-                      Ver por loja →
+                      Ver por loja <Icon name="chevronRight" size={11} />
                     </Link>
                   </div>
-                  <span className="text-neutral-600 text-sm">›</span>
+                  <span className="text-neutral-600 text-sm"><Icon name="chevronRight" size={14} /></span>
                 </div>
               </div>
             </div>

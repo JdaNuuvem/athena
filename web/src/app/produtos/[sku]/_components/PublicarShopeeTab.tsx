@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { api, ShopeeCategoria, ShopeeAtributo, ShopeeMarca } from "@/lib/api";
+import Icon from "@/app/_components/Icon";
 
 interface Props {
   produto: Record<string, unknown> | null;
@@ -404,7 +405,7 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
   if (lojas.length === 0) {
     return (
       <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-6 text-center text-neutral-500 text-sm">
-        Nenhuma loja Shopee conectada ainda. Conecte uma loja em <span className="text-indigo-400">Integrações → Shopee</span> antes de publicar produtos.
+        Nenhuma loja Shopee conectada ainda. Conecte uma loja em <span className="text-indigo-400 inline-flex items-center gap-0.5">Integrações <Icon name="chevronRight" size={11} /> Shopee</span> antes de publicar produtos.
       </div>
     );
   }
@@ -443,11 +444,11 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
           </div>
           {ehVariacao && (
             <div className="bg-amber-950/40 border border-amber-900/50 rounded-lg p-3 text-xs text-amber-300 space-y-1">
-              <p className="font-medium">⚠ Este SKU é uma variação de um produto com múltiplos modelos.</p>
+              <p className="font-medium flex items-center gap-1"><Icon name="alert" size={14} /> Este SKU é uma variação de um produto com múltiplos modelos.</p>
               <p className="text-amber-400/80">
                 Nome, descrição, atributos, marca e imagens abaixo são do produto pai (afetam todas as variações). Estoque desta
                 variação já é enviado corretamente por este formulário. Preço por variação: ajuste em{" "}
-                <span className="font-mono">Integrações → Shopee → Produtos</span> (o campo abaixo está desativado).
+                <span className="font-mono inline-flex items-center gap-0.5">Integrações <Icon name="chevronRight" size={10} /> Shopee <Icon name="chevronRight" size={10} /> Produtos</span> (o campo abaixo está desativado).
               </p>
             </div>
           )}
@@ -521,7 +522,9 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
                           {img.preview
                             ? <img src={img.preview} alt="" className="w-16 h-16 object-cover rounded-lg border border-neutral-700" />
                             : <div className="w-16 h-16 rounded-lg border border-neutral-700 bg-neutral-800 flex items-center justify-center text-neutral-500 text-[10px]">#{i + 1}</div>}
-                          <button onClick={() => removerImagem(i)} className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-600 hover:bg-red-500 text-white text-[10px] leading-none">×</button>
+                          <button onClick={() => removerImagem(i)} className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-600 hover:bg-red-500 text-white leading-none flex items-center justify-center">
+                            <Icon name="close" size={9} />
+                          </button>
                         </div>
                       ))}
                       {imagens.length < MAX_IMAGENS && (
@@ -579,7 +582,7 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
               ) : resultados.map(c => (
                 <button key={c.category_id} onClick={() => abrirCategoria(c)} className="w-full text-left px-3 py-2 text-sm text-neutral-300 hover:bg-neutral-800/50 flex items-center justify-between">
                   {c.nome}
-                  {c.tem_filhos && <span className="text-neutral-600 text-xs">›</span>}
+                  {c.tem_filhos && <span className="text-neutral-600 text-xs"><Icon name="chevronRight" size={12} /></span>}
                 </button>
               ))}
             </div>
@@ -632,7 +635,9 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
                   {img.preview
                     ? <img src={img.preview} alt="" className="w-20 h-20 object-cover rounded-lg border border-neutral-700" />
                     : <div className="w-20 h-20 rounded-lg border border-neutral-700 bg-neutral-800 flex items-center justify-center text-neutral-500 text-xs">#{i + 1}</div>}
-                  <button onClick={() => removerImagem(i)} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-600 hover:bg-red-500 text-white text-xs leading-none">×</button>
+                  <button onClick={() => removerImagem(i)} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-600 hover:bg-red-500 text-white leading-none flex items-center justify-center">
+                    <Icon name="close" size={11} />
+                  </button>
                 </div>
               ))}
               <div className="space-y-2">
@@ -648,7 +653,12 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
                       onChange={e => e.target.files?.[0] && adicionarImagemArquivo(e.target.files[0])} />
                   </label>
                 )}
-                {imagens.length > 0 && <p className="text-[10px] text-emerald-500">✓ {imagens.length}/{MAX_IMAGENS} imagens prontas</p>}
+                {imagens.length > 0 && (
+                  <p className="text-[10px] text-emerald-500 flex items-center gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7" /></svg>
+                    {imagens.length}/{MAX_IMAGENS} imagens prontas
+                  </p>
+                )}
               </div>
             </div>
             <p className="text-[10px] text-neutral-600">Vídeo e tabela de medidas não são suportados aqui (a Shopee exige um fluxo de upload próprio, em várias etapas) — gerencie esses dois pelo Seller Center da Shopee.</p>
@@ -705,13 +715,13 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
 
           {bloqueioMargem && (
             <div className="bg-red-950/40 border border-red-900/50 rounded-lg p-3 space-y-2 text-xs">
-              <p className="text-red-400 font-medium">❌ Este produto sairia com prejuízo nesta loja:</p>
+              <p className="text-red-400 font-medium flex items-center gap-1"><Icon name="alert" size={14} /> Este produto sairia com prejuízo nesta loja:</p>
               <ul className="text-neutral-400 space-y-0.5">
-                <li>Preço: R$ {Number(form.preco).toFixed(2)}</li>
-                <li>Comissão: R$ {bloqueioMargem.comissao_valor.toFixed(2)}</li>
-                <li>Frete médio: R$ {bloqueioMargem.frete.toFixed(2)}</li>
-                <li>Custo do produto: R$ {bloqueioMargem.custo.toFixed(2)}</li>
-                <li className="text-red-400 font-medium">Resultado: prejuízo de R$ {Math.abs(bloqueioMargem.margem_valor).toFixed(2)}</li>
+                <li>Preço: R$ {Number(form.preco).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</li>
+                <li>Comissão: R$ {bloqueioMargem.comissao_valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</li>
+                <li>Frete médio: R$ {bloqueioMargem.frete.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</li>
+                <li>Custo do produto: R$ {bloqueioMargem.custo.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</li>
+                <li className="text-red-400 font-medium">Resultado: prejuízo de R$ {Math.abs(bloqueioMargem.margem_valor).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</li>
               </ul>
               <button
                 onClick={() => publicar(true)}

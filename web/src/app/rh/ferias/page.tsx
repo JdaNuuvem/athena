@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import StatusBadge from "@/app/_components/StatusBadge";
 import LoadingState from "@/app/_components/LoadingState";
+import Icon from "@/app/_components/Icon";
 
 interface FeriasRow { id: number; funcionario_id: number; dias: number; inicio: string; fim: string; status: string; periodo_aquisitivo: string; }
 
@@ -28,7 +29,7 @@ export default function FeriasPage() {
               <div className="flex justify-between"><span className="text-sm font-semibold text-neutral-200">{f.dias} dias</span><StatusBadge label={f.status} variant={VARIANTS[f.status] || "neutral"} /></div>
               <div className="text-xs text-neutral-500 space-y-1">
                 <p>Período: {f.periodo_aquisitivo}</p>
-                <p>{f.inicio?.slice(0,10)} → {f.fim?.slice(0,10)}</p>
+                <p className="flex items-center gap-1">{f.inicio?.slice(0,10)} <Icon name="chevronRight" size={10} /> {f.fim?.slice(0,10)}</p>
               </div>
             </div>
           ))}

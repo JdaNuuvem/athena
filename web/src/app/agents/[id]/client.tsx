@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { api, type Agent } from "@/lib/api";
+import Icon from "@/app/_components/Icon";
 
 export default function AgentClientPage() {
   // ponytail: nao usa useParams() — no export estatico o HTML e' pre-renderizado
@@ -52,8 +53,8 @@ export default function AgentClientPage() {
   return (
     <div className="p-6 space-y-6 max-w-3xl">
       <div>
-        <Link href="/agents" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors">
-          ← Agentes
+        <Link href="/agents" className="inline-flex items-center gap-1 text-xs text-neutral-500 hover:text-neutral-300 transition-colors">
+          <Icon name="chevronLeft" size={12} /> Agentes
         </Link>
         <h1 className="text-lg font-light text-neutral-300 mt-1">{agentName}</h1>
         {agent && (

@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-01T19:59:00Z",
+  "title": "Design System: Athena",
+  "extensions": {
+    "colorMeta": {
+      "panel-950": { "role": "neutral", "displayName": "Void", "canonical": "#05070a" },
+      "panel-900": { "role": "neutral", "displayName": "Panel", "canonical": "#0a0e14" },
+      "panel-850": { "role": "neutral", "displayName": "Instrument Face", "canonical": "#10151d" },
+      "panel-border": { "role": "neutral", "displayName": "Panel Border", "canonical": "#232c38" },
+      "panel-border-lit": { "role": "neutral", "displayName": "Panel Border Lit", "canonical": "#34495e" },
+      "ink-100": { "role": "neutral", "displayName": "Ink 100", "canonical": "#e7ecf2" },
+      "ink-300": { "role": "neutral", "displayName": "Ink 300", "canonical": "#b3c0cf" },
+      "ink-500": { "role": "neutral", "displayName": "Ink 500", "canonical": "#7c8ba0" },
+      "ink-700": { "role": "neutral", "displayName": "Ink 700", "canonical": "#4c5866" },
+      "accent-400": { "role": "primary", "displayName": "Instrument Cyan", "canonical": "#5fd4ff" },
+      "accent-500": { "role": "primary", "displayName": "Instrument Cyan Dim", "canonical": "#2fb8f0" },
+      "status-ok": { "role": "status", "displayName": "Status OK Green", "canonical": "#34d399" },
+      "status-warn": { "role": "status", "displayName": "Status Warn Amber", "canonical": "#f5b942" },
+      "status-crit": { "role": "status", "displayName": "Status Critical Red", "canonical": "#f3556a" },
+      "categorical-blue": { "role": "categorical", "displayName": "Categorical Blue", "canonical": "#5fa8f5" },
+      "categorical-green": { "role": "categorical", "displayName": "Categorical Green", "canonical": "#6ad17e" },
+      "categorical-purple": { "role": "categorical", "displayName": "Categorical Purple", "canonical": "#b98ff5" },
+      "categorical-orange": { "role": "categorical", "displayName": "Categorical Orange", "canonical": "#f5a35f" },
+      "categorical-teal": { "role": "categorical", "displayName": "Categorical Teal", "canonical": "#22a89e" },
+      "categorical-pink": { "role": "categorical", "displayName": "Categorical Pink", "canonical": "#dd6398" },
+      "categorical-yellow": { "role": "categorical", "displayName": "Categorical Yellow", "canonical": "#f0d55f" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display (28px)", "purpose": "Valor numérico do instrumento primário. Único degrau grande da escala." },
+      "title": { "displayName": "Title (13px)", "purpose": "Wordmark, item de navegação, título de seção de instrumento." },
+      "label": { "displayName": "Label (11px)", "purpose": "Rótulo uppercase de cada instrumento individual." },
+      "context": { "displayName": "Context (10px)", "purpose": "Linha de apoio dentro do instrumento, texto de tabela secundário." },
+      "micro": { "displayName": "Micro (9px)", "purpose": "Rótulo de zona da sidebar e badges mínimos — agrupamento estrutural, nunca conteúdo de leitura." },
+      "numeric": { "displayName": "Numeric / Tabular", "purpose": "Todo valor numérico exibido ao usuário; JetBrains Mono, tabular-nums." }
+    },
+    "shadows": [
+      { "name": "instrument-inset", "value": "inset 0 1px 0 rgba(255,255,255,0.03)", "purpose": "Reflexo raso de vidro dentro de cada instrumento." },
+      { "name": "instrument-lit-halo", "value": "0 0 0 1px var(--panel-border-lit), 0 8px 20px -12px rgba(0,0,0,0.6)", "purpose": "Halo de destaque/foco em instrumento ativo." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Instrument",
+      "kind": "card",
+      "refersTo": "instrument",
+      "description": "Instrumento grande do dashboard: label, número tabular grande, LED de status opcional, linha de contexto.",
+      "html": "<div class=\"ds-instrument ds-instrument-primary\"><div class=\"ds-instrument-label\">VENDAS HOJE<span class=\"ds-led\"></span></div><div class=\"ds-instrument-value\">R$ 0,00</div><div class=\"ds-instrument-context\">0 pedidos</div></div>",
+      "css": ".ds-instrument-primary { background: #10151d; border: 1px solid #232c38; border-radius: 6px; padding: 16px; position: relative; } .ds-instrument-label { font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: #7c8ba0; display: flex; justify-content: space-between; align-items: center; } .ds-instrument-value { font-family: 'JetBrains Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; font-size: 28px; font-weight: 600; color: #34d399; margin-top: 8px; } .ds-instrument-context { font-size: 12px; color: #4c5866; margin-top: 4px; } .ds-led { width: 6px; height: 6px; border-radius: 50%; background: #34d399; box-shadow: 0 0 6px rgba(52,211,153,0.6); }"
+    },
+    {
+      "name": "Secondary Instrument",
+      "kind": "card",
+      "refersTo": "instrument",
+      "description": "Instrumento compacto para métricas secundárias, grid denso.",
+      "html": "<div class=\"ds-instrument ds-instrument-secondary\"><div class=\"ds-instrument-label\">TICKET MÉDIO</div><div class=\"ds-instrument-value-sm\">R$ 0,00</div></div>",
+      "css": ".ds-instrument-secondary { background: #10151d; border: 1px solid #232c38; border-radius: 6px; padding: 12px; } .ds-instrument-label { font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: #7c8ba0; } .ds-instrument-value-sm { font-family: 'JetBrains Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; font-size: 18px; font-weight: 600; color: #e7ecf2; margin-top: 4px; }"
+    },
+    {
+      "name": "Nav Item Active",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "Item de navegação ativo na sidebar, dentro de uma zona nomeada.",
+      "html": "<a class=\"ds-nav-item ds-nav-item-active\" href=\"#\">Dashboard</a>",
+      "css": ".ds-nav-item { display: block; padding: 8px 12px; border-radius: 4px; font-size: 14px; color: #b3c0cf; text-decoration: none; transition: color 0.15s, background 0.15s; } .ds-nav-item:hover, .ds-nav-item:focus-visible { color: #e7ecf2; background: rgba(255,255,255,0.03); } .ds-nav-item-active { background: rgba(95,212,255,0.1); color: #5fd4ff; }"
+    },
+    {
+      "name": "Nav Section Label",
+      "kind": "nav",
+      "refersTo": "nav-section",
+      "description": "Rótulo de zona fixa da sidebar (ex. OPERAÇÃO, VENDAS).",
+      "html": "<div class=\"ds-nav-section\">OPERAÇÃO</div>",
+      "css": ".ds-nav-section { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #4c5866; padding: 12px 12px 4px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Cockpit de Instrumentos",
+    "overview": "Athena é o ERP interno que unifica loja física, Shopee, Bling e o vínculo de estoque entre canais numa única tela de operação. A superfície opera no modo Operate: quem usa não está sendo persuadido, está completando uma tarefa. O painel se comporta como o painel de um cockpit: cada dado vive numa zona fixa e memorizável, a leitura é instantânea, e a cor nunca decora — ela reporta status. Fundo escuro por padrão reduz fadiga em uso prolongado. Tipografia monoespaçada e tabular em todo número garante alinhamento e confiabilidade num relance.",
+    "keyCharacteristics": [
+      "Fundo quase-preto (panel-950), nunca neutral-900 de estoque",
+      "Accent cyan de vidro de instrumento, não indigo",
+      "Cor reservada estritamente para status: verde = ok, âmbar = atenção, vermelho = crítico",
+      "Números sempre em fonte monoespaçada tabular",
+      "Navegação em zonas fixas nomeadas"
+    ],
+    "rules": [
+      { "name": "The Status-Only Rule", "body": "Verde, âmbar e vermelho só aparecem para reportar estado real. Nunca usados como cor de marca ou decoração.", "section": "colors" },
+      { "name": "The Tabular Rule", "body": "Todo número exibido ao usuário usa .numeric (tabular-nums). Nenhum número solto em fonte proporcional.", "section": "typography" },
+      { "name": "The Five-Step Rule", "body": "Todo texto do sistema cai em um dos cinco degraus da escala (28/13/11/10/9px). Um tamanho arbitrário fora dessa escala é drift, não uma decisão de design.", "section": "typography" },
+      { "name": "The One Radius Rule", "body": "rounded-lg é o único raio de card do sistema (6px, sobrescrito no tema do Tailwind, igual ao .instrument). Não introduza rounded-xl/rounded-2xl num card novo.", "section": "shapes" },
+      { "name": "The No-Drop-Shadow Rule", "body": "Profundidade vem de camadas tonais e borda, nunca de box-shadow projetada para fora, exceto o halo reservado a .instrument-lit.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do usar .numeric em todo valor numérico exibido (moeda, contagem, quantidade).",
+      "Do reservar accent-400/accent-500 (cyan) exclusivamente para foco de navegação e indicadores de sistema — nunca decoração.",
+      "Do usar verde/âmbar/vermelho apenas para reportar estado real.",
+      "Do manter a sidebar fechada por padrão em mobile (< 640px) e aberta por padrão em desktop.",
+      "Do usar ícones SVG próprios do Icon.tsx, nunca emoji ou glyph unicode."
+    ],
+    "donts": [
+      "Don't usar indigo ou qualquer accent de SaaS genérico — o accent do sistema é cyan.",
+      "Don't aplicar a classe .instrument a elementos que precisam de position: fixed/absolute fora do próprio readout.",
+      "Don't usar border-l-4 colorida ou cards hero-metric uniformes para alertas.",
+      "Don't formatar moeda manualmente com .toFixed(2) — sempre usar o helper fmtBRL."
+    ]
+  }
+}

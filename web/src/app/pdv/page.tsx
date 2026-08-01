@@ -60,7 +60,7 @@ export default function PDVPage() {
   const handleCaixaFechada = (result: any) => {
     setShowFechaModal(false);
     setCaixa(null);
-    notify(`Caixa fechado. Total vendas: R$ ${result.total_vendas?.toFixed(2)} | Em dinheiro: R$ ${result.vendas_dinheiro?.toFixed(2)} | Diferenca: R$ ${result.diferenca?.toFixed(2)}`, "info");
+    notify(`Caixa fechado. Total vendas: R$ ${Number(result.total_vendas).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} | Em dinheiro: R$ ${Number(result.vendas_dinheiro).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} | Diferenca: R$ ${Number(result.diferenca).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, "info");
   };
 
   if (!operador) {

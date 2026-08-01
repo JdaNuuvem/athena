@@ -32,9 +32,20 @@ export default function AgentsPage() {
       )}
 
       <div className="flex gap-4 text-sm text-neutral-400">
-        <span>🟢 {running.length} em execução</span>
-        <span>🟡 {idle.length} ociosos</span>
-        {errored.length > 0 && <span>🔴 {errored.length} com erro</span>}
+        <span className="inline-flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
+          {running.length} em execução
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-yellow-500 shrink-0" />
+          {idle.length} ociosos
+        </span>
+        {errored.length > 0 && (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
+            {errored.length} com erro
+          </span>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

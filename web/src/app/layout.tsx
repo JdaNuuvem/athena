@@ -3,11 +3,14 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { JetBrains_Mono } from "next/font/google";
 import { api } from "@/lib/api";
 import Icon from "./_components/Icon";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { StoreProvider, useStore, type LojaInfo } from "@/lib/store-context";
 import "./globals.css";
+
+const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", weight: ["400", "500", "600"] });
 
 const NAV_PERMS: Record<string, string> = {
   "/dashboard": "dashboard:view",
@@ -45,237 +48,291 @@ const NAV_PERMS: Record<string, string> = {
 // Sem "store" = universal, sempre visivel independente da loja selecionada.
 type NavChild = { href: string; label: string; store?: "fisica" | "virtual" };
 type NavItem = { href: string; label: string; icon: string; store?: "fisica" | "virtual"; children?: NavChild[] };
+// group: zona do painel — puramente de apresentação (agrupa visualmente),
+// nunca muda href/rota/comportamento de nenhum item.
+type NavGroup = { label: string; items: NavItem[] };
 
-const NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
+const NAV_GROUPS: NavGroup[] = [
   {
-    href: "/integracoes", label: "Shopee", icon: "bling", store: "virtual",
-    children: [
-      { href: "/integracoes/shopee", label: "Config & Lojas" },
-      { href: "/integracoes/shopee/dashboard", label: "Dashboard" },
-      { href: "/integracoes/shopee/produtos", label: "Produtos" },
-      { href: "/integracoes/shopee/pedidos", label: "Pedidos" },
-      { href: "/shopee/regras", label: "Regras de Preco" },
-      { href: "/shopee/kits", label: "Kits & Consistência de Preço" },
-      { href: "/relatorios/dre-lojas", label: "DRE por Loja" },
-      { href: "/integracoes/shopee-ads", label: "Shopee Ads" },
+    label: "Operação",
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
     ],
   },
-  { href: "/cadastros", label: "Cadastros", icon: "cadastros" },
-  { href: "/lojas", label: "Lojas", icon: "pdv" },
-  { href: "/chat", label: "Chat", icon: "atendimento" },
-  { href: "/produtos", label: "Produtos", icon: "produtos" },
   {
-    href: "/estoque", label: "Estoque", icon: "estoque",
-    children: [
-      { href: "/estoque", label: "Visão Geral" },
-      { href: "/estoque/entrada", label: "Entrada (Scanner)", store: "fisica" },
-      { href: "/estoque/saida", label: "Saída", store: "fisica" },
-      { href: "/estoque/transferencias", label: "Transferências", store: "fisica" },
-      { href: "/estoque/aprovacoes", label: "Aprovações", store: "fisica" },
-      { href: "/estoque/contagem", label: "Contagem Cíclica", store: "fisica" },
-      { href: "/estoque/discrepancias", label: "Discrepâncias" },
-      { href: "/estoque/rotacao", label: "Rotação", store: "fisica" },
+    label: "Vendas",
+    items: [
+      {
+        href: "/pdv", label: "PDV", icon: "pdv", store: "fisica",
+        children: [
+          { href: "/pdv", label: "Caixa (Terminal)" },
+          { href: "/pdv/aprovacoes", label: "Aprovações de Sangria" },
+          { href: "/pdv/quebra-caixa", label: "Quebra de Caixa" },
+          { href: "/pdv/operadores", label: "Operadores (PIN/Crachá)" },
+        ],
+      },
+      { href: "/vendas", label: "Vendas", icon: "vendas" },
+      {
+        href: "/integracoes", label: "Shopee", icon: "bling", store: "virtual",
+        children: [
+          { href: "/integracoes/shopee", label: "Config & Lojas" },
+          { href: "/integracoes/shopee/dashboard", label: "Dashboard" },
+          { href: "/integracoes/shopee/produtos", label: "Produtos" },
+          { href: "/integracoes/shopee/pedidos", label: "Pedidos" },
+          { href: "/shopee/regras", label: "Regras de Preco" },
+          { href: "/shopee/kits", label: "Kits & Consistência de Preço" },
+          { href: "/relatorios/dre-lojas", label: "DRE por Loja" },
+          { href: "/integracoes/shopee-ads", label: "Shopee Ads" },
+        ],
+      },
+      { href: "/crm", label: "CRM", icon: "crm" },
+      { href: "/atendimento", label: "Atendimento", icon: "atendimento" },
+      { href: "/chat", label: "Chat", icon: "atendimento" },
     ],
   },
-  { href: "/compras", label: "Compras", icon: "compras" },
-  { href: "/vendas", label: "Vendas", icon: "vendas" },
   {
-    href: "/pdv", label: "PDV", icon: "pdv", store: "fisica",
-    children: [
-      { href: "/pdv", label: "Caixa (Terminal)" },
-      { href: "/pdv/aprovacoes", label: "Aprovações de Sangria" },
-      { href: "/pdv/quebra-caixa", label: "Quebra de Caixa" },
-      { href: "/pdv/operadores", label: "Operadores (PIN/Crachá)" },
+    label: "Catálogo & Estoque",
+    items: [
+      { href: "/produtos", label: "Produtos", icon: "produtos" },
+      { href: "/cadastros", label: "Cadastros", icon: "cadastros" },
+      { href: "/lojas", label: "Lojas", icon: "pdv" },
+      {
+        href: "/estoque", label: "Estoque", icon: "estoque",
+        children: [
+          { href: "/estoque", label: "Visão Geral" },
+          { href: "/estoque/entrada", label: "Entrada (Scanner)", store: "fisica" },
+          { href: "/estoque/saida", label: "Saída", store: "fisica" },
+          { href: "/estoque/transferencias", label: "Transferências", store: "fisica" },
+          { href: "/estoque/aprovacoes", label: "Aprovações", store: "fisica" },
+          { href: "/estoque/contagem", label: "Contagem Cíclica", store: "fisica" },
+          { href: "/estoque/discrepancias", label: "Discrepâncias" },
+          { href: "/estoque/rotacao", label: "Rotação", store: "fisica" },
+        ],
+      },
+      { href: "/compras", label: "Compras", icon: "compras" },
     ],
   },
-  { href: "/financeiro", label: "Financeiro", icon: "financeiro" },
-  { href: "/fiscal", label: "Fiscal", icon: "fiscal" },
-  { href: "/crm", label: "CRM", icon: "crm" },
-  { href: "/atendimento", label: "Atendimento", icon: "atendimento" },
-  // Abas desativadas temporariamente (não usadas no momento)
-  // { href: "/producao", label: "Produção", icon: "producao" },
-  // { href: "/manutencao", label: "Manutenção", icon: "producao" },
-  // { href: "/qualidade", label: "Qualidade", icon: "producao" },
-  // { href: "/moldes", label: "Moldes & CNC", icon: "producao" },
-  // { href: "/memory", label: "Memória", icon: "agents" },
-  { href: "/rh", label: "RH", icon: "rh" },
-  { href: "/bi", label: "BI", icon: "bi" },
-  { href: "/documentos", label: "Documentos", icon: "documentos" },
-  { href: "/automacoes", label: "Automações", icon: "automacoes" },
-  { href: "/relatorios", label: "Relatórios", icon: "relatorios" },
-  { href: "/agents", label: "Agentes", icon: "agents" },
-  { href: "/integracoes/bling", label: "Bling", icon: "bling" },
-  { href: "/hermes", label: "Hermes", icon: "agents" },
-  { href: "/roles", label: "Cargos", icon: "cadastros" },
   {
-    href: "/seguranca", label: "Segurança", icon: "cadastros",
-    children: [
-      { href: "/seguranca/auditoria", label: "Auditoria" },
-      { href: "/seguranca/logs", label: "Logs" },
-      { href: "/seguranca/historico", label: "Histórico" },
-      { href: "/seguranca/rbac", label: "RBAC" },
+    label: "Financeiro & Fiscal",
+    items: [
+      { href: "/financeiro", label: "Financeiro", icon: "financeiro" },
+      { href: "/fiscal", label: "Fiscal", icon: "fiscal" },
+      { href: "/rh", label: "RH", icon: "rh" },
     ],
   },
-  { href: "/config", label: "Configurações", icon: "cadastros" },
+  {
+    label: "Inteligência",
+    items: [
+      { href: "/bi", label: "BI", icon: "bi" },
+      { href: "/relatorios", label: "Relatórios", icon: "relatorios" },
+      { href: "/documentos", label: "Documentos", icon: "documentos" },
+      { href: "/automacoes", label: "Automações", icon: "automacoes" },
+      { href: "/agents", label: "Agentes", icon: "agents" },
+      { href: "/hermes", label: "Hermes", icon: "agents" },
+      { href: "/integracoes/bling", label: "Bling", icon: "bling" },
+    ],
+  },
+  {
+    label: "Administração",
+    items: [
+      { href: "/roles", label: "Cargos", icon: "cadastros" },
+      {
+        href: "/seguranca", label: "Segurança", icon: "cadastros",
+        children: [
+          { href: "/seguranca/auditoria", label: "Auditoria" },
+          { href: "/seguranca/logs", label: "Logs" },
+          { href: "/seguranca/historico", label: "Histórico" },
+          { href: "/seguranca/rbac", label: "RBAC" },
+        ],
+      },
+      { href: "/config", label: "Configurações", icon: "cadastros" },
+    ],
+  },
 ];
+// Abas desativadas temporariamente (não usadas no momento, fora dos grupos):
+// producao, manutencao, qualidade, moldes, memory
 
 // null (loja "todas", ou sem tipo definido) mostra tudo. Fisica esconde itens
 // marcados "virtual"; Virtual esconde itens marcados "fisica".
-function filtrarNavPorTipoLoja(items: NavItem[], tipo: "fisica" | "virtual" | null): NavItem[] {
-  if (!tipo) return items;
-  return items
-    .filter(item => !item.store || item.store === tipo)
-    .map(item => item.children
-      ? { ...item, children: item.children.filter(c => !c.store || c.store === tipo) }
-      : item)
-    .filter(item => !item.children || item.children.length > 0);
+function filtrarNavPorTipoLoja(groups: NavGroup[], tipo: "fisica" | "virtual" | null): NavGroup[] {
+  if (!tipo) return groups;
+  return groups
+    .map(group => ({
+      label: group.label,
+      items: group.items
+        .filter(item => !item.store || item.store === tipo)
+        .map(item => item.children
+          ? { ...item, children: item.children.filter(c => !c.store || c.store === tipo) }
+          : item)
+        .filter(item => !item.children || item.children.length > 0),
+    }))
+    .filter(group => group.items.length > 0);
 }
 
-function Sidebar() {
-  const { user, hasPermission, logout } = useAuth();
+function Sidebar({ sidebarOpen, setSidebarOpen }: { sidebarOpen: boolean; setSidebarOpen: (v: boolean) => void }) {
+  const { user, logout } = useAuth();
   const { lojaId, lojas, setLojaId, tipoLojaSelecionada } = useStore();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
   const pathname = usePathname();
-  const navItems = filtrarNavPorTipoLoja(NAV_ITEMS, tipoLojaSelecionada);
+  const navGroups = filtrarNavPorTipoLoja(NAV_GROUPS, tipoLojaSelecionada);
+  const lojaAtual = lojas.find(l => String(l.id) === lojaId);
+  const lojaIcon = lojaId === "todas" ? "building2" : lojaAtual?.tipo === "virtual" ? "globe" : "building2";
 
   return (
     <aside aria-label="Navegação principal" className={[
-      "bg-neutral-900 border-r border-neutral-800 flex flex-col transition-all duration-200",
-      "fixed inset-y-0 left-0 z-50 w-56",
+      "flex flex-col transition-[width] duration-200 border-r",
+      "fixed inset-y-0 left-0 z-50 w-60",
       sidebarOpen ? "translate-x-0" : "-translate-x-full",
       "sm:relative sm:z-auto sm:inset-auto sm:translate-x-0 sm:shrink-0",
-      sidebarOpen ? "sm:w-56" : "sm:w-14",
-    ].join(" ")}>
-      <div className="flex items-center justify-between p-3 border-b border-neutral-800">
+      sidebarOpen ? "sm:w-60" : "sm:w-14",
+    ].join(" ")} style={{ background: "var(--panel-900)", borderColor: "var(--panel-border)" }}>
+      <div className="flex items-center justify-between px-3 h-12 shrink-0" style={{ borderBottom: "1px solid var(--panel-border)" }}>
         {sidebarOpen && (
-          <span className="font-semibold text-sm tracking-wide select-none">ATHENA</span>
+          <span className="flex items-center gap-2 select-none">
+            <span aria-hidden className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--accent-400)", boxShadow: "0 0 6px var(--accent-400)" }} />
+            <span className="font-semibold text-[13px] tracking-[0.14em]" style={{ color: "var(--ink-100)" }}>ATHENA</span>
+          </span>
         )}
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
           aria-label={sidebarOpen ? "Recolher menu" : "Expandir menu"}
           aria-expanded={sidebarOpen}
-          className="text-neutral-500 hover:text-neutral-300 text-lg leading-none p-1 rounded"
+          className="p-1.5 rounded transition-colors hover:bg-white/5"
+          style={{ color: "var(--ink-500)" }}
         >
-          {sidebarOpen ? "◀" : "▶"}
+          <Icon name={sidebarOpen ? "chevronLeft" : "chevronRight"} size={15} />
         </button>
       </div>
 
       {sidebarOpen ? (
-        <div className="px-3 pt-3 pb-2 border-b border-neutral-800">
-          <label className="text-[9px] text-neutral-500 uppercase tracking-wider mb-1 block">Loja</label>
+        <div className="px-3 pt-3 pb-3" style={{ borderBottom: "1px solid var(--panel-border)" }}>
+          <label className="text-[9px] uppercase tracking-[0.12em] mb-1.5 flex items-center gap-1.5" style={{ color: "var(--ink-700)" }}>
+            <Icon name={lojaIcon} size={11} />
+            Loja em operação
+          </label>
           <select
             value={lojaId}
             onChange={(e) => setLojaId(e.target.value)}
-            className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-indigo-500"
+            className="w-full rounded px-2.5 py-1.5 text-xs focus:outline-none transition-colors"
+            style={{ background: "var(--panel-800)", border: "1px solid var(--panel-700)", color: "var(--ink-100)" }}
+            onFocus={(e) => (e.currentTarget.style.borderColor = "var(--accent-500)")}
+            onBlur={(e) => (e.currentTarget.style.borderColor = "var(--panel-700)")}
           >
-            <option value="todas">🏢 Todas as Lojas</option>
+            <option value="todas">Todas as Lojas</option>
             {lojas.map((l) => (
-              <option key={l.id} value={String(l.id)}>{l.tipo === "virtual" ? "🌐" : "📍"} {l.nome}</option>
+              <option key={l.id} value={String(l.id)}>{l.tipo === "virtual" ? "Virtual — " : "Física — "}{l.nome}</option>
             ))}
           </select>
         </div>
       ) : (
-        <div className="px-1.5 py-2 flex justify-center border-b border-neutral-800">
-          <span className="text-[9px] text-neutral-500 cursor-help" title={`Loja: ${lojaId}`}>
-            {lojaId === "todas" ? "🏢" : tipoLojaSelecionada === "virtual" ? "🌐" : "📍"}
-          </span>
+        <div className="py-2.5 flex justify-center" style={{ borderBottom: "1px solid var(--panel-border)" }} title={`Loja: ${lojaAtual?.nome ?? "Todas"}`}>
+          <Icon name={lojaIcon} size={15} className="shrink-0" style={{ color: "var(--ink-500)" }} />
         </div>
       )}
 
-      <nav className="flex-1 p-2 space-y-1 overflow-y-auto" role="navigation">
-        {navItems.map((item) => {
-          const active = pathname?.startsWith(item.href);
-          const hasChildren = item.children && item.children.length > 0;
-          const isExpanded = expandedMenu === item.href;
-
-          if (hasChildren) {
-            return (
-              <div key={item.href}>
-                <button
-                  onClick={() => setExpandedMenu(isExpanded ? null : item.href)}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors w-full text-left ${
-                    active || isExpanded
-                      ? "bg-indigo-600/20 text-indigo-300"
-                      : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800"
-                  }`}
-                >
-                  <Icon name={item.icon} size={18} className="shrink-0" />
-                  {sidebarOpen && (
-                    <>
-                      <span className="flex-1">{item.label}</span>
-                      <span className="text-[10px]">{isExpanded ? "▾" : "▸"}</span>
-                    </>
-                  )}
-                </button>
-                {sidebarOpen && isExpanded && item.children && (
-                  <div className="ml-5 mt-0.5 space-y-0.5 border-l border-neutral-800 pl-2">
-                    {item.children.map((child) => {
-                      const childActive = pathname === child.href;
-                      return (
-                        <Link
-                          key={child.href}
-                          href={child.href}
-                          className={`block px-3 py-1.5 rounded-lg text-xs transition-colors ${
-                            childActive
-                              ? "bg-indigo-600/30 text-indigo-200"
-                              : "text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800"
-                          }`}
-                        >
-                          {child.label}
-                        </Link>
-                      );
-                    })}
-                  </div>
-                )}
+      <nav className="flex-1 px-2 pt-2 pb-2 space-y-3 overflow-y-auto" role="navigation">
+        {navGroups.map((group) => (
+          <div key={group.label}>
+            {sidebarOpen && (
+              <div className="px-2 pb-1 text-[9px] uppercase tracking-[0.12em] select-none" style={{ color: "var(--ink-700)" }}>
+                {group.label}
               </div>
-            );
-          }
+            )}
+            <div className="space-y-0.5">
+              {group.items.map((item) => {
+                const active = pathname?.startsWith(item.href);
+                const hasChildren = item.children && item.children.length > 0;
+                const isExpanded = expandedMenu === item.href;
 
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              aria-current={active ? "page" : undefined}
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                active
-                  ? "bg-indigo-600/20 text-indigo-300"
-                  : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800"
-              }`}
-            >
-              <Icon name={item.icon} size={18} className="shrink-0" />
-              {sidebarOpen
-                ? <span>{item.label}</span>
-                : <span className="sr-only">{item.label}</span>
-              }
-            </Link>
-          );
-        })}
+                if (hasChildren) {
+                  return (
+                    <div key={item.href}>
+                      <button
+                        onClick={() => setExpandedMenu(isExpanded ? null : item.href)}
+                        className="flex items-center gap-3 px-2.5 py-1.5 rounded text-[13px] transition-colors w-full text-left"
+                        style={active || isExpanded
+                          ? { background: "var(--accent-glow)", color: "var(--accent-400)" }
+                          : { color: "var(--ink-300)" }}
+                      >
+                        <Icon name={item.icon} size={16} className="shrink-0" />
+                        {sidebarOpen && (
+                          <>
+                            <span className="flex-1">{item.label}</span>
+                            <Icon name="chevronDown" size={11} className={"transition-transform shrink-0 " + (isExpanded ? "rotate-180" : "")} />
+                          </>
+                        )}
+                      </button>
+                      {sidebarOpen && isExpanded && item.children && (
+                        <div className="ml-[19px] mt-0.5 space-y-0.5 pl-2.5" style={{ borderLeft: "1px solid var(--panel-border)" }}>
+                          {item.children.map((child) => {
+                            const childActive = pathname === child.href;
+                            return (
+                              <Link
+                                key={child.href}
+                                href={child.href}
+                                className="block px-2.5 py-1 rounded text-xs transition-colors"
+                                style={childActive
+                                  ? { background: "var(--accent-glow)", color: "var(--accent-400)" }
+                                  : { color: "var(--ink-500)" }}
+                              >
+                                {child.label}
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    aria-current={active ? "page" : undefined}
+                    className="flex items-center gap-3 px-2.5 py-1.5 rounded text-[13px] transition-colors"
+                    style={active
+                      ? { background: "var(--accent-glow)", color: "var(--accent-400)" }
+                      : { color: "var(--ink-300)" }}
+                  >
+                    <Icon name={item.icon} size={16} className="shrink-0" />
+                    {sidebarOpen
+                      ? <span>{item.label}</span>
+                      : <span className="sr-only">{item.label}</span>
+                    }
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
       {user && (
-        <div className="p-3 border-t border-neutral-800">
+        <div className="px-3 py-2.5 shrink-0" style={{ borderTop: "1px solid var(--panel-border)" }}>
           {sidebarOpen ? (
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
-                <div className="text-xs font-medium text-neutral-300 truncate">{user.name}</div>
-                <div className="text-[10px] text-neutral-500 uppercase">{user.role}</div>
+                <div className="text-xs font-medium truncate" style={{ color: "var(--ink-300)" }}>{user.name}</div>
+                <div className="text-[9px] uppercase tracking-wide" style={{ color: "var(--ink-700)" }}>{user.role}</div>
               </div>
               <button
                 onClick={logout}
-                className="text-neutral-500 hover:text-red-400 text-xs shrink-0 transition-colors"
+                aria-label="Sair"
+                className="p-1.5 rounded shrink-0 transition-colors hover:bg-white/5"
+                style={{ color: "var(--ink-700)" }}
               >
-                sair
+                <Icon name="power" size={14} />
               </button>
             </div>
           ) : (
             <button
               onClick={logout}
               aria-label="Sair"
-              className="text-neutral-500 hover:text-red-400 text-xs w-full text-center transition-colors"
+              className="w-full flex justify-center p-1.5 rounded transition-colors hover:bg-white/5"
+              style={{ color: "var(--ink-700)" }}
             >
-              ⏻
+              <Icon name="power" size={14} />
             </button>
           )}
         </div>
@@ -285,38 +342,64 @@ function Sidebar() {
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Aberto por padrao em desktop, fechado em mobile — o valor inicial so'
+  // e' conhecido no cliente (matchMedia), entao comeca fechado (seguro em
+  // mobile) e o effect ajusta pra aberto se a tela ja' for >= sm (640px)
+  // antes da 1a pintura relevante, sem popular a tela com o menu por cima
+  // do conteudo no primeiro load mobile.
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  useEffect(() => {
+    if (window.matchMedia("(min-width: 640px)").matches) setSidebarOpen(true);
+  }, []);
   const pathname = usePathname();
   const isLogin = pathname === "/login";
 
   return (
-    <html lang="pt-BR">
+    <html lang="pt-BR" className={mono.variable}>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Athena</title>
       </head>
-      <body className={`bg-neutral-950 text-neutral-100 min-h-screen ${!isLogin ? "flex" : ""}`}>
+      <body className={`min-h-screen ${!isLogin ? "flex" : ""}`}>
         {isLogin ? (
           children
         ) : (
           <AuthProvider>
             <StoreProvider>
             <>
+              {/*
+                THESIS: an ERP shell reads like an instrument panel, not a SaaS dashboard —
+                every module is a dedicated readout, not a decorative card.
+                OWN-WORLD: near-black cooled ground (panel-9xx tokens), bordered "instrument"
+                faces, tabular-mono numerals, color spent only as status (ok/warn/crit), a
+                single signature cyan accent for navigation and identity.
+                STORY: an operator scans one screen and trusts the number without re-reading
+                it; navigation groups into panel zones (Vendas, Estoque, Financeiro...).
+                FIRST VIEWPORT: fixed instrument-panel sidebar (zoned nav) plus a dashboard
+                grid of differently-weighted instruments, cash position reading largest.
+                FORM: cockpit instrument panel, direction 7 of 7 (assigned), seed 8363d831.
+                FINISH: unreviewed and undocumented is unfinished; this build ends with the
+                finish review, the verdict, and DESIGN.md.
+              */}
               {sidebarOpen && (
                 <div className="sm:hidden fixed inset-0 bg-black/60 z-40" onClick={() => setSidebarOpen(false)} aria-hidden="true" />
               )}
-              <Sidebar />
+              <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
               <main className="flex-1 overflow-auto min-w-0">
-                <div className="sm:hidden flex items-center gap-3 px-4 py-3 border-b border-neutral-800 bg-neutral-900 sticky top-0 z-30">
+                <div className="sm:hidden flex items-center gap-3 px-4 h-12 sticky top-0 z-30" style={{ background: "var(--panel-900)", borderBottom: "1px solid var(--panel-border)" }}>
                   <button
                     onClick={() => setSidebarOpen(true)}
                     aria-label="Abrir menu"
-                    className="text-neutral-400 hover:text-neutral-200 text-lg leading-none"
+                    className="p-1 -ml-1 rounded"
+                    style={{ color: "var(--ink-300)" }}
                   >
-                    ☰
+                    <Icon name="menu" size={19} />
                   </button>
-                  <span className="font-semibold text-sm tracking-wide text-neutral-200 select-none">ATHENA</span>
+                  <span className="flex items-center gap-2 select-none">
+                    <span aria-hidden className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--accent-400)", boxShadow: "0 0 6px var(--accent-400)" }} />
+                    <span className="font-semibold text-[13px] tracking-[0.14em]" style={{ color: "var(--ink-100)" }}>ATHENA</span>
+                  </span>
                 </div>
                 {(() => {
                   const parts = pathname?.split("/").filter(Boolean) || [];
@@ -325,8 +408,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   const parentLabel = parts[parts.length - 2]?.replace(/-/g, " ").replace(/\w/g, c => c.toUpperCase()) || "Voltar";
                   return (
                     <div className="px-4 pt-3 pb-1">
-                      <Link href={parentPath} className="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-300 transition-colors">
-                        <span className="text-base leading-none">&larr;</span>
+                      <Link href={parentPath} className="inline-flex items-center gap-1 text-xs transition-colors" style={{ color: "var(--ink-500)" }}>
+                        <Icon name="chevronLeft" size={13} />
                         <span>{parentLabel}</span>
                       </Link>
                     </div>

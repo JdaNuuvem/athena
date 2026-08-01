@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Icon from "@/app/_components/Icon";
 
 export type DateFilterValue = { data_inicio?: string; data_fim?: string; dias?: number };
 
@@ -20,7 +21,13 @@ export default function DateFilter({ value, onChange, dateField }: DateFilterPro
         className="text-[10px] text-neutral-500 hover:text-neutral-300 px-1"
         title={mode === "preset" ? "Intervalo personalizado" : "Período rápido"}
       >
-        {mode === "preset" ? "📅" : "⚡"}
+        {mode === "preset" ? (
+          <svg xmlns="http://www.w3.org/2000/svg" width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M8 2v3m8-3v3M4 8h16M5 5h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z" />
+          </svg>
+        ) : (
+          <Icon name="agents" size={12} />
+        )}
       </button>
       {mode === "preset" ? (
         <select
@@ -50,7 +57,7 @@ export default function DateFilter({ value, onChange, dateField }: DateFilterPro
               onClick={() => onChange({})}
               className="text-[10px] text-red-400 hover:text-red-300 px-1"
               title="Limpar datas"
-            >✕</button>
+            ><Icon name="close" size={10} /></button>
           )}
         </div>
       )}

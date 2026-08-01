@@ -93,7 +93,7 @@ export default function QuebraCaixaPage() {
                         <td className="px-3 py-2 font-medium text-neutral-200">{op}</td>
                         <td className="px-3 py-2 text-right numeric">{dados.eventos}</td>
                         <td className={`px-3 py-2 text-right numeric ${dados.total < 0 ? "text-red-400" : dados.total > 0 ? "text-emerald-400" : "text-neutral-500"}`}>
-                          {dados.total > 0 ? "+" : ""}R$ {dados.total.toFixed(2)}
+                          {dados.total > 0 ? "+" : ""}R$ {dados.total.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
                       </tr>
                     ))}
@@ -125,10 +125,10 @@ export default function QuebraCaixaPage() {
                       <tr key={q.id} className="border-t border-neutral-800 text-neutral-300">
                         <td className="px-3 py-2 font-mono">{q.numero || `#${q.id}`}</td>
                         <td className="px-3 py-2">{q.operador_fechamento || "—"}</td>
-                        <td className="px-3 py-2 text-right numeric">R$ {Number(q.saldo_inicial).toFixed(2)}</td>
-                        <td className="px-3 py-2 text-right numeric">R$ {Number(q.saldo_final).toFixed(2)}</td>
+                        <td className="px-3 py-2 text-right numeric">R$ {Number(q.saldo_inicial).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td className="px-3 py-2 text-right numeric">R$ {Number(q.saldo_final).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                         <td className={`px-3 py-2 text-right numeric ${q.diferenca < 0 ? "text-red-400" : q.diferenca > 0 ? "text-emerald-400" : "text-neutral-500"}`}>
-                          {q.diferenca > 0 ? "+" : ""}R$ {Number(q.diferenca).toFixed(2)}
+                          {q.diferenca > 0 ? "+" : ""}R$ {Number(q.diferenca).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
                         <td className="px-3 py-2 text-neutral-500">{q.data_fechamento ? new Date(q.data_fechamento).toLocaleString("pt-BR") : "—"}</td>
                       </tr>

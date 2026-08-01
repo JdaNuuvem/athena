@@ -27,17 +27,24 @@ const paths: Record<string, string> = {
   userStar: "M15 19a6 6 0 00-12 0M9 12a4 4 0 100-8 4 4 0 000 8zm9-1.5l.94 1.9 2.1.3-1.52 1.48.36 2.09L18 15.27l-1.88 1 .36-2.09-1.52-1.48 2.1-.3L18 10.5z",
   search: "M21 21l-4.35-4.35M18 11a7 7 0 11-14 0 7 7 0 0114 0z",
   close: "M6 18L18 6M6 6l12 12",
+  globe: "M12 21a9 9 0 100-18 9 9 0 000 18zM3.6 9h16.8M3.6 15h16.8M11.5 3a17 17 0 000 18M12.5 3a17 17 0 010 18",
+  building2: "M4 21h16M6 21V5a1 1 0 011-1h10a1 1 0 011 1v16M9 8h1m4 0h1m-6 4h1m4 0h1m-6 4h1m4 0h1",
+  chevronLeft: "M15 18l-6-6 6-6",
+  chevronRight: "M9 18l6-6-6-6",
+  chevronDown: "M6 9l6 6 6-6",
+  power: "M12 3v9m6.36-6.36a9 9 0 11-12.72 0",
+  menu: "M4 6h16M4 12h16M4 18h16",
   pencil: "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.5-9.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 8.5-8.5z",
   trash: "M19 7l-.87 12.14A2 2 0 0116.14 21H7.86a2 2 0 01-1.99-1.86L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3M4 7h16",
   alert: "M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z",
   inbox: "M3 8l2-5h14l2 5m-18 0v10a2 2 0 002 2h14a2 2 0 002-2V8m-18 0h5a2 2 0 002 2v1a1 1 0 001 1h2a1 1 0 001-1v-1a2 2 0 002-2h5",
 };
 
-export default function Icon({ name, size = 20, className = "" }: { name: string; size?: number; className?: string }) {
+export default function Icon({ name, size = 20, className = "", style }: { name: string; size?: number; className?: string; style?: React.CSSProperties }) {
   const d = paths[name];
   if (!d) return null;
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" className={className} style={style}>
       <path d={d} />
     </svg>
   );

@@ -10,6 +10,7 @@ import { formatCurrency } from "../types";
 import { gerarVendasDiarias, gerarCategorias } from "../data/vendas";
 import PageHeader from "@/app/_components/PageHeader";
 import KpiCard from "@/app/_components/KpiCard";
+import Icon from "@/app/_components/Icon";
 import DrillDownTable from "../_components/DrillDownTable";
 
 function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) {
@@ -78,7 +79,7 @@ export default function VendasPage() {
       </section>
 
       <section>
-        <h2 className="text-sm font-medium text-neutral-400 mb-3">Drill-down: Categorias → Produtos</h2>
+        <h2 className="text-sm font-medium text-neutral-400 mb-3 inline-flex items-center gap-1">Drill-down: Categorias <Icon name="chevronRight" size={14} /> Produtos</h2>
         <DrillDownTable categorias={categorias} />
       </section>
 

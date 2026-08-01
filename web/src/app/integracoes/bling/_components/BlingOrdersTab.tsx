@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Icon from "@/app/_components/Icon";
 import Spinner from "./shared/Spinner";
 import Alert from "./shared/Alert";
 import EmptyState from "./shared/EmptyState";
@@ -68,8 +69,11 @@ export default function BlingOrdersTab() {
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2">
-        <button onClick={handleSync} className="px-3 py-1.5 bg-indigo-600 text-white text-xs rounded-lg hover:bg-indigo-500 transition-colors">
-          🔄 Sincronizar
+        <button onClick={handleSync} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs rounded-lg hover:bg-indigo-500 transition-colors">
+          <svg xmlns="http://www.w3.org/2000/svg" width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+          </svg>
+          Sincronizar
         </button>
 
         <input
@@ -93,8 +97,8 @@ export default function BlingOrdersTab() {
 
         <span className="text-xs text-neutral-500 ml-auto">{filtered.length} pedidos</span>
 
-        <button onClick={() => carregar(Math.max(1, pagina - 1))} disabled={pagina <= 1} className="px-2 py-1 bg-neutral-700 text-neutral-300 text-xs rounded disabled:opacity-40">←</button>
-        <button onClick={() => carregar(pagina + 1)} disabled={pedidos.length < 100} className="px-2 py-1 bg-neutral-700 text-neutral-300 text-xs rounded disabled:opacity-40">→</button>
+        <button onClick={() => carregar(Math.max(1, pagina - 1))} disabled={pagina <= 1} className="px-2 py-1 bg-neutral-700 text-neutral-300 text-xs rounded disabled:opacity-40"><Icon name="chevronLeft" size={14} /></button>
+        <button onClick={() => carregar(pagina + 1)} disabled={pedidos.length < 100} className="px-2 py-1 bg-neutral-700 text-neutral-300 text-xs rounded disabled:opacity-40"><Icon name="chevronRight" size={14} /></button>
       </div>
 
       {/* Summary */}
@@ -132,7 +136,7 @@ export default function BlingOrdersTab() {
                       </td>
                       <td className="p-3 text-neutral-400">
                         <div>{String(p.data ?? "—").slice(0, 10)}</div>
-                        {p.dataSaida && <div className="text-[10px] text-neutral-500">🚚 {String(p.dataSaida).slice(0, 10)}</div>}
+                        {p.dataSaida && <div className="flex items-center gap-1 text-[10px] text-neutral-500"><Icon name="truck" size={11} /> {String(p.dataSaida).slice(0, 10)}</div>}
                       </td>
                       <td className="p-3 text-right">
                         <div className="text-emerald-400 font-medium">R$ {(p.total ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</div>
@@ -146,9 +150,9 @@ export default function BlingOrdersTab() {
                       <td className="p-3 text-center">
                         <button
                           onClick={(e) => { e.stopPropagation(); setExpandedId(isExpanded ? null : p.id); }}
-                          className="text-indigo-400 hover:text-indigo-300 text-lg leading-none"
+                          className="text-indigo-400 hover:text-indigo-300 leading-none inline-flex"
                         >
-                          {isExpanded ? "▲" : "▼"}
+                          <Icon name="chevronDown" size={14} className={isExpanded ? "rotate-180 transition-transform" : "transition-transform"} />
                         </button>
                       </td>
                     </tr>

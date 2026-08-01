@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import Icon from "@/app/_components/Icon";
 
 interface Message {
   id: string;
@@ -59,7 +60,7 @@ export default function HermesPage() {
     <div className="flex flex-col h-[calc(100vh-60px)]">
       {/* Header */}
       <div className="border-b border-neutral-800 px-6 py-3 flex items-center gap-3 shrink-0">
-        <span className="text-lg">◈</span>
+        <Icon name="hermes" size={20} />
         <div>
           <h1 className="text-sm font-semibold text-neutral-200">Hermes</h1>
           <p className="text-[10px] text-neutral-500">Assistente IA — agentes de produto, finanças e marketing</p>
@@ -72,7 +73,7 @@ export default function HermesPage() {
           <div key={msg.id} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : ""}`}>
             {msg.role === "hermes" && (
               <div className="w-8 h-8 rounded-full bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center shrink-0">
-                <span className="text-xs">◈</span>
+                <Icon name="hermes" size={16} />
               </div>
             )}
             <div className={`max-w-[75%] ${msg.role === "user" ? "order-first" : ""}`}>
@@ -97,7 +98,7 @@ export default function HermesPage() {
         {loading && (
           <div className="flex gap-3">
             <div className="w-8 h-8 rounded-full bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center shrink-0">
-              <span className="text-xs">◈</span>
+              <Icon name="hermes" size={16} />
             </div>
             <div className="bg-neutral-800 border border-neutral-700 rounded-xl px-4 py-2.5">
               <div className="flex gap-1.5">

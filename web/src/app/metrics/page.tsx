@@ -106,7 +106,7 @@ export default function MetricsPage() {
                   </div>
                   <div className="flex justify-between">
                     <span>Ticket médio</span>
-                    <span className="text-neutral-200 numeric">R$ {Number(loja.ticket_medio).toFixed(2)}</span>
+                    <span className="text-neutral-200 numeric">R$ {Number(loja.ticket_medio).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 </div>
               </div>
@@ -135,7 +135,7 @@ export default function MetricsPage() {
                   </div>
                   <div className="flex justify-between">
                     <span>Ticket médio</span>
-                    <span className="text-neutral-200 numeric">R$ {Number(mp.ticket_medio).toFixed(2)}</span>
+                    <span className="text-neutral-200 numeric">R$ {Number(mp.ticket_medio).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 </div>
               </div>

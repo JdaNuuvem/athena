@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import StatusBadge from "@/app/_components/StatusBadge";
 import LoadingState from "@/app/_components/LoadingState";
+import Icon from "@/app/_components/Icon";
 
 interface Loja { id: number; nome: string; ativa: boolean; bling_id?: number; bling_descricao?: string; shopee_markup_pct?: number; tipo?: "fisica" | "virtual"; }
 
@@ -51,7 +52,10 @@ export default function LojasPage() {
     <div className="p-6 space-y-4">
       <div className="flex justify-between items-end">
         <div>
-          <h1 className="text-lg font-bold text-neutral-100">🏪 Lojas</h1>
+          <h1 className="text-lg font-bold text-neutral-100 flex items-center gap-2">
+            <Icon name="building2" size={18} />
+            Lojas
+          </h1>
           <p className="text-xs text-neutral-500 mt-1">Gerencie os ambientes e filiais do sistema</p>
         </div>
         <div className="flex gap-2">
@@ -89,8 +93,8 @@ export default function LojasPage() {
                 <p className="text-[10px] text-amber-400">Shopee markup: {l.shopee_markup_pct}%</p>
               )}
               <div className="flex gap-2">
-                <Link href={`/lojas/${l.id}`} className="text-xs text-emerald-400 hover:text-emerald-300">
-                  Ver detalhes →
+                <Link href={`/lojas/${l.id}`} className="text-xs text-emerald-400 hover:text-emerald-300 inline-flex items-center gap-0.5">
+                  Ver detalhes <Icon name="chevronRight" size={12} />
                 </Link>
                 <button
                   onClick={() => setModal({ open: true, nome: l.nome, markup: l.shopee_markup_pct || 100, grupos: (l as any).grupos_publicacao || "", tipo: l.tipo || "fisica", editId: l.id })}

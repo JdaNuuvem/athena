@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import type { ShopeeSyncLogEntry } from "@/lib/api";
+import Icon from "@/app/_components/Icon";
 
 interface LojaShopee {
   id: number;
@@ -35,8 +36,13 @@ function ResultadoAutorizacao() {
 
   return (
     <div className={`text-xs px-3 py-3 rounded-lg border space-y-1 ${ok ? "bg-green-950/40 border-green-900/50 text-green-400" : "bg-red-950/40 border-red-900/50 text-red-400"}`}>
-      <p className="font-medium">
-        {ok ? "✓ Autorização concluída com sucesso" : "✗ Falha na autorização"}
+      <p className="font-medium inline-flex items-center gap-1.5">
+        {ok ? (
+          <svg xmlns="http://www.w3.org/2000/svg" width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7" /></svg>
+        ) : (
+          <Icon name="close" size={14} />
+        )}
+        {ok ? "Autorização concluída com sucesso" : "Falha na autorização"}
       </p>
       {ok && shopId && <p className="text-neutral-400">shop_id: <span className="font-mono">{shopId}</span></p>}
       {ok && lojaNome && <p className="text-neutral-400">Loja vinculada: {lojaNome}</p>}
@@ -200,13 +206,13 @@ function ShopeeIntegrationContent() {
   return (
     <div className="p-6 space-y-6 max-w-3xl">
       <div>
-        <Link href="/integracoes" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors">← Integrações</Link>
+        <Link href="/integracoes" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors inline-flex items-center gap-1"><Icon name="chevronLeft" size={14} /> Integrações</Link>
         <h1 className="text-lg font-light text-neutral-300 mt-1">Shopee</h1>
         <p className="text-xs text-neutral-500 mt-0.5">Gerencie suas lojas Shopee e sincronize produtos/estoque — suporta múltiplas contas.</p>
         <div className="flex gap-3 mt-2">
-          <Link href="/integracoes/shopee/dashboard" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">📊 Painel consolidado</Link>
-          <Link href="/integracoes/shopee/produtos" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">📦 Produtos</Link>
-          <Link href="/integracoes/shopee/pedidos" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">🧾 Pedidos</Link>
+          <Link href="/integracoes/shopee/dashboard" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors inline-flex items-center gap-1"><Icon name="dashboard" size={14} /> Painel consolidado</Link>
+          <Link href="/integracoes/shopee/produtos" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors inline-flex items-center gap-1"><Icon name="produtos" size={14} /> Produtos</Link>
+          <Link href="/integracoes/shopee/pedidos" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors inline-flex items-center gap-1"><Icon name="vendas" size={14} /> Pedidos</Link>
         </div>
       </div>
 
@@ -250,11 +256,16 @@ function ShopeeIntegrationContent() {
                     <div className="flex items-center gap-2">
                       <p className="text-sm text-neutral-200">{l.nome}</p>
                       {l.tem_token ? (
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${tokenValido ? "bg-green-900/40 text-green-400" : "bg-amber-900/40 text-amber-400"}`}>
-                          {tokenValido ? "● Token ativo" : "⚠ Token expirado"}
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium inline-flex items-center gap-1 ${tokenValido ? "bg-green-900/40 text-green-400" : "bg-amber-900/40 text-amber-400"}`}>
+                          {tokenValido ? (
+                            <svg xmlns="http://www.w3.org/2000/svg" width={8} height={8} viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10" /></svg>
+                          ) : (
+                            <Icon name="alert" size={10} />
+                          )}
+                          {tokenValido ? "Token ativo" : "Token expirado"}
                         </span>
                       ) : (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-red-900/40 text-red-400">✗ Sem token</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-red-900/40 text-red-400 inline-flex items-center gap-1"><Icon name="close" size={10} /> Sem token</span>
                       )}
                     </div>
                     <p className="text-[10px] text-neutral-500 font-mono">shop_id: {l.shopee_shop_id}</p>
@@ -354,8 +365,8 @@ function ShopeeIntegrationContent() {
       </div>
 
       <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 space-y-3">
-        <button onClick={carregarHistorico} className="text-sm font-medium text-neutral-300 hover:text-neutral-100 transition-colors">
-          {mostrarHistorico ? "▾" : "▸"} Histórico de Sincronização
+        <button onClick={carregarHistorico} className="text-sm font-medium text-neutral-300 hover:text-neutral-100 transition-colors inline-flex items-center gap-1.5">
+          {mostrarHistorico ? <Icon name="chevronDown" size={14} /> : <Icon name="chevronRight" size={14} />} Histórico de Sincronização
         </button>
         {mostrarHistorico && (
           syncLog.length === 0 ? (

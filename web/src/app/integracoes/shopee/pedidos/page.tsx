@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import type { ShopeePedido } from "@/lib/api";
+import Icon from "@/app/_components/Icon";
 
 interface LojaShopee {
   id: number;
@@ -72,7 +73,7 @@ export default function ShopeePedidosPage() {
   return (
     <div className="p-6 space-y-4 max-w-4xl">
       <div>
-        <Link href="/integracoes/shopee" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors">← Shopee</Link>
+        <Link href="/integracoes/shopee" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors inline-flex items-center gap-1"><Icon name="chevronLeft" size={14} /> Shopee</Link>
         <h1 className="text-lg font-light text-neutral-300 mt-1">Pedidos Shopee</h1>
         <p className="text-xs text-neutral-500 mt-0.5">Pedidos recebidos em cada loja Shopee conectada.</p>
       </div>
@@ -135,7 +136,7 @@ export default function ShopeePedidosPage() {
                 </p>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-sm text-emerald-400 numeric">R$ {Number(p.total_amount || 0).toFixed(2)}</span>
+                <span className="text-sm text-emerald-400 numeric">R$ {Number(p.total_amount || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 <span className={`text-xs font-medium ${statusColor(p.status)}`}>{STATUS_LABEL[p.status] || p.status}</span>
               </div>
             </button>
@@ -156,7 +157,7 @@ export default function ShopeePedidosPage() {
                         <td className="py-1 text-neutral-400 font-mono">{item.sku}</td>
                         <td className="py-1 text-neutral-300">{item.nome}</td>
                         <td className="py-1 text-right text-neutral-300 numeric">{item.quantidade}</td>
-                        <td className="py-1 text-right text-neutral-300 numeric">R$ {Number(item.preco || 0).toFixed(2)}</td>
+                        <td className="py-1 text-right text-neutral-300 numeric">R$ {Number(item.preco || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       </tr>
                     ))}
                   </tbody>

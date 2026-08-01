@@ -287,7 +287,7 @@ export default function ControleTab({ produto }: Props) {
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <p className="text-xs text-neutral-300">item_id: <span className="font-mono">{anuncioId}</span></p>
-                      <p className="text-[10px] text-neutral-500">Preço atual: R$ {Number(a.preco || 0).toFixed(2)} · Status: {a.status}</p>
+                      <p className="text-[10px] text-neutral-500">Preço atual: R$ {Number(a.preco || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · Status: {a.status}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <input
@@ -346,7 +346,7 @@ export default function ControleTab({ produto }: Props) {
                             <tr key={v.model_id} className="border-t border-neutral-700/50">
                               <td className="py-1 text-neutral-300">{v.model_name}</td>
                               <td className="py-1 text-neutral-500 font-mono">{v.model_sku}</td>
-                              <td className="py-1 text-right text-neutral-200 numeric">R$ {Number(v.price_info?.[0]?.current_price || 0).toFixed(2)}</td>
+                              <td className="py-1 text-right text-neutral-200 numeric">R$ {Number(v.price_info?.[0]?.current_price || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                               <td className="py-1 text-right text-neutral-200 numeric">{v.stock_info_v2?.summary_info?.total_available_stock ?? "—"}</td>
                             </tr>
                           ))}

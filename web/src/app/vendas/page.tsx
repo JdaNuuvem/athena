@@ -9,6 +9,7 @@ import KpiCard from "@/app/_components/KpiCard";
 import StatusBadge from "@/app/_components/StatusBadge";
 import LoadingState from "@/app/_components/LoadingState";
 import ErrorAlert from "@/app/_components/ErrorAlert";
+import Icon from "@/app/_components/Icon";
 import { Can } from "@/lib/auth";
 
 interface PedidoRow {
@@ -265,7 +266,7 @@ export default function VendasPage() {
             <div className="bg-neutral-800 border border-blue-700 rounded-lg p-4 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-neutral-200">Pedido #{expandedId}</h3>
-                <button onClick={() => setExpandedId(null)} className="text-neutral-500 hover:text-neutral-300 text-xs">✕ Fechar</button>
+                <button onClick={() => setExpandedId(null)} className="text-neutral-500 hover:text-neutral-300 text-xs inline-flex items-center gap-1"><Icon name="close" size={12} /> Fechar</button>
               </div>
 
               {/* Itens */}
@@ -330,7 +331,7 @@ export default function VendasPage() {
               <div className="bg-neutral-900 border border-neutral-700 rounded-xl p-6 w-full max-w-md space-y-4" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-neutral-200">Novo Pedido</h3>
-                  <button onClick={() => setShowNovoPedido(false)} className="text-neutral-500 hover:text-neutral-300">✕</button>
+                  <button onClick={() => setShowNovoPedido(false)} className="text-neutral-500 hover:text-neutral-300"><Icon name="close" size={16} /></button>
                 </div>
                 <input type="text" value={novoCliente} onChange={e => setNovoCliente(e.target.value)} placeholder="Nome do cliente" className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-neutral-200 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-indigo-600" />
                 <div className="space-y-2">
@@ -340,7 +341,7 @@ export default function VendasPage() {
                       <input type="number" value={item.qtd} onChange={e => { const cp = [...novoItens]; cp[idx].qtd = Number(e.target.value); setNovoItens(cp); }} min={1} className="w-14 bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-xs text-right text-neutral-200 focus:outline-none" />
                       <input type="number" value={item.preco} onChange={e => { const cp = [...novoItens]; cp[idx].preco = Number(e.target.value); setNovoItens(cp); }} step="0.01" min={0} className="w-20 bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-xs text-right text-neutral-200 focus:outline-none" />
                       <span className="text-xs text-neutral-400 self-center w-16 text-right">{fmtBRL(item.qtd * item.preco)}</span>
-                      {novoItens.length > 1 && <button onClick={() => setNovoItens(novoItens.filter((_, i) => i !== idx))} className="text-red-400 text-xs">✕</button>}
+                      {novoItens.length > 1 && <button onClick={() => setNovoItens(novoItens.filter((_, i) => i !== idx))} className="text-red-400 text-xs"><Icon name="close" size={12} /></button>}
                     </div>
                   ))}
                   <button onClick={() => setNovoItens([...novoItens, { sku: "", qtd: 1, preco: 0 }])} className="text-xs text-indigo-400 hover:text-indigo-300">+ Adicionar item</button>

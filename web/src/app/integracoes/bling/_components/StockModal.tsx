@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Icon from "@/app/_components/Icon";
 import Spinner from "./shared/Spinner";
 import Alert from "./shared/Alert";
 import { listarBlingDepositos, obterSaldoDeposito, atualizarEstoqueDeposito, BlingDeposito } from "@/lib/api";
@@ -110,7 +111,7 @@ export default function StockModal({ produto, onClose, onSaved }: StockModalProp
             <h3 className="text-sm font-semibold text-neutral-100">Estoque — {produto.codigo}</h3>
             <p className="text-[10px] text-neutral-500">{produto.nome}</p>
           </div>
-          <button onClick={onClose} className="text-neutral-500 hover:text-neutral-300 text-lg leading-none">✕</button>
+          <button onClick={onClose} className="text-neutral-500 hover:text-neutral-300 leading-none"><Icon name="close" size={16} /></button>
         </div>
 
         <div className="p-4 space-y-3 max-h-[60vh] overflow-y-auto">

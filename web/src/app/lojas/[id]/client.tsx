@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { api } from "@/lib/api";
+import Icon from "@/app/_components/Icon";
 import GeralTab from "./_components/GeralTab";
 import OperacionalComercialTab from "./_components/OperacionalComercialTab";
 import FiscalFinanceiroTab from "./_components/FiscalFinanceiroTab";
@@ -54,8 +55,8 @@ export default function LojaClientPage() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <Link href="/lojas" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors">
-          ← Lojas
+        <Link href="/lojas" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors inline-flex items-center gap-0.5">
+          <Icon name="chevronLeft" size={12} /> Lojas
         </Link>
         <h1 className="text-lg font-light text-neutral-300 mt-1">
           {String(loja.nome_fantasia || loja.nome)}

@@ -1,9 +1,23 @@
 "use client";
 import type { ConversaChat } from "@/lib/types/chat";
+import Icon from "@/app/_components/Icon";
 
 const ICONE_TIPO: Record<string, string> = {
-  dm: "💬", grupo: "👥", canal_departamento: "🏢", ticket: "🎫",
+  dm: "atendimento", grupo: "crm", canal_departamento: "building2",
 };
+
+function IconeTipo({ tipo }: { tipo: string }) {
+  if (tipo === "ticket") {
+    return (
+      <svg xmlns="http://www.w3.org/2000/svg" width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 7a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 000 4v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2a2 2 0 000-4V7z" />
+        <path d="M10 5v2m0 2v2m0 2v2m0 2v2" />
+      </svg>
+    );
+  }
+  const nome = ICONE_TIPO[tipo];
+  return nome ? <Icon name={nome} size={16} /> : null;
+}
 
 const COR_PRESENCA: Record<string, string> = {
   online: "bg-emerald-500", ausente: "bg-amber-500", ocupado: "bg-red-500",
@@ -39,7 +53,7 @@ export default function ConversaSidebar({
           >
             <div className="flex items-center gap-2">
               <span className="relative">
-                {ICONE_TIPO[c.tipo]}
+                <IconeTipo tipo={c.tipo} />
                 {c.tipo === "dm" && (
                   <span
                     title={status || "offline"}

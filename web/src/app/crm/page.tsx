@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import HelpTooltip from "@/app/_components/HelpTooltip";
+import Icon from "@/app/_components/Icon";
 
 interface FunilData { categorias: string[]; series: {name:string;total:number;valor:number}[]; total_leads: number; total_negociacoes: number; total_propostas: number; etapas: string[]; }
 
@@ -87,7 +88,17 @@ export default function CRMPage() {
           disabled={blingStatus?.startsWith("Importando")}
           className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs px-4 py-2 rounded-lg transition-colors"
         >
-          {blingStatus?.startsWith("Importando") ? "⏳ Importando..." : "📥 Importar do Bling"}
+          {blingStatus?.startsWith("Importando") ? (
+            <span className="inline-flex items-center gap-1.5">
+              <svg xmlns="http://www.w3.org/2000/svg" width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              Importando...
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5">
+              <Icon name="inbox" size={14} />
+              Importar do Bling
+            </span>
+          )}
         </button>
         {blingStatus && !blingStatus.startsWith("Importando") && blingCounts && (
           <span className="text-xs text-emerald-400">

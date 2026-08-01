@@ -8,6 +8,7 @@ import {
 import { Can } from "@/lib/auth";
 import { useStore } from "@/lib/store-context";
 import ReplicarModal from "./_components/ReplicarModal";
+import Icon from "@/app/_components/Icon";
 
 interface EditFields {
   preco_custo: string;
@@ -422,8 +423,12 @@ export default function EstoqueLojasPage() {
                       <td className="px-4 py-2.5 text-center">
                         {isEditing ? (
                           <div className="flex gap-1 justify-center">
-                            <button onClick={() => salvarEdicao(r)} className="text-emerald-400 hover:text-emerald-300 text-xs">✓</button>
-                            <button onClick={cancelEdit} className="text-red-400 hover:text-red-300 text-xs">✗</button>
+                            <button onClick={() => salvarEdicao(r)} className="text-emerald-400 hover:text-emerald-300 text-xs" aria-label="Salvar">
+                              <svg xmlns="http://www.w3.org/2000/svg" width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7" /></svg>
+                            </button>
+                            <button onClick={cancelEdit} className="text-red-400 hover:text-red-300 text-xs" aria-label="Cancelar">
+                              <Icon name="close" size={14} />
+                            </button>
                           </div>
                         ) : (
                           <div className="flex gap-2 justify-center">
@@ -448,7 +453,7 @@ export default function EstoqueLojasPage() {
       {totalPaginas > 1 && (
         <div className="flex items-center justify-center gap-1">
           <button disabled={pagina <= 1} onClick={() => { setPagina(pagina - 1); load(busca, pagina - 1); }}
-            className="px-2 py-1 text-xs rounded bg-neutral-800 text-neutral-400 hover:bg-neutral-700 disabled:opacity-30">‹</button>
+            className="px-2 py-1 text-xs rounded bg-neutral-800 text-neutral-400 hover:bg-neutral-700 disabled:opacity-30 inline-flex items-center justify-center"><Icon name="chevronLeft" size={14} /></button>
           {Array.from({ length: Math.min(totalPaginas, 7) }, (_, i) => {
             const start = Math.max(1, Math.min(pagina - 3, totalPaginas - 6));
             const p = start + i;
@@ -460,7 +465,7 @@ export default function EstoqueLojasPage() {
             );
           })}
           <button disabled={pagina >= totalPaginas} onClick={() => { setPagina(pagina + 1); load(busca, pagina + 1); }}
-            className="px-2 py-1 text-xs rounded bg-neutral-800 text-neutral-400 hover:bg-neutral-700 disabled:opacity-30">›</button>
+            className="px-2 py-1 text-xs rounded bg-neutral-800 text-neutral-400 hover:bg-neutral-700 disabled:opacity-30 inline-flex items-center justify-center"><Icon name="chevronRight" size={14} /></button>
         </div>
       )}
 

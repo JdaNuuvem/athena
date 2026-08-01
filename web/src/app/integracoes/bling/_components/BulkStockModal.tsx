@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Icon from "@/app/_components/Icon";
 import Spinner from "./shared/Spinner";
 import Alert from "./shared/Alert";
 import {
@@ -86,7 +87,7 @@ export default function BulkStockModal({ onClose }: BulkStockModalProps) {
       <div className="bg-neutral-850 border border-neutral-700 rounded-xl w-full max-w-2xl mx-4 max-h-[80vh] overflow-y-auto shadow-2xl">
         <div className="flex items-center justify-between p-4 border-b border-neutral-700 sticky top-0 bg-neutral-850">
           <h3 className="text-sm font-semibold text-neutral-100">Gestão de Estoque</h3>
-          <button onClick={onClose} className="text-neutral-500 hover:text-neutral-300 text-lg">✕</button>
+          <button onClick={onClose} className="text-neutral-500 hover:text-neutral-300"><Icon name="close" size={16} /></button>
         </div>
 
         <div className="p-4 space-y-4">

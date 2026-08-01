@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import Icon from "@/app/_components/Icon";
 import { Section, SelectField } from "./shared";
 
 const NOMES: Record<string, string> = {
@@ -60,8 +61,8 @@ export default function IntegracoesTab({ id }: { id: number }) {
                 <div>
                   <p className="text-sm text-neutral-200">{NOMES[i.integracao] || i.integracao}</p>
                   {gerenciada && (
-                    <Link href={gerenciada} className="text-[10px] text-indigo-400 hover:text-indigo-300">
-                      Gerenciado na tela própria →
+                    <Link href={gerenciada} className="text-[10px] text-indigo-400 hover:text-indigo-300 inline-flex items-center gap-0.5">
+                      Gerenciado na tela própria <Icon name="chevronRight" size={10} />
                     </Link>
                   )}
                 </div>

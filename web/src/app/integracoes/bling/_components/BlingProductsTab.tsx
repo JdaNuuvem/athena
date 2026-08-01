@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Icon from "@/app/_components/Icon";
 import Spinner from "./shared/Spinner";
 import Alert from "./shared/Alert";
 import EmptyState from "./shared/EmptyState";
@@ -169,7 +170,12 @@ export default function BlingProductsTab({ onNewProduct, onStockManage }: BlingP
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex gap-2">
           {onNewProduct && <button onClick={onNewProduct} className="px-3 py-1.5 bg-emerald-600 text-white text-xs rounded-lg hover:bg-emerald-500 transition-colors">+ Novo</button>}
-          <button onClick={handleSync} className="px-3 py-1.5 bg-indigo-600 text-white text-xs rounded-lg hover:bg-indigo-500 transition-colors">🔄 Sincronizar</button>
+          <button onClick={handleSync} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs rounded-lg hover:bg-indigo-500 transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+            </svg>
+            Sincronizar
+          </button>
           {selected.size > 0 && (
             <>
               <button onClick={() => handleBulkStatus("A")} className="px-3 py-1.5 bg-emerald-600 text-white text-xs rounded-lg hover:bg-emerald-500">Ativar ({selected.size})</button>
@@ -186,9 +192,9 @@ export default function BlingProductsTab({ onNewProduct, onStockManage }: BlingP
               ))}
             </select>
           )}
-          <button onClick={() => carregar(Math.max(1, pagina - 1))} disabled={pagina <= 1} className="px-2 py-1 bg-neutral-700 text-neutral-300 text-xs rounded disabled:opacity-40">←</button>
+          <button onClick={() => carregar(Math.max(1, pagina - 1))} disabled={pagina <= 1} className="px-2 py-1 bg-neutral-700 text-neutral-300 text-xs rounded disabled:opacity-40"><Icon name="chevronLeft" size={14} /></button>
           <span className="text-xs text-neutral-400 py-1">Pág {pagina}</span>
-          <button onClick={() => carregar(pagina + 1)} disabled={produtos.length < 50} className="px-2 py-1 bg-neutral-700 text-neutral-300 text-xs rounded disabled:opacity-40">→</button>
+          <button onClick={() => carregar(pagina + 1)} disabled={produtos.length < 50} className="px-2 py-1 bg-neutral-700 text-neutral-300 text-xs rounded disabled:opacity-40"><Icon name="chevronRight" size={14} /></button>
         </div>
       </div>
 
@@ -220,7 +226,7 @@ export default function BlingProductsTab({ onNewProduct, onStockManage }: BlingP
                     {(p as any).imagemURL ? (
                       <img src={(p as any).imagemURL} alt="" className="w-8 h-8 object-cover rounded bg-neutral-700" />
                     ) : (
-                      <div className="w-8 h-8 rounded bg-neutral-700 flex items-center justify-center text-[8px] text-neutral-500">IMG</div>
+                      <div className="w-8 h-8 rounded bg-neutral-700 flex items-center justify-center text-[9px] text-neutral-500">IMG</div>
                     )}
                   </td>
                   <td className="p-3 text-neutral-200 font-mono text-[11px]">{p.codigo}</td>
@@ -238,8 +244,12 @@ export default function BlingProductsTab({ onNewProduct, onStockManage }: BlingP
                           autoFocus
                           onKeyDown={(e) => { if (e.key === "Enter") handleStockApply(p); if (e.key === "Escape") setEditStockId(null); }}
                         />
-                        <button onClick={() => handleStockApply(p)} className="text-emerald-400 hover:text-emerald-300 font-bold text-xs px-1">✓</button>
-                        <button onClick={() => setEditStockId(null)} className="text-neutral-500 hover:text-neutral-300 font-bold text-xs px-1">✕</button>
+                        <button onClick={() => handleStockApply(p)} className="text-emerald-400 hover:text-emerald-300 px-1 inline-flex">
+                          <svg xmlns="http://www.w3.org/2000/svg" width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                            <path d="m4.5 12.75 6 6 9-13.5" />
+                          </svg>
+                        </button>
+                        <button onClick={() => setEditStockId(null)} className="text-neutral-500 hover:text-neutral-300 px-1 inline-flex"><Icon name="close" size={13} /></button>
                       </div>
                     ) : (
                       <div className="flex items-center justify-center gap-1.5">
@@ -267,7 +277,7 @@ export default function BlingProductsTab({ onNewProduct, onStockManage }: BlingP
                     </span>
                   </td>
                   <td className="p-3 text-right">
-                    <button onClick={() => handleDelete(p.id)} className="text-red-400 hover:text-red-300">🗑</button>
+                    <button onClick={() => handleDelete(p.id)} className="text-red-400 hover:text-red-300"><Icon name="trash" size={14} /></button>
                   </td>
                 </tr>
               )})}

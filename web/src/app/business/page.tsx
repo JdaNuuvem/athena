@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
+import Icon from "@/app/_components/Icon";
 
 export default function BusinessPage() {
   const [alerts, setAlerts] = useState<Record<string, unknown>[]>([]);
@@ -98,8 +99,14 @@ export default function BusinessPage() {
                     <td className="p-3 text-right text-neutral-400">{o.nivel_concorrencia as string}</td>
                     <td className="p-3 text-center">
                       {o.fabricavel
-                        ? <span className="text-green-400" aria-label="sim">✓</span>
-                        : <span className="text-red-400" aria-label="não">✗</span>
+                        ? (
+                          <span className="text-green-400" aria-label="sim">
+                            <svg xmlns="http://www.w3.org/2000/svg" width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" className="inline">
+                              <path d="M5 13l4 4L19 7" />
+                            </svg>
+                          </span>
+                        )
+                        : <span className="text-red-400" aria-label="não"><Icon name="close" size={14} className="inline" /></span>
                       }
                     </td>
                   </tr>

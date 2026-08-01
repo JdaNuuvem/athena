@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Icon from "@/app/_components/Icon";
 import Spinner from "./shared/Spinner";
 import Alert from "./shared/Alert";
 import EmptyState from "./shared/EmptyState";
@@ -106,8 +107,21 @@ export default function BlingConfigTab() {
               {status?.autenticado ? "Reconectar" : "Conectar Bling"}
             </button>
           </div>
-          <div className="text-[10px] text-neutral-500">
-            Client ID: {status?.client_id_setado ? "✅ Configurado" : "❌ Não configurado"}
+          <div className="flex items-center gap-1 text-[10px] text-neutral-500">
+            Client ID:
+            {status?.client_id_setado ? (
+              <span className="flex items-center gap-1 text-emerald-400">
+                <svg xmlns="http://www.w3.org/2000/svg" width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="m4.5 12.75 6 6 9-13.5" />
+                </svg>
+                Configurado
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-red-400">
+                <Icon name="close" size={12} />
+                Não configurado
+              </span>
+            )}
           </div>
         </div>
       </section>
@@ -160,7 +174,7 @@ export default function BlingConfigTab() {
                       <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-900/30 text-emerald-400">Ativo</span>
                     </td>
                     <td className="p-2 text-right">
-                      <button onClick={() => handleDeletarWebhook(w.id)} className="text-red-400 hover:text-red-300">🗑</button>
+                      <button onClick={() => handleDeletarWebhook(w.id)} className="text-red-400 hover:text-red-300"><Icon name="trash" size={14} /></button>
                     </td>
                   </tr>
                 ))}

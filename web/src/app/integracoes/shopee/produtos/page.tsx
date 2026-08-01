@@ -4,6 +4,7 @@ import { Fragment, useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import type { ShopeeProdutoSincronizado } from "@/lib/api";
+import Icon from "@/app/_components/Icon";
 
 type EstoqueFiltro = "todos" | "zerado" | "baixo" | "normal";
 type ModoVisualizacao = "cards" | "lista";
@@ -561,7 +562,7 @@ export default function ShopeeProdutosPage() {
     <div className="p-6 space-y-5 max-w-6xl">
       <div className="flex items-start justify-between">
         <div>
-          <Link href="/integracoes/shopee" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors">← Shopee</Link>
+          <Link href="/integracoes/shopee" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors inline-flex items-center gap-1"><Icon name="chevronLeft" size={14} /> Shopee</Link>
           <h1 className="text-lg font-light text-neutral-300 mt-1">Produtos Shopee</h1>
           <p className="text-xs text-neutral-500 mt-0.5">Produtos sincronizados de cada loja Shopee, com estoque atual e envio manual pro anúncio.</p>
         </div>
@@ -713,7 +714,7 @@ export default function ShopeeProdutosPage() {
                         <span className={`numeric text-xs font-medium ${estoqueTotal <= 0 ? "text-red-400" : "text-neutral-400"}`}>{estoqueTotal} un total</span>
                         <EstoqueHealthBar variacoes={grupo.variacoesFiltradas} />
                       </div>
-                      <span className={`text-neutral-600 transition-transform shrink-0 ${expandido ? "rotate-90" : ""}`}>›</span>
+                      <span className={`text-neutral-600 transition-transform shrink-0 ${expandido ? "rotate-90" : ""}`}><Icon name="chevronRight" size={14} /></span>
                     </div>
                     {expandido && (
                       <div className="border-t border-neutral-800 divide-y divide-neutral-800/70 bg-neutral-950/30">
@@ -759,7 +760,7 @@ export default function ShopeeProdutosPage() {
                           >
                             <td className="px-4 py-3 text-neutral-500 text-xs" colSpan={3}>
                               <span className="inline-flex items-center gap-1.5">
-                                <span className={`text-neutral-600 transition-transform ${expandido ? "rotate-90" : ""}`}>›</span>
+                                <span className={`text-neutral-600 transition-transform ${expandido ? "rotate-90" : ""}`}><Icon name="chevronRight" size={14} /></span>
                                 <span className="text-neutral-200">{nomeBaseProduto(grupo.variacoesFiltradas[0].titulo)}</span>
                                 <span className="text-xs bg-indigo-900/30 text-indigo-400 px-1.5 py-0.5 rounded-full shrink-0">
                                   {parcial ? `${grupo.variacoesFiltradas.length} de ${grupo.variacoes.length} variações` : `${grupo.variacoes.length} variações`}

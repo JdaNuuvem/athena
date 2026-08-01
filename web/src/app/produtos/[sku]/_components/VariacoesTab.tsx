@@ -71,7 +71,7 @@ export default function VariacoesTab({ variacoes = [] }: { variacoes?: Variacao[
                   <td className="p-3 text-indigo-400 font-mono text-xs">{v.sku}</td>
                   <td className="p-3 text-neutral-300">{v.nome}</td>
                   <td className="p-3 text-right text-emerald-400 numeric">
-                    R$ {Number(v.valor || 0).toFixed(2)}
+                    R$ {Number(v.valor || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </td>
                 </tr>
               ))}

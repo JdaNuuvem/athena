@@ -55,7 +55,7 @@ export function OrcamentosTab({ caixa, operador, operadorSenha, onVendaCriada }:
             <span className="text-neutral-500 text-xs ml-3">{String(o.data || "").slice(0, 16)}</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-emerald-400 font-medium text-sm">R$ {Number(o.total || 0).toFixed(2)}</span>
+            <span className="text-emerald-400 font-medium text-sm">R$ {Number(o.total || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             <select value={pgtoForma} onChange={e => setPgtoForma(e.target.value)}
               className="bg-neutral-900 rounded px-2 py-1 text-xs text-neutral-200">
               {FORMAS.map(f => <option key={f} value={f}>{f.replace(/_/g, " ")}</option>)}
@@ -70,7 +70,7 @@ export function OrcamentosTab({ caixa, operador, operadorSenha, onVendaCriada }:
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setConvertendo(null)}>
           <div className="bg-neutral-800 border border-neutral-700 rounded-xl p-6 w-96" onClick={e => e.stopPropagation()}>
             <h3 className="text-sm font-semibold text-neutral-200 mb-3">Converter Orçamento #{convertendo.id}</h3>
-            <p className="text-xs text-neutral-400 mb-3">Total: R$ {convertendo.total.toFixed(2)} — forma: {pgtoForma.replace(/_/g, " ")}</p>
+            <p className="text-xs text-neutral-400 mb-3">Total: R$ {convertendo.total.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} — forma: {pgtoForma.replace(/_/g, " ")}</p>
             {erro && (
               <div className="text-red-400 text-xs bg-red-950/40 border border-red-900/50 rounded-lg px-3 py-2 mb-3">
                 {erro}

@@ -7,21 +7,51 @@ import { useStore } from "@/lib/store-context";
 
 const fmtBRL = (v: number) => "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
 
-const margemColor = (m: number) => m >= 25 ? "#22c55e" : m >= 15 ? "#f59e0b" : "#ef4444";
+const STATUS_COLOR = { ok: "var(--status-ok)", warn: "var(--status-warn)", crit: "var(--status-crit)" } as const;
+type Status = keyof typeof STATUS_COLOR;
 
-const alertaStyles: Record<string, { border: string; badge: string; icon: string }> = {
-  critico: { border: "border-l-red-500", badge: "bg-red-500/10 text-red-400 border border-red-500/30", icon: "!" },
-  atencao: { border: "border-l-amber-500", badge: "bg-amber-500/10 text-amber-400 border border-amber-500/30", icon: "!" },
-  info: { border: "border-l-blue-500", badge: "bg-blue-500/10 text-blue-400 border border-blue-500/30", icon: "i" },
+const margemColor = (m: number) => (m >= 25 ? STATUS_COLOR.ok : m >= 15 ? STATUS_COLOR.warn : STATUS_COLOR.crit);
+
+const alertaMeta: Record<string, { status: Status; label: string }> = {
+  critico: { status: "crit", label: "Crítico" },
+  atencao: { status: "warn", label: "Atenção" },
+  info: { status: "ok", label: "Info" },
 };
 
 function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) {
   if (!active || !payload?.length) return null;
-  return <div className="bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2 text-xs shadow-lg"><div className="text-neutral-400">{label}</div><div className="text-neutral-100 numeric">{fmtBRL(payload[0].value)}</div></div>;
+  return (
+    <div className="instrument px-3 py-2 text-xs" style={{ boxShadow: "0 8px 24px -8px rgba(0,0,0,0.6)" }}>
+      <div style={{ color: "var(--ink-500)" }}>{label}</div>
+      <div className="numeric mt-0.5" style={{ color: "var(--ink-100)" }}>{fmtBRL(payload[0].value)}</div>
+    </div>
+  );
 }
 
-function KpiCard({ label, value, valueClassName }: { label: string; value: string; valueClassName?: string; subtitle?: string }) {
-  return <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-3"><div className="text-[10px] text-neutral-500 uppercase tracking-wider">{label}</div><div className={"text-sm mt-1 font-medium " + (valueClassName || "text-neutral-200")}>{value}</div></div>;
+/** Primary instrument — the panel's largest readouts, one number owning the face. */
+function PrimaryInstrument({ label, value, status, trend }: { label: string; value: string; status?: Status; trend?: string }) {
+  const color = status ? STATUS_COLOR[status] : "var(--ink-100)";
+  return (
+    <div className="instrument instrument-lit px-5 py-4 flex-1 min-w-[200px]">
+      <div className="flex items-center justify-between">
+        <div className="text-[10px] uppercase tracking-[0.12em]" style={{ color: "var(--ink-500)" }}>{label}</div>
+        {status && <span aria-hidden className="w-1.5 h-1.5 rounded-full" style={{ background: color, boxShadow: `0 0 6px ${color}` }} />}
+      </div>
+      <div className="numeric text-[28px] leading-tight font-medium mt-1.5" style={{ color }}>{value}</div>
+      {trend && <div className="text-[11px] mt-1" style={{ color: "var(--ink-700)" }}>{trend}</div>}
+    </div>
+  );
+}
+
+/** Secondary instrument — smaller readout for a supporting figure. */
+function SecondaryInstrument({ label, value, status }: { label: string; value: string; status?: Status }) {
+  const color = status ? STATUS_COLOR[status] : "var(--ink-300)";
+  return (
+    <div className="instrument px-3.5 py-3">
+      <div className="text-[9px] uppercase tracking-[0.1em]" style={{ color: "var(--ink-700)" }}>{label}</div>
+      <div className="numeric text-base font-medium mt-1" style={{ color }}>{value}</div>
+    </div>
+  );
 }
 
 interface DashboardData {
@@ -37,7 +67,7 @@ export default function DashboardPage() {
   const { lojaId } = useStore();
   const [kpi, setKpi] = useState<KPIOverview | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [dash, setDash] = useState<DashboardData>({ vendasDia:0, vendasMes:0, vendasMesChart:[], estoqueCritico:0, estoqueTotal:0, fluxoCaixa:0, clientesNovos:0, clientesTotal:0, vendasHoje:0, vendasQtd:0, topProdutos:[], alertas:[] });
+  const [dash, setDash] = useState<DashboardData>({ vendasDia: 0, vendasMes: 0, vendasMesChart: [], estoqueCritico: 0, estoqueTotal: 0, fluxoCaixa: 0, clientesNovos: 0, clientesTotal: 0, vendasHoje: 0, vendasQtd: 0, topProdutos: [], alertas: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -75,82 +105,130 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
   }, [lojaId]);
 
-  if (loading) return <div className="p-6 text-neutral-500">Carregando...</div>;
+  if (loading) {
+    return (
+      <div className="p-6 flex items-center gap-2 text-sm" style={{ color: "var(--ink-500)" }}>
+        <span aria-hidden className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "var(--accent-400)" }} />
+        Calibrando instrumentos…
+      </div>
+    );
+  }
 
   return (
-    <div className="p-6 space-y-6">
-      <h1 className="text-lg font-light text-neutral-300">Dashboard</h1>
-      {error && <div className="text-red-400 text-sm bg-red-950/40 border border-red-900/50 rounded-lg px-4 py-3">{error}</div>}
-
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
-        <KpiCard label="Vendas do dia" value={fmtBRL(dash.vendasDia)} valueClassName="text-green-400" />
-        <KpiCard label="Vendas do mes" value={fmtBRL(dash.vendasMes)} valueClassName="text-blue-400" />
-        <KpiCard label="Ticket medio" value={kpi ? "R$ " + Number(kpi.ticket_medio).toFixed(2) : "—"} />
-        <KpiCard label="Receita (30d)" value={kpi ? fmtBRL(kpi.receita_total) : "—"} valueClassName="text-green-400" />
-        <KpiCard label="Estoque critico" value={String(dash.estoqueCritico)} valueClassName="text-red-400" />
-        <KpiCard label="Total itens" value={String(dash.estoqueTotal)} />
-        <KpiCard label="Fluxo de caixa" value={fmtBRL(dash.fluxoCaixa)} valueClassName={dash.fluxoCaixa >= 0 ? "text-green-400" : "text-red-400"} />
-        <KpiCard label="Clientes novos" value={String(dash.clientesNovos)} />
-        <KpiCard label="Clientes total" value={String(dash.clientesTotal)} />
-        <KpiCard label="Pedidos hoje" value={String(dash.vendasQtd)} />
+    <div className="p-6 space-y-5">
+      <div className="flex items-center justify-between">
+        <h1 className="text-[13px] font-semibold uppercase tracking-[0.14em]" style={{ color: "var(--ink-500)" }}>Painel de Operação</h1>
+        <div className="flex items-center gap-1.5 text-[11px]" style={{ color: "var(--ink-700)" }}>
+          <span aria-hidden className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--status-ok)" }} />
+          Sistema operando
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <section>
-          <h2 className="text-sm font-medium text-neutral-400 mb-3">Vendas do Mes</h2>
-          <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4">
-            {dash.vendasMesChart.length > 0 ? (
-              <ResponsiveContainer width="100%" height={220}>
-                <LineChart data={dash.vendasMesChart}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#262626" />
-                  <XAxis dataKey="dia" stroke="#525252" tick={{ fontSize: 10 }} />
-                  <YAxis stroke="#525252" tick={{ fontSize: 10 }} tickFormatter={v => "R$ " + v} />
-                  <Tooltip content={<ChartTooltip />} />
-                  <Line type="monotone" dataKey="valor" stroke="#6366f1" strokeWidth={2} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : <div className="text-neutral-600 text-sm text-center py-20">Sem dados de vendas no periodo</div>}
-          </div>
+      {error && (
+        <div className="instrument px-4 py-3 text-sm" style={{ borderColor: "var(--status-crit)", color: "var(--status-crit)" }}>
+          {error}
+        </div>
+      )}
+
+      {/* Primary instruments — the panel's biggest readouts */}
+      <div className="flex flex-wrap gap-3">
+        <PrimaryInstrument label="Vendas hoje" value={fmtBRL(dash.vendasDia)} status="ok" trend={`${dash.vendasQtd} pedido${dash.vendasQtd === 1 ? "" : "s"}`} />
+        <PrimaryInstrument label="Vendas do mês" value={fmtBRL(dash.vendasMes)} />
+        <PrimaryInstrument
+          label="Fluxo de caixa (30d)"
+          value={fmtBRL(dash.fluxoCaixa)}
+          status={dash.fluxoCaixa >= 0 ? "ok" : "crit"}
+        />
+      </div>
+
+      {/* Secondary instruments — supporting figures */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+        <SecondaryInstrument label="Ticket médio" value={kpi ? fmtBRL(Number(kpi.ticket_medio)) : "—"} />
+        <SecondaryInstrument label="Receita (30d)" value={kpi ? fmtBRL(kpi.receita_total) : "—"} status="ok" />
+        <SecondaryInstrument label="Estoque crítico" value={String(dash.estoqueCritico)} status={dash.estoqueCritico > 0 ? "crit" : "ok"} />
+        <SecondaryInstrument label="Total de itens" value={String(dash.estoqueTotal)} />
+        <SecondaryInstrument label="Clientes novos" value={String(dash.clientesNovos)} status="ok" />
+        <SecondaryInstrument label="Clientes total" value={String(dash.clientesTotal)} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+        <section className="lg:col-span-2 instrument p-4">
+          <h2 className="text-[10px] uppercase tracking-[0.12em] mb-3" style={{ color: "var(--ink-500)" }}>Vendas do mês</h2>
+          {dash.vendasMesChart.length > 0 ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={dash.vendasMesChart}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--panel-border)" />
+                <XAxis dataKey="dia" stroke="var(--ink-700)" tick={{ fontSize: 10, fill: "var(--ink-700)" }} />
+                <YAxis stroke="var(--ink-700)" tick={{ fontSize: 10, fill: "var(--ink-700)" }} tickFormatter={(v) => "R$ " + v} />
+                <Tooltip content={<ChartTooltip />} />
+                <Line type="monotone" dataKey="valor" stroke="var(--accent-400)" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="text-sm text-center py-20" style={{ color: "var(--ink-700)" }}>Sem dados de vendas no período</div>
+          )}
         </section>
 
-        <section>
-          <h2 className="text-sm font-medium text-neutral-400 mb-3">Agentes</h2>
-          <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-3 space-y-1">
-            {agents.slice(0, 8).map(a => (
-              <div key={a.id} className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-neutral-800/50">
-                <span className="text-xs text-neutral-300">{a.name}</span>
-                <span className={"inline-block w-2 h-2 rounded-full " + (a.status === "running" ? "bg-green-500" : "bg-yellow-500")} />
+        <section className="instrument p-4">
+          <h2 className="text-[10px] uppercase tracking-[0.12em] mb-3" style={{ color: "var(--ink-500)" }}>Agentes</h2>
+          <div className="space-y-0.5">
+            {agents.slice(0, 8).map((a) => (
+              <div key={a.id} className="flex items-center justify-between px-2 py-1.5 rounded transition-colors hover:bg-white/[0.03]">
+                <span className="text-xs" style={{ color: "var(--ink-300)" }}>{a.name}</span>
+                <span
+                  aria-hidden
+                  className="inline-block w-1.5 h-1.5 rounded-full"
+                  style={{
+                    background: a.status === "running" ? "var(--status-ok)" : "var(--status-warn)",
+                    boxShadow: `0 0 5px ${a.status === "running" ? "var(--status-ok)" : "var(--status-warn)"}`,
+                  }}
+                />
               </div>
             ))}
+            {agents.length === 0 && <div className="text-xs px-2 py-4 text-center" style={{ color: "var(--ink-700)" }}>Nenhum agente ativo</div>}
           </div>
         </section>
       </div>
 
       {dash.topProdutos.length > 0 && (
-        <section>
-          <h2 className="text-sm font-medium text-neutral-400 mb-3">Top Produtos</h2>
-          <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-3">
-            <BarChart width={600} height={200} data={dash.topProdutos.slice(0, 8)} layout="vertical" margin={{ left: 120 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#262626" />
-              <XAxis type="number" stroke="#525252" tick={{ fontSize: 10 }} tickFormatter={v => fmtBRL(v)} />
-              <YAxis type="category" dataKey="nome" stroke="#525252" tick={{ fontSize: 10 }} width={120} />
+        <section className="instrument p-4">
+          <h2 className="text-[10px] uppercase tracking-[0.12em] mb-3" style={{ color: "var(--ink-500)" }}>Top produtos</h2>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={dash.topProdutos.slice(0, 8)} layout="vertical" margin={{ left: 120 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--panel-border)" />
+              <XAxis type="number" stroke="var(--ink-700)" tick={{ fontSize: 10, fill: "var(--ink-700)" }} tickFormatter={(v) => fmtBRL(v)} />
+              <YAxis type="category" dataKey="nome" stroke="var(--ink-700)" tick={{ fontSize: 10, fill: "var(--ink-700)" }} width={120} />
               <Tooltip content={<ChartTooltip />} />
-              <Bar dataKey="valor" radius={[0, 4, 4, 0]}>{dash.topProdutos.map((e, i) => <Cell key={i} fill={margemColor(e.margem)} />)}</Bar>
+              <Bar dataKey="valor" radius={[0, 3, 3, 0]}>
+                {dash.topProdutos.map((e, i) => <Cell key={i} fill={margemColor(e.margem)} />)}
+              </Bar>
             </BarChart>
-          </div>
+          </ResponsiveContainer>
         </section>
       )}
 
       {dash.alertas.length > 0 && (
         <section>
-          <h2 className="text-sm font-medium text-neutral-400 mb-3">Alertas</h2>
-          <div className="space-y-2">{dash.alertas.map((a, i) => (
-            <div key={i} className={"bg-neutral-900 border border-neutral-800 border-l-4 rounded-lg px-4 py-2 flex items-center gap-3 " + (alertaStyles[a.tipo]?.border || "border-l-neutral-600")}>
-              <span className={alertaStyles[a.tipo]?.badge || "bg-neutral-700 text-neutral-400"} style={{ padding: "2px 8px", borderRadius: "4px", fontSize: "10px" }}>{a.tipo}</span>
-              <span className="text-xs text-neutral-300 flex-1">{a.mensagem}</span>
-              <span className="text-[10px] text-neutral-500">{a.data}</span>
-            </div>
-          ))}</div>
+          <h2 className="text-[10px] uppercase tracking-[0.12em] mb-2" style={{ color: "var(--ink-500)" }}>Alertas</h2>
+          <div className="space-y-1.5">
+            {dash.alertas.map((a, i) => {
+              const meta = alertaMeta[a.tipo] || { status: "ok" as Status, label: a.tipo };
+              const color = STATUS_COLOR[meta.status];
+              return (
+                <div key={i} className="instrument px-3.5 py-2.5 flex items-center gap-3">
+                  <span aria-hidden className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: color, boxShadow: `0 0 5px ${color}` }} />
+                  <span
+                    className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0"
+                    style={{ background: `${color}22`, color }}
+                  >
+                    {meta.label}
+                  </span>
+                  <span className="text-xs flex-1" style={{ color: "var(--ink-300)" }}>{a.mensagem}</span>
+                  <span className="text-[10px] numeric shrink-0" style={{ color: "var(--ink-700)" }}>{a.data}</span>
+                </div>
+              );
+            })}
+          </div>
         </section>
       )}
     </div>

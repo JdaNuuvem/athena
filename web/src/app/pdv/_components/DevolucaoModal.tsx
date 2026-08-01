@@ -26,7 +26,7 @@ export function DevolucaoModal({ devolverItem, onClose, onDevolver, operador, op
       });
       const d = await r.json();
       if (d.error) { alert(d.error); return; }
-      alert(`Devolvido: ${item.qtd} un — R$ ${d.valor_devolvido?.toFixed(2)}`);
+      alert(`Devolvido: ${item.qtd} un — R$ ${Number(d.valor_devolvido).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
       onDevolver();
     } catch { alert("Erro ao devolver"); }
   };

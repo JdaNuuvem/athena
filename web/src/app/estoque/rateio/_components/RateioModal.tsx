@@ -133,7 +133,7 @@ export default function RateioModal({ sku, produtoNome, onClose, onSucesso }: Ra
                       {l.quantidade.toLocaleString("pt-BR", { minimumFractionDigits: 3 })}
                     </td>
                     <td className="px-2 py-1.5 text-right font-mono numeric text-neutral-400 text-xs">
-                      {l.percentual.toFixed(2)}%
+                      {l.percentual.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%
                     </td>
                   </tr>
                 ))}

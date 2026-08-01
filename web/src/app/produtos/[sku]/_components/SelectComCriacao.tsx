@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Icon from "@/app/_components/Icon";
 
 interface Opcao { id: number; nome: string; }
 
@@ -53,7 +54,9 @@ export default function SelectComCriacao({
             className="flex-1 bg-neutral-900 border border-indigo-600 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none"
           />
           <button onClick={confirmarCriacao} className="px-2 bg-indigo-600 text-white text-xs rounded-lg">OK</button>
-          <button onClick={() => { setCriando(false); setErro(""); }} className="px-2 text-neutral-400 text-xs">✕</button>
+          <button onClick={() => { setCriando(false); setErro(""); }} className="px-2 text-neutral-400 text-xs flex items-center">
+            <Icon name="close" size={12} />
+          </button>
         </div>
         {erro && <p className="text-[10px] text-red-400">{erro}</p>}
       </div>

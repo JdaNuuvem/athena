@@ -7,6 +7,7 @@ import KpiCard from "@/app/_components/KpiCard";
 import TabBar from "@/app/_components/TabBar";
 import DataTable from "@/app/_components/DataTable";
 import StatusBadge from "@/app/_components/StatusBadge";
+import Icon from "@/app/_components/Icon";
 import type { IndicadorGiro, IndicadorRuptura, IndicadorCobertura } from "@/lib/types/domain";
 import type { StatusBadgeVariant } from "@/lib/types/ui";
 import { formatCurrency } from "../types";
@@ -34,8 +35,8 @@ const GIRO_COLUMNS: Column<IndicadorGiro>[] = [
     key: "tendencia", label: "Tendência", align: "center",
     render: (v, row) => {
       const t = row.tendencia;
-      return <span className={t === "up" ? "text-emerald-400" : t === "down" ? "text-red-400" : "text-neutral-400"}>
-        {t === "up" ? "▲" : t === "down" ? "▼" : "—"}
+      return <span className={`inline-flex items-center justify-center ${t === "up" ? "text-emerald-400" : t === "down" ? "text-red-400" : "text-neutral-400"}`}>
+        {t === "up" ? <Icon name="chevronDown" size={14} style={{ transform: "rotate(180deg)" }} /> : t === "down" ? <Icon name="chevronDown" size={14} /> : "—"}
       </span>;
     },
   },
@@ -117,7 +118,10 @@ export default function AnalisePage() {
         <div className="space-y-1">
           {totalRuptura === 0 ? (
             <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-8 text-center">
-              <p className="text-emerald-400 text-sm">✓ Nenhum SKU em ruptura no momento</p>
+              <p className="text-emerald-400 text-sm flex items-center justify-center gap-1.5">
+                <svg xmlns="http://www.w3.org/2000/svg" width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7" /></svg>
+                Nenhum SKU em ruptura no momento
+              </p>
             </div>
           ) : (
             <>

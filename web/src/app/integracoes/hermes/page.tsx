@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import Icon from "@/app/_components/Icon";
 
 export default function HermesIntegrationPage() {
   const [agents, setAgents] = useState<Record<string, unknown>[]>([]);
@@ -20,7 +21,9 @@ export default function HermesIntegrationPage() {
   return (
     <div className="p-6 space-y-6 max-w-4xl">
       <div>
-        <Link href="/integracoes" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors">← Integrações</Link>
+        <Link href="/integracoes" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors inline-flex items-center gap-1">
+          <Icon name="chevronLeft" size={12} /> Integrações
+        </Link>
         <h1 className="text-lg font-light text-neutral-300 mt-1">Hermes Agents</h1>
       </div>
 

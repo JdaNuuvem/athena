@@ -53,9 +53,9 @@ export function SangriaSuprimentoModal({ tipo, caixaId, operador, operadorSenha,
       const d = await r.json();
       if (d.error) { setErro(d.error); return; }
       if (d.pendente) {
-        onConcluido(`Sangria de R$ ${v.toFixed(2)} ficou pendente de aprovação (acima de R$ ${limite}).`);
+        onConcluido(`Sangria de R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ficou pendente de aprovação (acima de R$ ${limite}).`);
       } else {
-        onConcluido(`${tipo === "sangria" ? "Sangria" : "Suprimento"} de R$ ${v.toFixed(2)} registrada.`);
+        onConcluido(`${tipo === "sangria" ? "Sangria" : "Suprimento"} de R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} registrada.`);
       }
     } catch {
       setErro("Erro ao registrar");

@@ -82,8 +82,8 @@ export function VendaTab({ operador, operadorSenha, caixa, notify, onCaixaChange
       const r = await fetch("/api/pdv/venda/" + vendaId + "/cupom");
       const d = await r.json();
       if (d.error) { notify(d.error, "error"); return; }
-      const itensHtml = d.itens.map((it: any) => `<tr><td style="padding:2px 4px;font-size:12px">${escHtml(it.produto_codigo)}</td><td style="padding:2px 4px;font-size:12px">${escHtml(it.descricao)}</td><td style="padding:2px 4px;text-align:right;font-size:12px">${Number(it.quantidade)}</td><td style="padding:2px 4px;text-align:right;font-size:12px">R$ ${Number(it.valor_unitario).toFixed(2)}</td><td style="padding:2px 4px;text-align:right;font-size:12px">R$ ${Number(it.valor_total).toFixed(2)}</td></tr>`).join("");
-      const pgtsHtml = d.pagamentos.map((p: any) => `<div style="font-size:12px">${escHtml(String(p.forma).replace(/_/g, " "))}: R$ ${Number(p.valor).toFixed(2)}</div>`).join("");
+      const itensHtml = d.itens.map((it: any) => `<tr><td style="padding:2px 4px;font-size:12px">${escHtml(it.produto_codigo)}</td><td style="padding:2px 4px;font-size:12px">${escHtml(it.descricao)}</td><td style="padding:2px 4px;text-align:right;font-size:12px">${Number(it.quantidade)}</td><td style="padding:2px 4px;text-align:right;font-size:12px">R$ ${Number(it.valor_unitario).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td><td style="padding:2px 4px;text-align:right;font-size:12px">R$ ${Number(it.valor_total).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>`).join("");
+      const pgtsHtml = d.pagamentos.map((p: any) => `<div style="font-size:12px">${escHtml(String(p.forma).replace(/_/g, " "))}: R$ ${Number(p.valor).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>`).join("");
       const w = window.open("", "_blank", "width=320,height=600")!;
       w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Cupom #${vendaId}</title><style>body{font-family:monospace;width:280px;margin:0 auto;padding:10px}hr{border:0;border-top:1px dashed #ccc}.center{text-align:center}</style></head><body>
         <div class="center"><strong>ATHENA</strong><br><small>${new Date().toLocaleString("pt-BR")}</small></div><hr>
@@ -91,8 +91,8 @@ export function VendaTab({ operador, operadorSenha, caixa, notify, onCaixaChange
         ${d.venda.cliente ? `<div class="center">Cliente: ${escHtml(d.venda.cliente)}</div>` : ""}
         <hr><table style="width:100%">${itensHtml}</table><hr>
         ${pgtsHtml}
-        <div style="font-size:12px;margin-top:4px">Desconto: R$ ${Number(d.venda.desconto || 0).toFixed(2)}</div>
-        <div style="font-size:14px;font-weight:bold;margin-top:4px">TOTAL: R$ ${Number(d.venda.total).toFixed(2)}</div><hr>
+        <div style="font-size:12px;margin-top:4px">Desconto: R$ ${Number(d.venda.desconto || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+        <div style="font-size:14px;font-weight:bold;margin-top:4px">TOTAL: R$ ${Number(d.venda.total).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div><hr>
         <div class="center"><small>Obrigado pela preferencia!</small></div>
       </body></html>`);
       w.document.close(); setTimeout(() => w.print(), 500);
@@ -139,7 +139,7 @@ export function VendaTab({ operador, operadorSenha, caixa, notify, onCaixaChange
       });
       const d = await r.json();
       if (d.error) { notify(d.error, "error"); return; }
-      notify(`Venda #${d.venda.id} - R$ ${d.total.toFixed(2)}`, "success");
+      notify(`Venda #${d.venda.id} - R$ ${Number(d.total).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, "success");
       setLastVendaId(d.venda.id);
       setCart([]); setCliente(""); setClienteId(null); setClienteSearch(""); setDesconto(0); setPagamento([{ forma: "dinheiro", valor: 0 }]);
       onCaixaChange();
@@ -184,7 +184,7 @@ export function VendaTab({ operador, operadorSenha, caixa, notify, onCaixaChange
                   <div><span className="text-neutral-200">{p.codigo}</span><span className="text-neutral-500 ml-2">{p.nome}</span></div>
                   <div className="flex items-center gap-3">
                     <span className="text-neutral-400 text-xs">{Number(p.estoque_atual ?? 0) || "—"} und</span>
-                    <span className="text-emerald-400 font-medium">R$ {Number(p.preco || 0).toFixed(2)}</span>
+                    <span className="text-emerald-400 font-medium">R$ {Number(p.preco || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 </div>
               ))}
