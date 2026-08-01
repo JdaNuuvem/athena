@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import type { ShopeeProdutoSincronizado } from "@/lib/api";
 import Icon from "@/app/_components/Icon";
+import RateioShopeeModal from "./_components/RateioShopeeModal";
 
 type EstoqueFiltro = "todos" | "zerado" | "baixo" | "normal";
 type ModoVisualizacao = "cards" | "lista";
@@ -157,6 +158,7 @@ export default function ShopeeProdutosPage() {
   const [salvandoDuplicata, setSalvandoDuplicata] = useState(false);
   const [clonando, setClonando] = useState<{ sku: string; itemId: number; destino: number | "" } | null>(null);
   const [clonandoEnviando, setClonandoEnviando] = useState(false);
+  const [rateando, setRateando] = useState<{ sku: string; nome: string } | null>(null);
   const [busca, setBusca] = useState("");
   const [statusFiltro, setStatusFiltro] = useState("");
   const [estoqueFiltro, setEstoqueFiltro] = useState<EstoqueFiltro>("todos");
@@ -359,6 +361,14 @@ export default function ShopeeProdutosPage() {
               >
                 Clonar p/ loja
               </button>
+              <button
+                onClick={() => setRateando({ sku: p.sku, nome: p.titulo })}
+                disabled={lojas.length < 2}
+                title={lojas.length < 2 ? "Conecte outra loja Shopee para ratear" : "Ratear estoque entre várias lojas Shopee"}
+                className="text-xs bg-teal-600 hover:bg-teal-500 disabled:opacity-40 text-white px-2 py-1 rounded"
+              >
+                Ratear
+              </button>
             </div>
           </td>
         </tr>
@@ -467,6 +477,14 @@ export default function ShopeeProdutosPage() {
           className="text-xs bg-indigo-700 hover:bg-indigo-600 disabled:opacity-40 text-white px-2 py-1 rounded"
         >
           Clonar p/ loja
+        </button>
+        <button
+          onClick={() => setRateando({ sku: p.sku, nome: p.titulo })}
+          disabled={lojas.length < 2}
+          title={lojas.length < 2 ? "Conecte outra loja Shopee para ratear" : "Ratear estoque entre várias lojas Shopee"}
+          className="text-xs bg-teal-600 hover:bg-teal-500 disabled:opacity-40 text-white px-2 py-1 rounded"
+        >
+          Ratear
         </button>
       </div>
     );
@@ -785,6 +803,15 @@ export default function ShopeeProdutosPage() {
             </div>
           )}
         </>
+      )}
+      {rateando && (
+        <RateioShopeeModal
+          sku={rateando.sku}
+          produtoNome={rateando.nome}
+          lojas={lojas}
+          onClose={() => setRateando(null)}
+          onSucesso={() => carregar()}
+        />
       )}
     </div>
   );
