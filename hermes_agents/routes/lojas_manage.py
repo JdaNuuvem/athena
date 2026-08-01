@@ -117,6 +117,26 @@ def deletar_loja_manage(id):
     return _go()
 
 
+@lojas_bp.route("/manage/<int:id>/vinculo-estoque", methods=["PUT"])
+def vincular_estoque_loja(id):
+    from core.lojas import vincular_estoque, desvincular_estoque
+    from core.seguranca import auditar_alteracao
+    data = request.json or {}
+    loja_fisica_id = data.get("loja_fisica_id")
+
+    @requer_permissao("configuracoes.editar")
+    def _go():
+        if loja_fisica_id:
+            resultado = vincular_estoque(id, int(loja_fisica_id))
+        else:
+            resultado = desvincular_estoque(id)
+        if resultado.get("erro"):
+            return jsonify(resultado), 400
+        auditar_alteracao("editar", "lojas", "vinculo_estoque", id, dados_antes=None, dados_depois=resultado)
+        return jsonify(resultado)
+    return _go()
+
+
 @lojas_bp.route("/sync/bling", methods=["POST"])
 def lojas_sync_bling():
     @requer_permissao("configuracoes.editar")
