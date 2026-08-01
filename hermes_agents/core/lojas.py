@@ -77,6 +77,186 @@ def resolver_loja_id(nome: str):
     _cache_loja_id[nome] = loja_id
     return loja_id
 
+# Cache simples chave->nome_efetivo (chave = nome OU id como string), usado
+# pelo vinculo de estoque fisica x virtual (Fase Vinculo). Uma loja virtual
+# com loja_vinculada_id ativo compartilha o saldo da fisica vinculada —
+# qualquer operacao de estoque na virtual deve gravar/ler na fisica.
+# Invalidado sempre que um vinculo e' criado/desfeito — ver invalidar_cache_loja_efetiva().
+_cache_loja_efetiva: dict = {}
+
+def invalidar_cache_loja_efetiva():
+    _cache_loja_efetiva.clear()
+
+def _sync_run(coro):
+    """Helper de teste — roda uma coroutine isolada sem passar por run_async
+    (que abriria um pool asyncpg de verdade). Producao usa loja_efetiva()."""
+    import asyncio
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
+
+async def _loja_efetiva_async(loja) -> str:
+    """Aceita nome OU id (string de digitos) de loja; devolve sempre o NOME
+    efetivo — se for virtual com vinculo ativo, o nome da fisica vinculada;
+    senao, o proprio nome (resolvendo id->nome primeiro, se for o caso)."""
+    if not loja:
+        return loja
+    chave = str(loja)
+    if chave in _cache_loja_efetiva:
+        return _cache_loja_efetiva[chave]
+    db = await get_db()
+    if chave.isdigit():
+        row = await db.fetchrow(
+            "SELECT l1.nome, l1.tipo, l2.nome AS nome_fisica FROM lojas l1 "
+            "LEFT JOIN lojas l2 ON l2.id = l1.loja_vinculada_id "
+            "WHERE l1.id = $1", int(chave))
+        # so' usa nome_fisica se a PROPRIA loja for tipo='virtual' — defesa
+        # contra loja_vinculada_id setado numa loja fisica/hibrida/marketplace
+        # (nao deveria acontecer se quem grava validar, mas o resolver nao
+        # pode confiar so' na escrita; mesmo criterio do branch por nome abaixo).
+        if not row:
+            efetiva = loja
+        elif row.get("tipo") == "virtual" and row.get("nome_fisica"):
+            efetiva = row["nome_fisica"]
+        else:
+            efetiva = row["nome"]
+    else:
+        row = await db.fetchrow(
+            "SELECT l2.nome FROM lojas l1 JOIN lojas l2 ON l2.id = l1.loja_vinculada_id "
+            "WHERE l1.nome = $1 AND l1.tipo = 'virtual' AND l1.loja_vinculada_id IS NOT NULL", chave)
+        efetiva = row["nome"] if row else chave
+    _cache_loja_efetiva[chave] = efetiva
+    return efetiva
+
+def loja_efetiva(loja: str) -> str:
+    """Versao sincrona (wrapper sobre run_async) — use em qualquer caller
+    que ja tenha so' o nome/id em maos fora de um `async def`."""
+    if not loja:
+        return loja
+    try:
+        return run_async(_loja_efetiva_async(loja))
+    except Exception as e:
+        _log_erro("loja_efetiva", e)
+        return loja
+
+def loja_efetiva_sync(cur, loja: str) -> str:
+    """Para callers com conexao psycopg2 direta (routes/estoque.py,
+    athena_bridge.py) — usa cursor sincrono, mesmo cache compartilhado."""
+    if not loja:
+        return loja
+    chave = str(loja)
+    if chave in _cache_loja_efetiva:
+        return _cache_loja_efetiva[chave]
+    if chave.isdigit():
+        cur.execute(
+            "SELECT l1.nome, l1.tipo, l2.nome AS nome_fisica FROM lojas l1 "
+            "LEFT JOIN lojas l2 ON l2.id = l1.loja_vinculada_id "
+            "WHERE l1.id = %s", (int(chave),))
+        row = cur.fetchone()
+        # mesma defesa do branch async acima: so' usa nome_fisica (row[2]) se
+        # a propria loja (row[1]) for tipo='virtual'.
+        if not row:
+            efetiva = loja
+        elif row[1] == "virtual" and row[2]:
+            efetiva = row[2]
+        else:
+            efetiva = row[0]
+    else:
+        cur.execute(
+            "SELECT l2.nome FROM lojas l1 JOIN lojas l2 ON l2.id = l1.loja_vinculada_id "
+            "WHERE l1.nome = %s AND l1.tipo = 'virtual' AND l1.loja_vinculada_id IS NOT NULL", (chave,))
+        row = cur.fetchone()
+        efetiva = row[0] if row else chave
+    _cache_loja_efetiva[chave] = efetiva
+    return efetiva
+
+def vincular_estoque(loja_virtual_id: int, loja_fisica_id: int) -> dict:
+    """Ativa o vinculo: saldo da fisica vira o compartilhado. Linhas que a
+    virtual tinha em estoque_saldos/estoque_lojas sob o proprio nome ficam
+    orfas (nao apagadas — historico preservado), porque leitura/escrita
+    passam a resolver pro nome da fisica a partir de agora."""
+    async def _go():
+        db = await get_db()
+        virtual = await db.fetchrow("SELECT id, tipo, nome FROM lojas WHERE id = $1", loja_virtual_id)
+        if not virtual:
+            return {"erro": "Loja virtual nao encontrada"}
+        if virtual["tipo"] != "virtual":
+            return {"erro": f"Loja {virtual['nome']} nao e' do tipo virtual"}
+        fisica = await db.fetchrow("SELECT id, tipo, nome FROM lojas WHERE id = $1", loja_fisica_id)
+        if not fisica:
+            return {"erro": "Loja fisica nao encontrada"}
+        if fisica["tipo"] != "fisica":
+            return {"erro": f"Loja {fisica['nome']} nao e' do tipo fisica"}
+        await db.execute("UPDATE lojas SET loja_vinculada_id = $1 WHERE id = $2", loja_fisica_id, loja_virtual_id)
+        return {"ok": True, "loja_virtual": virtual["nome"], "loja_fisica": fisica["nome"]}
+    try:
+        resultado = run_async(_go())
+    except Exception as e:
+        return {"erro": str(e)}
+    if not resultado.get("erro"):
+        invalidar_cache_loja_efetiva()
+    return resultado
+
+
+def desvincular_estoque(loja_virtual_id: int) -> dict:
+    """Desativa o vinculo: a virtual recebe uma copia do saldo compartilhado
+    no momento da desvinculacao (entrada por sku com saldo > 0 na fisica),
+    como novo ponto de partida independente. A fisica fica intocada.
+
+    Tudo roda numa unica conexao/transacao (fix pos-review: a versao
+    original chamava a entrada() SINCRONA por sku dentro de um loop Python —
+    cada chamada passa por run_async(), que abre um asyncio.run() novo, e
+    get_db() cria [e abandona] um pool asyncpg sempre que o loop muda (ver
+    aviso em core/__init__.py::get_db() e em
+    core/estoque_saldos.py::mover_saldo()). Pra uma fisica com centenas de
+    skus isso vazava centenas de pools nunca fechados numa unica chamada.
+    Tambem nao era atomico: uma falha no meio deixava o vinculo ja limpo
+    com so' parte dos saldos copiados, e uma nova tentativa esbarrava em
+    "sem vinculo ativo" — sem jeito de retomar. Agora, como em
+    core/estoque.py::transferir()/ratear(), tudo (leitura do saldo da
+    fisica, limpeza do vinculo e a copia por sku via entrada_async) roda
+    numa so' conexao/transacao: se qualquer sku falhar, a transacao inteira
+    e' revertida — vinculo continua ativo, nada foi copiado, e o operador
+    pode tentar de novo."""
+    from core.estoque import entrada_async as estoque_entrada_async
+    from core.estoque_saldos import SaldoError
+    async def _go():
+        db = await get_db()
+        async with db.acquire() as conn:
+            async with conn.transaction():
+                virtual = await conn.fetchrow(
+                    "SELECT id, tipo, nome, loja_vinculada_id FROM lojas WHERE id = $1", loja_virtual_id)
+                if not virtual:
+                    return {"erro": "Loja virtual nao encontrada"}
+                if not virtual["loja_vinculada_id"]:
+                    return {"erro": f"Loja {virtual['nome']} nao tem vinculo ativo"}
+                fisica = await conn.fetchrow("SELECT nome FROM lojas WHERE id = $1", virtual["loja_vinculada_id"])
+                saldos = await conn.fetch(
+                    "SELECT sku, quantidade FROM estoque_saldos WHERE loja = $1 AND tipo = 'disponivel' AND quantidade > 0",
+                    fisica["nome"])
+                await conn.execute("UPDATE lojas SET loja_vinculada_id = NULL WHERE id = $1", loja_virtual_id)
+                copiados = 0
+                for s in saldos:
+                    r = await estoque_entrada_async(
+                        conn, s["sku"], virtual["nome"], float(s["quantidade"]), "ajuste_inventario")
+                    if r.get("erro"):
+                        raise SaldoError(f"{s['sku']}: {r['erro']}")
+                    copiados += 1
+                return {"ok": True, "loja_virtual": virtual["nome"], "loja_fisica": fisica["nome"],
+                        "skus_copiados": copiados}
+    try:
+        resultado = run_async(_go())
+    except SaldoError as e:
+        return {"erro": str(e)}
+    except Exception as e:
+        return {"erro": str(e)}
+    if not resultado.get("erro"):
+        invalidar_cache_loja_efetiva()
+    return resultado
+
+
 def _ensure_table():
     global _table_ok
     if _table_ok: return
@@ -103,6 +283,11 @@ def _ensure_table():
         # nunca trunca dado existente.
         try: await db.execute("ALTER TABLE lojas ALTER COLUMN tipo TYPE VARCHAR(20)")
         except Exception as e: _log_erro("ALTER lojas.tipo (widen)", e)
+        # vinculo de estoque fisica x virtual — quando preenchido numa loja
+        # "virtual", aponta pra loja "fisica" que efetivamente detem o saldo
+        # compartilhado (ver _loja_efetiva_async/loja_efetiva/loja_efetiva_sync acima).
+        try: await db.execute("ALTER TABLE lojas ADD COLUMN IF NOT EXISTS loja_vinculada_id INT REFERENCES lojas(id)")
+        except Exception as e: _log_erro("ALTER lojas.loja_vinculada_id", e)
         for col, ddl in _CAMPOS_GERAIS_DDL:
             try: await db.execute(f"ALTER TABLE lojas ADD COLUMN IF NOT EXISTS {col} {ddl}")
             except Exception as e: _log_erro(f"ALTER lojas.{col}", e)

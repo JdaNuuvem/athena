@@ -1,5 +1,6 @@
 """Estoque por loja — CRUD local + movimentacoes + Bling sync."""
 from core import get_db, run_async, log
+from core.lojas import _loja_efetiva_async, _log_erro
 from core.estoque_saldos import (
     mover_saldo, saldo as saldo_bucket,
     _mover_saldo_async, _saldo_async, _ensure_async as _ensure_saldos_async,
@@ -63,7 +64,18 @@ def listar(loja: str = "", busca: str = "", pagina: int = 1, por_pagina: int = 3
         where = ["1=1"]
         params = []
         if loja and loja != "todas":
-            w, p = _where_loja_param(loja)
+            loja_resolvida = loja
+            try:
+                r = await _loja_efetiva_async(loja)
+                if isinstance(r, str) and r:
+                    loja_resolvida = r
+                else:
+                    _log_erro(
+                        "estoque.listar: resolver_loja_efetiva",
+                        ValueError(f"loja '{loja}' -> valor invalido {r!r} (esperado str nao-vazia)"))
+            except Exception as e:
+                _log_erro("estoque.listar: resolver_loja_efetiva", e)
+            w, p = _where_loja_param(loja_resolvida)
             where.append(w); params.extend(p)
         elif loja_ids is not None:
             params.append(loja_ids)
@@ -256,7 +268,18 @@ def movimentacoes(sku: str = "", loja: str = "", limite: int = 50, loja_ids: lis
             params.append(sku)
             where.append(f"m.sku = ${len(params)}")
         if loja:
-            params.append(loja)
+            loja_resolvida = loja
+            try:
+                r = await _loja_efetiva_async(loja)
+                if isinstance(r, str) and r:
+                    loja_resolvida = r
+                else:
+                    _log_erro(
+                        "estoque.movimentacoes: resolver_loja_efetiva",
+                        ValueError(f"loja '{loja}' -> valor invalido {r!r} (esperado str nao-vazia)"))
+            except Exception as e:
+                _log_erro("estoque.movimentacoes: resolver_loja_efetiva", e)
+            params.append(loja_resolvida)
             where.append(f"m.loja = ${len(params)}")
         elif loja_ids is not None:
             params.append(loja_ids)

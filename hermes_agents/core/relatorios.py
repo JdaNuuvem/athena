@@ -1,6 +1,7 @@
 """Relatorios Core — 20 reports unificando Bling + PDV + Compras + Produção."""
 import os
 from core import get_db, run_async, log, hoje
+from core.lojas import loja_efetiva, _log_erro
 
 AGENT = "Relatorios Core"
 
@@ -16,8 +17,18 @@ def _loja_where_pdv(loja_id):
     return f" AND venda.caixa_id IN (SELECT id FROM pdv_caixas WHERE loja_id = {int(loja_id)})"
 
 def _loja_where_estoque(loja_id):
-    """WHERE clause suffix for estoque_lojas, maps loja_id -> loja nome."""
+    """WHERE clause suffix for estoque_lojas, maps loja_id -> loja nome efetivo (resolve vinculo)."""
     if not loja_id: return ""
+    try:
+        nome_efetivo = loja_efetiva(str(loja_id))
+        if isinstance(nome_efetivo, str) and nome_efetivo and not nome_efetivo.isdigit():
+            nome_escapado = nome_efetivo.replace("'", "''")
+            return f" AND e.loja = '{nome_escapado}'"
+        _log_erro(
+            "relatorios._loja_where_estoque: resolver_loja_efetiva",
+            ValueError(f"loja_id {loja_id} -> nao resolveu para um nome valido: {nome_efetivo!r}"))
+    except Exception as e:
+        _log_erro("relatorios._loja_where_estoque: resolver_loja_efetiva", e)
     return f" AND e.loja = (SELECT nome FROM lojas WHERE id = {int(loja_id)})"
 
 def _union_vendas(dias: int, loja_id=None):

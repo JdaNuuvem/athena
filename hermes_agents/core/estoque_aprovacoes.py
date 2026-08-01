@@ -2,6 +2,7 @@
 Saida grande fica pendente ate um Gerente/Admin aprovar — nao aplica sozinha."""
 from core import get_db, run_async, log
 from core.estoque import saida as _aplicar_saida, MOTIVOS_SAIDA, LIMITE_APROVACAO_UNIDADES
+from core.lojas import _loja_efetiva_async, _log_erro
 
 AGENT = "Estoque Aprovacoes"
 
@@ -51,8 +52,19 @@ def solicitar(sku: str, loja: str, quantidade: float, motivo: str,
         return {"erro": f"Motivo invalido. Use um de: {', '.join(MOTIVOS_SAIDA)}"}
     async def _go():
         db = await get_db()
+        loja_resolvida = loja
+        try:
+            r = await _loja_efetiva_async(loja)
+            if isinstance(r, str) and r:
+                loja_resolvida = r
+            else:
+                _log_erro(
+                    "estoque_aprovacoes.solicitar: resolver_loja_efetiva",
+                    ValueError(f"loja '{loja}' -> valor invalido {r!r} (esperado str nao-vazia)"))
+        except Exception as e:
+            _log_erro("estoque_aprovacoes.solicitar: resolver_loja_efetiva", e)
         atual = await db.fetchval(
-            "SELECT quantidade FROM estoque_lojas WHERE sku = $1 AND loja = $2", sku, loja)
+            "SELECT quantidade FROM estoque_lojas WHERE sku = $1 AND loja = $2", sku, loja_resolvida)
         atual = float(atual or 0)
         if atual < quantidade:
             return {"erro": f"Saldo insuficiente ({atual} disponivel, {quantidade} solicitado)"}
@@ -61,8 +73,8 @@ def solicitar(sku: str, loja: str, quantidade: float, motivo: str,
                 (tipo, sku, loja, quantidade, motivo, usuario_solicitante_id, usuario_solicitante_nome)
             VALUES ('saida', $1, $2, $3, $4, $5, $6)
             RETURNING id
-        """, sku, loja, quantidade, motivo, usuario_id, usuario_nome)
-        return {"pendente": True, "aprovacao_id": row["id"], "sku": sku, "loja": loja, "quantidade": quantidade}
+        """, sku, loja_resolvida, quantidade, motivo, usuario_id, usuario_nome)
+        return {"pendente": True, "aprovacao_id": row["id"], "sku": sku, "loja": loja_resolvida, "quantidade": quantidade}
     try:
         return run_async(_go())
     except Exception as e:
