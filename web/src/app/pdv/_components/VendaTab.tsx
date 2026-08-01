@@ -3,12 +3,13 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { SearchResult, CartItem, Operador, FORMAS } from "./types";
 
-export function VendaTab({ operador, operadorSenha, caixa, notify, onCaixaChange }: {
+export function VendaTab({ operador, operadorSenha, caixa, notify, onCaixaChange, onAbrirCaixaClick }: {
   operador: Operador;
   operadorSenha: string;
   caixa: any;
   notify: (text: string, type: "success" | "error" | "info") => void;
   onCaixaChange: () => void;
+  onAbrirCaixaClick: () => void;
 }) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchQ, setSearchQ] = useState("");
@@ -52,8 +53,7 @@ export function VendaTab({ operador, operadorSenha, caixa, notify, onCaixaChange
   const handleSearchKey = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      if (searchResults.length === 1) { addFromSearch(searchResults[0]); }
-      else if (searchResults.length > 0) { addFromSearch(searchResults[0]); }
+      if (searchResults.length > 0) addFromSearch(searchResults[0]);
     }
     if (e.key === "Escape") { setShowSearch(false); buscaRef.current?.blur(); }
   };
@@ -129,8 +129,15 @@ export function VendaTab({ operador, operadorSenha, caixa, notify, onCaixaChange
     if (!caixa) return notify("Abra o caixa primeiro!", "error");
     if (cart.length === 0) return notify("Adicione itens ao carrinho", "error");
     if (maxDesconto > 0 && descontoPct > maxDesconto) return notify(`Desconto maximo: ${maxDesconto}%`, "error");
+    // So' substitui pelo pagamento padrao quando existe UMA linha ainda intocada
+    // (valor 0, o estado inicial) — com mais de uma forma de pagamento lancada,
+    // trocar tudo por uma linha unica descartava as outras formas em silencio.
     let pgts = pagamento;
-    if (pgts[0]?.valor === 0) pgts = [{ forma: formaPadrao, valor: totalComDesconto }];
+    if (pgts.length === 1 && pgts[0].valor === 0) pgts = [{ forma: formaPadrao, valor: totalComDesconto }];
+    const totalPagoFinal = pgts.reduce((s, p) => s + (p.valor || 0), 0);
+    if (totalPagoFinal < totalComDesconto - 0.01) {
+      return notify(`Pagamento insuficiente: faltam R$ ${(totalComDesconto - totalPagoFinal).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`, "error");
+    }
     try {
       const r = await fetch("/api/pdv/venda", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -291,7 +298,7 @@ export function VendaTab({ operador, operadorSenha, caixa, notify, onCaixaChange
                 <button onClick={salvarOrcamento} className="w-full py-2 bg-neutral-700 hover:bg-neutral-600 text-neutral-300 text-sm rounded-lg">Salvar como Orcamento</button>
               </>
             ) : (
-              <button onClick={onCaixaChange} className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg">Abrir Caixa</button>
+              <button onClick={onAbrirCaixaClick} className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg">Abrir Caixa</button>
             )}
           </div>
         </div>

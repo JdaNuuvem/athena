@@ -110,7 +110,7 @@ export default function PDVPage() {
 
       {tab === "venda" && (
         <VendaTab operador={operador} operadorSenha={operadorSenha} caixa={caixa}
-          notify={notify} onCaixaChange={loadDashboard} />
+          notify={notify} onCaixaChange={loadDashboard} onAbrirCaixaClick={() => setTab("caixa")} />
       )}
     </div>
   );

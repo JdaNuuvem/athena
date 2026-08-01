@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import { Operador } from "./types";
 import { DevolucaoModal } from "./DevolucaoModal";
 
@@ -14,9 +14,7 @@ export function HistoricoTab({ operador, operadorSenha }: { operador: Operador; 
     fetch("/api/pdv/historico?limit=50").then(r => r.json()).then(d => setVendas(d.data || [])).catch(() => {});
   }, []);
 
-  const toggleExpand = async (vendaId: number) => {
-    if (expanded === vendaId) { setExpanded(null); setItens([]); return; }
-    setExpanded(vendaId);
+  const carregarItens = async (vendaId: number) => {
     try {
       const r = await fetch("/api/pdv/itens?venda_id=" + vendaId);
       const d = await r.json();
@@ -24,9 +22,17 @@ export function HistoricoTab({ operador, operadorSenha }: { operador: Operador; 
     } catch { setItens([]); }
   };
 
+  const toggleExpand = async (vendaId: number) => {
+    if (expanded === vendaId) { setExpanded(null); setItens([]); return; }
+    setExpanded(vendaId);
+    await carregarItens(vendaId);
+  };
+
   const handleDevolucaoConcluida = () => {
     setDevolverItem(null);
-    if (expanded) toggleExpand(expanded);
+    // Recarrega os itens da linha ja' expandida — chamar toggleExpand(expanded)
+    // aqui fecharia a linha em vez de atualizar (mesmo id = ramo de "colapsar").
+    if (expanded) carregarItens(expanded);
   };
 
   return (
@@ -37,8 +43,8 @@ export function HistoricoTab({ operador, operadorSenha }: { operador: Operador; 
           <th className="text-left p-3">Data</th><th className="text-center p-3">Status</th><th className="w-8"></th>
         </tr></thead>
         <tbody>
-          {vendas.map((v, i) => (<>
-            <tr key={v.id} className={"border-b border-neutral-800/50 " + (i % 2 === 0 ? "bg-neutral-900/30" : "") + (expanded === v.id ? " bg-neutral-800/50" : "")}>
+          {vendas.map((v, i) => (<Fragment key={v.id}>
+            <tr className={"border-b border-neutral-800/50 " + (i % 2 === 0 ? "bg-neutral-900/30" : "") + (expanded === v.id ? " bg-neutral-800/50" : "")}>
               <td className="p-3 text-indigo-400 font-mono">{v.numero || v.id}</td>
               <td className="p-3 text-neutral-300">{v.cliente || "—"}</td>
               <td className="p-3 text-right text-emerald-400">R$ {(v.total || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
@@ -53,7 +59,7 @@ export function HistoricoTab({ operador, operadorSenha }: { operador: Operador; 
               </td>
             </tr>
             {expanded === v.id && (
-              <tr key={v.id + "-items"}><td colSpan={6} className="p-0">
+              <tr><td colSpan={6} className="p-0">
                 <div className="bg-neutral-900/50 px-6 py-3 border-b border-neutral-800">
                   <table className="w-full text-xs">
                     <thead><tr className="text-neutral-600"><th className="text-left py-1">Codigo</th><th className="text-left py-1">Descricao</th><th className="text-right py-1">Qtd</th><th className="text-right py-1">Unit</th><th className="text-right py-1">Subtotal</th><th className="w-16"></th></tr></thead>
@@ -79,7 +85,7 @@ export function HistoricoTab({ operador, operadorSenha }: { operador: Operador; 
                 </div>
               </td></tr>
             )}
-          </>))}
+          </Fragment>))}
         </tbody>
       </table>
 

@@ -823,6 +823,14 @@ def realizar_venda(caixa_id: int, itens: list, pagamentos: list, cliente="", cli
     erro = _validar_desconto_operador(operador_id, itens, desconto, total_itens, gerente_pin_id, pin, codigo_barras)
     if erro: return erro
 
+    # Sem essa checagem, uma venda fecha "finalizada" mesmo com soma dos
+    # pagamentos menor que o total — quebra de caixa silenciosa, descoberta
+    # so' no fechamento (ou nunca). Sobrepagamento e' permitido (vira troco).
+    total_pago = round(sum((pg.get("valor", 0) or 0) for pg in pagamentos), 2)
+    if total_pago < total - 0.01:
+        falta = round(total - total_pago, 2)
+        return {"error": f"Pagamento insuficiente: faltam R$ {falta:.2f} para cobrir o total de R$ {total:.2f}"}
+
     # ponytail: transacao atomica — se item/pgto/baixa-de-estoque falhar, venda inteira rollback
     async def _go():
         await _ensure_saldos_async()
@@ -975,6 +983,12 @@ def converter_orcamento(venda_id: int, caixa_id: int, pagamentos: list, operador
     erro = _validar_desconto_operador(operador_id, itens_para_validar, desconto_total, total_itens_atual,
                                        gerente_pin_id, pin, codigo_barras)
     if erro: return erro
+
+    total_pago = round(sum((pg.get("valor", 0) or 0) for pg in pagamentos), 2)
+    total_orcamento = float(venda_atual["total"] or 0)
+    if total_pago < total_orcamento - 0.01:
+        falta = round(total_orcamento - total_pago, 2)
+        return {"error": f"Pagamento insuficiente: faltam R$ {falta:.2f} para cobrir o total de R$ {total_orcamento:.2f}"}
 
     async def _go():
         db = await get_db()
