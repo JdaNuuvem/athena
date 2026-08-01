@@ -60,7 +60,7 @@ export default function RegrasPrecoPage() {
       {loading ? <p className="text-neutral-500 text-sm">Carregando...</p> : regras.length === 0 ? (
         <p className="text-neutral-500 text-sm">Nenhuma regra cadastrada.</p>
       ) : (
-        <div className="bg-neutral-900 border border-neutral-800 rounded-lg overflow-hidden">
+        <div className="instrument-enter bg-neutral-900 border border-neutral-800 rounded-lg overflow-hidden">
           <table className="w-full text-xs">
             <thead><tr className="border-b border-neutral-800 text-neutral-500"><th className="text-left p-3">Nome</th><th className="text-left p-3">Tipo</th><th className="text-right p-3">Desconto</th><th className="text-right p-3">Markup</th><th className="text-left p-3">Loja</th><th className="text-center p-3">Ativo</th></tr></thead>
             <tbody>

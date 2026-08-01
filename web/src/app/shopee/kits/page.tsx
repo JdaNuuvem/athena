@@ -33,7 +33,7 @@ export default function KitsConsistenciaPage() {
       </div>
 
       {/* Consistencia de preco entre lojas proprias */}
-      <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 space-y-3">
+      <div className="instrument-enter instrument-hover bg-neutral-900 border border-neutral-800 rounded-lg p-4 space-y-3">
         <h2 className="text-sm font-semibold text-neutral-300">Consistência de Preço entre suas Lojas</h2>
         <p className="text-[11px] text-neutral-500">
           Compara o preço deste SKU com o mesmo produto anunciado em outras lojas Shopee da sua conta —
@@ -59,7 +59,7 @@ export default function KitsConsistenciaPage() {
       </div>
 
       {/* Kits */}
-      <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 space-y-3">
+      <div className="instrument-enter instrument-hover bg-neutral-900 border border-neutral-800 rounded-lg p-4 space-y-3">
         <div className="flex justify-between items-center">
           <h2 className="text-sm font-semibold text-neutral-300">Sugestão de Kits</h2>
           <select value={dias} onChange={e => setDias(Number(e.target.value))}

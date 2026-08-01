@@ -122,7 +122,7 @@ export default function ShopeePedidosPage() {
         </div>
       )}
 
-      <div className="space-y-2">
+      <div className="instrument-enter space-y-2">
         {pedidos.map((p) => (
           <div key={p.order_sn} className="bg-neutral-900 border border-neutral-800 rounded-lg overflow-hidden">
             <button

@@ -72,29 +72,29 @@ export default function ShopeeDashboardPage() {
       )}
 
       {lojas.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-3">
+        <div className="instrument-enter grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="instrument-hover bg-neutral-900 border border-neutral-800 rounded-lg p-3">
             <p className="text-[10px] text-neutral-500 uppercase tracking-wider">Receita Total</p>
             <p className="text-lg text-emerald-400 numeric font-medium">R$ {totalReceita.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
           </div>
-          <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-3">
+          <div className="instrument-hover bg-neutral-900 border border-neutral-800 rounded-lg p-3">
             <p className="text-[10px] text-neutral-500 uppercase tracking-wider">Unidades Vendidas</p>
             <p className="text-lg text-neutral-200 numeric font-medium">{totalUnidades}</p>
           </div>
-          <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-3">
+          <div className="instrument-hover bg-neutral-900 border border-neutral-800 rounded-lg p-3">
             <p className="text-[10px] text-neutral-500 uppercase tracking-wider">Anúncios Ativos</p>
             <p className="text-lg text-neutral-200 numeric font-medium">{totalAnunciosAtivos}</p>
           </div>
-          <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-3">
+          <div className="instrument-hover bg-neutral-900 border border-neutral-800 rounded-lg p-3">
             <p className="text-[10px] text-neutral-500 uppercase tracking-wider">Estoque Baixo</p>
             <p className={`text-lg numeric font-medium ${totalEstoqueBaixo > 0 ? "text-amber-400" : "text-neutral-200"}`}>{totalEstoqueBaixo}</p>
           </div>
         </div>
       )}
 
-      <div className="space-y-3">
+      <div className="instrument-enter space-y-3">
         {lojas.map((l) => (
-          <div key={l.loja_id} className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 space-y-2">
+          <div key={l.loja_id} className="instrument-hover bg-neutral-900 border border-neutral-800 rounded-lg p-4 space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <p className="text-sm text-neutral-200 font-medium">{l.nome}</p>
