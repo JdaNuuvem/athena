@@ -1,5 +1,7 @@
 """PDV Core — Vendas, Caixa, Pagamentos, Sangria, Suprimento, Fechamento, NFCe"""
 from core import get_db, run_async, log, hoje
+from core.estoque import saida_async, entrada_async
+from core.estoque_saldos import SaldoError, _ensure_async as _ensure_saldos_async
 import hashlib, hmac, os as _os
 
 AGENT = "PDV Core"
@@ -407,6 +409,21 @@ def _exigir_operador(operador_id, senha: str = "", roles_permitidas: set = None)
     if roles_permitidas and v.get("role") not in roles_permitidas:
         return {"error": f"Operacao restrita a: {', '.join(sorted(roles_permitidas))}"}
     return None
+
+async def _resolver_loja_da_venda(conn, caixa_id):
+    """Resolve o nome da loja fisica de uma venda a partir do caixa_id
+    (pdv_caixas.loja_id -> lojas.nome). Retorna None se o caixa nao tiver
+    loja_id definido ou a loja nao existir -- fail-open: quem chama decide
+    pular a baixa/restauracao de estoque nesse caso, sem bloquear a operacao
+    de PDV por falta de configuracao de loja no caixa (caixas antigos podem
+    nao ter loja_id setado)."""
+    if not caixa_id:
+        return None
+    caixa = await conn.fetchrow("SELECT loja_id FROM pdv_caixas WHERE id = $1", caixa_id)
+    if not caixa or not caixa["loja_id"]:
+        return None
+    loja_row = await conn.fetchrow("SELECT nome FROM lojas WHERE id = $1", caixa["loja_id"])
+    return loja_row["nome"] if loja_row else None
 
 def abrir_caixa(operador: str, saldo_inicial: float = 0, operador_id: int = None, senha: str = "") -> dict:
     erro = _exigir_operador(operador_id, senha)
