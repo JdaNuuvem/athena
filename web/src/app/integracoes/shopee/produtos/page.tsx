@@ -684,11 +684,11 @@ export default function ShopeeProdutosPage() {
               Nenhum produto encontrado com esses filtros.
             </div>
           ) : viewMode === "cards" ? (
-            <div className={`grid ${DENSIDADE_CARDS[densidade].grid} gap-4`}>
+            <div className={`instrument-enter grid ${DENSIDADE_CARDS[densidade].grid} gap-4`}>
               {gruposFiltrados.map((grupo) => {
                 if (!grupo.temVariacao) {
                   return (
-                    <div key={grupo.itemId} className="bg-neutral-900 border border-neutral-800 rounded-xl hover:border-neutral-700 transition-colors">
+                    <div key={grupo.itemId} className="instrument-hover bg-neutral-900 border border-neutral-800 rounded-xl">
                       <LinhaCard p={grupo.variacoesFiltradas[0]} />
                     </div>
                   );
@@ -698,7 +698,7 @@ export default function ShopeeProdutosPage() {
                 const estoqueTotal = grupo.variacoesFiltradas.reduce((s, v) => s + Number(v.estoque || 0), 0);
                 const cfg = DENSIDADE_CARDS[densidade];
                 return (
-                  <div key={grupo.itemId} className="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden hover:border-neutral-700 transition-colors">
+                  <div key={grupo.itemId} className="instrument-hover bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden">
                     <div onClick={() => toggleGrupo(grupo.itemId)} className={`${cfg.padding} flex items-center gap-3 cursor-pointer`}>
                       <ProdutoThumb url={grupo.variacoesFiltradas[0].imagem_url} titulo={grupo.variacoesFiltradas[0].titulo} tamanho={cfg.thumb} />
                       <div className="flex-1 min-w-0">

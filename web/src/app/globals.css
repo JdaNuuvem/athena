@@ -133,7 +133,10 @@
 
 /* ─── Base typography (dark mode) ─── */
 body {
-  background: var(--panel-950);
+  /* Cockpit glass dome: pure luminosity falloff from the same void color,
+     zero hue shift — depth, not decoration. Fixed so it reads as the
+     dome itself, not a scrolling backdrop. */
+  background: radial-gradient(ellipse 120% 70% at 50% -10%, var(--panel-900) 0%, var(--panel-950) 60%) fixed;
   color: var(--ink-100);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -175,7 +178,29 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: 0 0 0 1px var(--panel-border-lit), 0 8px 20px -12px rgba(0, 0, 0, 0.6);
 }
 
+/* Soft instrument-glass glow on hover — the accent color's one other job
+   besides navigation focus, reserved for the surface directly under the
+   cursor. Never on by default, never a second accent. */
+.instrument-hover {
+  transition: border-color 150ms ease-out, box-shadow 150ms ease-out;
+}
+.instrument-hover:hover {
+  border-color: var(--panel-border-lit);
+  box-shadow: 0 0 0 1px var(--panel-border-lit), 0 0 16px -4px var(--accent-glow);
+}
+
 /* ─── Motion ─── */
+/* Panel comes alive once, on mount — never re-triggers on data refresh
+   inside the same view, only when a section is (re)inserted (view switch,
+   route change). Purposeful, not ambient. */
+@keyframes instrument-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.instrument-enter {
+  animation: instrument-enter 220ms ease-out both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     transition-duration: 0.01ms !important;
