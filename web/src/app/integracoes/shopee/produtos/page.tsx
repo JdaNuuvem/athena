@@ -7,6 +7,13 @@ import type { ShopeeProdutoSincronizado } from "@/lib/api";
 
 type EstoqueFiltro = "todos" | "zerado" | "baixo" | "normal";
 type ModoVisualizacao = "cards" | "lista";
+type Densidade = "compacto" | "padrao" | "grande";
+
+const DENSIDADE_CARDS: Record<Densidade, { rotulo: string; grid: string; thumb: string; padding: string; titulo: string }> = {
+  compacto: { rotulo: "Compacto", grid: "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5", thumb: "w-8 h-8", padding: "p-2", titulo: "text-xs" },
+  padrao: { rotulo: "Padrão", grid: "grid-cols-1 md:grid-cols-2 xl:grid-cols-3", thumb: "w-10 h-10", padding: "p-3", titulo: "text-sm" },
+  grande: { rotulo: "Grande", grid: "grid-cols-1 sm:grid-cols-2 xl:grid-cols-2", thumb: "w-14 h-14", padding: "p-4", titulo: "text-base" },
+};
 
 interface LojaShopee {
   id: number;
@@ -57,11 +64,11 @@ function itemIdDoAnuncio(anuncioId: string): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-function ProdutoThumb({ url, titulo }: { url?: string | null; titulo: string }) {
+function ProdutoThumb({ url, titulo, tamanho = "w-10 h-10" }: { url?: string | null; titulo: string; tamanho?: string }) {
   const [falhou, setFalhou] = useState(false);
   if (!url || falhou) {
     return (
-      <div className="w-10 h-10 rounded bg-neutral-800 border border-neutral-700 flex items-center justify-center text-xs text-neutral-500 shrink-0">
+      <div className={`${tamanho} rounded bg-neutral-800 border border-neutral-700 flex items-center justify-center text-xs text-neutral-500 shrink-0`}>
         {titulo.charAt(0).toUpperCase() || "?"}
       </div>
     );
@@ -71,7 +78,7 @@ function ProdutoThumb({ url, titulo }: { url?: string | null; titulo: string }) 
     <img
       src={url}
       alt={titulo}
-      className="w-10 h-10 rounded object-cover border border-neutral-700 shrink-0"
+      className={`${tamanho} rounded object-cover border border-neutral-700 shrink-0`}
       onError={() => setFalhou(true)}
     />
   );
@@ -153,6 +160,7 @@ export default function ShopeeProdutosPage() {
   const [estoqueFiltro, setEstoqueFiltro] = useState<EstoqueFiltro>("todos");
   const [somenteVariacao, setSomenteVariacao] = useState(false);
   const [viewMode, setViewMode] = useState<ModoVisualizacao>("cards");
+  const [densidade, setDensidade] = useState<Densidade>("padrao");
 
   const statusDisponiveis = useMemo(
     () => Array.from(new Set(produtos.map(p => p.status))).sort(),
@@ -527,12 +535,13 @@ export default function ShopeeProdutosPage() {
   }
 
   function LinhaCard({ p, variacaoLabel }: { p: ShopeeProdutoSincronizado; variacaoLabel?: string }) {
+    const cfg = DENSIDADE_CARDS[densidade];
     return (
-      <div className="p-3 flex flex-col gap-2">
+      <div className={`${cfg.padding} flex flex-col gap-2`}>
         <div className="flex items-center gap-3">
-          <ProdutoThumb url={p.imagem_url} titulo={p.titulo} />
+          <ProdutoThumb url={p.imagem_url} titulo={p.titulo} tamanho={cfg.thumb} />
           <div className="flex-1 min-w-0">
-            <p className="text-sm text-neutral-200 truncate" title={p.titulo}>{variacaoLabel ?? p.titulo}</p>
+            <p className={`${cfg.titulo} text-neutral-200 truncate`} title={p.titulo}>{variacaoLabel ?? p.titulo}</p>
             <Link href={`/produtos/${p.sku}`} className="font-mono text-xs text-neutral-500 hover:text-indigo-400">{p.sku}</Link>
           </div>
           <div className="text-right shrink-0">
@@ -634,6 +643,20 @@ export default function ShopeeProdutosPage() {
               Só com variação
             </label>
             <div className="flex items-center gap-3 ml-auto">
+              {viewMode === "cards" && (
+                <div className="flex items-center bg-neutral-800 border border-neutral-700 rounded-lg p-0.5">
+                  {(Object.keys(DENSIDADE_CARDS) as Densidade[]).map(d => (
+                    <button
+                      key={d}
+                      onClick={() => setDensidade(d)}
+                      title={`Cards ${DENSIDADE_CARDS[d].rotulo.toLowerCase()}`}
+                      className={`text-xs px-3 py-1.5 rounded-md transition-colors ${densidade === d ? "bg-neutral-700 text-neutral-100" : "text-neutral-500 hover:text-neutral-300"}`}
+                    >
+                      {DENSIDADE_CARDS[d].rotulo}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="flex items-center bg-neutral-800 border border-neutral-700 rounded-lg p-0.5">
                 <button
                   onClick={() => setViewMode("cards")}
@@ -659,7 +682,7 @@ export default function ShopeeProdutosPage() {
               Nenhum produto encontrado com esses filtros.
             </div>
           ) : viewMode === "cards" ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            <div className={`grid ${DENSIDADE_CARDS[densidade].grid} gap-4`}>
               {gruposFiltrados.map((grupo) => {
                 if (!grupo.temVariacao) {
                   return (
@@ -671,12 +694,13 @@ export default function ShopeeProdutosPage() {
                 const parcial = grupo.variacoesFiltradas.length < grupo.variacoes.length;
                 const expandido = gruposExpandidos.has(grupo.itemId) || (filtroAtivo && parcial);
                 const estoqueTotal = grupo.variacoesFiltradas.reduce((s, v) => s + Number(v.estoque || 0), 0);
+                const cfg = DENSIDADE_CARDS[densidade];
                 return (
                   <div key={grupo.itemId} className="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden hover:border-neutral-700 transition-colors">
-                    <div onClick={() => toggleGrupo(grupo.itemId)} className="p-3 flex items-center gap-3 cursor-pointer">
-                      <ProdutoThumb url={grupo.variacoesFiltradas[0].imagem_url} titulo={grupo.variacoesFiltradas[0].titulo} />
+                    <div onClick={() => toggleGrupo(grupo.itemId)} className={`${cfg.padding} flex items-center gap-3 cursor-pointer`}>
+                      <ProdutoThumb url={grupo.variacoesFiltradas[0].imagem_url} titulo={grupo.variacoesFiltradas[0].titulo} tamanho={cfg.thumb} />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-neutral-200 truncate">{nomeBaseProduto(grupo.variacoesFiltradas[0].titulo)}</p>
+                        <p className={`${cfg.titulo} text-neutral-200 truncate`}>{nomeBaseProduto(grupo.variacoesFiltradas[0].titulo)}</p>
                         <div className="flex items-center gap-2 mt-1">
                           <span className="text-[10px] bg-indigo-900/30 text-indigo-400 px-1.5 py-0.5 rounded-full shrink-0">
                             {parcial ? `${grupo.variacoesFiltradas.length} de ${grupo.variacoes.length} variações` : `${grupo.variacoes.length} variações`}
