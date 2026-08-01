@@ -5,6 +5,7 @@ nao alterar tabela ja existente)."""
 import sys, os, unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from unittest.mock import patch, AsyncMock
+import asyncpg
 
 _TEST_TOKEN = "test-master-token-32-bytes-long!!"
 
@@ -211,13 +212,25 @@ class TestLojasFisicas(unittest.IsolatedAsyncioTestCase):
 
     async def test_deletar_loja_sucesso(self):
         criada = lojas.criar("Loja Descartavel")
-        ok = lojas.deletar(criada["id"])
-        self.assertTrue(ok)
+        r = lojas.deletar(criada["id"])
+        self.assertTrue(r.get("ok"))
         self.assertNotIn(criada["id"], self.fake.rows)
 
-    async def test_deletar_loja_inexistente_retorna_false(self):
-        ok = lojas.deletar(9999)
-        self.assertFalse(ok)
+    async def test_deletar_loja_inexistente_retorna_erro(self):
+        r = lojas.deletar(9999)
+        self.assertEqual(r.get("erro"), "Loja nao encontrada")
+
+    async def test_deletar_loja_com_dados_vinculados_retorna_erro_especifico(self):
+        """Regressao de bug real (achado em producao ao limpar lojas de teste):
+        excluir uma loja com estoque/vendas/caixas vinculados violava FK, e a
+        excecao generica era engolida virando "Loja nao encontrada" — mensagem
+        enganosa, indistinguivel de loja realmente inexistente."""
+        criada = lojas.criar("Loja Com Estoque")
+        self.fake.execute_raises = asyncpg.ForeignKeyViolationError("dados vinculados")
+        r = lojas.deletar(criada["id"])
+        self.assertIn("erro", r)
+        self.assertNotEqual(r["erro"], "Loja nao encontrada")
+        self.assertIn("vinculad", r["erro"])
 
     async def test_criar_loja_com_erro_db_retorna_error_e_loga(self):
         """Regressao do bug de producao: qualquer excecao no INSERT deve virar

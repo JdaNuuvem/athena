@@ -112,9 +112,10 @@ def deletar_loja_manage(id):
         from core.lojas import listar as listar_lojas_fn, deletar as deletar_loja_fn
         from core.seguranca import auditar_exclusao
         dados_antes = next((l for l in listar_lojas_fn() if l.get("id") == loja_id), None)
-        ok = deletar_loja_fn(loja_id)
-        if not ok:
-            return jsonify({"error": "Loja nao encontrada"}), 404
+        r = deletar_loja_fn(loja_id)
+        if r.get("erro"):
+            status = 404 if r["erro"] == "Loja nao encontrada" else 409
+            return jsonify({"error": r["erro"]}), status
         auditar_exclusao("lojas", "manage", loja_id, dados_antes)
         return jsonify({"success": True})
     return _go(loja_id=id)

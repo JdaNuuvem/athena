@@ -84,7 +84,7 @@ class TestLojasManageExigePermissao(unittest.TestCase):
     def test_excluir_loja_com_permissao_libera_e_audita(self):
         headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
         with patch("core.lojas.listar", return_value=[{"id": 1, "nome": "Loja Centro"}]), \
-             patch("core.lojas.deletar", return_value=True) as mock_deletar, \
+             patch("core.lojas.deletar", return_value={"ok": True}) as mock_deletar, \
              patch("core.seguranca.auditar_exclusao") as mock_audit:
             r = self.client.delete("/api/lojas/manage/1", headers=headers)
         self.assertEqual(r.status_code, 200)

@@ -1,5 +1,6 @@
 """Store management CRUD — substitui lojas hardcoded do core/config."""
 import traceback
+import asyncpg
 from core import get_db, run_async, log
 
 AGENT = "Lojas"
@@ -408,14 +409,26 @@ def atualizar_geral(id_loja: int, campos: dict) -> bool:
         campos["ativa"] = campos["status"] == "ativa"
     return _update_campos(id_loja, campos, CAMPOS_GERAIS | {"ativa"})
 
-def deletar(id_loja: int) -> bool:
+def deletar(id_loja: int) -> dict:
+    """Retorna {"ok": True} se excluiu, ou {"erro": "..."} — distingue loja
+    inexistente de exclusao bloqueada por FK (estoque/vendas/caixas/etc
+    vinculados), que antes virava silenciosamente "Loja nao encontrada"
+    (achado real durante limpeza de dados de teste em producao)."""
     _ensure_table()
     async def _go():
         db = await get_db()
         r = await db.execute("DELETE FROM lojas WHERE id = $1", id_loja)
-        return r != "DELETE 0"
-    try: return run_async(_go())
-    except Exception as e: _log_erro("deletar", e); return False
+        if r == "DELETE 0":
+            return {"erro": "Loja nao encontrada"}
+        return {"ok": True}
+    try:
+        return run_async(_go())
+    except asyncpg.ForeignKeyViolationError:
+        return {"erro": "Nao e possivel excluir: existem dados vinculados a esta loja "
+                         "(estoque, vendas, caixas, etc). Desative-a em vez de excluir."}
+    except Exception as e:
+        _log_erro("deletar", e)
+        return {"erro": str(e)}
 
 # ── Sync Bling ──
 
