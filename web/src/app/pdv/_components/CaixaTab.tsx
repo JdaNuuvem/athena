@@ -1,19 +1,31 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Operador } from "./types";
 import { SangriaSuprimentoModal } from "./SangriaSuprimentoModal";
+import { api } from "@/lib/api";
 
 export function CaixaTab({ operador, operadorSenha, caixa, onAbrirCaixa, onFecharCaixa }: {
   operador: Operador;
   operadorSenha: string;
   caixa: any;
-  onAbrirCaixa: (saldoInicial: number) => Promise<void>;
+  onAbrirCaixa: (saldoInicial: number, lojaId: number | null) => Promise<void>;
   onFecharCaixa: () => void;
 }) {
   const [saldoInicial, setSaldoInicial] = useState(0);
   const [modalTipo, setModalTipo] = useState<"sangria" | "suprimento" | null>(null);
   const [msg, setMsg] = useState("");
+  const [lojasFisicas, setLojasFisicas] = useState<{ id: number; nome: string }[]>([]);
+  const [lojaSelecionada, setLojaSelecionada] = useState<string>("");
+
+  useEffect(() => {
+    api.lojasManage().then((r) => {
+      const fisicas = ((r.lojas ?? []) as unknown as Record<string, unknown>[])
+        .filter((l) => l.tipo === "fisica")
+        .map((l) => ({ id: l.id as number, nome: l.nome as string }));
+      setLojasFisicas(fisicas);
+    }).catch(() => {});
+  }, []);
 
   const handleConcluido = (texto: string) => {
     setModalTipo(null);
@@ -38,8 +50,12 @@ export function CaixaTab({ operador, operadorSenha, caixa, onAbrirCaixa, onFecha
           </div>
         ) : (
           <div className="space-y-2">
+            <select value={lojaSelecionada} onChange={e => setLojaSelecionada(e.target.value)} className="w-full bg-neutral-900 border border-neutral-700 rounded px-3 py-2 text-sm text-neutral-200">
+              <option value="">Selecione a loja</option>
+              {lojasFisicas.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
+            </select>
             <input type="number" value={saldoInicial} onChange={e => setSaldoInicial(Number(e.target.value))} placeholder="Saldo inicial" className="w-full bg-neutral-900 border border-neutral-700 rounded px-3 py-2 text-sm text-neutral-200" />
-            <button onClick={() => onAbrirCaixa(saldoInicial)} className="w-full py-2 bg-emerald-600 text-white text-sm rounded-lg">Abrir Caixa</button>
+            <button onClick={() => onAbrirCaixa(saldoInicial, lojaSelecionada ? Number(lojaSelecionada) : null)} className="w-full py-2 bg-emerald-600 text-white text-sm rounded-lg">Abrir Caixa</button>
           </div>
         )}
       </div>
