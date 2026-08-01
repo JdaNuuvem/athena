@@ -8,6 +8,7 @@ import {
 import { Can } from "@/lib/auth";
 import { useStore } from "@/lib/store-context";
 import ReplicarModal from "./_components/ReplicarModal";
+import EstoqueMultiLojaModal from "./_components/EstoqueMultiLojaModal";
 import Icon from "@/app/_components/Icon";
 
 interface EditFields {
@@ -57,6 +58,7 @@ export default function EstoqueLojasPage() {
   const [editForm, setEditForm] = useState<EditFields>(EMPTY_EDIT);
   const [editQty, setEditQty] = useState("");
   const [replicando, setReplicando] = useState<ProdutoLojaRow | null>(null);
+  const [editandoLojas, setEditandoLojas] = useState<ProdutoLojaRow | null>(null);
 
   const [novoSku, setNovoSku] = useState("");
   const [novoMestreSku, setNovoMestreSku] = useState("");
@@ -438,6 +440,9 @@ export default function EstoqueLojasPage() {
                             <Can permission="produtos.editar">
                               <button onClick={() => setReplicando(r)} className="text-neutral-400 hover:text-neutral-300 text-xs">Replicar</button>
                             </Can>
+                            <Can permission="produtos.editar">
+                              <button onClick={() => setEditandoLojas(r)} className="text-teal-400 hover:text-teal-300 text-xs">Lojas</button>
+                            </Can>
                           </div>
                         )}
                       </td>
@@ -476,6 +481,15 @@ export default function EstoqueLojasPage() {
           lojasDisponiveis={lojas}
           onClose={() => setReplicando(null)}
           onDone={() => { setReplicando(null); load(busca, pagina); }}
+        />
+      )}
+      {editandoLojas && (
+        <EstoqueMultiLojaModal
+          sku={editandoLojas.sku}
+          nome={editandoLojas.nome_override || editandoLojas.nome_mestre || editandoLojas.sku}
+          lojas={lojas}
+          onClose={() => setEditandoLojas(null)}
+          onSucesso={() => load(busca, pagina)}
         />
       )}
     </div>

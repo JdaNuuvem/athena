@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
+import { useStore } from "@/lib/store-context";
+import EstoqueMultiLojaModal from "./EstoqueMultiLojaModal";
 
 interface EstoquePorLoja { loja: string; quantidade: number; data_atualizacao?: string | null; }
 interface AnuncioShopee { marketplace: string; shop_id?: string; anuncio_id?: string; preco: number; status: string; }
@@ -32,6 +34,8 @@ function SugestaoReposicao({ atual, minimo, maximo }: { atual: number; minimo: n
 }
 
 export default function ControleTab({ produto }: Props) {
+  const { lojas } = useStore();
+  const [editandoLojas, setEditandoLojas] = useState(false);
   const p = produto as any;
   const sku = String(p?.sku || "");
   const estoqueMinimo = Number(p?.estoque_minimo ?? 0);
@@ -226,15 +230,24 @@ export default function ControleTab({ produto }: Props) {
         <div className="bg-neutral-900 border border-neutral-800 rounded-lg overflow-x-auto">
           <div className="flex items-center justify-between px-3 pt-3">
             {msg ? <span className="text-xs text-emerald-400">{msg}</span> : <span />}
-            {lojasShopee.length > 1 && (
+            <div className="flex items-center gap-2">
               <button
-                onClick={() => enviarParaTodasLojas(totalAtual)}
-                disabled={enviando === "__todas__"}
-                className="text-[10px] bg-orange-700 hover:bg-orange-600 disabled:opacity-50 text-white px-2.5 py-1.5 rounded-lg"
+                onClick={() => setEditandoLojas(true)}
+                disabled={!sku || lojas.length === 0}
+                className="text-[10px] bg-teal-600 hover:bg-teal-500 disabled:opacity-50 text-white px-2.5 py-1.5 rounded-lg"
               >
-                {enviando === "__todas__" ? "Enviando..." : `Enviar ${totalAtual} un para todas as lojas Shopee`}
+                Editar por loja
               </button>
-            )}
+              {lojasShopee.length > 1 && (
+                <button
+                  onClick={() => enviarParaTodasLojas(totalAtual)}
+                  disabled={enviando === "__todas__"}
+                  className="text-[10px] bg-orange-700 hover:bg-orange-600 disabled:opacity-50 text-white px-2.5 py-1.5 rounded-lg"
+                >
+                  {enviando === "__todas__" ? "Enviando..." : `Enviar ${totalAtual} un para todas as lojas Shopee`}
+                </button>
+              )}
+            </div>
           </div>
           <table className="w-full text-sm min-w-[400px]">
             <thead>
@@ -359,6 +372,15 @@ export default function ControleTab({ produto }: Props) {
             })}
           </div>
         </div>
+      )}
+      {editandoLojas && (
+        <EstoqueMultiLojaModal
+          sku={sku}
+          nome={String(p?.nome || sku)}
+          lojas={lojas}
+          onClose={() => setEditandoLojas(false)}
+          onSucesso={() => window.location.reload()}
+        />
       )}
     </div>
   );
