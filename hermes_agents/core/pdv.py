@@ -627,7 +627,8 @@ def cancelar_venda(venda_id: int, motivo: str = "", operador: str = "", operador
 
 def devolver_item_venda(item_id: int, quantidade: float, motivo: str = "", operador: str = "", operador_id: int = None, senha: str = "",
                          gerente_pin_id: int = None, pin: str = "", codigo_barras: str = "") -> dict:
-    """Devolucao parcial: remove qtd de um item da venda, ajusta total, registra devolucao.
+    """Devolucao parcial: remove qtd de um item da venda, ajusta total, registra devolucao,
+    restaura a quantidade devolvida no estoque real da loja fisica.
     Exige autorizacao gerencial (senha do proprio gerente logado, PIN ou
     codigo de barras de um gerente chamado ao caixa) — cancelamento/devolucao
     e' forma comum de fraude ("desconta" a venda depois que o cliente ja
@@ -638,31 +639,42 @@ def devolver_item_venda(item_id: int, quantidade: float, motivo: str = "", opera
     if quantidade is None or quantidade <= 0:
         return {"error": "Quantidade a devolver deve ser maior que zero"}
     async def _go():
+        await _ensure_saldos_async()
         db = await get_db()
-        item = await db.fetchrow("SELECT i.*, v.status AS venda_status FROM pdv_itens i JOIN pdv_vendas v ON v.id = i.venda_id WHERE i.id = $1", item_id)
-        if not item: return {"error": "Item nao encontrado"}
-        if item["venda_status"] == "cancelada": return {"error": "Venda ja cancelada"}
-        valor_unitario = float(item["valor_unitario"] or 0)
-        valor_devolvido = round(quantidade * valor_unitario, 2)
-        # UPDATE atomico: a condicao "quantidade >= $1" no WHERE garante que a checagem de
-        # estoque disponivel e' feita no mesmo statement que o decremento, evitando que duas
-        # devolucoes concorrentes do mesmo item leiam a mesma quantidade e se sobrescrevam.
-        atualizado = await db.fetchrow("""
-            UPDATE pdv_itens SET quantidade = quantidade - $1,
-                valor_total = ROUND((quantidade - $1) * valor_unitario, 2)
-            WHERE id = $2 AND quantidade >= $1
-            RETURNING quantidade
-        """, quantidade, item_id)
-        if not atualizado:
-            return {"error": f"Quantidade insuficiente (max: {item['quantidade']})"}
-        if float(atualizado["quantidade"]) <= 0:
-            await db.execute("DELETE FROM pdv_itens WHERE id = $1", item_id)
-        await db.execute("UPDATE pdv_vendas SET total = GREATEST(0, total - $1) WHERE id = $2", valor_devolvido, item["venda_id"])
-        await db.execute("INSERT INTO pdv_devolucoes (venda_id, motivo, valor, operador) VALUES ($1,$2,$3,$4)",
-            item["venda_id"], f"Item #{item_id}: {motivo}" if motivo else f"Devolucao parcial item #{item_id}",
-            valor_devolvido, operador_registro)
-        return {"success": True, "item_id": item_id, "quantidade_devolvida": quantidade, "valor_devolvido": valor_devolvido}
+        async with db.acquire() as conn:
+            async with conn.transaction():
+                item = await conn.fetchrow(
+                    "SELECT i.*, v.status AS venda_status, v.caixa_id FROM pdv_itens i JOIN pdv_vendas v ON v.id = i.venda_id WHERE i.id = $1", item_id)
+                if not item: return {"error": "Item nao encontrado"}
+                if item["venda_status"] == "cancelada": return {"error": "Venda ja cancelada"}
+                valor_unitario = float(item["valor_unitario"] or 0)
+                valor_devolvido = round(quantidade * valor_unitario, 2)
+                # UPDATE atomico: a condicao "quantidade >= $1" no WHERE garante que a checagem de
+                # estoque disponivel e' feita no mesmo statement que o decremento, evitando que duas
+                # devolucoes concorrentes do mesmo item leiam a mesma quantidade e se sobrescrevam.
+                atualizado = await conn.fetchrow("""
+                    UPDATE pdv_itens SET quantidade = quantidade - $1,
+                        valor_total = ROUND((quantidade - $1) * valor_unitario, 2)
+                    WHERE id = $2 AND quantidade >= $1
+                    RETURNING quantidade
+                """, quantidade, item_id)
+                if not atualizado:
+                    return {"error": f"Quantidade insuficiente (max: {item['quantidade']})"}
+                if float(atualizado["quantidade"]) <= 0:
+                    await conn.execute("DELETE FROM pdv_itens WHERE id = $1", item_id)
+                await conn.execute("UPDATE pdv_vendas SET total = GREATEST(0, total - $1) WHERE id = $2", valor_devolvido, item["venda_id"])
+                await conn.execute("INSERT INTO pdv_devolucoes (venda_id, motivo, valor, operador) VALUES ($1,$2,$3,$4)",
+                    item["venda_id"], f"Item #{item_id}: {motivo}" if motivo else f"Devolucao parcial item #{item_id}",
+                    valor_devolvido, operador_registro)
+                loja = await _resolver_loja_da_venda(conn, item["caixa_id"])
+                if loja:
+                    r = await entrada_async(conn, item["produto_codigo"], loja, quantidade, "devolucao_cliente",
+                                            usuario_id=autorizador.get("id"), usuario_nome=operador_registro)
+                    if r.get("erro"):
+                        raise SaldoError(f"Erro ao restaurar estoque de {item['produto_codigo']}: {r['erro']}")
+                return {"success": True, "item_id": item_id, "quantidade_devolvida": quantidade, "valor_devolvido": valor_devolvido}
     try: return run_async(_go())
+    except SaldoError as e: return {"error": str(e)}
     except Exception as e: return {"error": str(e)}
 
 def historico_vendas(caixa_id: int = None, data_inicio: str = None, data_fim: str = None, limit: int = 50) -> list:

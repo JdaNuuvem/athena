@@ -325,5 +325,73 @@ class TestCancelarVendaRestauraEstoque(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(chamadas, ["SKU1", "SKU2"])
 
 
+class TestDevolverItemVendaRestauraParcial(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.fake = FakeDBPdv()
+        self.fake.caixas[1] = {"loja_id": 5}
+        self.fake.lojas[5] = "Loja Fisica Central"
+        self.fake.vendas[10] = {"id": 10, "caixa_id": 1, "cliente": "", "cliente_id": None,
+                                 "total": 30.0, "desconto": 0, "operador": "Joao", "status": "finalizada",
+                                 "data": "2026-07-31", "observacoes": None, "tipo": "venda", "numero": None}
+        self.fake.itens[1] = {"id": 1, "venda_id": 10, "produto_codigo": "SKU1", "descricao": "Produto 1",
+                               "quantidade": 5, "valor_unitario": 6.0, "desconto": 0, "valor_total": 30.0}
+        async def _get_db(_fake=self.fake):
+            return _fake
+        self.patch_db = patch("core.pdv.get_db", side_effect=_get_db)
+        self.patch_db.start()
+        self.patch_autoriza = patch("core.pdv._autorizar_gerencial",
+                                     return_value={"ok": True, "id": 9, "nome": "Gerente", "role": "gerente"})
+        self.patch_autoriza.start()
+        self.patch_ensure = patch("core.pdv._ensure_saldos_async", new=AsyncMock(return_value=None))
+        self.patch_ensure.start()
+
+    def tearDown(self):
+        self.patch_db.stop()
+        self.patch_autoriza.stop()
+        self.patch_ensure.stop()
+
+    async def test_devolve_so_quantidade_parcial_mantendo_resto_decrementado(self):
+        from core.pdv import devolver_item_venda
+        chamadas = []
+        async def fake_entrada(conn, sku, loja, quantidade, motivo, usuario_id=None, usuario_nome="", ip=None, dispositivo=None):
+            chamadas.append((sku, loja, quantidade, motivo))
+            return {"ok": True, "sku": sku, "loja": loja, "quantidade": quantidade, "anterior": 0, "atual": quantidade}
+        with patch("core.pdv.entrada_async", side_effect=fake_entrada):
+            r = devolver_item_venda(1, quantidade=2, motivo="Defeito", operador_id=9)
+        self.assertTrue(r.get("success"))
+        self.assertEqual(chamadas, [("SKU1", "Loja Fisica Central", 2, "devolucao_cliente")])
+        self.assertEqual(self.fake.itens[1]["quantidade"], 3)
+
+    async def test_devolucao_total_remove_item_e_restaura_tudo(self):
+        from core.pdv import devolver_item_venda
+        chamadas = []
+        async def fake_entrada(conn, sku, loja, quantidade, motivo, usuario_id=None, usuario_nome="", ip=None, dispositivo=None):
+            chamadas.append((sku, loja, quantidade, motivo))
+            return {"ok": True, "sku": sku, "loja": loja, "quantidade": quantidade, "anterior": 0, "atual": quantidade}
+        with patch("core.pdv.entrada_async", side_effect=fake_entrada):
+            r = devolver_item_venda(1, quantidade=5, motivo="Defeito", operador_id=9)
+        self.assertTrue(r.get("success"))
+        self.assertEqual(chamadas, [("SKU1", "Loja Fisica Central", 5, "devolucao_cliente")])
+        self.assertNotIn(1, self.fake.itens)
+
+    async def test_item_com_erro_ao_restaurar_estoque_desfaz_devolucao_inteira(self):
+        from core.pdv import devolver_item_venda
+        chamadas = []
+        async def fake_entrada(conn, sku, loja, quantidade, motivo, usuario_id=None, usuario_nome="", ip=None, dispositivo=None):
+            chamadas.append(sku)
+            return {"erro": "Erro ao restaurar estoque"}
+        with patch("core.pdv.entrada_async", side_effect=fake_entrada):
+            r = devolver_item_venda(1, quantidade=2, motivo="Defeito", operador_id=9)
+        self.assertIn("error", r)
+        self.assertIn("SKU1", r["error"])
+        # tudo ou nada: quantidade do item, total da venda e devolucoes ficam
+        # exatamente como estavam antes -- a UPDATE de pdv_itens que decrementou
+        # a quantidade e a INSERT em pdv_devolucoes nunca sao commitadas.
+        self.assertEqual(self.fake.itens[1]["quantidade"], 5)
+        self.assertEqual(self.fake.vendas[10]["total"], 30.0)
+        self.assertEqual(self.fake.devolucoes, [])
+        self.assertEqual(chamadas, ["SKU1"])
+
+
 if __name__ == "__main__":
     unittest.main()
