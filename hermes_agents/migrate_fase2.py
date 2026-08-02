@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Aplica schema Fase 2 ao banco PostgreSQL."""
 import asyncio
+import os
 import asyncpg
 from pathlib import Path
 
-DB_URL = "postgresql://postgres:hpj7Zi4vwe7i2uThIhS46nszrblsbNhzqblpYovRBdJgqtAU5L5giL8hLli5Tz54@h3bdeft4hgsbg9rcxklxidwt:5432/hermes_factory"
+DB_URL = os.environ.get("DATABASE_URL", "")
+if not DB_URL:
+    raise RuntimeError("DATABASE_URL nao configurado — defina a connection string do Postgres antes de rodar esta migration")
 SQL_FILE = Path(__file__).parent / "sql" / "create_tables_fase2.sql"
 
 async def apply_fase2():

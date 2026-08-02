@@ -2,7 +2,9 @@
 """Inicializa o banco PostgreSQL — schema + dados de exemplo."""
 import subprocess, os
 
-DB_URL = "postgresql://postgres:hpj7Zi4vwe7i2uThIhS46nszrblsbNhzqblpYovRBdJgqtAU5L5giL8hLli5Tz54@h3bdeft4hgsbg9rcxklxidwt:5432/postgres"
+DB_URL = os.environ.get("DATABASE_URL", "")
+if not DB_URL:
+    raise RuntimeError("DATABASE_URL nao configurado — defina a connection string do Postgres antes de rodar esta migration")
 
 SCHEMA = os.path.join(os.path.dirname(__file__), "sql", "schema.sql")
 
