@@ -199,6 +199,32 @@ class TestUploadAnexoTicket(unittest.TestCase):
             "/api/atendimento/tickets/1/anexo/../../../../etc/passwd", headers=headers)
         self.assertEqual(r.status_code, 404)
 
+    def test_download_anexo_de_outro_ticket_retorna_404(self):
+        """IDOR: atendimento.ver e' permissao global, nao por ticket. Sem
+        checar que o anexo pertence ao ticket da URL, um usuario com essa
+        permissao podia baixar o anexo de QUALQUER ticket so' adivinhando/
+        reaproveitando o nome do arquivo em disco. arquivo EXISTE de verdade
+        no disco (isfile=True) — se ainda assim vier 404, e' a checagem de
+        posse que bloqueou, nao a ausencia do arquivo."""
+        headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+        with patch("core.atendimento.listar_mensagens_ticket", return_value=[
+                {"id": 1, "anexo_url": "1_1234_meu.pdf"}]), \
+             patch("os.path.isfile", return_value=True):
+            r = self.client.get(
+                "/api/atendimento/tickets/1/anexo/2_1234_outro.pdf", headers=headers)
+        self.assertEqual(r.status_code, 404)
+
+    def test_download_anexo_do_proprio_ticket_libera(self):
+        headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+        with patch("core.atendimento.listar_mensagens_ticket", return_value=[
+                {"id": 9, "anexo_url": "1_1234_relatorio.pdf"}]), \
+             patch("routes.atendimento.send_file", return_value="arquivo") as mock_send, \
+             patch("os.path.isfile", return_value=True):
+            r = self.client.get(
+                "/api/atendimento/tickets/1/anexo/1_1234_relatorio.pdf", headers=headers)
+        self.assertEqual(r.status_code, 200)
+        mock_send.assert_called_once()
+
     def test_upload_anexo_maior_que_25mb_retorna_413(self):
         headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
         conteudo_grande = b"x" * (25 * 1024 * 1024 + 1)

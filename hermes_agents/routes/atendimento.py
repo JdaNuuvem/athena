@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_file
 from core.rbac import requer_permissao
 from core.api_utils import status_for_resultado as _status_for
 
@@ -137,17 +137,27 @@ def atend_upload_anexo(id):
 
         usuario = usuario_atual_da_request()
         remetente = usuario.get("nome") or usuario.get("email") or ""
-        mensagem = adicionar_mensagem(id, remetente, arquivo.filename, "anexo", anexo_url=nome_seguro)
+        # nome_base (ja sanitizado por secure_filename), nao arquivo.filename
+        # bruto — evita persistir/exibir texto arbitrario vindo do cliente
+        # como se fosse o nome do arquivo.
+        mensagem = adicionar_mensagem(id, remetente, nome_base, "anexo", anexo_url=nome_seguro)
         return jsonify(mensagem)
     return _go()
 
 
 @atendimento_bp.route("/tickets/<int:id>/anexo/<path:nome_arquivo>", methods=["GET"])
 def atend_download_anexo(id, nome_arquivo):
+    """atendimento.ver e' permissao global, nao por ticket — sem checar que
+    o anexo pedido pertence de fato ao ticket <id> da URL, qualquer usuario
+    com essa permissao poderia baixar o anexo de OUTRO ticket so' sabendo/
+    adivinhando o nome do arquivo em disco (IDOR)."""
     @requer_permissao("atendimento.ver")
     def _go():
         import os
-        from flask import send_file
+        from core.atendimento import listar_mensagens_ticket
+        mensagens = listar_mensagens_ticket(id)
+        if not any(m.get("anexo_url") == nome_arquivo for m in mensagens):
+            return jsonify({"error": "anexo invalido"}), 404
         upload_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "uploads", "atendimento")
         caminho_completo = os.path.realpath(os.path.join(upload_dir, nome_arquivo))
         if not caminho_completo.startswith(os.path.realpath(upload_dir) + os.sep) or not os.path.isfile(caminho_completo):
