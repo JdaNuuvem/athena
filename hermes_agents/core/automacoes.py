@@ -164,6 +164,77 @@ def aplicar_regras_preco(sku: str = "", preco_base: float = 0, loja_id: int = No
     try: return run_async(_go())
     except Exception as e: return {"preco_original": preco_base, "preco_final": preco_base, "regras_aplicadas": [], "erro": str(e)}
 
+
+def aplicar_regras_precificacao_shopee(loja_id: int = None, dry_run: bool = False) -> dict:
+    """Reavalia as regras de preco ativas contra o catalogo JA PUBLICADO na
+    Shopee e envia o preco recalculado pra API real quando ele mudou.
+
+    Antes, aplicar_regras_preco() so' era chamado em shopee/replication.py, no
+    momento unico de clonar um anuncio pra uma loja nova — regras dinamicas
+    (produto parado, estoque alto, sazonal) nunca eram reavaliadas depois
+    disso, entao um produto que ficasse "parado" 30 dias apos publicado nunca
+    tinha o preco ajustado de verdade na Shopee. Esta funcao e' o pedaco que
+    faltava pra fechar o ciclo: le, recalcula, e EMPURRA pra Shopee de verdade.
+
+    Sempre recalcula a partir do preco-base do catalogo (produtos_loja.preco_venda
+    da loja, com fallback pra catalogo_produtos.preco_venda), nunca a partir do
+    preco atualmente listado — senao rodar a funcao duas vezes composta o
+    desconto/markup em cima de si mesmo a cada execucao."""
+    from shopee.products import update_price
+    async def _go():
+        db = await get_db()
+        if loja_id:
+            lojas_rows = await db.fetch("SELECT id, nome, shopee_shop_id FROM lojas WHERE id = $1 AND shopee_shop_id IS NOT NULL", loja_id)
+        else:
+            lojas_rows = await db.fetch("SELECT id, nome, shopee_shop_id FROM lojas WHERE shopee_shop_id IS NOT NULL")
+        resultado = {"avaliados": 0, "atualizados": 0, "sem_mudanca": 0, "sem_preco_base": 0, "erros": [], "detalhes": []}
+        for loja in lojas_rows:
+            shop_id = loja["shopee_shop_id"]
+            anuncios = await db.fetch("""
+                SELECT a.sku, a.anuncio_id, a.preco AS preco_atual
+                FROM anuncios a WHERE a.marketplace = 'shopee' AND a.shop_id = $1 AND a.status = 'normal'
+            """, shop_id)
+            for a in anuncios:
+                sku = a["sku"]
+                resultado["avaliados"] += 1
+                preco_base_row = await db.fetchrow(
+                    "SELECT preco_venda FROM produtos_loja WHERE loja = $1 AND sku = $2 AND preco_venda IS NOT NULL",
+                    loja["nome"], sku)
+                if not preco_base_row:
+                    preco_base_row = await db.fetchrow(
+                        "SELECT preco_venda FROM catalogo_produtos WHERE sku = $1 AND preco_venda IS NOT NULL", sku)
+                if not preco_base_row or not preco_base_row["preco_venda"]:
+                    resultado["sem_preco_base"] += 1
+                    continue
+                preco_base = float(preco_base_row["preco_venda"])
+                calc = aplicar_regras_preco(sku, preco_base, loja["id"])
+                preco_final = calc.get("preco_final", preco_base)
+                preco_atual = float(a["preco_atual"] or 0)
+                if abs(preco_final - preco_atual) < 0.01:
+                    resultado["sem_mudanca"] += 1
+                    continue
+                item = {"sku": sku, "anuncio_id": a["anuncio_id"], "loja": loja["nome"],
+                        "preco_base": preco_base, "preco_atual": preco_atual, "preco_novo": preco_final,
+                        "regras_aplicadas": [r["nome"] for r in calc.get("regras_aplicadas", [])]}
+                if dry_run:
+                    item["simulado"] = True
+                    resultado["detalhes"].append(item)
+                    continue
+                try:
+                    r = update_price(int(a["anuncio_id"]), preco_final, loja_id=loja["id"])
+                    if r.get("error"):
+                        resultado["erros"].append({**item, "erro": r["error"]})
+                    else:
+                        await db.execute("UPDATE anuncios SET preco = $1 WHERE shop_id = $2 AND anuncio_id = $3",
+                                          preco_final, shop_id, a["anuncio_id"])
+                        resultado["atualizados"] += 1
+                        resultado["detalhes"].append(item)
+                except Exception as e:
+                    resultado["erros"].append({**item, "erro": str(e)})
+        return resultado
+    try: return run_async(_go())
+    except Exception as e: return {"avaliados": 0, "atualizados": 0, "sem_mudanca": 0, "sem_preco_base": 0, "erros": [{"erro": str(e)}], "detalhes": []}
+
 # ── Webhook Dispatcher ──
 
 def disparar_webhooks(evento: str, dados: dict = None) -> dict:

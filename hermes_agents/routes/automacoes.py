@@ -20,6 +20,18 @@ def auto_disparar_webhooks():
     return jsonify(disparar_webhooks(evento, dados))
 
 
+@automacoes_bp.route("/regras_preco/aplicar", methods=["POST"])
+def auto_aplicar_regras_preco():
+    """Reavalia as regras de preco ativas contra o catalogo Shopee ja
+    publicado e envia os precos recalculados pra API real (nao so' no
+    momento de replicar um produto pra loja nova)."""
+    from core.automacoes import aplicar_regras_precificacao_shopee
+    data = request.json or {}
+    loja_id = data.get("loja_id")
+    dry_run = bool(data.get("dry_run", False))
+    return jsonify(aplicar_regras_precificacao_shopee(loja_id=int(loja_id) if loja_id else None, dry_run=dry_run))
+
+
 @automacoes_bp.route("/<tabela>", methods=["GET"])
 def auto_list(tabela):
     from core.automacoes import list as al, TABLES
