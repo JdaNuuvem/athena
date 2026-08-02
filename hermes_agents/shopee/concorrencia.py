@@ -19,17 +19,32 @@ from core import log, run_async, get_db
 AGENT = "AG-03 | Shopee Pricing Consistency"
 
 
-def analisar_consistencia_precos(sku: str, preco: float, marketplace: str = "shopee") -> dict:
+def analisar_consistencia_precos(sku: str, preco: float, marketplace: str = "shopee", loja_id: int = None) -> dict:
     """Compara o preco do produto com o mesmo SKU em OUTRAS lojas Shopee da sua conta
     (nao com concorrentes externos — a API nao da acesso a isso).
-    Retorna { media, mediana, min, max, total_anuncios, preco_acima_pct, alerta, mensagem }"""
+    Retorna { media, mediana, min, max, total_anuncios, preco_acima_pct, alerta, mensagem }
+
+    ponytail: sem loja_id, a query somava o anuncio da PROPRIA loja sendo
+    analisada na media de "outras lojas" — o texto da funcao promete excluir
+    a loja atual, mas nada excluia nada. Com loja_id, resolve o shop_id
+    correspondente e tira essa loja do calculo."""
     async def _go():
         db = await get_db()
-        rows = await db.fetch("""
-            SELECT preco FROM anuncios
-            WHERE sku = $1 AND marketplace = $2 AND preco > 0
-            ORDER BY preco
-        """, sku, marketplace)
+        excluir_shop_id = None
+        if loja_id:
+            excluir_shop_id = await db.fetchval("SELECT shopee_shop_id FROM lojas WHERE id = $1", loja_id)
+        if excluir_shop_id:
+            rows = await db.fetch("""
+                SELECT preco FROM anuncios
+                WHERE sku = $1 AND marketplace = $2 AND preco > 0 AND shop_id != $3
+                ORDER BY preco
+            """, sku, marketplace, excluir_shop_id)
+        else:
+            rows = await db.fetch("""
+                SELECT preco FROM anuncios
+                WHERE sku = $1 AND marketplace = $2 AND preco > 0
+                ORDER BY preco
+            """, sku, marketplace)
         precos = sorted([float(r["preco"]) for r in rows])
         if not precos:
             return None
@@ -56,4 +71,5 @@ def analisar_consistencia_precos(sku: str, preco: float, marketplace: str = "sho
         if result: return result
         return {"sku": sku, "preco_nosso": preco, "total_anuncios": 0, "mensagem": "Este SKU nao esta anunciado em nenhuma outra loja sua para comparar."}
     except Exception as e:
-        return {"sku": sku, "erro": str(e)}
+        log(AGENT, f"Erro analisar_consistencia_precos: {e}")
+        return {"sku": sku, "preco_nosso": preco, "total_anuncios": 0, "erro": str(e), "mensagem": f"Erro ao analisar: {e}"}

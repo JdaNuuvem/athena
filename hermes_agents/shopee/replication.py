@@ -100,7 +100,7 @@ def _clonar_item(item: dict, destino_loja_id: int) -> dict:
     if margem.get("alerta"):
         mensagem = f"Item #{item_id} ({sku}): publicado, mas {margem['mensagem']}"
     try:
-        consist = analisar_consistencia_precos(sku, preco)
+        consist = analisar_consistencia_precos(sku, preco, loja_id=destino_loja_id)
         if consist.get("alerta"):
             mensagem += f" — {consist['mensagem']}"
     except Exception: pass

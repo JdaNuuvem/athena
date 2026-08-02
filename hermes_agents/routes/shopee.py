@@ -366,9 +366,10 @@ def shopee_consistencia_precos():
     from shopee import analisar_consistencia_precos
     sku = request.args.get("sku", "")
     preco = float(request.args.get("preco", 0))
+    loja_id = request.args.get("loja_id", type=int)
     if not sku:
         return jsonify({"error": "SKU obrigatorio"}), 400
-    return jsonify(analisar_consistencia_precos(sku, preco))
+    return jsonify(analisar_consistencia_precos(sku, preco, loja_id=loja_id))
 
 @shopee_bp.route('/sugestao-kits', methods=['GET'])
 def shopee_sugestao_kits():
