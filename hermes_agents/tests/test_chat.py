@@ -207,8 +207,10 @@ class TestChatRotasTicket(unittest.TestCase):
             mock_add.assert_called_once()
             self.assertEqual(mock_add.call_args[0][0], 77)
             self.assertEqual(mock_add.call_args[0][2], "resposta")
-            mock_broadcast.assert_called_once()
-            self.assertEqual(mock_broadcast.call_args[0][1]["evento"], "nova_mensagem")
+            # broadcast pra ticket agora e' disparado dentro de adicionar_mensagem
+            # (core/atendimento.py), nao mais pela rota — como adicionar_mensagem
+            # esta mockado acima, a rota nao deve broadcastar duas vezes.
+            mock_broadcast.assert_not_called()
             self.assertEqual(r.get_json()["texto"], "resposta")
 
     def test_enviar_mensagem_ticket_rebaixa_mencao_a_nao_participante(self):

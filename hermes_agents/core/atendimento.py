@@ -265,19 +265,36 @@ def criar_ticket(cliente: str, assunto: str, canal="whatsapp", prioridade="norma
         criar_conversa_ticket(ticket["id"])
     return ticket
 
-def adicionar_mensagem(ticket_id: int, remetente: str, conteudo: str, tipo="texto") -> dict:
-    mensagem = create("mensagens", {"ticket_id": ticket_id, "remetente": remetente,
-        "conteudo": conteudo, "tipo": tipo, "enviado_em": hoje()})
+def _serializar_mensagem_ticket(m: dict, conversa_id: int) -> dict:
+    """Shape normalizado de mensagem de ticket — usado tanto no broadcast WS
+    quanto no endpoint REST de listagem, pra garantir que os dois nunca
+    divirjam (era exatamente essa divergencia que causava o double-broadcast
+    com payloads diferentes pra mesma mensagem)."""
+    enviado_em = m.get("enviado_em")
+    return {
+        "id": m["id"], "conversa_id": conversa_id, "thread_pai_id": None,
+        "remetente_id": None, "remetente_nome": m.get("remetente"),
+        "texto": m.get("conteudo"), "anexo_id": None, "anexo_url": m.get("anexo_url"),
+        "created_at": enviado_em.isoformat() if hasattr(enviado_em, "isoformat") else enviado_em,
+        "editado_em": None, "excluido_em": None,
+    }
+
+def adicionar_mensagem(ticket_id: int, remetente: str, conteudo: str, tipo="texto", anexo_url: str = None) -> dict:
+    campos = {"ticket_id": ticket_id, "remetente": remetente, "conteudo": conteudo, "tipo": tipo, "enviado_em": hoje()}
+    if anexo_url:
+        campos["anexo_url"] = anexo_url
+    mensagem = create("mensagens", campos)
     if not mensagem.get("error"):
         from core.chat import conversa_id_do_ticket
         from core.chat_ws import broadcast_para_participantes
         conversa_id = conversa_id_do_ticket(ticket_id)
         if conversa_id:
             broadcast_para_participantes(conversa_id, {
-                "evento": "nova_mensagem", "ticket_id": ticket_id,
-                "mensagem": {k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in mensagem.items()},
+                "evento": "nova_mensagem",
+                "mensagem": _serializar_mensagem_ticket(mensagem, conversa_id),
             })
     return mensagem
+
 def listar_mensagens_ticket(ticket_id: int) -> list:
     """Mensagens de UM ticket, em ordem cronologica — usado pela ponte do chat
     interno (conversa tipo 'ticket' le/escreve em atend_mensagens, nao em

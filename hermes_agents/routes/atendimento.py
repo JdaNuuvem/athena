@@ -30,8 +30,10 @@ def atend_mensagem(id):
     @requer_permissao("atendimento.criar")
     def _go():
         from core.atendimento import adicionar_mensagem
-        return jsonify(adicionar_mensagem(id, data.get("remetente", ""), data.get("conteudo", ""),
-                                          data.get("tipo", "texto")))
+        from core.rbac import usuario_atual_da_request
+        usuario = usuario_atual_da_request()
+        remetente = usuario.get("nome") or usuario.get("email") or data.get("remetente", "")
+        return jsonify(adicionar_mensagem(id, remetente, data.get("conteudo", ""), data.get("tipo", "texto")))
     return _go()
 
 
@@ -81,6 +83,18 @@ def atend_atribuir(id):
         from core.atendimento import atribuir_ticket
         resultado = atribuir_ticket(id, atendente_id)
         return jsonify(resultado), (400 if resultado.get("error") else 200)
+    return _go()
+
+
+@atendimento_bp.route("/tickets/<int:id>/mensagens", methods=["GET"])
+def atend_listar_mensagens(id):
+    @requer_permissao("atendimento.ver")
+    def _go():
+        from core.atendimento import listar_mensagens_ticket, _serializar_mensagem_ticket
+        from core.chat import conversa_id_do_ticket
+        conversa_id = conversa_id_do_ticket(id)
+        mensagens = listar_mensagens_ticket(id)
+        return jsonify({"data": [_serializar_mensagem_ticket(m, conversa_id) for m in mensagens]})
     return _go()
 
 

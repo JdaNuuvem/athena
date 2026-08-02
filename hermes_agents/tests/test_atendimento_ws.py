@@ -76,5 +76,26 @@ class TestAtribuirTicket(unittest.TestCase):
         mock_update.assert_not_called()
 
 
+class TestAdicionarMensagemBroadcastUnico(unittest.TestCase):
+    """Regressao: antes deste fix, adicionar_mensagem (core/atendimento.py) e
+    chat_enviar_mensagem (routes/chat.py) juntos disparavam 2 frames
+    nova_mensagem com shapes diferentes para a mesma mensagem de ticket."""
+
+    def test_adicionar_mensagem_emite_exatamente_um_broadcast_normalizado(self):
+        with patch.object(atend, "create", return_value={
+                "id": 10, "ticket_id": 1, "conteudo": "oi", "remetente": "Ana",
+                "tipo": "texto", "anexo_url": None, "enviado_em": "2026-08-01T10:00:00"}), \
+             patch("core.chat.conversa_id_do_ticket", return_value=42), \
+             patch("core.chat_ws.broadcast_para_participantes") as mock_broadcast:
+            atend.adicionar_mensagem(1, "Ana", "oi")
+        mock_broadcast.assert_called_once()
+        _, evento = mock_broadcast.call_args[0]
+        self.assertEqual(evento["evento"], "nova_mensagem")
+        self.assertEqual(evento["mensagem"]["conversa_id"], 42)
+        self.assertEqual(evento["mensagem"]["texto"], "oi")
+        self.assertEqual(evento["mensagem"]["remetente_nome"], "Ana")
+        self.assertIsNone(evento["mensagem"]["remetente_id"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

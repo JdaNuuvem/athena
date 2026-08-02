@@ -132,9 +132,8 @@ def chat_enviar_mensagem(conversa_id):
                                     texto_processado, "texto")
         if criada.get("error"):
             return jsonify(criada)
-        mensagem = _adaptar_mensagem_ticket(criada, conversa_id)
-        broadcast_para_participantes(conversa_id, {"evento": "nova_mensagem", "mensagem": _serializar(mensagem)})
-        return jsonify(mensagem)
+        # broadcast ja disparado dentro de adicionar_mensagem — nao duplicar aqui
+        return jsonify(_adaptar_mensagem_ticket(criada, conversa_id))
     if is_master:
         # ponytail: chat_mensagens.remetente_id e' FK pra rbac_usuarios(id) —
         # conta master nao tem linha real la. So' consegue ver canal/ticket
