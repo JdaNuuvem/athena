@@ -363,6 +363,38 @@ export const api = {
   shopeeLogisticaRastreio: (lojaId: number, orderSn: string, packageNumber?: string) =>
     request<{ response?: ShopeeTrackingInfo; error?: string }>(`/api/shopee/logistica/rastreio?loja_id=${lojaId}&order_sn=${orderSn}${packageNumber ? `&package_number=${packageNumber}` : ""}`),
 
+  // Shopee — Fulfillment (vincula ao pedido/NF-e do Bling; despacho real
+  // continua vindo de shopeeLogisticaDespachar acima)
+  shopeeFulfillmentStatus: (orderSn: string, lojaId: number) =>
+    request<ShopeeFulfillmentStatus & { erro?: string }>(`/api/shopee/pedidos/${orderSn}/fulfillment?loja_id=${lojaId}`),
+  shopeeFulfillmentVincularBling: (orderSn: string, lojaId: number, idPedidoBling?: number) =>
+    request<{ ok?: boolean; erro?: string }>(`/api/shopee/pedidos/${orderSn}/vincular-bling`, {
+      method: "POST",
+      body: JSON.stringify({ loja_id: lojaId, id_pedido_bling: idPedidoBling }),
+    }),
+  shopeeFulfillmentEmitirNota: (orderSn: string, lojaId: number) =>
+    request<{ ok?: boolean; bling_nota_fiscal_id?: number; erro?: string; resposta_bruta?: unknown }>(`/api/shopee/pedidos/${orderSn}/emitir-nota`, {
+      method: "POST",
+      body: JSON.stringify({ loja_id: lojaId }),
+    }),
+  shopeeFulfillmentNotaPdf: async (orderSn: string, lojaId: number) => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const res = await fetch(`/api/shopee/pedidos/${orderSn}/nota-pdf?loja_id=${lojaId}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      credentials: "include",
+    });
+    if (!res.ok) {
+      const erro = await res.json().catch(() => ({ erro: `HTTP ${res.status}` }));
+      return { error: erro.erro || `HTTP ${res.status}` } as { error: string };
+    }
+    return { blob: await res.blob() } as { blob: Blob };
+  },
+  shopeeFulfillmentDespacharConfirmar: (orderSn: string, lojaId: number, packageNumber?: string) =>
+    request<{ ok?: boolean; erro?: string }>(`/api/shopee/pedidos/${orderSn}/despachar-confirmar`, {
+      method: "POST",
+      body: JSON.stringify({ loja_id: lojaId, package_number: packageNumber }),
+    }),
+
   // Shopee — Discount (desconto por item)
   shopeeListarDescontos: (lojaId: number, status: "upcoming" | "ongoing" | "expired" | "all" = "all", pageNo = 1, pageSize = 50) =>
     request<{ response?: { discount_list: ShopeeDiscountResumo[]; more: boolean }; error?: string }>(`/api/shopee/descontos?loja_id=${lojaId}&status=${status}&page_no=${pageNo}&page_size=${pageSize}`),
@@ -940,6 +972,21 @@ export interface ShopeePedidoSincronizado {
   prazo_envio: string | null;
   ultima_sincronizacao: string;
   itens: Array<{ id: number; pedido_id: number; sku: string; nome: string; quantidade: number; preco: number | string }>;
+  bling_pedido_id?: number | null;
+  bling_nota_fiscal_id?: number | null;
+  package_number?: string | null;
+  despachado_em?: string | null;
+}
+
+export interface ShopeeFulfillmentStatus {
+  order_sn: string;
+  vinculado_bling: boolean;
+  bling_pedido_id: number | null;
+  nota_emitida: boolean;
+  bling_nota_fiscal_id: number | null;
+  despachado: boolean;
+  despachado_em: string | null;
+  package_number: string | null;
 }
 
 export interface ShopeeDashboardLoja {
@@ -1461,13 +1508,19 @@ export async function fiscalBaixarObrigacao(id: number): Promise<Record<string, 
   return res.json();
 }
 
-export async function fiscalSyncNotasFiscais(pagina?: number, limite?: number): Promise<{ sync: number; error?: string }> {
-  const res = await fetch("/api/fiscal/sync/notas-fiscais", {
+// ponytail: sync de notas fiscais processa o DETALHE de cada nota via
+// chamada individual ao Bling — com centenas de notas numa conta real, uma
+// unica chamada estourava o timeout de 100s do proxy Cloudflare (524).
+// Backend agora processa em lotes (core/fiscal.py::sincronizar_notas_fiscais_bling)
+// e devolve mais_notas/proximo_pular pra continuar; ver loop em fiscal/notas/page.tsx.
+export async function fiscalSyncNotasFiscais(
+  pagina?: number, limite?: number, pular?: number
+): Promise<{ sync: number; error?: string; mais_notas?: boolean; proximo_pular?: number; total_notas?: number }> {
+  return request("/api/fiscal/sync/notas-fiscais", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ pagina: pagina || 1, limite: limite || 100 }),
+    body: JSON.stringify({ pagina: pagina || 1, limite: limite || 100, pular: pular || 0 }),
   });
-  return res.json();
 }
 
 export async function fiscalSyncContasReceber(pagina?: number, limite?: number): Promise<{ sync: number; error?: string }> {

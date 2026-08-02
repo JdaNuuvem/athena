@@ -148,5 +148,28 @@ class TestSincronizarNotasFiscaisBling(unittest.TestCase):
         self.assertEqual(r["sync"], 0)
         self.assertIn("conexao recusada", r["error"])
 
+    @patch("bling_erp.get_access_token", return_value="tok")
+    @patch("bling_erp.listar_notas_fiscais", return_value={"data": [{"id": i} for i in range(1, 61)]})
+    @patch("bling_erp.get_nfe_completa", return_value={"data": _NFE_DETALHE_MOCK})
+    def test_processa_em_lote_com_continuacao(self, mdet, ml, mt):
+        """ponytail: processar o detalhe de todas as notas numa chamada so'
+        estourava o timeout de 100s do proxy Cloudflare com contas reais
+        (centenas de notas). Cap de 50 por chamada + mais_notas/proximo_pular
+        pro chamador continuar em lotes."""
+        db = _FakeDBNotas(existing_id=None)
+        async def fake_get_db(): return db
+        with patch.object(self.fiscal, "get_db", fake_get_db):
+            r1 = self.fiscal.sincronizar_notas_fiscais_bling()
+        self.assertEqual(r1["sync"], 50)
+        self.assertTrue(r1["mais_notas"])
+        self.assertEqual(r1["proximo_pular"], 50)
+        self.assertEqual(r1["total_notas"], 60)
+
+        with patch.object(self.fiscal, "get_db", fake_get_db):
+            r2 = self.fiscal.sincronizar_notas_fiscais_bling(pular=50)
+        self.assertEqual(r2["sync"], 10)
+        self.assertFalse(r2["mais_notas"])
+        self.assertEqual(r2["proximo_pular"], 0)
+
 
 if __name__=="__main__":unittest.main(verbosity=2)

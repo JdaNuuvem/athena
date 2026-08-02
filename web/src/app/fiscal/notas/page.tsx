@@ -78,8 +78,16 @@ export default function NotasFiscaisPage() {
     setSyncing(true);
     setErro(null);
     try {
-      const r = await fiscalSyncNotasFiscais();
-      if (r.error) setErro(r.error);
+      // ponytail: backend processa em lotes (evita timeout do proxy com
+      // muitas notas) — continua chamando enquanto houver mais_notas.
+      let pular = 0;
+      let continuar = true;
+      while (continuar) {
+        const r = await fiscalSyncNotasFiscais(1, 100, pular);
+        if (r.error) { setErro(r.error); break; }
+        continuar = Boolean(r.mais_notas);
+        pular = r.proximo_pular || 0;
+      }
       carregar();
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao sincronizar");

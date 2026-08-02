@@ -193,7 +193,8 @@ def fiscal_sync_nf():
     def _go():
         data = request.json or {}
         return jsonify(sincronizar_notas_fiscais_bling(
-            pagina=data.get("pagina", 1), limite=data.get("limite", 100)))
+            pagina=data.get("pagina", 1), limite=data.get("limite", 100),
+            pular=data.get("pular", 0)))
     return _go()
 
 

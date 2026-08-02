@@ -490,15 +490,23 @@ async def _upsert_nota_fiscal(db, bling_id: int, detalhe: dict) -> int:
             nota_id, trib["id"], trib["nome"], trib["sigla"], base or 0, trib["aliquota"] or 0, valor)
     return nota_id
 
-def sincronizar_notas_fiscais_bling(pagina: int = 1, limite: int = 100) -> dict:
+def sincronizar_notas_fiscais_bling(pagina: int = 1, limite: int = 100, pular: int = 0) -> dict:
     """Sync completo: lista todas as paginas de notas fiscais e busca o DETALHE de
     cada uma (GET /nfe/{id}) para importar itens e impostos reais — a listagem
-    (GET /nfe) traz apenas um resumo, sem itens nem tributos."""
+    (GET /nfe) traz apenas um resumo, sem itens nem tributos.
+    ponytail: processar o DETALHE de todas as notas numa chamada so' — com
+    centenas de notas reais em producao — estourava o timeout de 100s do
+    proxy Cloudflare (524), e o fetch() cru do frontend virava "Unexpected
+    token '<'..." tentando fazer .json() da pagina de erro HTML do Cloudflare.
+    Confirmado ao vivo. Agora cada chamada processa so' MAX_DETALHES_POR_CHAMADA
+    notas (a listagem em si e' rapida, refeita a cada chamada); quando sobra
+    mais, devolve mais_notas=True + proximo_pular pro chamador continuar."""
     from bling_erp import listar_notas_fiscais as bling_nfe, get_nfe_completa, get_access_token, get_auth_url
     token = get_access_token()
     if not token: return {"error": "Bling nao autenticado", "auth_url": get_auth_url()}
 
     MAX_PAGINAS = 50  # limite de seguranca: evita loop/chamadas ilimitadas em contas com muitas notas
+    MAX_DETALHES_POR_CHAMADA = 50  # cabe com folga no timeout de 100s do proxy
     notas_resumo = []
     erros = []
     pag = pagina
@@ -518,10 +526,14 @@ def sincronizar_notas_fiscais_bling(pagina: int = 1, limite: int = 100) -> dict:
     if not notas_resumo:
         return {"sync": 0, "message": "sem dados", "erros": erros}
 
+    lote = notas_resumo[pular:pular + MAX_DETALHES_POR_CHAMADA]
+    proximo_pular = pular + len(lote)
+    mais_notas = proximo_pular < len(notas_resumo) or mais_paginas
+
     async def _go():
         db = await get_db()
         total = 0
-        for nf_resumo in notas_resumo:
+        for nf_resumo in lote:
             bling_id = nf_resumo.get("id")
             if not bling_id:
                 continue
@@ -544,7 +556,9 @@ def sincronizar_notas_fiscais_bling(pagina: int = 1, limite: int = 100) -> dict:
                 total += 1
             except Exception as e:
                 log(AGENT, f"Erro sync NF {nf_resumo.get('numero')}: {e}")
-        return {"sync": total, "erros": erros, "mais_paginas": mais_paginas}
+        return {"sync": total, "erros": erros, "mais_paginas": mais_paginas,
+                "mais_notas": mais_notas, "proximo_pular": proximo_pular if mais_notas else 0,
+                "total_notas": len(notas_resumo)}
     # ponytail: unica funcao deste arquivo cujo run_async(_go()) nao tinha
     # try/except no nivel de fora (toda outra funcao aqui tem). O try/except
     # DENTRO do loop so' cobre erro por-nota; qualquer excecao fora dele
