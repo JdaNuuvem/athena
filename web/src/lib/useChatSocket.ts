@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 
 export interface EventoChatSocket {
-  evento: "nova_mensagem" | "mensagem_editada" | "mensagem_excluida" | "usuario_digitando" | "presenca_atualizada" | "confirmacao_leitura";
+  evento: "nova_mensagem" | "mensagem_editada" | "mensagem_excluida" | "usuario_digitando" | "presenca_atualizada" | "confirmacao_leitura" | "ticket_status_alterado" | "ticket_atendente_alterado" | "notificacao";
   [chave: string]: unknown;
 }
 
