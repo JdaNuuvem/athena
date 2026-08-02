@@ -15,6 +15,12 @@ def _ensure_tables():
             data_fechamento TIMESTAMP, tempo_resposta_min INT,
             observacoes TEXT, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW()
         )""")
+        await db.execute("CREATE SEQUENCE IF NOT EXISTS atend_tickets_numero_seq")
+        try:
+            await db.execute("ALTER TABLE atend_tickets RENAME COLUMN atendente TO atendente_nome_legado")
+        except Exception:
+            pass
+        await db.execute("ALTER TABLE atend_tickets ADD COLUMN IF NOT EXISTS atendente_id INT REFERENCES rbac_usuarios(id)")
         await db.execute("""CREATE TABLE IF NOT EXISTS atend_mensagens (
             id SERIAL PRIMARY KEY, ticket_id INT REFERENCES atend_tickets(id),
             remetente VARCHAR(100), conteudo TEXT, tipo VARCHAR(20) DEFAULT 'texto',
@@ -127,15 +133,18 @@ def criar_ticket(cliente: str, assunto: str, canal="whatsapp", prioridade="norma
         agora = datetime.now()
         sla_vencimento = agora + timedelta(minutes=sla_row["tempo_resposta_min"]) if sla_row else None
         tempo_resposta = sla_row["tempo_resposta_min"] if sla_row else None
-        return {"sla_vencimento": sla_vencimento, "tempo_resposta_min": tempo_resposta}
+        numero_seq = await db.fetchval("SELECT nextval('atend_tickets_numero_seq')")
+        return {"sla_vencimento": sla_vencimento, "tempo_resposta_min": tempo_resposta, "numero_seq": numero_seq}
     try: sla_data = run_async(_go())
-    except Exception as e: sla_data = {"sla_vencimento": None, "tempo_resposta_min": None}
+    except Exception as e: sla_data = {"sla_vencimento": None, "tempo_resposta_min": None, "numero_seq": None}
 
+    numero = f"#{sla_data['numero_seq']:04d}" if sla_data.get("numero_seq") else None
     ticket = create("tickets", {
         "cliente": cliente, "assunto": assunto, "canal": canal,
         "prioridade": prioridade, "status": "aberto", "data_abertura": hoje(),
         "sla_vencimento": sla_data["sla_vencimento"],
         "tempo_resposta_min": sla_data["tempo_resposta_min"],
+        "numero": numero,
     })
     if not ticket.get("error"):
         from core.chat import criar_conversa_ticket
@@ -189,3 +198,24 @@ def dashboard() -> dict:
         }
     try: return run_async(_go())
     except Exception as e: return {"tickets_abertos":0,"tickets_pendentes":0,"hoje":0,"tempo_medio_resposta":0,"canais":[],"slas":[]}
+
+def listar_tickets_filtrado(status=None, prioridade=None, canal=None, atendente_id=None, q=None, de=None, ate=None) -> list:
+    where = []
+    params = []
+    def _add(cond, val):
+        params.append(val)
+        where.append(cond.format(n=len(params)))
+    if status: _add("status = ${n}", status)
+    if prioridade: _add("prioridade = ${n}", prioridade)
+    if canal: _add("canal = ${n}", canal)
+    if atendente_id: _add("atendente_id = ${n}", int(atendente_id))
+    if q: _add("(cliente ILIKE ${n} OR assunto ILIKE ${n} OR numero ILIKE ${n})", f"%{q}%")
+    if de: _add("data_abertura >= ${n}", de)
+    if ate: _add("data_abertura <= ${n}", ate)
+    where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch(f"SELECT * FROM atend_tickets {where_sql} ORDER BY id DESC LIMIT 200", *params)
+        return [dict(r) for r in rows]
+    try: return run_async(_go())
+    except Exception as e: log(AGENT, f"listar_tickets_filtrado: {e}"); return []

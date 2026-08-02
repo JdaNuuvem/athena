@@ -50,5 +50,17 @@ class TestSLAEnforcement(unittest.TestCase):
         self.assertIsNone(args.get("sla_vencimento"))
 
 
+class TestNumeroTicket(unittest.TestCase):
+    @patch("core.atendimento.get_db", return_value=_fake_db)
+    def test_criar_ticket_preenche_numero_sequencial(self, mock_db):
+        _fake_db.fetchrow.return_value = {"tempo_resposta_min": 60, "tempo_resolucao_h": 2}
+        _fake_db.fetchval.return_value = 7
+        with patch.object(atend, "create") as mock_create:
+            mock_create.return_value = {"id": 1, "numero": "#0007", "status": "aberto"}
+            atend.criar_ticket("Cliente", "Assunto", canal="chat", prioridade="urgente")
+        args = mock_create.call_args[0][1]
+        self.assertEqual(args["numero"], "#0007")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
