@@ -32,6 +32,17 @@ export interface MensagemTicket {
   error?: string;
 }
 
+export interface MensagemTicketRaw {
+  id: number;
+  ticket_id: number;
+  remetente: number | null;
+  conteudo: string;
+  tipo: string;
+  anexo_url: string | null;
+  enviado_em: string;
+  error?: string;
+}
+
 export interface Atendente {
   id: number;
   nome: string;

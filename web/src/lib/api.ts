@@ -75,7 +75,7 @@ import type {
   IndicadorCobertura,
 } from "@/lib/types/domain";
 import type { ConversaChat, MensagemChat, AnexoChat, ParticipanteChat } from "@/lib/types/chat";
-import type { Ticket, MensagemTicket, Atendente, Notificacao } from "@/lib/types/atendimento";
+import type { Ticket, MensagemTicket, MensagemTicketRaw, Atendente, Notificacao } from "@/lib/types/atendimento";
 
 export type TipoLoja = "fisica" | "virtual" | "hibrida" | "marketplace";
 
@@ -672,16 +672,16 @@ export const api = {
       request<Ticket>("/api/atendimento/tickets/criar", { method: "POST", body: JSON.stringify(dados) }),
     obter: (id: number) => request<Ticket>(`/api/atendimento/tickets/${id}`),
     atualizar: (id: number, dados: Record<string, unknown>) =>
-      request<{ success?: boolean; error?: string }>(`/api/atendimento/tickets/${id}`, { method: "PUT", body: JSON.stringify(dados) }),
+      request<Ticket>(`/api/atendimento/tickets/${id}`, { method: "PUT", body: JSON.stringify(dados) }),
     mudarStatus: (id: number, status: string) =>
       request<Ticket>(`/api/atendimento/tickets/${id}/status`, { method: "PUT", body: JSON.stringify({ status }) }),
     atribuir: (id: number, atendenteId: number) =>
       request<Ticket>(`/api/atendimento/tickets/${id}/atribuir`, { method: "PUT", body: JSON.stringify({ atendente_id: atendenteId }) }),
     listarMensagens: (id: number) => request<{ data: MensagemTicket[] }>(`/api/atendimento/tickets/${id}/mensagens`),
     enviarMensagem: (id: number, conteudo: string) =>
-      request<MensagemTicket>(`/api/atendimento/tickets/${id}/mensagem`, { method: "POST", body: JSON.stringify({ conteudo, tipo: "texto" }) }),
+      request<MensagemTicketRaw>(`/api/atendimento/tickets/${id}/mensagem`, { method: "POST", body: JSON.stringify({ conteudo, tipo: "texto" }) }),
     listarAtendentes: () => request<{ data: Atendente[] }>("/api/atendimento/atendentes"),
-    uploadAnexo: async (ticketId: number, arquivo: File): Promise<MensagemTicket> => {
+    uploadAnexo: async (ticketId: number, arquivo: File): Promise<MensagemTicketRaw> => {
       const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
       const formData = new FormData();
       formData.append("arquivo", arquivo);
@@ -1358,88 +1358,104 @@ export function abrirNFeDANFE(idNota: number): void {
 
 // ── Fiscal ──
 
-// ponytail: toda essa familia fiscalXxx usava fetch() cru — sem Authorization
-// header (dependia so' do cookie, inconsistente com o resto do app), sem
-// checar res.ok (um 403/500 com corpo JSON {"error":...} virava sucesso
-// silencioso: r.data undefined -> "Nenhum registro encontrado" na tela, sem
-// nenhum aviso de que o usuario nao tinha permissao). Migrado pra request<T>(),
-// mesmo padrao usado em api.chat/api.crmList/etc.
 export async function fiscalDashboard(): Promise<import("@/lib/types/domain").FiscalDashboard> {
-  return request("/api/fiscal/dashboard");
+  const res = await fetch("/api/fiscal/dashboard");
+  return res.json();
 }
 
-export async function fiscalList(
-  tabela: string,
-  filtro?: { data_inicio?: string; data_fim?: string; dias?: number }
-): Promise<{ data: unknown[] }> {
-  const q = new URLSearchParams();
-  if (filtro?.data_inicio) q.set("data_inicio", filtro.data_inicio);
-  if (filtro?.data_fim) q.set("data_fim", filtro.data_fim);
-  if (filtro?.dias) q.set("dias", String(filtro.dias));
-  const qs = q.toString();
-  return request(`/api/fiscal/${tabela}${qs ? "?" + qs : ""}`);
+export async function fiscalList(tabela: string): Promise<{ data: unknown[] }> {
+  const res = await fetch(`/api/fiscal/${tabela}`);
+  return res.json();
 }
 
 export async function fiscalGet(tabela: string, id: number): Promise<Record<string, unknown>> {
-  return request(`/api/fiscal/${tabela}/${id}`);
+  const res = await fetch(`/api/fiscal/${tabela}/${id}`);
+  return res.json();
 }
 
 export async function fiscalCreate(tabela: string, data: Record<string, unknown>): Promise<Record<string, unknown>> {
-  return request(`/api/fiscal/${tabela}`, { method: "POST", body: JSON.stringify(data) });
+  const res = await fetch(`/api/fiscal/${tabela}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return res.json();
 }
 
 export async function fiscalUpdate(tabela: string, id: number, data: Record<string, unknown>): Promise<Record<string, unknown>> {
-  return request(`/api/fiscal/${tabela}/${id}`, { method: "PUT", body: JSON.stringify(data) });
+  const res = await fetch(`/api/fiscal/${tabela}/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return res.json();
 }
 
 export async function fiscalDelete(tabela: string, id: number): Promise<{ success: boolean }> {
-  return request(`/api/fiscal/${tabela}/${id}`, { method: "DELETE" });
+  const res = await fetch(`/api/fiscal/${tabela}/${id}`, { method: "DELETE" });
+  return res.json();
 }
 
 export async function fiscalCalcularTributos(notaId: number): Promise<Record<string, unknown>> {
-  return request(`/api/fiscal/tributos/calcular/${notaId}`);
+  const res = await fetch(`/api/fiscal/tributos/calcular/${notaId}`);
+  return res.json();
 }
 
 export async function fiscalObrigacoesProximas(dias?: number): Promise<{ data: unknown[] }> {
-  return request(`/api/fiscal/obrigacoes/proximas${dias ? "?dias=" + dias : ""}`);
+  const res = await fetch(`/api/fiscal/obrigacoes/proximas${dias ? "?dias=" + dias : ""}`);
+  return res.json();
 }
 
 export async function fiscalObrigacoesAtrasadas(): Promise<{ data: unknown[] }> {
-  return request("/api/fiscal/obrigacoes/atrasadas");
+  const res = await fetch("/api/fiscal/obrigacoes/atrasadas");
+  return res.json();
 }
 
 export async function fiscalBaixarObrigacao(id: number): Promise<Record<string, unknown>> {
-  return request(`/api/fiscal/obrigacoes/${id}/baixar`, { method: "POST" });
+  const res = await fetch(`/api/fiscal/obrigacoes/${id}/baixar`, { method: "POST" });
+  return res.json();
 }
 
 export async function fiscalSyncNotasFiscais(pagina?: number, limite?: number): Promise<{ sync: number; error?: string }> {
-  return request("/api/fiscal/sync/notas-fiscais", {
-    method: "POST", body: JSON.stringify({ pagina: pagina || 1, limite: limite || 100 }),
+  const res = await fetch("/api/fiscal/sync/notas-fiscais", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pagina: pagina || 1, limite: limite || 100 }),
   });
+  return res.json();
 }
 
 export async function fiscalSyncContasReceber(pagina?: number, limite?: number): Promise<{ sync: number; error?: string }> {
-  return request("/api/fiscal/sync/contas-receber", {
-    method: "POST", body: JSON.stringify({ pagina: pagina || 1, limite: limite || 100 }),
+  const res = await fetch("/api/fiscal/sync/contas-receber", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pagina: pagina || 1, limite: limite || 100 }),
   });
+  return res.json();
 }
 
 export async function fiscalSyncContasPagar(pagina?: number, limite?: number): Promise<{ sync: number; error?: string }> {
-  return request("/api/fiscal/sync/contas-pagar", {
-    method: "POST", body: JSON.stringify({ pagina: pagina || 1, limite: limite || 100 }),
+  const res = await fetch("/api/fiscal/sync/contas-pagar", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pagina: pagina || 1, limite: limite || 100 }),
   });
+  return res.json();
 }
 
 export async function fiscalSyncTudo(): Promise<{ notas_fiscais: number; contas_receber: number; contas_pagar: number }> {
-  return request("/api/fiscal/sync/tudo", { method: "POST" });
+  const res = await fetch("/api/fiscal/sync/tudo", { method: "POST" });
+  return res.json();
 }
 
 export async function fiscalNFItens(notaId: number): Promise<{ data: unknown[] }> {
-  return request(`/api/fiscal/notas-fiscais/${notaId}/itens`);
+  const res = await fetch(`/api/fiscal/notas-fiscais/${notaId}/itens`);
+  return res.json();
 }
 
 export async function fiscalNFImpostos(notaId: number): Promise<{ data: unknown[] }> {
-  return request(`/api/fiscal/notas-fiscais/${notaId}/impostos`);
+  const res = await fetch(`/api/fiscal/notas-fiscais/${notaId}/impostos`);
+  return res.json();
 }
 
 // ── Vendas ──
