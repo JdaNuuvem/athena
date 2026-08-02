@@ -321,8 +321,13 @@ def bling_sync_products():
         r = sincronizar_produtos()
         return jsonify({"count": r.get("sincronizados", 0), "errors": [r["erro"]] if r.get("erro") else []})
     except Exception as e:
+        # ponytail: mandava traceback.format_exc() pro cliente — stack trace
+        # completo (caminhos de arquivo, estrutura interna) vazado em toda
+        # falha de sync. Loga no servidor, devolve so' a mensagem.
         import traceback
-        return jsonify({"count": 0, "errors": [str(e), traceback.format_exc()]}), 500
+        from core import log
+        log("Bling Sync", f"Erro em sync/products: {traceback.format_exc()}")
+        return jsonify({"count": 0, "errors": [str(e)]}), 500
 
 
 @integrations_bp.route("/api/bling/sync/orders", methods=["POST"])
@@ -895,9 +900,8 @@ def api_nfe_xml(id_nota):
 @bling_bp.route("/financeiro/notas-fiscais/<int:id_nota>/danfe")
 def api_nfe_danfe(id_nota):
     """Redireciona para o DANFE no site do Bling."""
-    r = get_nfe_detail(id_nota)
-    data = r.get("data", {})
-    danfe_url = data.get("linkDanfe", "")
+    from bling_erp import get_nfe_danfe_url
+    danfe_url = get_nfe_danfe_url(id_nota)
     if not danfe_url:
         return jsonify({"error": "DANFE não disponível"}), 404
     from flask import redirect

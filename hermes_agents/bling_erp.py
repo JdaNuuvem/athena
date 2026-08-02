@@ -177,6 +177,40 @@ def get_pedido_detalhe(id_pedido: int) -> dict:
     """Retorna detalhes completos: itens, parcelas, transporte, vendedor."""
     return _request(f"pedidos/vendas/{id_pedido}")
 
+def emitir_nfe(id_pedido: int) -> dict:
+    """Emite a NF-e de um pedido de venda ja existente no Bling. Antes era
+    uma chamada crua em routes/integrations.py, sem wrapper nomeado nem
+    teste — extraida pra core.shopee_fulfillment poder reusar."""
+    return _request(f"pedidos/vendas/{id_pedido}/gerar-nfe", {}, method="POST")
+
+def enviar_rastreio_pedido(id_pedido: int, codigo_rastreio: str) -> dict:
+    """Grava o codigo de rastreio no pedido de venda do Bling."""
+    return _request(f"pedidos/vendas/{id_pedido}/rastrear", {"codigoRastreamento": codigo_rastreio}, method="POST")
+
+def buscar_pedido_por_numero_loja(numero_loja: str, max_paginas: int = 50) -> dict | None:
+    """Acha o pedido Bling importado de um marketplace pelo numero do pedido
+    no canal de origem (campo numeroLoja) — usado pra vincular um pedido
+    Shopee (order_sn) ao pedido correspondente que a integracao nativa
+    Shopee<->Bling ja criou automaticamente no painel do Bling.
+
+    ponytail: 'numeroLoja' e' o unico nome de campo documentado no painel do
+    Bling pra isso ('Nº Pedido Loja'), mas o formato exato do payload de
+    listagem nao pode ser confirmado sem um pedido de marketplace real ao
+    vivo (mesma ressalva de get_nfe_danfe_url) — se a API mudar o nome do
+    campo, isso para de achar silenciosamente (retorna None, nunca erro
+    falso-positivo)."""
+    for pagina in range(1, max_paginas + 1):
+        r = listar_pedidos(pagina=pagina, limite=100)
+        dados = r.get("data") or []
+        if r.get("error") or not dados:
+            return None
+        for pedido in dados:
+            if str(pedido.get("numeroLoja") or "") == str(numero_loja):
+                return pedido
+        if len(dados) < 100:
+            return None
+    return None
+
 # ── NF-e Completa ──
 
 def get_nfe_completa(id_nota: int) -> dict:
@@ -216,6 +250,40 @@ def get_nfe_xml(id_nota: int) -> tuple[str | None, str | None]:
     except Exception:
         pass
     return None, None
+
+def get_nfe_pdf_bytes(id_nota: int) -> tuple[bytes | None, str | None]:
+    """Retorna (conteudo_pdf, content_type) do DANFE ou (None, None) se erro —
+    mesmo padrao de get_nfe_xml (baixa bytes de verdade, nao so' a URL/redirect)."""
+    r = get_nfe_detail(id_nota)
+    if r.get("error"):
+        return None, None
+    data = r.get("data", {}) or {}
+    danfe_url = data.get("linkDanfe") or data.get("danfe") or ""
+    if not danfe_url:
+        return None, None
+    try:
+        token = get_access_token()
+        headers = {"Authorization": f"Bearer {token}"}
+        resp = requests.get(danfe_url, headers=headers, timeout=30)
+        if resp.status_code == 200:
+            return resp.content, resp.headers.get("Content-Type", "application/pdf")
+    except Exception:
+        pass
+    return None, None
+
+def get_nfe_danfe_url(id_nota: int) -> str:
+    """Retorna a URL do DANFE ou "" se nao encontrada.
+
+    ponytail: 2 rotas duplicadas nesta feature usavam 2 chaves diferentes
+    pra achar esse link ("danfe" numa, "linkDanfe" noutra) — nenhuma das duas
+    tentava a outra como fallback. O formato exato do payload de detalhe da
+    NF-e nao pode ser confirmado sem uma nota real ao vivo (mesma ressalva
+    de core/fiscal.py::_mapear_nfe_detalhe), entao tenta ambas."""
+    r = get_nfe_detail(id_nota)
+    if r.get("error"):
+        return ""
+    data = r.get("data", {}) or {}
+    return data.get("linkDanfe") or data.get("danfe") or ""
 
 def _mapear_produto_bling(p: dict) -> dict:
     """Mapeia o payload de detalhe do Bling (GET /produtos/{id}) para as colunas de catalogo_produtos.
@@ -801,26 +869,18 @@ def processar_evento_webhook(evento: str, payload: dict) -> dict:
             nf = payload.get("notaFiscal", payload.get("nfe", payload))
             bling_id = nf.get("id")
             if bling_id:
-                existing = await db.fetchval("SELECT id FROM fiscal_notas_fiscais WHERE bling_id = $1", bling_id)
-                contato = nf.get("contato", {}) or {}
-                natureza = nf.get("naturezaOperacao", {}) or {}
-                data_emissao = (nf.get("dataEmissao") or "")[:10] or None
-                valor_nf = float(nf.get("total", 0) or 0)
-                if existing:
-                    await db.execute("""UPDATE fiscal_notas_fiscais SET numero=$1, data_emissao=$2::date,
-                        contato_nome=$3, contato_documento=$4, valor_nf=$5, natureza_operacao=$6,
-                        status=$7, sincronizado_em=NOW() WHERE bling_id=$8""",
-                        str(nf.get("numero","")), data_emissao, contato.get("nome",""),
-                        contato.get("numeroDocumento",""), valor_nf, natureza.get("descricao",""),
-                        {1:"emitida",2:"cancelada",3:"inutilizada",4:"denegada"}.get(nf.get("situacao",1),"emitida"), bling_id)
-                else:
-                    await db.execute("""INSERT INTO fiscal_notas_fiscais (numero, modelo, data_emissao,
-                        natureza_operacao, contato_nome, contato_documento, valor_nf, status, bling_id, sincronizado_em)
-                        VALUES ($1,$2,$3::date,$4,$5,$6,$7,$8,$9,NOW())""",
-                        str(nf.get("numero","")), str(nf.get("modelo","55")), data_emissao,
-                        natureza.get("descricao",""), contato.get("nome",""),
-                        contato.get("numeroDocumento",""), valor_nf,
-                        {1:"emitida",2:"cancelada",3:"inutilizada",4:"denegada"}.get(nf.get("situacao",1),"emitida"), bling_id)
+                # ponytail: antes gravava so' numero/data/contato/valor_nf/status
+                # a partir do payload resumido do webhook — todo campo de imposto
+                # (valor_icms, valor_pis, valor_cofins, valor_ipi, valor_iss...)
+                # ficava no DEFAULT 0, contaminando silenciosamente a Apuracao
+                # pra qualquer nota que chegasse por webhook (tempo real) em vez
+                # do sync manual completo. Busca o detalhe completo (com os
+                # tributos reais); se falhar, cai no fallback com o payload do
+                # proprio webhook (mesmo comportamento de antes, nunca piora).
+                from core.fiscal import sincronizar_uma_nota_fiscal
+                resultado = sincronizar_uma_nota_fiscal(bling_id, resumo_fallback=nf)
+                if resultado.get("error"):
+                    log(AGENT, f"webhook nota-fiscal {bling_id}: {resultado['error']}")
 
         elif resource in ("contato", "contact"):
             contato = payload.get("contato", payload)

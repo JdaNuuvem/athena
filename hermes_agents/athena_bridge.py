@@ -3,6 +3,7 @@ Athena Bridge â€” conecta o Hermes Agent ao ATHENA OS via GraphQL.
 ATHENA OS tem 52 agentes, 40+ queries GraphQL, 30+ endpoints REST.
 """
 import os, sys, json, hmac, urllib.request
+from contextlib import contextmanager
 from typing import Optional
 from flask import Flask, request, jsonify, send_from_directory, redirect
 from flask_cors import CORS
@@ -698,29 +699,16 @@ def bling_pt_contas_receber():
     limite = request.args.get("limite", 100, type=int)
     return jsonify(listar_contas_receber(pagina, limite))
 
-@app.route('/api/bling/financeiro/notas-fiscais', methods=['GET'])
-def bling_pt_notas_fiscais():
-    from bling_erp import listar_notas_fiscais
-    pagina = request.args.get("pagina", 1, type=int)
-    limite = request.args.get("limite", 100, type=int)
-    return jsonify(listar_notas_fiscais(pagina, limite))
 
-@app.route('/api/bling/financeiro/notas-fiscais/<int:id>/xml', methods=['GET'])
-def bling_pt_nf_xml(id):
-    from bling_erp import get_nfe_xml
-    xml, ct = get_nfe_xml(id)
-    if not xml: return jsonify({"error": "XML nao encontrado"}), 404
-    return xml, 200, {"Content-Type": ct or "application/xml"}
-
-@app.route('/api/bling/financeiro/notas-fiscais/<int:id>/danfe', methods=['GET'])
-def bling_pt_nf_danfe(id):
-    from bling_erp import get_nfe_detail
-    r = get_nfe_detail(id)
-    danfe_url = (r.get("data", {}) or {}).get("danfe", "")
-    if danfe_url:
-        from flask import redirect
-        return redirect(danfe_url)
-    return jsonify({"error": "DANFE nao encontrada"}), 404
+# ponytail: /api/bling/financeiro/notas-fiscais (+ /xml, /danfe) removidas
+# daqui — duplicavam, na mesma URL final, as rotas de routes/integrations.py
+# (bling_bp, url_prefix /api/bling), registrado nesta mesma app. Uma delas
+# nunca era alcancada (Werkzeug so' despacha pra uma das duas em rotas
+# identicas), e as duas tinham logica DIVERGENTE pro link do DANFE (chaves
+# "danfe" vs "linkDanfe" — nenhuma tentava a outra como fallback). Mantida
+# a versao de routes/integrations.py, que ja' tinha download com
+# Content-Disposition correto pro XML; DANFE agora tenta as duas chaves
+# (ver bling_erp.get_nfe_danfe_url).
 
 @app.route('/api/bling/webhooks', methods=['GET'])
 def bling_pt_webhooks():
@@ -1624,117 +1612,135 @@ def _db_sync():
     conn.set_session(autocommit=True)
     return conn
 
+@contextmanager
+def _conn_sync():
+    """Conexao sincrona (psycopg2) com fechamento garantido. Sem isso, uma
+    excecao no meio da query (SQL invalido, parametro com tipo errado,
+    timeout) pulava direto pro `except` sem fechar conn/cur — a conexao
+    fisica ficava aberta ate o driver/GC agir ou o max_connections do
+    Postgres estourar. Usado pelas rotas de produtos, as mais chamadas do
+    modulo (listagem principal roda a cada carregamento da tela)."""
+    conn = _db_sync()
+    try:
+        yield conn
+    finally:
+        conn.close()
+
 def _dicts(cur):
     cols = [d[0] for d in cur.description] if cur.description else []
     return [dict(zip(cols, row)) for row in cur.fetchall()]
 
+PRODUTOS_POR_PAGINA_MAX = 200
+
 @app.route('/api/produtos', methods=['GET'])
 def listar_produtos():
-    if not _autenticado():
-        return jsonify({"error": "Unauthorized"}), 401
-    busca = request.args.get("busca", "").strip()
-    loja = request.args.get("loja", "")
-    variacoes = request.args.get("variacoes", "0") == "1"
-    pagina = request.args.get("pagina", 1, type=int)
-    por_pagina = request.args.get("por_pagina", 50, type=int)
-    try:
-        conn = _db_sync()
-        cur = conn.cursor()
-        where = ["1=1"]
-        params = []
-        if busca:
-            where.append("(c.sku ILIKE %s OR c.descricao ILIKE %s)")
-            params.extend([f"%{busca}%", f"%{busca}%"])
-        if loja:
-            if loja.isdigit():
-                from core.lojas import loja_efetiva_sync
-                nome_efetivo = loja_efetiva_sync(cur, loja)
-                where.append("EXISTS(SELECT 1 FROM estoque_lojas e WHERE e.sku = c.sku AND e.loja = %s)")
-                params.append(nome_efetivo)
-            else:
-                # Marketplace: filtra via anuncios
-                where.append("EXISTS(SELECT 1 FROM anuncios a WHERE a.sku=c.sku AND a.marketplace=%s)")
-                params.append(loja)
-        if not variacoes:
-            where.append("c.sku_pai IS NULL")
-        sql_where = " AND ".join(where)
-        offset = (pagina - 1) * por_pagina
-        cur.execute(f"SELECT COUNT(*) FROM catalogo_produtos c WHERE {sql_where}", params)
-        count = cur.fetchone()[0]
-        _estoque_sub = "COALESCE((SELECT SUM(e.quantidade) FROM estoque_lojas e WHERE e.sku = c.sku), 0)"
+    from core.rbac import requer_permissao
+
+    @requer_permissao("produtos.ver")
+    def _handler():
+        busca = request.args.get("busca", "").strip()
+        loja = request.args.get("loja", "")
+        variacoes = request.args.get("variacoes", "0") == "1"
+        pagina = max(1, request.args.get("pagina", 1, type=int))
+        por_pagina = max(1, min(request.args.get("por_pagina", 50, type=int), PRODUTOS_POR_PAGINA_MAX))
         try:
-            cur.execute(f"""
-                SELECT c.id, c.sku, c.descricao AS nome,
-                       COALESCE(c.imagem_url,
-                           CASE WHEN c.id_bling IS NOT NULL
-                               THEN 'https://bling.com.br/Api/v3/produtos/' || c.id_bling || '/imagem'
-                           END
-                       ) AS imagem_url,
-                       COALESCE(c.categoria, '') AS categoria,
-                       COALESCE(c.marca, '') AS marca,
-                       COALESCE(c.codigo_barras, '') AS codigo_barras,
-                       c.estoque_minimo, c.estoque_maximo, c.preco_custo,
-                       COALESCE(a.preco, 0) AS valor,
-                       (SELECT COUNT(*) FROM catalogo_produtos f WHERE f.sku_pai = c.sku) AS total_variacoes,
-                       {_estoque_sub} AS estoque_atual,
-                       COALESCE(m.margem_pct, 0) AS margem_pct,
-                       COALESCE(m.receita_total, 0) AS receita_30d,
-                       COALESCE(m.quantidade_vendida, 0) AS vendidos_30d
-                FROM catalogo_produtos c
-                LEFT JOIN anuncios a ON a.sku = c.sku AND a.marketplace = 'bling'
-                LEFT JOIN margens_diarias m ON m.sku = c.sku AND m.data = CURRENT_DATE
-                WHERE {sql_where}
-                ORDER BY c.id DESC
-                LIMIT %s OFFSET %s
-            """, params + [por_pagina, offset])
-        except Exception:
-            conn.rollback()
-            cur = conn.cursor()
-            cur.execute(f"""
-                SELECT c.id, c.sku, c.descricao AS nome,
-                       COALESCE(c.imagem_url,
-                           CASE WHEN c.id_bling IS NOT NULL
-                               THEN 'https://bling.com.br/Api/v3/produtos/' || c.id_bling || '/imagem'
-                           END
-                       ) AS imagem_url,
-                       COALESCE(c.categoria, '') AS categoria,
-                       COALESCE(c.marca, '') AS marca,
-                       COALESCE(c.codigo_barras, '') AS codigo_barras,
-                       c.estoque_minimo, c.estoque_maximo, c.preco_custo,
-                       COALESCE(a.preco, 0) AS valor,
-                       (SELECT COUNT(*) FROM catalogo_produtos f WHERE f.sku_pai = c.sku) AS total_variacoes,
-                       0 AS estoque_atual,
-                       COALESCE(m.margem_pct, 0) AS margem_pct,
-                       COALESCE(m.receita_total, 0) AS receita_30d,
-                       COALESCE(m.quantidade_vendida, 0) AS vendidos_30d
-                FROM catalogo_produtos c
-                LEFT JOIN anuncios a ON a.sku = c.sku AND a.marketplace = 'bling'
-                LEFT JOIN margens_diarias m ON m.sku = c.sku AND m.data = CURRENT_DATE
-                WHERE {sql_where}
-                ORDER BY c.id DESC
-                LIMIT %s OFFSET %s
-            """, params + [por_pagina, offset])
-        rows = _dicts(cur)
-        for r in rows:
-            for k in ("estoque_minimo", "estoque_maximo", "preco_custo"):
-                if r.get(k) is not None:
-                    r[k] = float(r[k])
-        skus = [r["sku"] for r in rows]
-        if skus:
-            cur.execute("SELECT sku, marketplace, preco, status FROM anuncios WHERE sku = ANY(%s)", (skus,))
-            precos_por_sku = {}
-            for e in _dicts(cur):
-                precos_por_sku.setdefault(e["sku"], []).append({"loja": e["marketplace"], "preco": float(e["preco"]) if e["preco"] else 0, "status": e["status"]})
-            for r in rows:
-                r["estoque_lojas"] = precos_por_sku.get(r["sku"], [])
-                r["total_lojas"] = len(r["estoque_lojas"])
-                if not r.get("valor"):
-                    precos = precos_por_sku.get(r["sku"], [])
-                    r["valor"] = max((p["preco"] for p in precos), default=0)
-        cur.close(); conn.close()
-        return jsonify({"produtos": rows, "total": count, "pagina": pagina, "por_pagina": por_pagina})
-    except Exception as e:
-        return jsonify({"erro": str(e), "produtos": [], "total": 0})
+            with _conn_sync() as conn:
+                cur = conn.cursor()
+                where = ["1=1"]
+                params = []
+                if busca:
+                    where.append("(c.sku ILIKE %s OR c.descricao ILIKE %s)")
+                    params.extend([f"%{busca}%", f"%{busca}%"])
+                if loja:
+                    if loja.isdigit():
+                        from core.lojas import loja_efetiva_sync
+                        nome_efetivo = loja_efetiva_sync(cur, loja)
+                        where.append("EXISTS(SELECT 1 FROM estoque_lojas e WHERE e.sku = c.sku AND e.loja = %s)")
+                        params.append(nome_efetivo)
+                    else:
+                        # Marketplace: filtra via anuncios
+                        where.append("EXISTS(SELECT 1 FROM anuncios a WHERE a.sku=c.sku AND a.marketplace=%s)")
+                        params.append(loja)
+                if not variacoes:
+                    where.append("c.sku_pai IS NULL")
+                sql_where = " AND ".join(where)
+                offset = (pagina - 1) * por_pagina
+                cur.execute(f"SELECT COUNT(*) FROM catalogo_produtos c WHERE {sql_where}", params)
+                count = cur.fetchone()[0]
+                _estoque_sub = "COALESCE((SELECT SUM(e.quantidade) FROM estoque_lojas e WHERE e.sku = c.sku), 0)"
+                try:
+                    cur.execute(f"""
+                        SELECT c.id, c.sku, c.descricao AS nome,
+                               COALESCE(c.imagem_url,
+                                   CASE WHEN c.id_bling IS NOT NULL
+                                       THEN 'https://bling.com.br/Api/v3/produtos/' || c.id_bling || '/imagem'
+                                   END
+                               ) AS imagem_url,
+                               COALESCE(c.categoria, '') AS categoria,
+                               COALESCE(c.marca, '') AS marca,
+                               COALESCE(c.codigo_barras, '') AS codigo_barras,
+                               c.estoque_minimo, c.estoque_maximo, c.preco_custo,
+                               COALESCE(a.preco, 0) AS valor,
+                               (SELECT COUNT(*) FROM catalogo_produtos f WHERE f.sku_pai = c.sku) AS total_variacoes,
+                               {_estoque_sub} AS estoque_atual,
+                               COALESCE(m.margem_pct, 0) AS margem_pct,
+                               COALESCE(m.receita_total, 0) AS receita_30d,
+                               COALESCE(m.quantidade_vendida, 0) AS vendidos_30d
+                        FROM catalogo_produtos c
+                        LEFT JOIN anuncios a ON a.sku = c.sku AND a.marketplace = 'bling'
+                        LEFT JOIN margens_diarias m ON m.sku = c.sku AND m.data = CURRENT_DATE
+                        WHERE {sql_where}
+                        ORDER BY c.id DESC
+                        LIMIT %s OFFSET %s
+                    """, params + [por_pagina, offset])
+                except Exception:
+                    conn.rollback()
+                    cur = conn.cursor()
+                    cur.execute(f"""
+                        SELECT c.id, c.sku, c.descricao AS nome,
+                               COALESCE(c.imagem_url,
+                                   CASE WHEN c.id_bling IS NOT NULL
+                                       THEN 'https://bling.com.br/Api/v3/produtos/' || c.id_bling || '/imagem'
+                                   END
+                               ) AS imagem_url,
+                               COALESCE(c.categoria, '') AS categoria,
+                               COALESCE(c.marca, '') AS marca,
+                               COALESCE(c.codigo_barras, '') AS codigo_barras,
+                               c.estoque_minimo, c.estoque_maximo, c.preco_custo,
+                               COALESCE(a.preco, 0) AS valor,
+                               (SELECT COUNT(*) FROM catalogo_produtos f WHERE f.sku_pai = c.sku) AS total_variacoes,
+                               0 AS estoque_atual,
+                               COALESCE(m.margem_pct, 0) AS margem_pct,
+                               COALESCE(m.receita_total, 0) AS receita_30d,
+                               COALESCE(m.quantidade_vendida, 0) AS vendidos_30d
+                        FROM catalogo_produtos c
+                        LEFT JOIN anuncios a ON a.sku = c.sku AND a.marketplace = 'bling'
+                        LEFT JOIN margens_diarias m ON m.sku = c.sku AND m.data = CURRENT_DATE
+                        WHERE {sql_where}
+                        ORDER BY c.id DESC
+                        LIMIT %s OFFSET %s
+                    """, params + [por_pagina, offset])
+                rows = _dicts(cur)
+                for r in rows:
+                    for k in ("estoque_minimo", "estoque_maximo", "preco_custo"):
+                        if r.get(k) is not None:
+                            r[k] = float(r[k])
+                skus = [r["sku"] for r in rows]
+                if skus:
+                    cur.execute("SELECT sku, marketplace, preco, status FROM anuncios WHERE sku = ANY(%s)", (skus,))
+                    precos_por_sku = {}
+                    for e in _dicts(cur):
+                        precos_por_sku.setdefault(e["sku"], []).append({"loja": e["marketplace"], "preco": float(e["preco"]) if e["preco"] else 0, "status": e["status"]})
+                    for r in rows:
+                        r["estoque_lojas"] = precos_por_sku.get(r["sku"], [])
+                        r["total_lojas"] = len(r["estoque_lojas"])
+                        if not r.get("valor"):
+                            precos = precos_por_sku.get(r["sku"], [])
+                            r["valor"] = max((p["preco"] for p in precos), default=0)
+            return jsonify({"produtos": rows, "total": count, "pagina": pagina, "por_pagina": por_pagina})
+        except Exception as e:
+            return jsonify({"erro": str(e), "produtos": [], "total": 0})
+    return _handler()
 
 @app.route('/api/produtos', methods=['POST'])
 def criar_produto_local():
@@ -1782,103 +1788,129 @@ def criar_produto_local():
 
     return _handler()
 
+_PRODUTO_CAMPOS_FLOAT = {"preco_custo", "custo_transporte", "preco_venda", "peso_bruto",
+                          "peso_liquido", "largura", "altura", "profundidade",
+                          "estoque_minimo", "estoque_maximo"}
+_PRODUTO_CAMPOS_INT = {"fornecedor_id", "marca_id", "fabricante_id", "categoria_id_norm",
+                        "volumes", "itens_por_caixa"}
+
 @app.route('/api/produtos/<sku>', methods=['PUT'])
 def editar_produto(sku):
     from core.rbac import requer_permissao
 
     @requer_permissao("produtos.editar")
     def _handler():
+        data = request.json or {}
+        updates = []
+        values = []
+        campos = ["descricao","ncm","cest","categoria","marca","unidade_padrao","tipo",
+                  "peso_bruto","sku_pai","atributo","imagem_url",
+                  "codigo_barras","gtin_embalagem","descricao_curta","descricao_complementar",
+                  "peso_liquido","largura","altura","profundidade","unidade_medida_dimensao",
+                  "volumes","itens_por_caixa","cfop_padrao","observacoes","link_externo",
+                  "fornecedor_nome","fornecedor_codigo","fornecedor_id","preco_custo",
+                  "custo_transporte","preco_venda",
+                  "estoque_minimo","estoque_maximo","estoque_localizacao",
+                  "classificacao","nome_reduzido","nome_impressao","codigo_interno",
+                  "codigo_erp","ex_tipi","modelo","linha","colecao",
+                  "marca_id","fabricante_id","categoria_id_norm"]
+        # marca_id/fabricante_id/categoria_id_norm sao FKs opcionais: o frontend envia
+        # null explicito quando o usuario limpa o campo ("— Nenhum —"), e isso deve
+        # gerar SET campo = NULL em vez de ser ignorado (que era o comportamento antigo
+        # e tornava impossivel desvincular marca/fabricante/categoria de um produto).
+        fks_anulaveis = {"marca_id", "fabricante_id", "categoria_id_norm"}
+        for campo in campos:
+            if campo in fks_anulaveis:
+                if campo not in data:
+                    continue
+                valor = data[campo]
+            elif campo in data and data[campo] is not None:
+                valor = data[campo]
+            else:
+                continue
+            # coerce/validacao de tipo no boundary — sem isso, um valor
+            # incompativel (ex.: preco_custo: "abc") so' estourava la na
+            # frente, como excecao generica do driver do Postgres (500 com
+            # a mensagem crua do banco).
+            if valor is not None and campo in _PRODUTO_CAMPOS_FLOAT:
+                try:
+                    valor = float(valor)
+                except (TypeError, ValueError):
+                    return jsonify({"error": f"Campo '{campo}' precisa ser numerico"}), 400
+            elif valor is not None and campo in _PRODUTO_CAMPOS_INT:
+                try:
+                    valor = int(valor)
+                except (TypeError, ValueError):
+                    return jsonify({"error": f"Campo '{campo}' precisa ser um numero inteiro"}), 400
+            updates.append(f"{campo} = %s")
+            values.append(valor)
+        if not updates:
+            return jsonify({"error": "Nenhum campo para atualizar"}), 400
+        updates.append("updated_at = NOW()")
+        values.append(sku)
         try:
-            data = request.json or {}
-            conn = _db_sync(); cur = conn.cursor()
-            updates = []
-            values = []
-            campos = ["descricao","ncm","cest","categoria","marca","unidade_padrao","tipo",
-                      "peso_bruto","sku_pai","atributo",
-                      "codigo_barras","gtin_embalagem","descricao_curta","descricao_complementar",
-                      "peso_liquido","largura","altura","profundidade","unidade_medida_dimensao",
-                      "volumes","itens_por_caixa","cfop_padrao","observacoes","link_externo",
-                      "fornecedor_nome","fornecedor_codigo","fornecedor_id","preco_custo",
-                      "custo_transporte","preco_venda",
-                      "estoque_minimo","estoque_maximo","estoque_localizacao",
-                      "classificacao","nome_reduzido","nome_impressao","codigo_interno",
-                      "codigo_erp","ex_tipi","modelo","linha","colecao",
-                      "marca_id","fabricante_id","categoria_id_norm"]
-            # marca_id/fabricante_id/categoria_id_norm sao FKs opcionais: o frontend envia
-            # null explicito quando o usuario limpa o campo ("— Nenhum —"), e isso deve
-            # gerar SET campo = NULL em vez de ser ignorado (que era o comportamento antigo
-            # e tornava impossivel desvincular marca/fabricante/categoria de um produto).
-            fks_anulaveis = {"marca_id", "fabricante_id", "categoria_id_norm"}
-            for campo in campos:
-                if campo in fks_anulaveis:
-                    if campo in data:
-                        updates.append(f"{campo} = %s")
-                        values.append(data[campo])
-                elif campo in data and data[campo] is not None:
-                    updates.append(f"{campo} = %s")
-                    values.append(data[campo])
-            if not updates:
-                return jsonify({"error": "Nenhum campo para atualizar"}), 400
-            updates.append("updated_at = NOW()")
-            values.append(sku)
-            sql = f"UPDATE catalogo_produtos SET {', '.join(updates)} WHERE sku = %s"
-            cur.execute(sql, values)
-            if "descricao" in data:
-                cur.execute("UPDATE fichas_tecnicas SET descricao = %s WHERE sku = %s", (data["descricao"], sku))
-            cur.close(); conn.close()
-            try:
-                from core.seguranca import auditar_alteracao
-                auditar_alteracao("editar", "produtos", "catalogo_produtos", None, dados_depois={**data, "sku": sku})
-            except Exception:
-                pass
-            return jsonify({"success": True, "sku": sku})
+            with _conn_sync() as conn:
+                cur = conn.cursor()
+                sql = f"UPDATE catalogo_produtos SET {', '.join(updates)} WHERE sku = %s"
+                cur.execute(sql, values)
+                if "descricao" in data:
+                    cur.execute("UPDATE fichas_tecnicas SET descricao = %s WHERE sku = %s", (data["descricao"], sku))
         except Exception as e:
             return jsonify({"error": str(e)}), 500
+        try:
+            from core.seguranca import auditar_alteracao
+            auditar_alteracao("editar", "produtos", "catalogo_produtos", None, dados_depois={**data, "sku": sku})
+        except Exception:
+            pass
+        return jsonify({"success": True, "sku": sku})
 
     return _handler()
 
 @app.route('/api/produtos/<sku>', methods=['GET'])
 def detalhe_produto(sku):
-    if not _autenticado():
-        return jsonify({"error": "Unauthorized"}), 401
-    try:
-        conn = _db_sync(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("""
-            SELECT c.*, COALESCE(a.preco,0) AS valor, cf.nome AS fornecedor_cadastro_nome
-            FROM catalogo_produtos c
-            LEFT JOIN anuncios a ON a.sku=c.sku AND a.marketplace='bling'
-            LEFT JOIN cad_fornecedores cf ON cf.id = c.fornecedor_id
-            WHERE c.sku=%s
-        """, (sku,))
-        p = cur.fetchone()
-        if not p:
-            return jsonify({"sku": sku, "erro": "nÃ£o encontrado"}), 404
-        p = dict(p)
-        cur.execute("SELECT marketplace,shop_id,anuncio_id,preco,posicao_busca,avaliacao_media,status FROM anuncios WHERE sku=%s", (sku,))
-        p["estoque_lojas"] = [dict(r) for r in cur.fetchall()]
+    from core.rbac import requer_permissao
 
-        # Estoque real por loja/deposito (tabela estoque_lojas â€” quantidade fisica, nao confundir com o campo acima)
-        cur.execute("SELECT loja, quantidade, data_atualizacao FROM estoque_lojas WHERE sku=%s ORDER BY loja", (sku,))
-        p["estoque_por_loja"] = [dict(r, quantidade=float(r["quantidade"]) if r.get("quantidade") is not None else 0,
-                                      data_atualizacao=str(r["data_atualizacao"]) if r.get("data_atualizacao") else None)
-                                 for r in cur.fetchall()]
+    @requer_permissao("produtos.ver")
+    def _handler():
+        try:
+            with _conn_sync() as conn:
+                cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+                cur.execute("""
+                    SELECT c.*, COALESCE(a.preco,0) AS valor, cf.nome AS fornecedor_cadastro_nome
+                    FROM catalogo_produtos c
+                    LEFT JOIN anuncios a ON a.sku=c.sku AND a.marketplace='bling'
+                    LEFT JOIN cad_fornecedores cf ON cf.id = c.fornecedor_id
+                    WHERE c.sku=%s
+                """, (sku,))
+                p = cur.fetchone()
+                if not p:
+                    return jsonify({"sku": sku, "erro": "nÃ£o encontrado"}), 404
+                p = dict(p)
+                cur.execute("SELECT marketplace,shop_id,anuncio_id,preco,posicao_busca,avaliacao_media,status FROM anuncios WHERE sku=%s", (sku,))
+                p["estoque_lojas"] = [dict(r) for r in cur.fetchall()]
 
-        # Variacoes (filhos)
-        cur.execute("SELECT sku, descricao AS nome, atributo, (SELECT COALESCE(preco,0) FROM anuncios WHERE sku=catalogo_produtos.sku AND marketplace='bling' LIMIT 1) AS valor FROM catalogo_produtos WHERE sku_pai = %s ORDER BY sku", (sku,))
-        p["variacoes"] = [dict(r, valor=float(r["valor"]) if r.get("valor") else 0) for r in cur.fetchall()]
-        cur.execute("SELECT data,marketplace,quantidade,preco_venda,receita_bruta FROM vendas WHERE sku=%s ORDER BY data DESC LIMIT 90", (sku,))
-        p["vendas_30d"] = [dict(r, data=str(r["data"])) for r in cur.fetchall()]
-        cur.execute("SELECT data,preco_venda FROM vendas WHERE sku=%s ORDER BY data ASC", (sku,))
-        p["historico_precos"] = [{"data": str(r["data"]), "preco": float(r["preco_venda"])} for r in cur.fetchall()]
-        for k in ("peso_gramas","tempo_ciclo_segundos","valor",
-                  "peso_bruto","peso_liquido","largura","altura","profundidade",
-                  "percentual_tributos","valor_base_st_retencao","valor_st_retencao","valor_icms_st",
-                  "preco_custo","custo_transporte","preco_venda","estoque_minimo","estoque_maximo"):
-            if k in p and p[k] is not None: p[k] = float(p[k])
-        cur.close(); conn.close()
-        return jsonify(p)
-    except Exception as e:
-        return jsonify({"sku": sku, "erro": str(e), "estoque_lojas": []})
+                # Estoque real por loja/deposito (tabela estoque_lojas â€” quantidade fisica, nao confundir com o campo acima)
+                cur.execute("SELECT loja, quantidade, data_atualizacao FROM estoque_lojas WHERE sku=%s ORDER BY loja", (sku,))
+                p["estoque_por_loja"] = [dict(r, quantidade=float(r["quantidade"]) if r.get("quantidade") is not None else 0,
+                                              data_atualizacao=str(r["data_atualizacao"]) if r.get("data_atualizacao") else None)
+                                         for r in cur.fetchall()]
+
+                # Variacoes (filhos)
+                cur.execute("SELECT sku, descricao AS nome, atributo, (SELECT COALESCE(preco,0) FROM anuncios WHERE sku=catalogo_produtos.sku AND marketplace='bling' LIMIT 1) AS valor FROM catalogo_produtos WHERE sku_pai = %s ORDER BY sku", (sku,))
+                p["variacoes"] = [dict(r, valor=float(r["valor"]) if r.get("valor") else 0) for r in cur.fetchall()]
+                cur.execute("SELECT data,marketplace,quantidade,preco_venda,receita_bruta FROM vendas WHERE sku=%s ORDER BY data DESC LIMIT 90", (sku,))
+                p["vendas_30d"] = [dict(r, data=str(r["data"])) for r in cur.fetchall()]
+                cur.execute("SELECT data,preco_venda FROM vendas WHERE sku=%s ORDER BY data ASC", (sku,))
+                p["historico_precos"] = [{"data": str(r["data"]), "preco": float(r["preco_venda"])} for r in cur.fetchall()]
+                for k in ("peso_gramas","tempo_ciclo_segundos","valor",
+                          "peso_bruto","peso_liquido","largura","altura","profundidade",
+                          "percentual_tributos","valor_base_st_retencao","valor_st_retencao","valor_icms_st",
+                          "preco_custo","custo_transporte","preco_venda","estoque_minimo","estoque_maximo"):
+                    if k in p and p[k] is not None: p[k] = float(p[k])
+            return jsonify(p)
+        except Exception as e:
+            return jsonify({"sku": sku, "erro": str(e), "estoque_lojas": []})
+    return _handler()
 
 @app.route('/api/produtos/limites', methods=['GET'])
 def produtos_limites():
@@ -1887,19 +1919,19 @@ def produtos_limites():
     if not _autenticado():
         return jsonify({"error": "Unauthorized"}), 401
     try:
-        conn = _db_sync(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("""SELECT sku, marca, fornecedor_nome, estoque_minimo, estoque_maximo, preco_custo
-                       FROM catalogo_produtos""")
-        out = {}
-        for r in cur.fetchall():
-            out[r["sku"]] = {
-                "marca": r["marca"] or "",
-                "fornecedor_nome": r["fornecedor_nome"] or "",
-                "estoque_minimo": float(r["estoque_minimo"]) if r["estoque_minimo"] is not None else None,
-                "estoque_maximo": float(r["estoque_maximo"]) if r["estoque_maximo"] is not None else None,
-                "preco_custo": float(r["preco_custo"]) if r["preco_custo"] is not None else None,
-            }
-        cur.close(); conn.close()
+        with _conn_sync() as conn:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cur.execute("""SELECT sku, marca, fornecedor_nome, estoque_minimo, estoque_maximo, preco_custo
+                           FROM catalogo_produtos""")
+            out = {}
+            for r in cur.fetchall():
+                out[r["sku"]] = {
+                    "marca": r["marca"] or "",
+                    "fornecedor_nome": r["fornecedor_nome"] or "",
+                    "estoque_minimo": float(r["estoque_minimo"]) if r["estoque_minimo"] is not None else None,
+                    "estoque_maximo": float(r["estoque_maximo"]) if r["estoque_maximo"] is not None else None,
+                    "preco_custo": float(r["preco_custo"]) if r["preco_custo"] is not None else None,
+                }
         return jsonify(out)
     except Exception as e:
         return jsonify({"erro": str(e)})

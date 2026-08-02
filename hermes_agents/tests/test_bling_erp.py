@@ -57,6 +57,97 @@ class TestBlingAgrupados(unittest.TestCase):
     @patch("bling_erp._request",return_value={"data":[{"id":1,"codigo":"P"},{"id":2,"codigo":"F","idProdutoPai":1}]})
     def test_filhos(self, m): r=bling.listar_produtos_agrupados(); self.assertEqual(r["total_filhos"],1)
 
+
+class TestEmitirNfe(unittest.TestCase):
+    """Emissao de NF-e de um pedido de venda — antes era chamada crua em
+    routes/integrations.py, sem wrapper nomeado/testavel."""
+    def setUp(self): bling._TOKEN["access"] = "mock"
+
+    @patch("bling_erp._request")
+    def test_chama_endpoint_correto(self, mock_req):
+        mock_req.return_value = {"data": {"id": 999}}
+        r = bling.emitir_nfe(123)
+        mock_req.assert_called_once_with("pedidos/vendas/123/gerar-nfe", {}, method="POST")
+        self.assertEqual(r["data"]["id"], 999)
+
+    @patch("bling_erp._request", return_value={"error": "pedido ja possui nota fiscal"})
+    def test_propaga_erro(self, mock_req):
+        r = bling.emitir_nfe(123)
+        self.assertIn("error", r)
+
+
+class TestEnviarRastreioPedido(unittest.TestCase):
+    def setUp(self): bling._TOKEN["access"] = "mock"
+
+    @patch("bling_erp._request")
+    def test_envia_codigo_rastreamento(self, mock_req):
+        mock_req.return_value = {"data": {}}
+        bling.enviar_rastreio_pedido(123, "BR123456789")
+        mock_req.assert_called_once_with(
+            "pedidos/vendas/123/rastrear", {"codigoRastreamento": "BR123456789"}, method="POST")
+
+
+class TestGetNfePdfBytes(unittest.TestCase):
+    """Baixa o DANFE como bytes (mesmo padrao ja usado por get_nfe_xml) — a
+    rota antiga so' fazia redirect() pra URL do Bling, sem servir os bytes."""
+    def setUp(self): bling._TOKEN["access"] = "mock"
+
+    @patch("bling_erp.requests.get")
+    @patch("bling_erp.get_nfe_detail", return_value={"data": {"linkDanfe": "https://bling.example/danfe/1"}})
+    def test_baixa_com_sucesso(self, mock_detail, mock_get):
+        mock_get.return_value = MagicMock(status_code=200, content=b"%PDF-bytes",
+                                            headers={"Content-Type": "application/pdf"})
+        conteudo, content_type = bling.get_nfe_pdf_bytes(1)
+        self.assertEqual(conteudo, b"%PDF-bytes")
+        self.assertEqual(content_type, "application/pdf")
+
+    @patch("bling_erp.get_nfe_detail", return_value={"error": "nao encontrada"})
+    def test_sem_url_danfe_retorna_none(self, mock_detail):
+        conteudo, content_type = bling.get_nfe_pdf_bytes(1)
+        self.assertIsNone(conteudo)
+        self.assertIsNone(content_type)
+
+    @patch("bling_erp.requests.get")
+    @patch("bling_erp.get_nfe_detail", return_value={"data": {"danfe": "https://bling.example/danfe/1"}})
+    def test_usa_chave_danfe_como_fallback(self, mock_detail, mock_get):
+        mock_get.return_value = MagicMock(status_code=200, content=b"%PDF-2",
+                                            headers={"Content-Type": "application/pdf"})
+        conteudo, _ = bling.get_nfe_pdf_bytes(1)
+        self.assertEqual(conteudo, b"%PDF-2")
+
+
+class TestBuscarPedidoPorNumeroLoja(unittest.TestCase):
+    """Vinculo Shopee->Bling: acha o pedido Bling correspondente a um order_sn
+    Shopee pelo numero do pedido no canal de origem (campo numeroLoja, unico
+    candidato documentado no painel do Bling para pedidos importados de
+    marketplace)."""
+    def setUp(self): bling._TOKEN["access"] = "mock"
+
+    @patch("bling_erp._request")
+    def test_encontra_por_numero_loja(self, mock_req):
+        mock_req.return_value = {"data": [
+            {"id": 1, "numeroLoja": "OUTRO"},
+            {"id": 2, "numeroLoja": "2412345ABCDEF"},
+        ]}
+        r = bling.buscar_pedido_por_numero_loja("2412345ABCDEF")
+        self.assertEqual(r["id"], 2)
+
+    @patch("bling_erp._request", return_value={"data": []})
+    def test_nao_encontrado_retorna_none(self, mock_req):
+        r = bling.buscar_pedido_por_numero_loja("SEM-MATCH")
+        self.assertIsNone(r)
+
+    @patch("bling_erp._request")
+    def test_pagina_ate_encontrar_ou_esgotar(self, mock_req):
+        pagina_1 = {"data": [{"id": i, "numeroLoja": f"X{i}"} for i in range(100)]}
+        pagina_2 = {"data": [{"id": 200, "numeroLoja": "ACHOU"}]}
+        pagina_3 = {"data": []}
+        mock_req.side_effect = [pagina_1, pagina_2, pagina_3]
+        r = bling.buscar_pedido_por_numero_loja("ACHOU")
+        self.assertEqual(r["id"], 200)
+        self.assertEqual(mock_req.call_count, 2)
+
+
 if __name__=="__main__": unittest.main(verbosity=2)
 
 patcher.stop()

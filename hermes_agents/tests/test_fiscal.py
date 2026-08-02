@@ -48,6 +48,12 @@ class _FakeDBNotas:
     async def fetchrow(self, q, *a):
         return None
 
+    async def fetch(self, q, *a):
+        # fiscal_tributos ativos, usados pra popular fiscal_impostos_nota —
+        # lista vazia = nenhum tributo cadastrado, comportamento seguro (so'
+        # nao popula a tabela derivada, nao quebra o upsert da nota/itens).
+        return []
+
     async def execute(self, q, *a):
         self.executed.append((q, a))
         if "DELETE FROM fiscal_nfe_itens" in q:
@@ -128,6 +134,19 @@ class TestSincronizarNotasFiscaisBling(unittest.TestCase):
             r = self.fiscal.sincronizar_notas_fiscais_bling()
         self.assertEqual(r["sync"], 1)
         self.assertTrue(any("777" in e for e in r["erros"]))
+
+    @patch("bling_erp.get_access_token", return_value="tok")
+    @patch("bling_erp.listar_notas_fiscais", return_value={"data": [{"id": 777}]})
+    def test_erro_fora_do_loop_nao_propaga(self, ml, mt):
+        """ponytail: get_db() (ou qualquer coisa fora do try/except por-nota)
+        falhando nao pode subir como excecao crua ate o Flask — tem que virar
+        {"error":..., "sync":0}, igual toda outra funcao deste arquivo."""
+        async def fake_get_db(): raise RuntimeError("conexao recusada")
+        with patch.object(self.fiscal, "get_db", fake_get_db):
+            r = self.fiscal.sincronizar_notas_fiscais_bling()
+        self.assertIn("error", r)
+        self.assertEqual(r["sync"], 0)
+        self.assertIn("conexao recusada", r["error"])
 
 
 if __name__=="__main__":unittest.main(verbosity=2)

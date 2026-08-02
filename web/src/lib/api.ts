@@ -1363,9 +1363,22 @@ export async function fiscalDashboard(): Promise<import("@/lib/types/domain").Fi
   return res.json();
 }
 
-export async function fiscalList(tabela: string): Promise<{ data: unknown[] }> {
-  const res = await fetch(`/api/fiscal/${tabela}`);
-  return res.json();
+// ponytail: fetch() cru sem checar res.ok — um 403/500 com corpo JSON
+// {"error":...} virava sucesso silencioso (r.data undefined -> tela vazia,
+// sem nenhum aviso de permissao negada). Migrado pra request<T>() (lanca em
+// !res.ok), mesmo padrao usado em api.chat/api.crmList/etc. Tambem ganhou
+// filtro de data opcional — a pagina /fiscal/notas fazia um fetch() paralelo
+// duplicado so' pra isso.
+export async function fiscalList(
+  tabela: string,
+  filtro?: { data_inicio?: string; data_fim?: string; dias?: number }
+): Promise<{ data: unknown[] }> {
+  const q = new URLSearchParams();
+  if (filtro?.data_inicio) q.set("data_inicio", filtro.data_inicio);
+  if (filtro?.data_fim) q.set("data_fim", filtro.data_fim);
+  if (filtro?.dias) q.set("dias", String(filtro.dias));
+  const qs = q.toString();
+  return request(`/api/fiscal/${tabela}${qs ? "?" + qs : ""}`);
 }
 
 export async function fiscalGet(tabela: string, id: number): Promise<Record<string, unknown>> {
@@ -1411,6 +1424,38 @@ export async function fiscalObrigacoesAtrasadas(): Promise<{ data: unknown[] }> 
   return res.json();
 }
 
+export async function fiscalApuracao(params?: { ano?: number; mes?: number; dias?: number }): Promise<{ resumo: Record<string, unknown>; mensal: unknown[]; fechamento?: { fechado: boolean; fechado_por?: string; fechado_em?: string; divergente?: boolean; total_tributos_no_fechamento?: number }; error?: string }> {
+  const q = new URLSearchParams();
+  if (params?.ano) q.set("ano", String(params.ano));
+  if (params?.mes) q.set("mes", String(params.mes));
+  if (params?.dias) q.set("dias", String(params.dias));
+  const res = await fetch(`/api/fiscal/apuracao?${q}`);
+  return res.json();
+}
+
+export async function fiscalApuracaoFechar(ano: number, mes: number): Promise<Record<string, unknown>> {
+  const res = await fetch("/api/fiscal/apuracao/fechar", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ano, mes }),
+  });
+  return res.json();
+}
+
+export async function fiscalApuracaoReabrir(ano: number, mes: number): Promise<Record<string, unknown>> {
+  const res = await fetch("/api/fiscal/apuracao/reabrir", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ano, mes }),
+  });
+  return res.json();
+}
+
+export async function fiscalApuracaoFechamentos(): Promise<{ data: unknown[] }> {
+  const res = await fetch("/api/fiscal/apuracao/fechamentos");
+  return res.json();
+}
+
 export async function fiscalBaixarObrigacao(id: number): Promise<Record<string, unknown>> {
   const res = await fetch(`/api/fiscal/obrigacoes/${id}/baixar`, { method: "POST" });
   return res.json();
@@ -1449,13 +1494,11 @@ export async function fiscalSyncTudo(): Promise<{ notas_fiscais: number; contas_
 }
 
 export async function fiscalNFItens(notaId: number): Promise<{ data: unknown[] }> {
-  const res = await fetch(`/api/fiscal/notas-fiscais/${notaId}/itens`);
-  return res.json();
+  return request(`/api/fiscal/notas-fiscais/${notaId}/itens`);
 }
 
 export async function fiscalNFImpostos(notaId: number): Promise<{ data: unknown[] }> {
-  const res = await fetch(`/api/fiscal/notas-fiscais/${notaId}/impostos`);
-  return res.json();
+  return request(`/api/fiscal/notas-fiscais/${notaId}/impostos`);
 }
 
 // ── Vendas ──

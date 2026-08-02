@@ -448,5 +448,62 @@ class TestListarPedidosSincronizados(unittest.TestCase):
         self.assertEqual(r, {"pedidos": [], "total": 0, "valor_total": 0, "atrasados": 0})
 
 
+class TestObterPedidoSincronizado(unittest.TestCase):
+    @patch("shopee_sync.get_db")
+    def test_encontrado_traz_itens(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetchrow.return_value = {"id": 5, "order_sn": "SN-1", "shop_id": "123", "bling_pedido_id": None}
+        fake_db.fetch.return_value = [{"id": 1, "pedido_id": 5, "sku": "SKU-A"}]
+        mock_get_db.return_value = fake_db
+
+        r = shopee_sync.obter_pedido_sincronizado("SN-1", "123")
+
+        self.assertEqual(r["order_sn"], "SN-1")
+        self.assertEqual(len(r["itens"]), 1)
+
+    @patch("shopee_sync.get_db")
+    def test_nao_encontrado_retorna_none(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetchrow.return_value = None
+        mock_get_db.return_value = fake_db
+
+        r = shopee_sync.obter_pedido_sincronizado("SN-X", "123")
+
+        self.assertIsNone(r)
+
+
+class TestAtualizarVinculoPedido(unittest.TestCase):
+    def test_campo_invalido_rejeita_sem_tocar_banco(self):
+        r = shopee_sync.atualizar_vinculo_pedido("SN-1", "123", coluna_arbitraria="x")
+        self.assertIn("erro", r)
+
+    def test_sem_campos_rejeita(self):
+        r = shopee_sync.atualizar_vinculo_pedido("SN-1", "123")
+        self.assertIn("erro", r)
+
+    @patch("shopee_sync.get_db")
+    def test_grava_bling_pedido_id(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetchrow.return_value = {"id": 5, "order_sn": "SN-1", "bling_pedido_id": 999}
+        mock_get_db.return_value = fake_db
+
+        r = shopee_sync.atualizar_vinculo_pedido("SN-1", "123", bling_pedido_id=999)
+
+        self.assertTrue(r["ok"])
+        query, params = fake_db.fetchrow.call_args.args[0], fake_db.fetchrow.call_args.args[1:]
+        self.assertIn("bling_pedido_id = $3", query)
+        self.assertEqual(params, ("SN-1", "123", 999))
+
+    @patch("shopee_sync.get_db")
+    def test_pedido_nao_encontrado_retorna_erro(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetchrow.return_value = None
+        mock_get_db.return_value = fake_db
+
+        r = shopee_sync.atualizar_vinculo_pedido("SN-X", "123", bling_pedido_id=1)
+
+        self.assertIn("erro", r)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

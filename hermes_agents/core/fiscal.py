@@ -93,6 +93,19 @@ def _ensure_tables():
             competencia VARCHAR(7),
             sincronizado_em TIMESTAMP DEFAULT NOW(), created_at TIMESTAMP DEFAULT NOW()
         )""")
+        # Snapshot congelado de apuracao fechada por (ano, mes) — antes a
+        # apuracao era so' um SUM() ao vivo, sem nenhum registro de "isso foi
+        # fechado com este valor nesta data" nem trilha do que mudou depois.
+        await db.execute("""CREATE TABLE IF NOT EXISTS fiscal_apuracao_fechada (
+            id SERIAL PRIMARY KEY, ano INT NOT NULL, mes INT NOT NULL,
+            total_notas INT DEFAULT 0, valor_total DECIMAL(14,2) DEFAULT 0,
+            valor_produtos DECIMAL(14,2) DEFAULT 0, base_icms DECIMAL(14,2) DEFAULT 0,
+            total_icms DECIMAL(14,2) DEFAULT 0, total_ipi DECIMAL(14,2) DEFAULT 0,
+            total_pis DECIMAL(14,2) DEFAULT 0, total_cofins DECIMAL(14,2) DEFAULT 0,
+            total_iss DECIMAL(14,2) DEFAULT 0, total_tributos DECIMAL(14,2) DEFAULT 0,
+            fechado_por VARCHAR(200), fechado_em TIMESTAMP DEFAULT NOW(),
+            UNIQUE(ano, mes)
+        )""")
     try:
         run_async(_go())
     except Exception as e:
@@ -182,24 +195,66 @@ def listar_filtrado(tabela: str, data_inicio: str = "", data_fim: str = "", dias
     field = DATE_FIELDS.get(tabela, "created_at")
     return {"data": _list_filtered(t, field, data_inicio, data_fim, dias)}
 
+# ── Itens/Impostos por nota ──
+
+def itens_da_nota(nota_id: int) -> list:
+    """Itens de UMA nota especifica.
+
+    ponytail: a rota que expunha isso passava `id` no path mas chamava
+    _list("fiscal_nfe_itens", ...) sem nenhum WHERE — devolvia os itens de
+    TODAS as notas fiscais pra qualquer nota_id pedido."""
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch(
+            "SELECT * FROM fiscal_nfe_itens WHERE nota_id = $1 ORDER BY numero_item", nota_id)
+        return [dict(r) for r in rows]
+    try: return run_async(_go())
+    except Exception as e: log(AGENT, f"itens_da_nota {nota_id}: {e}"); return []
+
+def impostos_da_nota(nota_id: int) -> list:
+    """Mesmo bug de itens_da_nota, na tabela de impostos calculados por nota."""
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch(
+            "SELECT * FROM fiscal_impostos_nota WHERE nota_id = $1 ORDER BY id", nota_id)
+        return [dict(r) for r in rows]
+    try: return run_async(_go())
+    except Exception as e: log(AGENT, f"impostos_da_nota {nota_id}: {e}"); return []
+
 # ── Tributos ──
 
 def calcular_tributos_nota(nota_id: int) -> dict:
+    """Aplica a aliquota de cada tributo ATIVO sobre valor_produtos da nota.
+
+    ponytail: usa Decimal, nao float, pro calculo em si — asyncpg ja devolve
+    colunas NUMERIC/DECIMAL como Decimal nativo; converter pra float antes de
+    multiplicar/dividir reintroduz erro de arredondamento de ponto flutuante
+    num calculo fiscal (a coluna do banco e' DECIMAL exatamente pra evitar
+    isso). Converte pra float so' na saida, pra serializar em JSON.
+
+    Atencao (limitacao de dominio, nao bug de codigo): esta funcao soma
+    cegamente TODOS os tributos ativos sobre a mesma base — nao distingue
+    regime (Simples Nacional substitui ICMS/PIS/COFINS/IPI, nao soma com
+    eles), nem tipo de operacao (ISS de servico vs ICMS de mercadoria nao
+    coexistem na mesma nota). Nao ha nenhuma tela usando esse endpoint hoje;
+    exige regra de negocio fiscal real (contador/especialista) antes de
+    expor pra uso operacional."""
+    from decimal import Decimal, ROUND_HALF_UP
     async def _go():
         db = await get_db()
         nota = await db.fetchrow("SELECT * FROM fiscal_notas_fiscais WHERE id = $1", nota_id)
         if not nota: return {"error": "nota nao encontrada"}
         tributos = await db.fetch("SELECT * FROM fiscal_tributos WHERE ativo = true")
-        total = 0
+        base = Decimal(nota["valor_produtos"] or 0)
+        total = Decimal("0")
         calculated = []
         for trib in tributos:
             t = dict(trib)
-            base = float(nota["valor_produtos"] or 0)
-            aliq = float(t["aliquota"] or 0)
-            valor = round(base * aliq / 100, 2)
+            aliq = Decimal(t["aliquota"] or 0)
+            valor = (base * aliq / Decimal(100)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
             total += valor
-            calculated.append({"nome": t["nome"], "sigla": t["sigla"], "aliquota_pct": aliq, "valor": valor})
-        return {"nota_id": nota_id, "base_calculo": float(nota["valor_produtos"] or 0), "tributos": calculated, "total_tributos": round(total, 2)}
+            calculated.append({"nome": t["nome"], "sigla": t["sigla"], "aliquota_pct": float(aliq), "valor": float(valor)})
+        return {"nota_id": nota_id, "base_calculo": float(base), "tributos": calculated, "total_tributos": float(total)}
     try: return run_async(_go())
     except Exception as e: return {"error": str(e)}
 
@@ -273,6 +328,21 @@ def _data(s):
     except (ValueError, TypeError):
         return None
 
+# sigla (fiscal_tributos, seed em _seed()) -> coluna correspondente ja
+# importada em fiscal_notas_fiscais. valor_ii/valor_inss ficam de fora: nao
+# ha tributo "II"/"INSS" no seed padrao (menos comuns fora de importacao/
+# folha), entao nao ha pra qual fiscal_tributos.id linkar.
+_MAPA_TRIBUTO_CAMPO = {
+    "ICMS": "valor_icms",
+    "ICMS-ST": "valor_icms_st",
+    "IPI": "valor_ipi",
+    "PIS": "valor_pis",
+    "COFINS": "valor_cofins",
+    "ISS": "valor_iss",
+    "CSLL": "valor_csll",
+    "IRPJ": "valor_ir",
+}
+
 def _mapear_nfe_detalhe(nf: dict) -> dict:
     """Mapeia o payload de detalhe do Bling (GET /nfe/{id}) para as colunas de
     fiscal_notas_fiscais. Os valores de tributos usam multiplas chaves candidatas
@@ -325,12 +395,106 @@ def _mapear_nfe_detalhe(nf: dict) -> dict:
         "modelo": str(nf.get("modelo", "55")),
     }
 
+async def _upsert_nota_fiscal(db, bling_id: int, detalhe: dict) -> int:
+    """Upsert de uma nota fiscal + seus itens, dado o payload de DETALHE do
+    Bling ja' obtido (GET /nfe/{id}). Compartilhado entre o sync manual em
+    massa (sincronizar_notas_fiscais_bling) e sincronizar_uma_nota_fiscal
+    (chamada pelo webhook em tempo real) — antes essa logica so' existia
+    dentro do loop do sync manual, e o webhook fazia um INSERT/UPDATE
+    proprio, bem mais simples, que so' gravava numero/data/contato/valor_nf/
+    status — todos os campos de imposto (valor_icms, valor_pis, valor_cofins,
+    valor_ipi, valor_iss...) ficavam no DEFAULT 0, contaminando
+    silenciosamente a Apuracao pra qualquer nota que chegasse por webhook em
+    vez do sync manual."""
+    import json as _json
+    existing = await db.fetchval("SELECT id FROM fiscal_notas_fiscais WHERE bling_id = $1", bling_id)
+    campos = _mapear_nfe_detalhe(detalhe)
+    raw = _json.dumps(detalhe, ensure_ascii=False)
+    if existing:
+        await db.execute("""UPDATE fiscal_notas_fiscais SET
+            numero=$1, chave_acesso=$2, data_emissao=$3::date, data_operacao=$4::date,
+            contato_nome=$5, contato_documento=$6, natureza_operacao=$7,
+            valor_nf=$8, valor_produtos=$9, valor_frete=$10, status=$11,
+            cfop=$12, loja_id=$13, valor_seguro=$14, valor_desconto=$15, valor_outros=$16,
+            base_icms=$17, valor_icms=$18, base_icms_st=$19, valor_icms_st=$20,
+            valor_ipi=$21, valor_pis=$22, valor_cofins=$23, valor_iss=$24,
+            valor_ii=$25, valor_ir=$26, valor_csll=$27, valor_inss=$28, valor_total_tributos=$29,
+            xml_url=$30, danfe_url=$31, dados_brutos_bling=$32::jsonb, sincronizado_em=NOW()
+            WHERE bling_id=$33""",
+            campos["numero"], campos["chave_acesso"], campos["data_emissao"], campos["data_operacao"],
+            campos["contato_nome"], campos["contato_documento"], campos["natureza_operacao"],
+            campos["valor_nf"], campos["valor_produtos"], campos["valor_frete"], campos["status"],
+            campos["cfop"], campos["loja_id"], campos["valor_seguro"], campos["valor_desconto"], campos["valor_outros"],
+            campos["base_icms"], campos["valor_icms"], campos["base_icms_st"], campos["valor_icms_st"],
+            campos["valor_ipi"], campos["valor_pis"], campos["valor_cofins"], campos["valor_iss"],
+            campos["valor_ii"], campos["valor_ir"], campos["valor_csll"], campos["valor_inss"], campos["valor_total_tributos"],
+            campos["xml_url"], campos["danfe_url"], raw, bling_id)
+        nota_id = existing
+        await db.execute("DELETE FROM fiscal_nfe_itens WHERE nota_id = $1", nota_id)
+    else:
+        nota_id = await db.fetchval("""INSERT INTO fiscal_notas_fiscais
+            (numero, modelo, chave_acesso, tipo, data_emissao, data_operacao,
+             natureza_operacao, cfop, contato_nome, contato_documento,
+             valor_nf, valor_produtos, valor_frete, valor_seguro, valor_desconto, valor_outros,
+             base_icms, valor_icms, base_icms_st, valor_icms_st, valor_ipi, valor_pis, valor_cofins,
+             valor_iss, valor_ii, valor_ir, valor_csll, valor_inss, valor_total_tributos,
+             status, loja_id, xml_url, danfe_url, dados_brutos_bling, bling_id, sincronizado_em)
+            VALUES ($1,$2,$3,$4,$5::date,$6::date,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
+                    $20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34::jsonb,$35,NOW())
+            RETURNING id""",
+            campos["numero"], campos["modelo"], campos["chave_acesso"], campos["tipo"],
+            campos["data_emissao"], campos["data_operacao"], campos["natureza_operacao"], campos["cfop"],
+            campos["contato_nome"], campos["contato_documento"], campos["valor_nf"], campos["valor_produtos"],
+            campos["valor_frete"], campos["valor_seguro"], campos["valor_desconto"], campos["valor_outros"],
+            campos["base_icms"], campos["valor_icms"], campos["base_icms_st"], campos["valor_icms_st"],
+            campos["valor_ipi"], campos["valor_pis"], campos["valor_cofins"], campos["valor_iss"],
+            campos["valor_ii"], campos["valor_ir"], campos["valor_csll"], campos["valor_inss"],
+            campos["valor_total_tributos"], campos["status"], campos["loja_id"],
+            campos["xml_url"], campos["danfe_url"], raw, bling_id)
+
+    itens = detalhe.get("itens", []) or []
+    for idx, item in enumerate(itens, 1):
+        await db.execute("""INSERT INTO fiscal_nfe_itens
+            (nota_id, numero_item, codigo, descricao, ncm, cest, cfop, unidade,
+             quantidade, valor_unitario, valor_total, valor_desconto, base_icms, valor_icms, aliquota_icms,
+             base_icms_st, valor_icms_st, valor_ipi, valor_pis, valor_cofins)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)""",
+            nota_id, idx,
+            item.get("codigo", ""), item.get("descricao", ""),
+            item.get("ncm", ""), item.get("cest", ""), item.get("cfop", ""),
+            item.get("unidade", "UN"),
+            _num(item.get("quantidade")), _num(item.get("valorUnitario")), _num(item.get("valor"), item.get("valorTotal")),
+            _num(item.get("valorDesconto")), _num(item.get("baseICMS")), _num(item.get("valorICMS")), _num(item.get("aliquotaICMS")),
+            _num(item.get("baseICMSST")), _num(item.get("valorICMSST")), _num(item.get("valorIPI")),
+            _num(item.get("valorPIS")), _num(item.get("valorCOFINS")))
+
+    # ponytail: fiscal_impostos_nota existia no schema desde sempre (FK pra
+    # fiscal_tributos, base_calculo/aliquota/valor por tributo) mas nunca era
+    # populada em lugar nenhum — GET /notas-fiscais/<id>/impostos sempre
+    # devolvia []. Deriva uma linha por tributo cadastrado com valor
+    # correspondente > 0 nas colunas ja importadas da nota (nao recalcula
+    # nada, so' espelha em formato normalizado o que o Bling ja mandou).
+    await db.execute("DELETE FROM fiscal_impostos_nota WHERE nota_id = $1", nota_id)
+    tributos_ativos = await db.fetch("SELECT id, nome, sigla, aliquota FROM fiscal_tributos WHERE ativo = true")
+    for trib in tributos_ativos:
+        campo = _MAPA_TRIBUTO_CAMPO.get(trib["sigla"])
+        if not campo:
+            continue
+        valor = campos.get(campo) or 0
+        if not valor:
+            continue
+        base = campos.get("base_icms") if campo in ("valor_icms", "valor_icms_st") else campos.get("valor_produtos")
+        await db.execute("""INSERT INTO fiscal_impostos_nota
+            (nota_id, tributo_id, nome, sigla, base_calculo, aliquota, valor)
+            VALUES ($1,$2,$3,$4,$5,$6,$7)""",
+            nota_id, trib["id"], trib["nome"], trib["sigla"], base or 0, trib["aliquota"] or 0, valor)
+    return nota_id
+
 def sincronizar_notas_fiscais_bling(pagina: int = 1, limite: int = 100) -> dict:
     """Sync completo: lista todas as paginas de notas fiscais e busca o DETALHE de
     cada uma (GET /nfe/{id}) para importar itens e impostos reais — a listagem
     (GET /nfe) traz apenas um resumo, sem itens nem tributos."""
     from bling_erp import listar_notas_fiscais as bling_nfe, get_nfe_completa, get_access_token, get_auth_url
-    import json as _json
     token = get_access_token()
     if not token: return {"error": "Bling nao autenticado", "auth_url": get_auth_url()}
 
@@ -376,71 +540,53 @@ def sincronizar_notas_fiscais_bling(pagina: int = 1, limite: int = 100) -> dict:
                 detalhe = nf_resumo  # fallback: usa ao menos o resumo da listagem
 
             try:
-                existing = await db.fetchval("SELECT id FROM fiscal_notas_fiscais WHERE bling_id = $1", bling_id)
-                campos = _mapear_nfe_detalhe(detalhe)
-                raw = _json.dumps(detalhe, ensure_ascii=False)
-                if existing:
-                    await db.execute("""UPDATE fiscal_notas_fiscais SET
-                        numero=$1, chave_acesso=$2, data_emissao=$3::date, data_operacao=$4::date,
-                        contato_nome=$5, contato_documento=$6, natureza_operacao=$7,
-                        valor_nf=$8, valor_produtos=$9, valor_frete=$10, status=$11,
-                        cfop=$12, loja_id=$13, valor_seguro=$14, valor_desconto=$15, valor_outros=$16,
-                        base_icms=$17, valor_icms=$18, base_icms_st=$19, valor_icms_st=$20,
-                        valor_ipi=$21, valor_pis=$22, valor_cofins=$23, valor_iss=$24,
-                        valor_ii=$25, valor_ir=$26, valor_csll=$27, valor_inss=$28, valor_total_tributos=$29,
-                        xml_url=$30, danfe_url=$31, dados_brutos_bling=$32::jsonb, sincronizado_em=NOW()
-                        WHERE bling_id=$33""",
-                        campos["numero"], campos["chave_acesso"], campos["data_emissao"], campos["data_operacao"],
-                        campos["contato_nome"], campos["contato_documento"], campos["natureza_operacao"],
-                        campos["valor_nf"], campos["valor_produtos"], campos["valor_frete"], campos["status"],
-                        campos["cfop"], campos["loja_id"], campos["valor_seguro"], campos["valor_desconto"], campos["valor_outros"],
-                        campos["base_icms"], campos["valor_icms"], campos["base_icms_st"], campos["valor_icms_st"],
-                        campos["valor_ipi"], campos["valor_pis"], campos["valor_cofins"], campos["valor_iss"],
-                        campos["valor_ii"], campos["valor_ir"], campos["valor_csll"], campos["valor_inss"], campos["valor_total_tributos"],
-                        campos["xml_url"], campos["danfe_url"], raw, bling_id)
-                    nota_id = existing
-                    await db.execute("DELETE FROM fiscal_nfe_itens WHERE nota_id = $1", nota_id)
-                else:
-                    nota_id = await db.fetchval("""INSERT INTO fiscal_notas_fiscais
-                        (numero, modelo, chave_acesso, tipo, data_emissao, data_operacao,
-                         natureza_operacao, cfop, contato_nome, contato_documento,
-                         valor_nf, valor_produtos, valor_frete, valor_seguro, valor_desconto, valor_outros,
-                         base_icms, valor_icms, base_icms_st, valor_icms_st, valor_ipi, valor_pis, valor_cofins,
-                         valor_iss, valor_ii, valor_ir, valor_csll, valor_inss, valor_total_tributos,
-                         status, loja_id, xml_url, danfe_url, dados_brutos_bling, bling_id, sincronizado_em)
-                        VALUES ($1,$2,$3,$4,$5::date,$6::date,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
-                                $20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34::jsonb,$35,NOW())
-                        RETURNING id""",
-                        campos["numero"], campos["modelo"], campos["chave_acesso"], campos["tipo"],
-                        campos["data_emissao"], campos["data_operacao"], campos["natureza_operacao"], campos["cfop"],
-                        campos["contato_nome"], campos["contato_documento"], campos["valor_nf"], campos["valor_produtos"],
-                        campos["valor_frete"], campos["valor_seguro"], campos["valor_desconto"], campos["valor_outros"],
-                        campos["base_icms"], campos["valor_icms"], campos["base_icms_st"], campos["valor_icms_st"],
-                        campos["valor_ipi"], campos["valor_pis"], campos["valor_cofins"], campos["valor_iss"],
-                        campos["valor_ii"], campos["valor_ir"], campos["valor_csll"], campos["valor_inss"],
-                        campos["valor_total_tributos"], campos["status"], campos["loja_id"],
-                        campos["xml_url"], campos["danfe_url"], raw, bling_id)
-
-                itens = detalhe.get("itens", []) or []
-                for idx, item in enumerate(itens, 1):
-                    await db.execute("""INSERT INTO fiscal_nfe_itens
-                        (nota_id, numero_item, codigo, descricao, ncm, cest, cfop, unidade,
-                         quantidade, valor_unitario, valor_total, valor_desconto, base_icms, valor_icms, aliquota_icms,
-                         base_icms_st, valor_icms_st, valor_ipi, valor_pis, valor_cofins)
-                        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)""",
-                        nota_id, idx,
-                        item.get("codigo", ""), item.get("descricao", ""),
-                        item.get("ncm", ""), item.get("cest", ""), item.get("cfop", ""),
-                        item.get("unidade", "UN"),
-                        _num(item.get("quantidade")), _num(item.get("valorUnitario")), _num(item.get("valor"), item.get("valorTotal")),
-                        _num(item.get("valorDesconto")), _num(item.get("baseICMS")), _num(item.get("valorICMS")), _num(item.get("aliquotaICMS")),
-                        _num(item.get("baseICMSST")), _num(item.get("valorICMSST")), _num(item.get("valorIPI")),
-                        _num(item.get("valorPIS")), _num(item.get("valorCOFINS")))
+                await _upsert_nota_fiscal(db, bling_id, detalhe)
                 total += 1
             except Exception as e:
                 log(AGENT, f"Erro sync NF {nf_resumo.get('numero')}: {e}")
         return {"sync": total, "erros": erros, "mais_paginas": mais_paginas}
-    return run_async(_go())
+    # ponytail: unica funcao deste arquivo cujo run_async(_go()) nao tinha
+    # try/except no nivel de fora (toda outra funcao aqui tem). O try/except
+    # DENTRO do loop so' cobre erro por-nota; qualquer excecao fora dele
+    # (get_db() falhar, etc) subia direto ate o Flask sem handler, virando
+    # 500 generico em texto puro — response.json() no frontend quebrava com
+    # "Unexpected token 'I', 'Internal S'... is not valid JSON" em vez de
+    # mostrar o erro real. Confirmado ao vivo: sync real contra producao
+    # estourava exatamente assim.
+    try:
+        return run_async(_go())
+    except Exception as e:
+        log(AGENT, f"Erro sincronizar_notas_fiscais_bling: {e}")
+        return {"error": str(e), "sync": 0}
+
+def sincronizar_uma_nota_fiscal(bling_id: int, resumo_fallback: dict = None) -> dict:
+    """Busca o detalhe completo de UMA nota (GET /nfe/{id}) e faz upsert —
+    usado pelo webhook de nota-fiscal em bling_erp.processar_evento_webhook,
+    pra que uma nota recebida em tempo real chegue com valor_icms/pis/
+    cofins/ipi/iss corretos, nao zerados. So' tenta UMA vez (sem retry/
+    backoff, ao contrario do sync em massa) porque o webhook precisa
+    responder ao Bling rapido; se a busca falhar (rede, rate limit), cai no
+    fallback com os dados basicos que ja vieram no proprio payload do
+    webhook (mesmo comportamento de antes dessa correcao — nunca fica pior)."""
+    from bling_erp import get_nfe_completa, get_access_token
+    token = get_access_token()
+    detalhe = None
+    if token:
+        r_detalhe = get_nfe_completa(bling_id)
+        if not r_detalhe.get("error"):
+            detalhe = r_detalhe.get("data", {})
+    if not detalhe:
+        if not resumo_fallback:
+            return {"error": "nao foi possivel obter detalhe da nota e nenhum fallback foi informado"}
+        detalhe = resumo_fallback
+    async def _go():
+        db = await get_db()
+        nota_id = await _upsert_nota_fiscal(db, bling_id, detalhe)
+        return {"nota_id": nota_id}
+    try:
+        return run_async(_go())
+    except Exception as e:
+        return {"error": str(e)}
 
 def sincronizar_contas_receber_bling(pagina: int = 1, limite: int = 100) -> dict:
     """Sync contas a receber do Bling → fin_contas_receber (tabela unificada SSOT)."""
@@ -543,33 +689,48 @@ def sincronizar_tudo_bling() -> dict:
 
 # ── Apuração de Impostos ──
 
+def _clause_periodo(ano: int = None, mes: int = None, dias: int = 0) -> str:
+    where = []
+    if ano and mes:
+        where.append(f"EXTRACT(YEAR FROM COALESCE(data_emissao, created_at)) = {ano}")
+        where.append(f"EXTRACT(MONTH FROM COALESCE(data_emissao, created_at)) = {mes}")
+    elif dias:
+        where.append(f"COALESCE(data_emissao, created_at) >= CURRENT_DATE - {dias}")
+    return ("WHERE " + " AND ".join(where)) if where else ""
+
+async def _resumo_periodo(db, ano: int = None, mes: int = None, dias: int = 0) -> dict:
+    """Agregacao SUM() usada tanto por apuracao_impostos() (visualizacao ao
+    vivo) quanto por fechar_apuracao() (snapshot congelado) — mesma query,
+    dois consumidores, extraida pra nao duplicar."""
+    clause = _clause_periodo(ano, mes, dias)
+    row = await db.fetchrow(f"""
+        SELECT
+            COUNT(*) as total_notas,
+            COALESCE(SUM(valor_nf), 0) as valor_total,
+            COALESCE(SUM(valor_produtos), 0) as valor_produtos,
+            COALESCE(SUM(base_icms), 0) as base_icms,
+            COALESCE(SUM(valor_icms), 0) as total_icms,
+            COALESCE(SUM(valor_ipi), 0) as total_ipi,
+            COALESCE(SUM(valor_pis), 0) as total_pis,
+            COALESCE(SUM(valor_cofins), 0) as total_cofins,
+            COALESCE(SUM(valor_iss), 0) as total_iss,
+            COALESCE(SUM(valor_total_tributos), 0) as total_tributos
+        FROM fiscal_notas_fiscais
+        {clause}
+    """)
+    return dict(row) if row else {}
+
 def apuracao_impostos(ano: int = None, mes: int = None, dias: int = 365) -> dict:
-    """Apuração consolidada de ICMS, PIS, COFINS, IPI por período (mensal ou últimos N dias)."""
+    """Apuração consolidada de ICMS, PIS, COFINS, IPI por período (mensal ou últimos N dias).
+
+    Quando ano+mes sao informados (apuracao de um mes especifico), inclui
+    tambem o status de fechamento (fiscal_apuracao_fechada) e se o resumo
+    ao vivo diverge do snapshot congelado — sinal de que uma nota do
+    periodo foi alterada/cancelada DEPOIS do fechamento."""
     async def _go():
         db = await get_db()
-        where = []
-        if ano and mes:
-            where.append(f"EXTRACT(YEAR FROM COALESCE(data_emissao, created_at)) = {ano}")
-            where.append(f"EXTRACT(MONTH FROM COALESCE(data_emissao, created_at)) = {mes}")
-        elif dias:
-            where.append(f"COALESCE(data_emissao, created_at) >= CURRENT_DATE - {dias}")
-        clause = ("WHERE " + " AND ".join(where)) if where else ""
-
-        row = await db.fetchrow(f"""
-            SELECT
-                COUNT(*) as total_notas,
-                COALESCE(SUM(valor_nf), 0) as valor_total,
-                COALESCE(SUM(valor_produtos), 0) as valor_produtos,
-                COALESCE(SUM(base_icms), 0) as base_icms,
-                COALESCE(SUM(valor_icms), 0) as total_icms,
-                COALESCE(SUM(valor_ipi), 0) as total_ipi,
-                COALESCE(SUM(valor_pis), 0) as total_pis,
-                COALESCE(SUM(valor_cofins), 0) as total_cofins,
-                COALESCE(SUM(valor_iss), 0) as total_iss,
-                COALESCE(SUM(valor_total_tributos), 0) as total_tributos
-            FROM fiscal_notas_fiscais
-            {clause}
-        """)
+        clause = _clause_periodo(ano, mes, dias)
+        resumo = await _resumo_periodo(db, ano, mes, dias)
 
         monthly = await db.fetch(f"""
             SELECT
@@ -589,14 +750,103 @@ def apuracao_impostos(ano: int = None, mes: int = None, dias: int = 365) -> dict
             LIMIT 24
         """)
 
-        return {
-            "resumo": dict(row) if row else {},
+        resultado = {
+            "resumo": resumo,
             "mensal": [dict(r) for r in (monthly or [])],
         }
+        if ano and mes:
+            fechamento = await db.fetchrow(
+                "SELECT * FROM fiscal_apuracao_fechada WHERE ano=$1 AND mes=$2", ano, mes)
+            if fechamento:
+                f = dict(fechamento)
+                divergente = round(float(resumo.get("total_tributos") or 0), 2) != round(float(f.get("total_tributos") or 0), 2)
+                resultado["fechamento"] = {
+                    "fechado": True,
+                    "fechado_por": f.get("fechado_por"),
+                    "fechado_em": str(f.get("fechado_em")) if f.get("fechado_em") else None,
+                    "divergente": divergente,
+                    "total_tributos_no_fechamento": float(f.get("total_tributos") or 0),
+                }
+            else:
+                resultado["fechamento"] = {"fechado": False}
+        return resultado
     try:
         return run_async(_go())
     except Exception as e:
         return {"error": str(e), "resumo": {}, "mensal": []}
+
+def fechar_apuracao(ano: int, mes: int, usuario: str = "") -> dict:
+    """Congela o resumo atual da apuracao do periodo (ano, mes) num snapshot
+    fechado — antes a apuracao era so' um SUM() ao vivo, sem nenhum conceito
+    de periodo fechado nem trilha do que mudou depois. Rejeita se ja existir
+    fechamento ativo pro periodo (precisa reabrir_apuracao() antes de
+    fechar de novo, nunca sobrescreve silenciosamente)."""
+    if not ano or not mes:
+        return {"error": "ano e mes sao obrigatorios"}
+    if mes < 1 or mes > 12:
+        return {"error": "mes invalido"}
+    async def _go():
+        db = await get_db()
+        existente = await db.fetchval(
+            "SELECT id FROM fiscal_apuracao_fechada WHERE ano=$1 AND mes=$2", ano, mes)
+        if existente:
+            return {"error": f"Apuracao de {mes:02d}/{ano} ja esta fechada. Reabra antes de fechar novamente."}
+        resumo = await _resumo_periodo(db, ano, mes)
+        row = await db.fetchrow("""INSERT INTO fiscal_apuracao_fechada
+            (ano, mes, total_notas, valor_total, valor_produtos, base_icms,
+             total_icms, total_ipi, total_pis, total_cofins, total_iss, total_tributos, fechado_por)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *""",
+            ano, mes, resumo.get("total_notas", 0), resumo.get("valor_total", 0), resumo.get("valor_produtos", 0),
+            resumo.get("base_icms", 0), resumo.get("total_icms", 0), resumo.get("total_ipi", 0),
+            resumo.get("total_pis", 0), resumo.get("total_cofins", 0), resumo.get("total_iss", 0),
+            resumo.get("total_tributos", 0), usuario)
+        return dict(row) if row else {"error": "falha ao gravar fechamento"}
+    try:
+        resultado = run_async(_go())
+        if not resultado.get("error"):
+            try:
+                from core.seguranca import auditar_alteracao
+                auditar_alteracao("fechar", "fiscal", "apuracao_fechada", resultado.get("id"), dados_depois=resultado)
+            except Exception:
+                pass
+        return resultado
+    except Exception as e:
+        return {"error": str(e)}
+
+def reabrir_apuracao(ano: int, mes: int, usuario: str = "") -> dict:
+    """Remove o fechamento ativo do periodo, permitindo fechar de novo depois
+    (ex.: uma nota precisou ser corrigida/cancelada). A remocao em si fica
+    registrada na auditoria central (auditar_exclusao ja preserva
+    dados_antes com quem/quando fechou originalmente)."""
+    if not ano or not mes:
+        return {"error": "ano e mes sao obrigatorios"}
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow("SELECT * FROM fiscal_apuracao_fechada WHERE ano=$1 AND mes=$2", ano, mes)
+        if not row:
+            return {"error": f"Apuracao de {mes:02d}/{ano} nao esta fechada"}
+        await db.execute("DELETE FROM fiscal_apuracao_fechada WHERE ano=$1 AND mes=$2", ano, mes)
+        return dict(row)
+    try:
+        dados_antes = run_async(_go())
+        if not dados_antes.get("error"):
+            try:
+                from core.seguranca import auditar_exclusao
+                auditar_exclusao("fiscal", "apuracao_fechada", dados_antes.get("id"), dados_antes)
+            except Exception:
+                pass
+            return {"success": True, "reaberto": dados_antes}
+        return dados_antes
+    except Exception as e:
+        return {"error": str(e)}
+
+def listar_fechamentos() -> list:
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch("SELECT * FROM fiscal_apuracao_fechada ORDER BY ano DESC, mes DESC LIMIT 36")
+        return [dict(r) for r in rows]
+    try: return run_async(_go())
+    except Exception as e: log(AGENT, f"listar_fechamentos: {e}"); return []
 
 
 # ── Seed ──

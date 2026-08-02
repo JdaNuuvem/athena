@@ -91,6 +91,13 @@ async def _init_tables():
         )
     """)
     await db.execute("CREATE INDEX IF NOT EXISTS idx_shopee_pedidos_itens_pedido ON shopee_pedidos_itens (pedido_id)")
+    # Fulfillment (emissao de NF-e via Bling + despacho/etiqueta via Shopee) —
+    # ver core/shopee_fulfillment.py. package_number pode diferir de order_sn
+    # (a Shopee gera 1 por pacote; a maioria dos pedidos tem so' 1 pacote).
+    await db.execute("ALTER TABLE shopee_pedidos_sincronizados ADD COLUMN IF NOT EXISTS bling_pedido_id INT")
+    await db.execute("ALTER TABLE shopee_pedidos_sincronizados ADD COLUMN IF NOT EXISTS bling_nota_fiscal_id INT")
+    await db.execute("ALTER TABLE shopee_pedidos_sincronizados ADD COLUMN IF NOT EXISTS package_number VARCHAR(50)")
+    await db.execute("ALTER TABLE shopee_pedidos_sincronizados ADD COLUMN IF NOT EXISTS despachado_em TIMESTAMP")
 
 async def _upsert_anuncio(db, shop_id: str, sku: str, anuncio_id: str, titulo: str,
                            preco: float, estoque: int, status: str, agora: datetime,
@@ -394,6 +401,52 @@ def listar_pedidos_sincronizados(loja_id: int, status: str = None, busca: str = 
     except Exception as e:
         log(AGENT, f"Erro listar_pedidos_sincronizados: {e}")
         return {"pedidos": [], "total": 0, "valor_total": 0, "atrasados": 0}
+
+def obter_pedido_sincronizado(order_sn: str, shop_id: str) -> dict:
+    """1 pedido (com itens) pelo par order_sn/shop_id — usado pelo fulfillment
+    (core/shopee_fulfillment.py) pra ler o estado atual (vinculo Bling, nota,
+    despacho) antes de cada acao."""
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow(
+            "SELECT * FROM shopee_pedidos_sincronizados WHERE order_sn = $1 AND shop_id = $2",
+            order_sn, shop_id)
+        if not row:
+            return None
+        pedido = dict(row)
+        itens = await db.fetch("SELECT * FROM shopee_pedidos_itens WHERE pedido_id = $1", pedido["id"])
+        pedido["itens"] = [dict(i) for i in itens]
+        return pedido
+    try:
+        return run_async(_go())
+    except Exception as e:
+        log(AGENT, f"Erro obter_pedido_sincronizado: {e}")
+        return None
+
+_CAMPOS_VINCULO_VALIDOS = {"bling_pedido_id", "bling_nota_fiscal_id", "package_number", "despachado_em"}
+
+def atualizar_vinculo_pedido(order_sn: str, shop_id: str, **campos) -> dict:
+    """Grava campos de fulfillment (vinculo Bling, nota emitida, package_number,
+    despacho) no pedido ja sincronizado. Whitelist propria (_CAMPOS_VINCULO_VALIDOS)
+    porque quem chama isso e' sempre codigo interno (core.shopee_fulfillment),
+    nunca dado bruto de request — ainda assim nao concatena chave nao validada."""
+    invalidos = set(campos) - _CAMPOS_VINCULO_VALIDOS
+    if invalidos:
+        return {"erro": f"campos invalidos: {', '.join(sorted(invalidos))}"}
+    if not campos:
+        return {"erro": "nenhum campo informado"}
+    async def _go():
+        db = await get_db()
+        sets = ", ".join(f"{k} = ${i + 3}" for i, k in enumerate(campos.keys()))
+        row = await db.fetchrow(
+            f"UPDATE shopee_pedidos_sincronizados SET {sets} WHERE order_sn = $1 AND shop_id = $2 RETURNING *",
+            order_sn, shop_id, *campos.values())
+        return dict(row) if row else None
+    try:
+        r = run_async(_go())
+        return {"ok": True, "pedido": r} if r else {"erro": "pedido nao encontrado"}
+    except Exception as e:
+        return {"erro": str(e)}
 
 def listar_produtos_sincronizados(loja_id: int) -> list:
     """Produtos ja sincronizados (tabela anuncios) para uma loja Shopee especifica —
