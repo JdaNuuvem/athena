@@ -81,7 +81,7 @@ class TestFinanceiroAlcadaPagamento(unittest.TestCase):
                 json={"fornecedor": "X", "valor": 9000, "status": "pago"},
                 headers=headers,
             )
-        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.status_code, 400)
         data = r.get_json()
         self.assertIn("error", data)
         mock_create.assert_not_called()
@@ -208,6 +208,101 @@ class TestFinanceiroAlcadaPorPinOuCracha(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         _, dados_enviados = mock_create.call_args[0]
         self.assertEqual(dados_enviados["aprovado_por"], "Diretora X")
+
+
+class TestFinanceiroWhitelistColunas(unittest.TestCase):
+    """core.financeiro._create/_update concatenam as CHAVES do dict recebido
+    direto na string SQL (so' os valores sao parametrizados) — sem whitelist,
+    um nome de campo malicioso no JSON vira SQL injection. FIN_COLUNAS filtra
+    antes de chegar em _create/_update."""
+
+    def test_create_filtra_coluna_desconhecida(self):
+        import core.financeiro as fin
+        with patch("core.financeiro._create", return_value={"id": 1}) as mock_create:
+            fin.create("contas_pagar", {"fornecedor": "X", "valor); DROP TABLE fin_bancos;--": "1"})
+        tabela, dados_enviados = mock_create.call_args[0]
+        self.assertEqual(tabela, "fin_contas_pagar")
+        self.assertEqual(set(dados_enviados.keys()), {"fornecedor"})
+
+    def test_update_filtra_coluna_desconhecida(self):
+        import core.financeiro as fin
+        with patch("core.financeiro._update", return_value={"id": 1}) as mock_update:
+            fin.update("bancos", 1, {"nome": "Y", "id = 0 OR 1=1; --": "x"})
+        tabela, id_, dados_enviados = mock_update.call_args[0]
+        self.assertEqual(tabela, "fin_bancos")
+        self.assertEqual(set(dados_enviados.keys()), {"nome"})
+
+    def test_create_sem_campo_valido_retorna_erro_sem_tocar_banco(self):
+        import core.financeiro as fin
+        with patch("core.financeiro._create") as mock_create:
+            r = fin.create("contas_pagar", {"campo_inexistente": "x"})
+        self.assertIn("error", r)
+        mock_create.assert_not_called()
+
+    def test_tabela_invalida_retorna_erro_sem_tocar_banco(self):
+        import core.financeiro as fin
+        with patch("core.financeiro._create") as mock_create:
+            r = fin.create("tabela_que_nao_existe", {"x": "y"})
+        self.assertIn("error", r)
+        mock_create.assert_not_called()
+
+    def test_contas_receber_e_pagar_aceitam_bling_id_e_origem(self):
+        """Schema bling_id/origem foi adicionado para os 3 fluxos que gravam
+        contas vindas do Bling (webhook, sync manual, migracao) — a whitelist
+        precisa deixar esses 2 campos passarem, senao o INSERT do webhook
+        falha calado (campo filtrado vira dict vazio ou incompleto)."""
+        import core.financeiro as fin
+        self.assertIn("bling_id", fin.FIN_COLUNAS["contas_receber"])
+        self.assertIn("origem", fin.FIN_COLUNAS["contas_pagar"])
+        with patch("core.financeiro._create", return_value={"id": 1}) as mock_create:
+            fin.create("contas_receber", {"cliente": "X", "bling_id": 999, "origem": "bling"})
+        _, dados_enviados = mock_create.call_args[0]
+        self.assertEqual(dados_enviados["bling_id"], 999)
+        self.assertEqual(dados_enviados["origem"], "bling")
+
+
+class TestFinanceiroRBACLeitura(unittest.TestCase):
+    """financeiro.ver deve ser exigido em toda rota GET — antes da correcao
+    qualquer usuario autenticado (mesmo sem nenhuma permissao financeira)
+    conseguia ler contas a pagar/receber, saldo bancario, DRE etc."""
+
+    def setUp(self):
+        self._env_patch = patch.dict(os.environ, {"ATHENA_TOKEN": _TEST_TOKEN})
+        self._env_patch.start()
+        self.client = _app()
+
+    def tearDown(self):
+        self._env_patch.stop()
+
+    def _headers_sem_permissao_financeira(self):
+        token = rbac.gerar_token_sessao(7, "op@x.com", "Operador Loja")
+        return {"Authorization": f"Bearer {token}"}
+
+    def test_listar_sem_permissao_nega(self):
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=["pdv.operar"]):
+            r = self.client.get("/api/financeiro/contas_pagar", headers=self._headers_sem_permissao_financeira())
+        self.assertEqual(r.status_code, 403)
+
+    def test_obter_por_id_sem_permissao_nega(self):
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=["pdv.operar"]):
+            r = self.client.get("/api/financeiro/contas_pagar/1", headers=self._headers_sem_permissao_financeira())
+        self.assertEqual(r.status_code, 403)
+
+    def test_fluxo_caixa_resumo_sem_permissao_nega(self):
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=["pdv.operar"]):
+            r = self.client.get("/api/financeiro/fluxo_caixa/resumo", headers=self._headers_sem_permissao_financeira())
+        self.assertEqual(r.status_code, 403)
+
+    def test_dre_resumo_sem_permissao_nega(self):
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=["pdv.operar"]):
+            r = self.client.get("/api/financeiro/dre/resumo", headers=self._headers_sem_permissao_financeira())
+        self.assertEqual(r.status_code, 403)
+
+    def test_listar_com_permissao_ver_ok(self):
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=["financeiro.ver"]), \
+             patch("core.financeiro.list", return_value=[]):
+            r = self.client.get("/api/financeiro/contas_pagar", headers=self._headers_sem_permissao_financeira())
+        self.assertEqual(r.status_code, 200)
 
 
 if __name__ == "__main__":

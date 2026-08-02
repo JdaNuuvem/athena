@@ -90,7 +90,7 @@ class TestFinanceiroDeleteAuditado(unittest.TestCase):
              patch("core.financeiro.delete", return_value={"error": "falhou"}), \
              patch("core.seguranca.auditar_exclusao") as mock_audit:
             r = self.client.delete("/api/financeiro/contas_pagar/3", headers=headers)
-        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.status_code, 400)
         mock_audit.assert_not_called()
 
     def test_excluir_sem_permissao_nega_e_nao_chama_delete(self):

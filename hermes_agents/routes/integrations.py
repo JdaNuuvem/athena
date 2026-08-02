@@ -1,6 +1,7 @@
 import os
 from flask import Blueprint, request, jsonify
 from core import get_db, run_async
+from core.rbac import requer_permissao
 
 integrations_bp = Blueprint("integrations", __name__)
 
@@ -860,6 +861,7 @@ def api_pedido_detalhe(id_pedido):
     return jsonify(get_pedido_detalhe(id_pedido))
 
 @bling_bp.route("/financeiro/contas-pagar")
+@requer_permissao("financeiro.ver")
 def api_contas_pagar():
     pagina = request.args.get("pagina", 1, type=int)
     limite = request.args.get("limite", 100, type=int)
@@ -872,6 +874,7 @@ def api_formas_pagamento():
 
 
 @bling_bp.route("/financeiro/contas-receber")
+@requer_permissao("financeiro.ver")
 def api_contas_receber():
     pagina = request.args.get("pagina", 1, type=int)
     limite = request.args.get("limite", 100, type=int)

@@ -762,6 +762,14 @@ def processar_evento_webhook(evento: str, payload: dict) -> dict:
     """Roteia evento de webhook para o handler adequado.
     Retorna: {"processed": True, "evento": evento} ou {"error": ...}"""
     from datetime import date, timedelta
+    # ponytail: core.financeiro so' e' importado hoje dentro das rotas de
+    # routes/financeiro.py (lazy) — se o primeiro contato com o sistema apos
+    # deploy num banco novo for um webhook de conta-receber/conta-pagar (em
+    # vez de alguem abrir a tela /financeiro), fin_contas_receber/pagar (e as
+    # colunas bling_id/origem) podiam nao existir ainda, e o INSERT abaixo
+    # quebrava com "relation/column does not exist". Importar aqui forca
+    # core.financeiro._ensure_tables() a rodar antes de qualquer INSERT.
+    import core.financeiro  # noqa: F401
 
     async def _go():
         db = await get_db()

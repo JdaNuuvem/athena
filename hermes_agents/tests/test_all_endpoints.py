@@ -309,17 +309,19 @@ class TestFinanceiroEndpoints(unittest.TestCase):
         self.client = app.test_client()
         self.headers = {"Authorization": f"Bearer {USER_TOKEN}"}
 
+    # 403 e' esperado nos 3 testes abaixo: USER_TOKEN nao tem financeiro.ver
+    # no RBAC mockado (mesmo padrao das demais secoes desta suite).
     def test_list(self):
         r = self.client.get("/api/financeiro/contas_pagar", headers=self.headers)
-        self.assertIn(r.status_code, [200, 404, 500])  # 404 se tabela nao existe no mock DB
+        self.assertEqual(r.status_code, 403)
 
     def test_fluxo_caixa_resumo(self):
         r = self.client.get("/api/financeiro/fluxo_caixa/resumo", headers=self.headers)
-        self.assertIn(r.status_code, [200, 500])
+        self.assertEqual(r.status_code, 403)
 
     def test_dre_resumo(self):
         r = self.client.get("/api/financeiro/dre/resumo", headers=self.headers)
-        self.assertIn(r.status_code, [200, 500])
+        self.assertEqual(r.status_code, 403)
 
 
 class TestEstoqueEndpoints(unittest.TestCase):
