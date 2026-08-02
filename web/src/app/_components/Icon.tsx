@@ -38,6 +38,7 @@ const paths: Record<string, string> = {
   trash: "M19 7l-.87 12.14A2 2 0 0116.14 21H7.86a2 2 0 01-1.99-1.86L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3M4 7h16",
   alert: "M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z",
   inbox: "M3 8l2-5h14l2 5m-18 0v10a2 2 0 002 2h14a2 2 0 002-2V8m-18 0h5a2 2 0 002 2v1a1 1 0 001 1h2a1 1 0 001-1v-1a2 2 0 002-2h5",
+  check: "M5 13l4 4L19 7",
 };
 
 export default function Icon({ name, size = 20, className = "", style }: { name: string; size?: number; className?: string; style?: React.CSSProperties }) {

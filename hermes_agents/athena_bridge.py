@@ -194,6 +194,26 @@ import time, json
 
 app = Flask(__name__)
 CORS(app)
+
+# ponytail: o JSONProvider padrao do Flask serializa date/datetime como
+# RFC 822 ("Wed, 05 Aug 2026 14:30:00 GMT") — formato de header HTTP, nao de
+# API JSON. O frontend inteiro (inputs <input type="date">/"datetime-local",
+# parsing de coluna tipo fmtDataBR em crm/negociacoes) assume ISO 8601
+# ("2026-08-05" / "2026-08-05T14:30:00"), entao toda data vinda da API
+# aparecia vazia ao editar e alguns displays sempre mostravam "-". ISO e'
+# tambem o formato padrao de qualquer API JSON razoavel.
+from flask.json.provider import DefaultJSONProvider
+import datetime as _dt
+
+class _ISODateJSONProvider(DefaultJSONProvider):
+    @staticmethod
+    def default(o):
+        if isinstance(o, (_dt.datetime, _dt.date)):
+            return o.isoformat()
+        return DefaultJSONProvider.default(o)
+
+app.json = _ISODateJSONProvider(app)
+
 app.before_request(_verificar_autenticacao)
 
 from routes.integrations import bling_bp, integrations_bp
@@ -304,7 +324,7 @@ def _fazer_login(email, password, api_key, autenticar, gerar_token_sessao):
             "token": sessao_token, "role": "admin", "name": email.split("@")[0],
             "email": email, "user_id": 0, "permissoes": ["*"],
         })
-        resp.set_cookie("auth_token", sessao_token, httponly=False, samesite="Lax", max_age=86400*30, secure=False)
+        resp.set_cookie("auth_token", sessao_token, httponly=False, samesite="Lax", max_age=86400*30, secure=not DEV_MODE)
         return resp
 
     # Tenta RBAC primeiro
@@ -321,7 +341,7 @@ def _fazer_login(email, password, api_key, autenticar, gerar_token_sessao):
             "user_id": rbac_result.get("id"),
             "permissoes": rbac_result.get("permissoes",[]),
         })
-        resp.set_cookie("auth_token", sessao_token, httponly=False, samesite="Lax", max_age=86400*30, secure=False)
+        resp.set_cookie("auth_token", sessao_token, httponly=False, samesite="Lax", max_age=86400*30, secure=not DEV_MODE)
         return resp
 
     # Fallback hardcoded — sem usuario RBAC real, token marcado is_master (mesmo
@@ -331,12 +351,12 @@ def _fazer_login(email, password, api_key, autenticar, gerar_token_sessao):
     if user and user["password"] == password:
         sessao_token = gerar_token_sessao(None, email, user["role"], is_master=True)
         resp = jsonify({"token": sessao_token, "role": user["role"], "name": user["name"], "permissoes": ["*"]})
-        resp.set_cookie("auth_token", sessao_token, httponly=False, samesite="Lax", max_age=86400*30, secure=False)
+        resp.set_cookie("auth_token", sessao_token, httponly=False, samesite="Lax", max_age=86400*30, secure=not DEV_MODE)
         return resp
     if api_key and api_key == API_TOKEN:
         sessao_token = gerar_token_sessao(None, email or "admin", "admin", is_master=True)
         resp = jsonify({"token": sessao_token, "role": "admin", "name": "Admin", "permissoes": ["*"]})
-        resp.set_cookie("auth_token", sessao_token, httponly=False, samesite="Lax", max_age=86400*30, secure=False)
+        resp.set_cookie("auth_token", sessao_token, httponly=False, samesite="Lax", max_age=86400*30, secure=not DEV_MODE)
         return resp
     from core.seguranca import auditar_login
     auditar_login(email, False, request.remote_addr or "", request.headers.get("User-Agent",""))
@@ -1299,12 +1319,34 @@ def ev_pdv_fechar_caixa(id):
 @app.route('/api/eventos/crm/lead/<int:id>/converter', methods=['POST'])
 def ev_crm_converter_lead(id):
     from core.entidades import ao_converter_lead
-    return jsonify(ao_converter_lead(id))
+    from core.rbac import requer_permissao
+
+    @requer_permissao("crm.editar")
+    def _handler():
+        return jsonify(ao_converter_lead(id))
+    return _handler()
 
 @app.route('/api/eventos/crm/negociacao/<int:id>/ganha', methods=['POST'])
 def ev_crm_negociacao_ganha(id):
     from core.entidades import ao_converter_negociacao
-    return jsonify(ao_converter_negociacao(id))
+    from core.rbac import requer_permissao
+
+    @requer_permissao("crm.editar")
+    def _handler():
+        return jsonify(ao_converter_negociacao(id))
+    return _handler()
+
+@app.route('/api/eventos/crm/proposta/<int:id>/converter-contrato', methods=['POST'])
+def ev_crm_proposta_converter_contrato(id):
+    from core.entidades import ao_converter_proposta_em_contrato
+    from core.rbac import requer_permissao
+
+    @requer_permissao("crm.editar")
+    def _handler():
+        resultado = ao_converter_proposta_em_contrato(id)
+        status = 404 if resultado.get("error") == "proposta nao encontrada" else 400 if resultado.get("error") else 200
+        return jsonify(resultado), status
+    return _handler()
 
 @app.route('/api/eventos/processar', methods=['POST'])
 def ev_processar_fila():

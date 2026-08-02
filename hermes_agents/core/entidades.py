@@ -110,7 +110,7 @@ def sincronizar_contatos_bling(pagina: int = 1, limite: int = 100) -> dict:
     r = listar_contatos(pagina, limite)
     if r.get("error"): return r
     dados = r.get("data", [])
-    if not dados: return {"sync": 0, "message": "sem dados"}
+    if not dados: return {"sync": 0, "recebidos": 0, "message": "sem dados"}
     async def _go():
         db = await get_db()
         total = 0
@@ -136,7 +136,7 @@ def sincronizar_contatos_bling(pagina: int = 1, limite: int = 100) -> dict:
                     if row: total += 1
             except Exception as e:
                 log(AGENT, f"Erro sync contato {c.get('nome')}: {e}")
-        return {"sync": total}
+        return {"sync": total, "recebidos": len(dados)}
     return run_async(_go())
 
 # ─────────────────────────────────────────────────────────
@@ -456,19 +456,71 @@ def ao_converter_lead(lead_id: int) -> dict:
     except Exception as e: return {"error": str(e)}
 
 def ao_converter_negociacao(negociacao_id: int) -> dict:
-    """Quando uma negociacao CRM e ganha: cria vendas_pedidos."""
+    """Quando uma negociacao CRM e ganha: cria vendas_pedidos e fecha a negociacao.
+
+    ponytail: faltavam 3 coisas. (1) idempotencia — reenviar o evento (clique
+    duplo, retry de rede) criava um vendas_pedidos novo a cada chamada, sem
+    nenhum guard. (2) a negociacao nunca era marcada como 'ganha' — status
+    ficava 'aberta' pra sempre, entao funil() e o contador "negociacoes
+    abertas" nunca refletiam o fechamento, e nada impedia reprocessar. (3)
+    cliente_id levava lead.empresa_id (que referencia crm_empresas.id) pro
+    campo vendas_pedidos.cliente_id, que referencia cad_clientes(id) — tabela
+    diferente, mesmo nome de coluna. Ou a FK rejeitava o insert (id nao existe
+    em cad_clientes) ou, pior, coincidia com um cliente errado."""
     async def _go():
         db = await get_db()
+        try:
+            await db.execute("ALTER TABLE crm_negociacoes ADD COLUMN IF NOT EXISTS pedido_id INT REFERENCES vendas_pedidos(id)")
+        except Exception:
+            pass
         neg = await db.fetchrow("SELECT * FROM crm_negociacoes WHERE id = $1", negociacao_id)
         if not neg: return {"error": "negociacao nao encontrada"}
+        if neg.get("status") == "ganha" and neg.get("pedido_id"):
+            return {"pedido_id": neg["pedido_id"], "ja_processada": True}
         lead = await db.fetchrow("SELECT * FROM crm_leads WHERE id = $1", neg["lead_id"]) if neg.get("lead_id") else None
         cliente_nome = lead["nome"] if lead else neg.get("titulo","")
-        cliente_id = lead.get("empresa_id") if lead else None
+        cliente_id = None
+        empresa = await db.fetchrow("SELECT * FROM crm_empresas WHERE id = $1", lead["empresa_id"]) if lead and lead.get("empresa_id") else None
+        if empresa and empresa.get("cnpj"):
+            doc = empresa["cnpj"].replace(".", "").replace("/", "").replace("-", "").strip()
+            if doc:
+                cliente_id = await db.fetchval(
+                    "SELECT id FROM cad_clientes WHERE REPLACE(REPLACE(REPLACE(documento,'.',''),'/',''),'-','') = $1 LIMIT 1", doc)
         row = await db.fetchrow(
             "INSERT INTO vendas_pedidos (cliente, cliente_id, total, status, data, marketplace, origem) VALUES ($1,$2,$3,'aberto',CURRENT_DATE,'manual','crm') RETURNING id",
             cliente_nome, cliente_id, float(neg.get("valor",0) or 0))
         vid = row["id"] if row else 0
+        await db.execute(
+            "UPDATE crm_negociacoes SET status = 'ganha', pedido_id = $1, data_fechamento = COALESCE(data_fechamento, CURRENT_DATE) WHERE id = $2",
+            vid, negociacao_id)
         return {"pedido_id": vid}
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
+
+def ao_converter_proposta_em_contrato(proposta_id: int) -> dict:
+    """Quando uma proposta CRM e aceita pelo cliente: gera o contrato
+    correspondente (crm_contratos.proposta_id existe no schema pra esse
+    vinculo desde sempre, mas nada preenchia — uma proposta aceita nao tinha
+    nenhum caminho pra virar contrato). Idempotente: reenviar o evento nao
+    duplica o contrato. So' aceita converter proposta com status='aceita' —
+    gerar contrato de uma proposta ainda em rascunho/enviada seria fechar
+    algo que o cliente nao confirmou."""
+    async def _go():
+        db = await get_db()
+        proposta = await db.fetchrow("SELECT * FROM crm_propostas WHERE id = $1", proposta_id)
+        if not proposta:
+            return {"error": "proposta nao encontrada"}
+        existente = await db.fetchval("SELECT id FROM crm_contratos WHERE proposta_id = $1", proposta_id)
+        if existente:
+            return {"contrato_id": existente, "ja_processada": True}
+        if proposta.get("status") != "aceita":
+            return {"error": "so' e' possivel converter propostas com status 'aceita' em contrato"}
+        row = await db.fetchrow(
+            "INSERT INTO crm_contratos (negociacao_id, proposta_id, valor, status) VALUES ($1,$2,$3,'pendente') RETURNING id",
+            proposta["negociacao_id"], proposta_id, float(proposta.get("valor", 0) or 0))
+        contrato_id = row["id"] if row else 0
+        await db.execute("UPDATE crm_contratos SET numero = $1 WHERE id = $2", f"CONT-{str(contrato_id).zfill(4)}", contrato_id)
+        return {"contrato_id": contrato_id}
     try: return run_async(_go())
     except Exception as e: return {"error": str(e)}
 

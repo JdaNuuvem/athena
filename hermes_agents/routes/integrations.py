@@ -597,23 +597,14 @@ def fechar_caixa_pdv(id_caixa):
         return jsonify({"error": str(e)}), 500
 
 
-@integrations_bp.route("/api/eventos/crm/lead/<int:id_lead>/converter", methods=["POST"])
-def converter_lead(id_lead):
-    """Converte lead em cliente no CRM."""
-    from core import get_db, run_async
-    async def _go():
-        db = await get_db()
-        lead = await db.fetchrow("SELECT * FROM crm_leads WHERE id = $1", id_lead)
-        if not lead:
-            return {"error": "Lead nao encontrado"}
-        cliente_id = await db.fetchval(
-            """INSERT INTO cad_clientes (nome, email, telefone, status)
-               VALUES ($1, $2, $3, 'ativo') ON CONFLICT DO NOTHING RETURNING id""",
-            lead.get("nome", ""), lead.get("email", ""), lead.get("telefone", ""))
-        if cliente_id:
-            await db.execute("UPDATE crm_leads SET status = 'convertido', cliente_id = $1 WHERE id = $2", cliente_id, id_lead)
-        return {"success": True, "lead_id": id_lead, "cliente_id": cliente_id}
-    return jsonify(run_async(_go()))
+# ponytail: rota duplicada removida (havia outra "/api/eventos/crm/lead/<id>/converter"
+# em athena_bridge.py, registrada como a fonte canonica via core.entidades.ao_converter_lead).
+# Esta aqui, alem de duplicar a URL (uma delas ficava inalcancavel dependendo da ordem de
+# registro dos blueprints), tinha 2 bugs: fazia UPDATE crm_leads SET cliente_id = $1, mas
+# crm_leads nunca teve coluna cliente_id (so' empresa_id) — dava erro 500 sempre que o
+# INSERT em cad_clientes de fato retornava um id; e o dedupe por ON CONFLICT DO NOTHING nao
+# tinha coluna de conflito declarada, entao so' funcionava por acidente se alguma constraint
+# unica generica batesse.
 
 
 # --- Full Sync / Migrar Tudo ---

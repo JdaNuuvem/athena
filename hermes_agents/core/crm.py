@@ -1,7 +1,38 @@
 """CRM Core — Leads, Contatos, Empresas, Negociacoes, Funil, Atividades, Propostas, Contratos"""
+import asyncpg
+import datetime
+import re
 from core import get_db, run_async, log, hoje
 
 AGENT = "CRM Core"
+
+_DATA_ISO_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_DATETIME_ISO_RE = re.compile(r"^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$")
+
+def _coerce_datas(dados: dict) -> dict:
+    """Campos DATE (data_fechamento, data_envio, data_validade, data_assinatura...)
+    chegam do frontend (<input type="date">) como string "YYYY-MM-DD" no JSON,
+    e campos TIMESTAMP (data_agendada, data_realizada da agenda) chegam como
+    "YYYY-MM-DDTHH:MM" (<input type="datetime-local">). asyncpg, ao contrario
+    de outros drivers, nao converte string pra DATE/TIMESTAMP automaticamente
+    — exige datetime.date/datetime.datetime de verdade, senao estoura
+    "'str' object has no attribute 'toordinal'". String vazia vira NULL."""
+    out = {}
+    for k, v in dados.items():
+        if isinstance(v, str) and _DATETIME_ISO_RE.match(v):
+            try:
+                v = datetime.datetime.fromisoformat(v.replace(" ", "T"))
+            except ValueError:
+                pass
+        elif isinstance(v, str) and _DATA_ISO_RE.match(v):
+            try:
+                v = datetime.date.fromisoformat(v)
+            except ValueError:
+                pass
+        elif isinstance(v, str) and k.startswith("data_") and not v.strip():
+            v = None
+        out[k] = v
+    return out
 
 def _ensure_tables():
     async def _go():
@@ -111,7 +142,7 @@ def funil() -> dict:
 
 # ── CRUD generico ──
 
-def _list(tabela: str, cols="*", order="id DESC", limit=100) -> list:
+def _list(tabela: str, cols="*", order="id DESC", limit=500) -> list:
     async def _go():
         db = await get_db()
         rows = await db.fetch(f"SELECT {cols} FROM {tabela} ORDER BY {order} LIMIT {limit}")
@@ -132,6 +163,8 @@ def _get(tabela: str, id: int) -> dict:
     except Exception as e:
         return {"error": str(e)}
 
+_ERRO_FK_INVALIDA = "Referencia invalida: um dos vinculos informados (lead, contato, negociacao, empresa, etc) nao existe."
+
 def _create(tabela: str, dados: dict) -> dict:
     # ponytail: NAO usar list(...) — este modulo define list(t) no nivel de
     # modulo, que sombreia o builtin para qualquer funcao neste arquivo.
@@ -145,6 +178,8 @@ def _create(tabela: str, dados: dict) -> dict:
         return dict(row) if row else {"error": "insert failed"}
     try:
         return run_async(_go())
+    except asyncpg.ForeignKeyViolationError:
+        return {"error": _ERRO_FK_INVALIDA}
     except Exception as e:
         return {"error": str(e)}
 
@@ -157,6 +192,8 @@ def _update(tabela: str, id: int, dados: dict) -> dict:
         return dict(row) if row else {"error": "not found"}
     try:
         return run_async(_go())
+    except asyncpg.ForeignKeyViolationError:
+        return {"error": _ERRO_FK_INVALIDA}
     except Exception as e:
         return {"error": str(e)}
 
@@ -168,18 +205,132 @@ def _delete(tabela: str, id: int) -> dict:
     try:
         run_async(_go())
         return {"success": True}
+    except asyncpg.ForeignKeyViolationError:
+        # ponytail: excluir uma empresa/lead/negociacao com filhos (leads,
+        # contatos, negociacoes, propostas...) apontando pra ela quebrava
+        # com o erro cru do Postgres ("violates foreign key constraint...")
+        # direto na tela do usuario. Mensagem amigavel, igual ao padrao
+        # ja usado em core/lojas.py para o mesmo tipo de erro.
+        return {"error": "Nao e possivel excluir: existem outros registros do CRM vinculados a este item (leads, contatos, negociacoes, propostas, etc)."}
     except Exception as e:
         return {"error": str(e)}
 
 # ── API helpers por entidade ──
 
-CRM_TABLES = ["leads", "contatos", "empresas", "negociacoes", "atividades", "propostas", "contratos"]
+CRM_TABLES = ["leads", "contatos", "empresas", "negociacoes", "atividades", "propostas", "contratos", "agenda"]
 
-def list(tabela: str): return _list(f"crm_{tabela}")
-def get(tabela: str, id: int): return _get(f"crm_{tabela}", id)
-def create(tabela: str, data: dict): return _create(f"crm_{tabela}", data)
-def update(tabela: str, id: int, data: dict): return _update(f"crm_{tabela}", id, data)
-def delete(tabela: str, id: int): return _delete(f"crm_{tabela}", id)
+# "agenda" e' um alias de "atividades" — a pagina web/src/app/crm/agenda
+# chama /api/crm/agenda, mas nunca existiu tabela crm_agenda nem entrada
+# "agenda" em CRM_TABLES/CRM_COLUNAS, entao list/create/get/update/delete
+# caiam sempre em 404 "Tabela invalida". O conceito de negocio (follow-ups
+# agendados) ja e' coberto por crm_atividades.
+_ALIAS_TABELA = {"agenda": "atividades"}
+
+def _tabela_real(tabela: str) -> str:
+    return _ALIAS_TABELA.get(tabela, tabela)
+
+# ponytail: whitelist de colunas por tabela — _create/_update concatenam as
+# CHAVES do dict recebido direto na string SQL (so' os valores sao
+# parametrizados com $1, $2...). Sem essa whitelist, um cliente com permissao
+# crm.criar/crm.editar poderia injetar SQL arbitrario via nome de campo no
+# JSON (ex.: {"nome, x) VALUES ('a'); DROP TABLE crm_leads;--": "x"}).
+CRM_COLUNAS = {
+    "leads": {"nome", "email", "telefone", "empresa_id", "origem", "status", "funil_etapa", "valor_potencial", "observacoes"},
+    "empresas": {"nome", "cnpj", "segmento", "porte", "telefone", "email", "website", "endereco", "observacoes"},
+    "contatos": {"nome", "email", "telefone", "cargo", "empresa_id", "lead_id"},
+    "negociacoes": {"titulo", "lead_id", "contato_id", "empresa_id", "valor", "etapa_funil", "probabilidade", "data_fechamento", "status", "observacoes"},
+    "atividades": {"tipo", "descricao", "data_agendada", "data_realizada", "lead_id", "negociacao_id", "contato_id", "status"},
+    "propostas": {"negociacao_id", "numero", "valor", "status", "data_envio", "data_validade", "conteudo"},
+    "contratos": {"negociacao_id", "proposta_id", "numero", "valor", "status", "data_assinatura"},
+}
+
+def list(tabela: str): return _list(f"crm_{_tabela_real(tabela)}")
+def get(tabela: str, id: int): return _get(f"crm_{_tabela_real(tabela)}", id)
+
+# Ciclo de vida de uma proposta — rascunho (em edicao) -> enviada (mandada pro
+# cliente) -> aceita/rejeitada (resposta do cliente) ou vencida (passou
+# data_validade sem resposta). funil() ja conta "enviada" como o status
+# significativo pro contador de propostas em aberto.
+STATUS_PROPOSTA = ["rascunho", "enviada", "aceita", "rejeitada", "vencida"]
+
+def _validar_campos(tabela: str, dados: dict, criando: bool) -> str | None:
+    """Validacao de formato no boundary, antes de tocar o banco. Sem isso,
+    um campo obrigatorio vazio ou invalido so' falhava (feio) na constraint
+    do Postgres, sem mensagem util pro frontend."""
+    if tabela == "atividades":
+        if criando and not str(dados.get("tipo", "")).strip():
+            return "Tipo e obrigatorio"
+        if "tipo" in dados and not str(dados.get("tipo", "")).strip():
+            return "Tipo nao pode ser vazio"
+        return None
+    if tabela == "propostas":
+        if criando and not dados.get("negociacao_id"):
+            return "Negociação é obrigatória"
+        if "negociacao_id" in dados:
+            try:
+                if int(dados["negociacao_id"]) <= 0:
+                    return "Negociação inválida"
+            except (TypeError, ValueError):
+                return "Negociação inválida"
+        if dados.get("status") and dados["status"] not in STATUS_PROPOSTA:
+            return f"Status inválido — use um de: {', '.join(STATUS_PROPOSTA)}"
+        if "valor" in dados and dados["valor"] not in (None, ""):
+            try:
+                if float(dados["valor"]) < 0:
+                    return "Valor não pode ser negativo"
+            except (TypeError, ValueError):
+                return "Valor inválido"
+        if dados.get("data_validade") and dados.get("data_envio") and str(dados["data_validade"]) < str(dados["data_envio"]):
+            return "Data de validade não pode ser anterior à data de envio"
+        return None
+    if tabela != "empresas":
+        return None
+    from core.validadores import validar_cnpj, validar_email
+    if criando and not str(dados.get("nome", "")).strip():
+        return "Nome e obrigatorio"
+    if "nome" in dados and not str(dados.get("nome", "")).strip():
+        return "Nome nao pode ser vazio"
+    if dados.get("cnpj") and not validar_cnpj(dados["cnpj"]):
+        return "CNPJ invalido"
+    if dados.get("email") and not validar_email(dados["email"]):
+        return "E-mail invalido"
+    return None
+
+def _gerar_numero_proposta(proposta_id: int) -> str:
+    return f"PROP-{str(proposta_id).zfill(4)}"
+
+def create(tabela: str, data: dict) -> dict:
+    tabela_real = _tabela_real(tabela)
+    colunas_validas = CRM_COLUNAS.get(tabela_real)
+    if colunas_validas is None:
+        return {"error": "Tabela invalida"}
+    filtrado = {k: v for k, v in data.items() if k in colunas_validas}
+    if not filtrado:
+        return {"error": "Nenhum campo valido informado"}
+    erro = _validar_campos(tabela_real, filtrado, criando=True)
+    if erro:
+        return {"error": erro}
+    resultado = _create(f"crm_{tabela_real}", _coerce_datas(filtrado))
+    # numero e' gerado a partir do proprio id (sequencial, sem corrida de uma
+    # query de COUNT separada) — so' quando o caller nao mandou um explicito.
+    if tabela_real == "propostas" and not resultado.get("error") and not filtrado.get("numero"):
+        resultado = _update("crm_propostas", resultado["id"], {"numero": _gerar_numero_proposta(resultado["id"])})
+    return resultado
+
+def update(tabela: str, id: int, data: dict) -> dict:
+    tabela_real = _tabela_real(tabela)
+    colunas_validas = CRM_COLUNAS.get(tabela_real)
+    if colunas_validas is None:
+        return {"error": "Tabela invalida"}
+    filtrado = {k: v for k, v in data.items() if k in colunas_validas}
+    if not filtrado:
+        return {"error": "Nenhum campo valido informado"}
+    erro = _validar_campos(tabela_real, filtrado, criando=False)
+    if erro:
+        return {"error": erro}
+    return _update(f"crm_{tabela_real}", id, _coerce_datas(filtrado))
+
+def delete(tabela: str, id: int): return _delete(f"crm_{_tabela_real(tabela)}", id)
 
 def importar_contatos_bling() -> dict:
     """Importa contatos do Bling para o CRM (empresas, contatos, leads).
@@ -208,11 +359,21 @@ def importar_contatos_bling() -> dict:
                 tipo = (c.get("tipo") or "").upper()
                 doc = (c.get("numeroDocumento") or "").strip()
 
+                # ponytail: dedupe por email cobre a maioria dos casos, mas
+                # contatos sem email (comum em fornecedores/clientes do Bling
+                # sem email cadastrado) sempre caiam nesse if como False e
+                # duplicavam a cada sincronizacao — sem fallback, o CRM
+                # acumulava um lead/contato novo por contato sem email a
+                # cada reimportacao. Fallback por (nome+telefone) ou so' nome.
                 if email:
                     exists = await db.fetchval("SELECT id FROM crm_contatos WHERE email = $1", email)
-                    if exists:
-                        res["total"] += 1
-                        continue
+                elif tel:
+                    exists = await db.fetchval("SELECT id FROM crm_contatos WHERE telefone = $1 AND nome = $2", tel, nome)
+                else:
+                    exists = await db.fetchval("SELECT id FROM crm_contatos WHERE nome = $1 AND email IS NULL AND telefone IS NULL", nome)
+                if exists:
+                    res["total"] += 1
+                    continue
 
                 if tipo == "F":
                     if doc:
