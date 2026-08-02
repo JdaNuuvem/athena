@@ -239,8 +239,10 @@ class TestLojasEndpoints(unittest.TestCase):
         self.assertEqual(r.status_code, 401)
 
     def test_deposito_map(self):
+        # 403 e' esperado aqui: USER_TOKEN nao tem configuracoes.ver no RBAC
+        # mockado (rota antes nao exigia permissao nenhuma — corrigido).
         r = self.client.get("/api/lojas/deposito-map", headers=self.headers)
-        self.assertIn(r.status_code, [200, 500])
+        self.assertIn(r.status_code, [200, 403, 500])
 
     def test_sync_bling(self):
         # 403 e' esperado aqui: USER_TOKEN nao tem configuracoes.editar no RBAC mockado.
@@ -276,25 +278,29 @@ class TestFiscalEndpoints(unittest.TestCase):
         self.client = app.test_client()
         self.headers = {"Authorization": f"Bearer {USER_TOKEN}"}
 
+    # 403 e' esperado nos 5 testes abaixo: USER_TOKEN nao tem fiscal.ver no
+    # RBAC mockado (essas rotas antes nao exigiam nenhuma permissao — dado
+    # financeiro sensivel, corrigido em routes/fiscal.py).
+
     def test_dashboard(self):
         r = self.client.get("/api/fiscal/dashboard", headers=self.headers)
-        self.assertIn(r.status_code, [200, 500])
+        self.assertIn(r.status_code, [200, 403, 500])
 
     def test_obrigacoes_proximas(self):
         r = self.client.get("/api/fiscal/obrigacoes/proximas", headers=self.headers)
-        self.assertIn(r.status_code, [200, 500])
+        self.assertIn(r.status_code, [200, 403, 500])
 
     def test_obrigacoes_atrasadas(self):
         r = self.client.get("/api/fiscal/obrigacoes/atrasadas", headers=self.headers)
-        self.assertIn(r.status_code, [200, 500])
+        self.assertIn(r.status_code, [200, 403, 500])
 
     def test_apuracao(self):
         r = self.client.get("/api/fiscal/apuracao", headers=self.headers)
-        self.assertIn(r.status_code, [200, 500])
+        self.assertIn(r.status_code, [200, 403, 500])
 
     def test_alertas(self):
         r = self.client.get("/api/fiscal/obrigacoes/alertas", headers=self.headers)
-        self.assertIn(r.status_code, [200, 500])
+        self.assertIn(r.status_code, [200, 403, 500])
 
 
 class TestFinanceiroEndpoints(unittest.TestCase):
@@ -368,8 +374,11 @@ class TestCRMEndpoints(unittest.TestCase):
         self.headers = {"Authorization": f"Bearer {USER_TOKEN}"}
 
     def test_funil(self):
+        # 403 e' esperado aqui: USER_TOKEN nao tem crm.ver no RBAC mockado
+        # (rota antes nao exigia permissao nenhuma — bug de leitura aberta
+        # corrigido; ver core/rbac.py e routes/crm.py).
         r = self.client.get("/api/crm/funil", headers=self.headers)
-        self.assertIn(r.status_code, [200, 500])
+        self.assertIn(r.status_code, [200, 403, 500])
 
 
 class TestPDVEndpoints(unittest.TestCase):
@@ -414,7 +423,8 @@ class TestCadastrosEndpoints(unittest.TestCase):
 
     def test_list(self):
         r = self.client.get("/api/cadastros/clientes", headers=self.headers)
-        self.assertIn(r.status_code, [200, 404, 500])  # 404 se tabela nao existe
+        # 403 e' esperado aqui: USER_TOKEN nao tem cadastros.ver no RBAC mockado.
+        self.assertIn(r.status_code, [200, 403, 404, 500])  # 404 se tabela nao existe
 
 
 class TestAtendimentoEndpoints(unittest.TestCase):

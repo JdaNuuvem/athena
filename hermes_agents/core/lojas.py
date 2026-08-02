@@ -327,7 +327,14 @@ def listar() -> list:
     _ensure_table()
     async def _go():
         db = await get_db()
-        rows = await db.fetch("SELECT id, nome, ativa, created_at, bling_id, tipo FROM lojas ORDER BY id")
+        # ponytail: shopee_markup_pct/grupos_publicacao precisam vir aqui —
+        # e' o unico SELECT que alimenta o hub /lojas, cujo modal "Editar
+        # rapido" pre-carrega esses 2 campos. Sem eles aqui, o modal sempre
+        # mostrava markup=100 (default do form) e o Salvar sobrescrevia
+        # silenciosamente qualquer markup real configurado.
+        rows = await db.fetch(
+            "SELECT id, nome, ativa, created_at, bling_id, tipo, "
+            "shopee_markup_pct, grupos_publicacao FROM lojas ORDER BY id")
         return [dict(r) for r in rows]
     try: return run_async(_go())
     except Exception as e: _log_erro("listar", e); return []
@@ -347,18 +354,35 @@ def criar(nome: str, tipo: str = "fisica"):
     finally:
         invalidar_cache_loja_id()
 
-def atualizar(id_loja: int, nome: str, shopee_markup_pct: float = None, grupos_publicacao: str = None, tipo: str = None) -> bool:
+def atualizar(id_loja: int, nome: str = None, shopee_markup_pct: float = None, grupos_publicacao: str = None, tipo: str = None) -> bool:
+    """nome e' opcional — antes era sempre obrigatorio nesta funcao, entao
+    um PUT parcial (ex.: so' trocar o status ativa/inativa via
+    atualizar_geral) precisava reenviar o nome atual so' pra nao quebrar
+    aqui, e a rota /manage/<id> exigia nome em TODO PUT por causa disso
+    (o botao Ativar/Desativar do hub so' manda {status}, entao sempre
+    devolvia 400 'Nome e obrigatorio' — nunca funcionou)."""
     _ensure_table()
     async def _go():
         db = await get_db()
-        r = await db.execute("UPDATE lojas SET nome = $1 WHERE id = $2", nome, id_loja)
+        tocou = False
+        if nome is not None:
+            r = await db.execute("UPDATE lojas SET nome = $1 WHERE id = $2", nome, id_loja)
+            if r == "UPDATE 0":
+                return False
+            tocou = True
         if shopee_markup_pct is not None:
             await db.execute("UPDATE lojas SET shopee_markup_pct = $1 WHERE id = $2", float(shopee_markup_pct), id_loja)
+            tocou = True
         if grupos_publicacao is not None:
             await db.execute("UPDATE lojas SET grupos_publicacao = $1 WHERE id = $2", grupos_publicacao.strip(), id_loja)
+            tocou = True
         if tipo in TIPOS_VALIDOS:
             await db.execute("UPDATE lojas SET tipo = $1 WHERE id = $2", tipo, id_loja)
-        return r != "UPDATE 0"
+            tocou = True
+        if not tocou:
+            existe = await db.fetchval("SELECT 1 FROM lojas WHERE id = $1", id_loja)
+            return bool(existe)
+        return True
     try:
         return run_async(_go())
     except Exception as e:

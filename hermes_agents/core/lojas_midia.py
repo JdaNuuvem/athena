@@ -25,5 +25,13 @@ def listar(loja_id: int, tipo: str = None) -> list:
     return itens
 
 
-def remover(documento_id: int) -> dict:
+def remover(documento_id: int, loja_id: int = None) -> dict:
+    """loja_id (quando informado) valida que a midia pertence de fato a essa
+    loja antes de apagar — sem isso, quem tem configuracoes.editar consegue
+    apagar midia de QUALQUER loja so' trocando o <id> na URL, ja que
+    documentos.deletar() so' olha o documento_id (IDOR)."""
+    if loja_id is not None:
+        pertence = any(item.get("id") == documento_id for item in listar(loja_id))
+        if not pertence:
+            return {"error": "Midia nao encontrada para esta loja"}
     return documentos.deletar(documento_id)

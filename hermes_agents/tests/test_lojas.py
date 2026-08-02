@@ -146,7 +146,7 @@ class FakeDB:
 
     async def fetch(self, query, *params):
         q = self._norm(query)
-        if "SELECT id, nome, ativa, created_at, bling_id, tipo FROM lojas" in q:
+        if q.startswith("SELECT id, nome, ativa, created_at, bling_id, tipo") and "FROM lojas ORDER BY id" in q:
             return [dict(r) for r in self.rows.values()]
         if "shopee_shop_id IS NOT NULL" in q and "tem_token" in q:
             return [{"id": r["id"], "nome": r["nome"], "shopee_shop_id": r.get("shopee_shop_id"),

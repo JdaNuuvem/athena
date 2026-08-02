@@ -78,12 +78,17 @@ def criar_loja_manage():
 @lojas_bp.route("/manage/<int:id>", methods=["PUT"])
 def atualizar_loja_manage(id):
     data = request.json or {}
-    nome = (data.get("nome") or "").strip()
+    # nome so' e' obrigatorio quando o caller de fato quer troca-lo — um PUT
+    # parcial (ex.: o botao Ativar/Desativar do hub, que so' manda {status})
+    # nao pode ser forcado a reenviar o nome atual so' pra passar na validacao.
+    nome = None
+    if "nome" in data:
+        nome = (data.get("nome") or "").strip()
+        if not nome:
+            return jsonify({"error": "Nome nao pode ser vazio"}), 400
     markup = data.get("shopee_markup_pct")
     grupos = data.get("grupos_publicacao")
     tipo = data.get("tipo")
-    if not nome:
-        return jsonify({"error": "Nome e obrigatorio"}), 400
     campos, erro = _extrair_campos_gerais(data)
     if erro:
         return jsonify({"error": erro}), 400
@@ -94,9 +99,12 @@ def atualizar_loja_manage(id):
         from core.lojas import atualizar as atualizar_loja_fn, atualizar_geral, obter
         from core.seguranca import auditar_alteracao
         dados_antes = obter(loja_id)
-        ok = atualizar_loja_fn(loja_id, nome, shopee_markup_pct=markup, grupos_publicacao=grupos, tipo=tipo)
-        if not ok:
+        if dados_antes is None:
             return jsonify({"error": "Loja nao encontrada"}), 404
+        if nome is not None or markup is not None or grupos is not None or tipo is not None:
+            ok = atualizar_loja_fn(loja_id, nome=nome, shopee_markup_pct=markup, grupos_publicacao=grupos, tipo=tipo)
+            if not ok:
+                return jsonify({"error": "Loja nao encontrada"}), 404
         if campos:
             atualizar_geral(loja_id, campos)
         auditar_alteracao("editar", "lojas", "manage", loja_id, dados_antes=dados_antes, dados_depois=campos or None)
@@ -152,12 +160,15 @@ def lojas_sync_bling():
 
 @lojas_bp.route("/deposito-map", methods=["GET"])
 def lojas_deposito_map():
-    from core import get_db, run_async
-    async def _go():
-        db = await get_db()
-        rows = await db.fetch("SELECT id, nome, bling_id FROM lojas WHERE bling_id IS NOT NULL AND ativa = TRUE ORDER BY id")
-        return [{"loja_id": r["id"], "nome": r["nome"], "deposito_id": r["bling_id"]} for r in rows]
-    try:
-        return jsonify({"map": run_async(_go())})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    @requer_permissao("configuracoes.ver")
+    def _go():
+        from core import get_db, run_async
+        async def _fetch():
+            db = await get_db()
+            rows = await db.fetch("SELECT id, nome, bling_id FROM lojas WHERE bling_id IS NOT NULL AND ativa = TRUE ORDER BY id")
+            return [{"loja_id": r["id"], "nome": r["nome"], "deposito_id": r["bling_id"]} for r in rows]
+        try:
+            return jsonify({"map": run_async(_fetch())})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return _go()

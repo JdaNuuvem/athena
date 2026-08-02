@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { Section, TextField, TextAreaField, strVal } from "./shared";
+import { Section, TextField, TextAreaField, SelectField, strVal } from "./shared";
 
 const CAMPOS_OPERACIONAL = [
   "dias_funcionamento", "fuso_horario", "moeda", "idioma", "codigo_interno",
   "codigo_erp", "centro_custo", "regiao", "area_atuacao", "horario_funcionamento",
+  "loja_matriz_id",
 ];
 const CAMPOS_COMERCIAL = [
   "politica_precos", "tabela_precos_padrao", "desconto_maximo_pct",
@@ -20,6 +21,7 @@ export default function OperacionalComercialTab({ id, loja }: { id: number; loja
   const [msgOp, setMsgOp] = useState("");
   const [msgCom, setMsgCom] = useState("");
   const [erro, setErro] = useState("");
+  const [outrasLojas, setOutrasLojas] = useState<{ id: number; nome: string }[]>([]);
 
   useEffect(() => {
     const todos = [...CAMPOS_OPERACIONAL, ...CAMPOS_COMERCIAL];
@@ -28,13 +30,28 @@ export default function OperacionalComercialTab({ id, loja }: { id: number; loja
     setForm(inicial);
   }, [loja]);
 
+  useEffect(() => {
+    api.lojasManage().then((r) => {
+      const outras = ((r.lojas ?? []) as unknown as Record<string, unknown>[])
+        .filter((l) => l.id !== id)
+        .map((l) => ({ id: l.id as number, nome: l.nome as string }));
+      setOutrasLojas(outras);
+    }).catch(() => {});
+  }, [id]);
+
   const set = (campo: string) => (v: string) => setForm((p) => ({ ...p, [campo]: v }));
 
   const salvarOperacional = async () => {
     setSavingOp(true); setErro("");
     try {
       const campos: Record<string, unknown> = {};
-      for (const c of CAMPOS_OPERACIONAL) campos[c] = form[c];
+      for (const c of CAMPOS_OPERACIONAL) {
+        if (c === "loja_matriz_id") {
+          if (form[c]) campos[c] = Number(form[c]); // vazio = nao envia (coluna INT nao aceita string vazia)
+        } else {
+          campos[c] = form[c];
+        }
+      }
       const r = await api.lojasOperacionalAtualizar(id, campos);
       if (r.error) { setErro(r.error); return; }
       setMsgOp("Salvo!"); setTimeout(() => setMsgOp(""), 2500);
@@ -83,6 +100,12 @@ export default function OperacionalComercialTab({ id, loja }: { id: number; loja
           <TextField label="Moeda" value={form.moeda || ""} onChange={set("moeda")} placeholder="BRL" />
           <TextField label="Idioma" value={form.idioma || ""} onChange={set("idioma")} placeholder="pt-BR" />
           <TextField label="Dias de funcionamento" value={form.dias_funcionamento || ""} onChange={set("dias_funcionamento")} placeholder="seg,ter,qua,qui,sex,sab" />
+          <SelectField
+            label="Loja matriz"
+            value={form.loja_matriz_id || ""}
+            onChange={set("loja_matriz_id")}
+            options={[{ value: "", label: "Nenhuma (esta loja é matriz)" }, ...outrasLojas.map((l) => ({ value: String(l.id), label: l.nome }))]}
+          />
         </div>
         <TextAreaField
           label='Horário de funcionamento (JSON: {"seg":"08:00-18:00","dom":"fechado"})'

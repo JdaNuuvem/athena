@@ -2,7 +2,7 @@
 financeiro/estoque/virtual/delivery) — cada secao e' um PUT dedicado que
 delega pro core/lojas_*.py correspondente."""
 from flask import Blueprint, request, jsonify
-from core.rbac import requer_permissao
+from core.rbac import requer_permissao, requer_acesso_loja
 from core.seguranca import auditar_alteracao
 from core.lojas import obter
 
@@ -15,18 +15,19 @@ def _registrar_secao(nome_secao: str, atualizar_fn, whitelist: set, mascarar=Non
         data = request.json or {}
         campos = {k: v for k, v in data.items() if k in whitelist}
 
+        @requer_acesso_loja
         @requer_permissao("configuracoes.editar")
-        def _go():
-            dados_antes = obter(id)
+        def _go(loja_id):
+            dados_antes = obter(loja_id)
             if dados_antes is None:
                 return jsonify({"error": "Loja nao encontrada"}), 404
-            ok = atualizar_fn(id, campos)
+            ok = atualizar_fn(loja_id, campos)
             if not ok:
                 return jsonify({"error": "Falha ao atualizar"}), 500
             log_campos = mascarar(campos) if mascarar else campos
-            auditar_alteracao("editar", "lojas", nome_secao, id, dados_antes=dados_antes, dados_depois=log_campos)
+            auditar_alteracao("editar", "lojas", nome_secao, loja_id, dados_antes=dados_antes, dados_depois=log_campos)
             return jsonify({"success": True})
-        return _go()
+        return _go(loja_id=id)
 
     view.__name__ = f"atualizar_loja_{nome_secao}"
     lojas_config_bp.add_url_rule(f"/<int:id>/{nome_secao}", view_func=view, methods=["PUT"])

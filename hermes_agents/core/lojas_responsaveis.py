@@ -70,41 +70,58 @@ def listar(loja_id: int) -> list:
     except Exception as e: _log_erro("lojas_responsaveis.listar", e); return []
 
 
-def atualizar(vinculo_id: int, cargo: str = None, permissoes: str = None) -> bool:
+def atualizar(vinculo_id: int, cargo: str = None, permissoes: str = None, loja_id: int = None) -> bool:
+    """loja_id (quando informado) escopa o UPDATE — sem isso, quem tem
+    configuracoes.editar consegue editar o vinculo de responsavel de
+    QUALQUER loja so' sabendo o vinculo_id, mesmo restrito por usuario_lojas
+    a uma loja especifica (IDOR)."""
     _ensure_table()
     if cargo is not None and cargo not in CARGOS_VALIDOS:
         return False
     async def _go():
         db = await get_db()
         r = None
+        extra_where = " AND loja_id = $3" if loja_id is not None else ""
+        extra_args = [loja_id] if loja_id is not None else []
         if cargo is not None:
-            r = await db.execute("UPDATE loja_responsaveis SET cargo = $1 WHERE id = $2", cargo, vinculo_id)
+            r = await db.execute(f"UPDATE loja_responsaveis SET cargo = $1 WHERE id = $2{extra_where}", cargo, vinculo_id, *extra_args)
         if permissoes is not None:
-            r = await db.execute("UPDATE loja_responsaveis SET permissoes = $1 WHERE id = $2", permissoes, vinculo_id)
+            r = await db.execute(f"UPDATE loja_responsaveis SET permissoes = $1 WHERE id = $2{extra_where}", permissoes, vinculo_id, *extra_args)
         return r != "UPDATE 0" if r else False
     try: return run_async(_go())
     except Exception as e: _log_erro("lojas_responsaveis.atualizar", e); return False
 
 
-def encerrar(vinculo_id: int, data_fim: str = None) -> bool:
-    """Marca o fim da vigencia (nao apaga o historico)."""
+def encerrar(vinculo_id: int, data_fim: str = None, loja_id: int = None) -> bool:
+    """Marca o fim da vigencia (nao apaga o historico). loja_id escopa o
+    UPDATE — mesma razao do IDOR documentado em atualizar()."""
     _ensure_table()
     async def _go():
         db = await get_db()
-        r = await db.execute(
-            "UPDATE loja_responsaveis SET data_fim = COALESCE($1, CURRENT_DATE) WHERE id = $2",
-            data_fim, vinculo_id)
+        if loja_id is not None:
+            r = await db.execute(
+                "UPDATE loja_responsaveis SET data_fim = COALESCE($1, CURRENT_DATE) WHERE id = $2 AND loja_id = $3",
+                data_fim, vinculo_id, loja_id)
+        else:
+            r = await db.execute(
+                "UPDATE loja_responsaveis SET data_fim = COALESCE($1, CURRENT_DATE) WHERE id = $2",
+                data_fim, vinculo_id)
         return r != "UPDATE 0"
     try: return run_async(_go())
     except Exception as e: _log_erro("lojas_responsaveis.encerrar", e); return False
 
 
-def remover(vinculo_id: int) -> bool:
-    """Apaga o vinculo (uso p/ corrigir erro de cadastro, nao pra encerrar vigencia)."""
+def remover(vinculo_id: int, loja_id: int = None) -> bool:
+    """Apaga o vinculo (uso p/ corrigir erro de cadastro, nao pra encerrar
+    vigencia). loja_id escopa o DELETE — mesma razao do IDOR documentado em
+    atualizar()."""
     _ensure_table()
     async def _go():
         db = await get_db()
-        r = await db.execute("DELETE FROM loja_responsaveis WHERE id = $1", vinculo_id)
+        if loja_id is not None:
+            r = await db.execute("DELETE FROM loja_responsaveis WHERE id = $1 AND loja_id = $2", vinculo_id, loja_id)
+        else:
+            r = await db.execute("DELETE FROM loja_responsaveis WHERE id = $1", vinculo_id)
         return r != "DELETE 0"
     try: return run_async(_go())
     except Exception as e: _log_erro("lojas_responsaveis.remover", e); return False

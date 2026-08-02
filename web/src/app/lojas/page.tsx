@@ -2,18 +2,26 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { api } from "@/lib/api";
+import { api, type TipoLoja } from "@/lib/api";
 import StatusBadge from "@/app/_components/StatusBadge";
 import LoadingState from "@/app/_components/LoadingState";
 import Icon from "@/app/_components/Icon";
 
-interface Loja { id: number; nome: string; ativa: boolean; bling_id?: number; bling_descricao?: string; shopee_markup_pct?: number; tipo?: "fisica" | "virtual"; }
+interface Loja { id: number; nome: string; ativa: boolean; bling_id?: number; bling_descricao?: string; shopee_markup_pct?: number; grupos_publicacao?: string; tipo?: TipoLoja; }
+
+const TIPO_LABEL: Record<TipoLoja, string> = {
+  fisica: "Física",
+  virtual: "Virtual",
+  hibrida: "Híbrida",
+  marketplace: "Marketplace",
+};
 
 export default function LojasPage() {
   const [lojas, setLojas] = useState<Loja[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [modal, setModal] = useState<{ open: boolean; nome: string; markup: number; grupos: string; tipo: "fisica" | "virtual"; editId?: number }>({ open: false, nome: "", markup: 100, grupos: "", tipo: "fisica" });
+  const [erro, setErro] = useState("");
+  const [modal, setModal] = useState<{ open: boolean; nome: string; markup: number; grupos: string; tipo: TipoLoja; editId?: number }>({ open: false, nome: "", markup: 100, grupos: "", tipo: "fisica" });
 
   const carregar = () => {
     api.lojasManage()
@@ -34,8 +42,24 @@ export default function LojasPage() {
 
   const deletar = async (id: number) => {
     if (!confirm("Tem certeza que deseja excluir esta loja?")) return;
-    await api.lojasDeletar(id);
-    carregar();
+    setErro("");
+    try {
+      await api.lojasDeletar(id);
+      carregar();
+    } catch (e) {
+      setErro((e as Error).message);
+    }
+  };
+
+  const alternarAtiva = async (l: Loja) => {
+    setErro("");
+    try {
+      const r = await api.lojasAtualizarGeral(l.id, { status: l.ativa ? "inativa" : "ativa" });
+      if (r.error) { setErro(r.error); return; }
+      carregar();
+    } catch (e) {
+      setErro((e as Error).message);
+    }
   };
 
   const syncBling = async () => {
@@ -57,6 +81,7 @@ export default function LojasPage() {
             Lojas
           </h1>
           <p className="text-xs text-neutral-500 mt-1">Gerencie os ambientes e filiais do sistema</p>
+          {erro && <p className="text-xs text-red-400 mt-1">{erro}</p>}
         </div>
         <div className="flex gap-2">
           <button
@@ -82,8 +107,8 @@ export default function LojasPage() {
               <div className="flex justify-between items-start">
                 <h3 className="text-sm font-semibold text-neutral-200">{l.nome}</h3>
                 <div className="flex gap-1 items-center">
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${l.tipo === "virtual" ? "bg-purple-900/40 text-purple-400" : "bg-sky-900/40 text-sky-400"}`}>
-                    {l.tipo === "virtual" ? "Virtual" : "Física"}
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${l.tipo === "virtual" ? "bg-purple-900/40 text-purple-400" : l.tipo === "hibrida" ? "bg-amber-900/40 text-amber-400" : l.tipo === "marketplace" ? "bg-pink-900/40 text-pink-400" : "bg-sky-900/40 text-sky-400"}`}>
+                    {TIPO_LABEL[l.tipo || "fisica"]}
                   </span>
                   <StatusBadge label={l.ativa ? "Ativa" : "Inativa"} variant={l.ativa ? "success" : "neutral"} />
                 </div>
@@ -97,9 +122,13 @@ export default function LojasPage() {
                   Ver detalhes <Icon name="chevronRight" size={12} />
                 </Link>
                 <button
-                  onClick={() => setModal({ open: true, nome: l.nome, markup: l.shopee_markup_pct || 100, grupos: (l as any).grupos_publicacao || "", tipo: l.tipo || "fisica", editId: l.id })}
+                  onClick={() => setModal({ open: true, nome: l.nome, markup: l.shopee_markup_pct || 100, grupos: l.grupos_publicacao || "", tipo: l.tipo || "fisica", editId: l.id })}
                   className="text-xs text-indigo-400 hover:text-indigo-300"
                 >Editar rápido</button>
+                <button
+                  onClick={() => alternarAtiva(l)}
+                  className="text-xs text-neutral-400 hover:text-neutral-200"
+                >{l.ativa ? "Desativar" : "Ativar"}</button>
                 <button
                   onClick={() => deletar(l.id)}
                   className="text-xs text-red-400 hover:text-red-300"
@@ -128,11 +157,13 @@ export default function LojasPage() {
               <label className="text-xs text-neutral-400 block mb-1">Tipo de loja:</label>
               <select
                 value={modal.tipo}
-                onChange={e => setModal(p => ({ ...p, tipo: e.target.value as "fisica" | "virtual" }))}
+                onChange={e => setModal(p => ({ ...p, tipo: e.target.value as TipoLoja }))}
                 className="w-full bg-neutral-700 border border-neutral-600 rounded px-3 py-2 text-xs text-neutral-200 focus:outline-none focus:border-indigo-500"
               >
                 <option value="fisica">Física (PDV, caixa, estoque)</option>
                 <option value="virtual">Virtual (marketplace/Shopee)</option>
+                <option value="hibrida">Híbrida (física + virtual)</option>
+                <option value="marketplace">Marketplace</option>
               </select>
               <p className="text-[10px] text-neutral-600 mt-1">Define quais utilitários aparecem no menu quando esta loja está selecionada.</p>
             </div>
