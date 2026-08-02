@@ -71,11 +71,15 @@ def atend_atribuir(id):
 
     @requer_permissao("atendimento.editar")
     def _go():
-        atendente_id = data.get("atendente_id")
-        if not atendente_id:
+        atendente_id_raw = data.get("atendente_id")
+        if not atendente_id_raw:
             return jsonify({"error": "atendente_id obrigatorio"}), 400
+        try:
+            atendente_id = int(atendente_id_raw)
+        except ValueError:
+            return jsonify({"error": "atendente_id invalido"}), 400
         from core.atendimento import atribuir_ticket
-        resultado = atribuir_ticket(id, int(atendente_id))
+        resultado = atribuir_ticket(id, atendente_id)
         return jsonify(resultado), (400 if resultado.get("error") else 200)
     return _go()
 

@@ -63,7 +63,7 @@ class TestAtribuirTicket(unittest.TestCase):
         })
         mock_notif.assert_called_once_with(
             5, "ticket_atribuido", "Ticket #0001 atribuido a voce", "Duvida", "/atendimento/tickets/1")
-        mock_enviar.assert_called_once()
+        mock_enviar.assert_called_once_with(5, {"evento": "notificacao", "id": 99, "usuario_id": 5})
 
     @patch("core.atendimento.get_db")
     def test_atendente_inexistente_retorna_erro(self, mock_get_db):

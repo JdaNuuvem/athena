@@ -101,5 +101,43 @@ class TestListarAtendentes(unittest.TestCase):
         mock_list.assert_not_called()
 
 
+class TestAtribuirTicketRota(unittest.TestCase):
+    def setUp(self):
+        self._env_patch = patch.dict(os.environ, {"ATHENA_TOKEN": _TEST_TOKEN})
+        self._env_patch.start()
+        self.client = _app()
+
+    def tearDown(self):
+        self._env_patch.stop()
+
+    def test_atribuir_atendente_id_invalido_retorna_400(self):
+        """Fix round 1: atendente_id nao numerico retorna 400 com mensagem
+        clara em vez de deixar o ValueError de int() vazar como 500."""
+        headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+        with patch("core.atendimento.atribuir_ticket") as mock_atribuir:
+            r = self.client.put("/api/atendimento/tickets/1/atribuir",
+                                 json={"atendente_id": "abc"}, headers=headers)
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.get_json()["error"], "atendente_id invalido")
+        mock_atribuir.assert_not_called()
+
+    def test_atribuir_atendente_id_ausente_retorna_400(self):
+        headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+        with patch("core.atendimento.atribuir_ticket") as mock_atribuir:
+            r = self.client.put("/api/atendimento/tickets/1/atribuir",
+                                 json={}, headers=headers)
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.get_json()["error"], "atendente_id obrigatorio")
+        mock_atribuir.assert_not_called()
+
+    def test_atribuir_atendente_id_valido_chama_core(self):
+        headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+        with patch("core.atendimento.atribuir_ticket", return_value={"id": 1, "atendente_id": 5}) as mock_atribuir:
+            r = self.client.put("/api/atendimento/tickets/1/atribuir",
+                                 json={"atendente_id": 5}, headers=headers)
+        self.assertEqual(r.status_code, 200)
+        mock_atribuir.assert_called_once_with(1, 5)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
