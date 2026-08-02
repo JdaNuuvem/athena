@@ -52,6 +52,18 @@ def atend_reabrir(id):
     return _go()
 
 
+@atendimento_bp.route("/tickets/<int:id>/status", methods=["PUT"])
+def atend_mudar_status(id):
+    data = request.json or {}
+
+    @requer_permissao("atendimento.editar")
+    def _go():
+        from core.atendimento import mudar_status_ticket
+        resultado = mudar_status_ticket(id, data.get("status", ""))
+        return jsonify(resultado), (400 if resultado.get("error") else 200)
+    return _go()
+
+
 @atendimento_bp.route("/tickets", methods=["GET"])
 def atend_listar_tickets():
     @requer_permissao("atendimento.ver")

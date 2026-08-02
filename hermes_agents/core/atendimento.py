@@ -181,6 +181,38 @@ def fechar_ticket(ticket_id: int) -> dict:
 def reabrir_ticket(ticket_id: int) -> dict:
     return update("tickets", ticket_id, {"status": "aberto", "data_fechamento": None})
 
+TRANSICOES_STATUS = {
+    "aberto": {"pendente", "fechado"},
+    "pendente": {"aberto", "fechado"},
+    "fechado": {"aberto"},
+}
+
+def mudar_status_ticket(ticket_id: int, novo_status: str) -> dict:
+    """Aplica a maquina de estado de status do ticket (aberto <-> pendente ->
+    fechado, reabrir sempre volta para aberto) e avisa participantes via WS."""
+    ticket = get("tickets", ticket_id)
+    if ticket.get("error"):
+        return ticket
+    atual = ticket.get("status", "aberto")
+    if novo_status not in TRANSICOES_STATUS.get(atual, set()):
+        return {"error": f"Transicao invalida: {atual} -> {novo_status}"}
+    campos = {"status": novo_status}
+    if novo_status == "fechado":
+        campos["data_fechamento"] = hoje()
+    elif atual == "fechado":
+        campos["data_fechamento"] = None
+    resultado = update("tickets", ticket_id, campos)
+    if not resultado.get("error"):
+        from core.chat import conversa_id_do_ticket
+        from core.chat_ws import broadcast_para_participantes
+        conversa_id = conversa_id_do_ticket(ticket_id)
+        if conversa_id:
+            broadcast_para_participantes(conversa_id, {
+                "evento": "ticket_status_alterado", "ticket_id": ticket_id,
+                "status": novo_status, "conversa_id": conversa_id,
+            })
+    return resultado
+
 def dashboard() -> dict:
     async def _go():
         db = await get_db()
