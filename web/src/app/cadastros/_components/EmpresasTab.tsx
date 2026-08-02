@@ -1,7 +1,7 @@
 "use client";
 
 import SidebarLayout from "./SidebarLayout";
-import CrudPanel, { type Column, type FieldDef } from "./CrudPanel";
+import CrudPanel, { type Column, type FieldDef } from "../../_components/CrudPanel";
 
 const empresasCols: Column[] = [
   { key: "id", label: "ID" },

@@ -344,6 +344,67 @@ class TestCRMPropostasValidacao(unittest.TestCase):
         self.assertEqual(resultado, {"id": 1})
 
 
+class TestCRMContratosValidacao(unittest.TestCase):
+    """create()/update() de 'contratos' — o CRUD generico aceitava um
+    contrato sem negociacao_id, com status fora do enum (pendente/assinado/
+    cancelado) ou valor negativo; a unica validacao existia no evento
+    automatico (ao_converter_proposta_em_contrato), nao no CRUD manual."""
+
+    def test_create_sem_negociacao_id_rejeita(self):
+        with patch("core.crm._create") as mock_create:
+            resultado = crm.create("contratos", {"valor": "100"})
+        mock_create.assert_not_called()
+        self.assertEqual(resultado, {"error": "Negociação é obrigatória"})
+
+    def test_create_com_negociacao_id_invalido_rejeita(self):
+        with patch("core.crm._create") as mock_create:
+            resultado = crm.create("contratos", {"negociacao_id": "abc"})
+        mock_create.assert_not_called()
+        self.assertEqual(resultado, {"error": "Negociação inválida"})
+
+    def test_create_com_proposta_id_invalido_rejeita(self):
+        with patch("core.crm._create") as mock_create:
+            resultado = crm.create("contratos", {"negociacao_id": 1, "proposta_id": "abc"})
+        mock_create.assert_not_called()
+        self.assertEqual(resultado, {"error": "Proposta inválida"})
+
+    def test_create_com_status_fora_do_enum_rejeita(self):
+        with patch("core.crm._create") as mock_create:
+            resultado = crm.create("contratos", {"negociacao_id": 1, "status": "em_revisao"})
+        mock_create.assert_not_called()
+        self.assertIn("Status inválido", resultado["error"])
+
+    def test_create_com_valor_negativo_rejeita(self):
+        with patch("core.crm._create") as mock_create:
+            resultado = crm.create("contratos", {"negociacao_id": 1, "valor": -10})
+        mock_create.assert_not_called()
+        self.assertEqual(resultado, {"error": "Valor não pode ser negativo"})
+
+    def test_create_com_dados_validos_gera_numero_automatico(self):
+        with patch("core.crm._create", return_value={"id": 42, "negociacao_id": 1}) as mock_create, \
+             patch("core.crm._update", return_value={"id": 42, "numero": "CONT-0042", "negociacao_id": 1}) as mock_update:
+            resultado = crm.create("contratos", {"negociacao_id": 1, "valor": 1500.0, "status": "pendente"})
+        mock_create.assert_called_once()
+        mock_update.assert_called_once_with("crm_contratos", 42, {"numero": "CONT-0042"})
+        self.assertEqual(resultado["numero"], "CONT-0042")
+
+    def test_create_com_numero_explicito_nao_sobrescreve(self):
+        with patch("core.crm._create", return_value={"id": 7, "numero": "CONT-LEGADO-1"}) as mock_create, \
+             patch("core.crm._update") as mock_update:
+            resultado = crm.create("contratos", {"negociacao_id": 1, "numero": "CONT-LEGADO-1"})
+        mock_create.assert_called_once()
+        mock_update.assert_not_called()
+        self.assertEqual(resultado["numero"], "CONT-LEGADO-1")
+
+    def test_update_parcial_nao_exige_negociacao_id(self):
+        # marcar como assinado (so' status + data_assinatura) nao deve exigir
+        # reenviar negociacao_id — mesmo padrao de update parcial de propostas.
+        with patch("core.crm._update", return_value={"id": 1, "status": "assinado"}) as mock_update:
+            resultado = crm.update("contratos", 1, {"status": "assinado", "data_assinatura": "2026-08-02"})
+        mock_update.assert_called_once()
+        self.assertEqual(resultado, {"id": 1, "status": "assinado"})
+
+
 class TestCRMDeleteComVinculo(unittest.TestCase):
     """Excluir uma empresa/lead com filhos vinculados (leads, contatos,
     negociacoes apontando pra ela via FK) deve retornar erro amigavel em

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import SidebarLayout from "./SidebarLayout";
-import CrudPanel, { type Column, type FieldDef } from "./CrudPanel";
+import CrudPanel, { type Column, type FieldDef } from "../../_components/CrudPanel";
 import { api } from "@/lib/api";
 import { fmtBRL } from "@/lib/format";
 

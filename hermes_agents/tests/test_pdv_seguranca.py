@@ -214,10 +214,13 @@ class TestPDVDescontoPorItem(unittest.IsolatedAsyncioTestCase):
 
     async def test_desconto_total_dentro_do_limite_ok(self):
         from core.pdv import realizar_venda
-        # so' testamos a validacao (retorno de erro) — nao a persistencia da venda inteira
+        # so' testamos a validacao de desconto (retorno de erro) — nao a
+        # persistencia da venda inteira. pagamentos precisa cobrir o total
+        # (100 - 5 desconto item - 5 desconto venda = 90) pra nao cair na
+        # checagem de "pagamento insuficiente" antes de chegar no mock.
         with patch("core.pdv.run_async", side_effect=lambda coro: coro.close() or {"venda": {"id": 1}, "total": 90}):
             r = realizar_venda(caixa_id=1, itens=[{"quantidade": 1, "valor_unitario": 100, "desconto": 5}],
-                                pagamentos=[], operador="op1", operador_id=1, desconto=5)
+                                pagamentos=[{"valor": 90}], operador="op1", operador_id=1, desconto=5)
         self.assertNotIn("error", r)
 
     async def test_desconto_concentrado_em_item_acima_do_limite_bloqueado(self):

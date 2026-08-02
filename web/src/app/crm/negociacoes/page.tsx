@@ -5,7 +5,7 @@ import CrudPanel, { type Column, type FieldDef, type CrudService } from "../../_
 import Icon from "../../_components/Icon";
 import { Can } from "@/lib/auth";
 import { api, evtNegociacaoGanha } from "@/lib/api";
-import { fmtBRL } from "@/lib/format";
+import { fmtBRL, fmtDataBR } from "@/lib/format";
 
 const ETAPAS_FUNIL = ["captacao", "qualificacao", "prospeccao", "proposta", "negociacao", "fechamento"];
 
@@ -23,14 +23,6 @@ const STATUS_CORES: Record<string, string> = {
   ganha: "bg-emerald-500/20 text-emerald-400",
   perdida: "bg-red-500/20 text-red-400",
 };
-
-// Datas DATE (YYYY-MM-DD) sem hora — new Date(str) interpreta como UTC e
-// desloca 1 dia pra tras em fusos negativos (Brasil). Formata via split direto.
-function fmtDataBR(v: unknown): string {
-  const s = String(v ?? "");
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
-  return m ? `${m[3]}/${m[2]}/${m[1]}` : "—";
-}
 
 interface Registro { id: number; nome: string; }
 

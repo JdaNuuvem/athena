@@ -203,6 +203,42 @@ def _list(tabela: str, cols="*", order="id DESC", limit=100) -> list:
     try: return run_async(_go())
     except Exception as e: log(AGENT, f"Erro list {tabela}: {e}"); return []
 
+# campos-alvo de busca por tabela logica (nao a tabela SQL resolvida) — nomes
+# fixos no codigo, nunca vindos do request, entao seguro interpolar na query;
+# so' o termo buscado ($1) e' parametrizado.
+_CAMPOS_BUSCA = {
+    "clientes": ["nome", "documento", "email", "telefone"],
+    "fornecedores": ["nome", "documento"],
+    "empresas": ["razao_social", "cnpj"],
+    "usuarios": ["nome", "email"],
+    "transportadoras": ["nome", "cnpj"],
+    "vendedores": ["nome", "email"],
+}
+
+def _count(tabela_sql: str, campos_busca=None, busca: str = None) -> int:
+    async def _go():
+        db = await get_db()
+        if busca and campos_busca:
+            where = " OR ".join(f"{c} ILIKE $1" for c in campos_busca)
+            return await db.fetchval(f"SELECT COUNT(*) FROM {tabela_sql} WHERE {where}", f"%{busca}%")
+        return await db.fetchval(f"SELECT COUNT(*) FROM {tabela_sql}")
+    try: return run_async(_go()) or 0
+    except Exception as e: log(AGENT, f"Erro count {tabela_sql}: {e}"); return 0
+
+def _list_pagina(tabela_sql: str, order="id DESC", limit=50, offset=0, campos_busca=None, busca: str = None) -> list:
+    async def _go():
+        db = await get_db()
+        if busca and campos_busca:
+            where = " OR ".join(f"{c} ILIKE $1" for c in campos_busca)
+            rows = await db.fetch(
+                f"SELECT * FROM {tabela_sql} WHERE {where} ORDER BY {order} LIMIT {limit} OFFSET {offset}",
+                f"%{busca}%")
+        else:
+            rows = await db.fetch(f"SELECT * FROM {tabela_sql} ORDER BY {order} LIMIT {limit} OFFSET {offset}")
+        return [dict(r) for r in rows]
+    try: return run_async(_go())
+    except Exception as e: log(AGENT, f"Erro list_pagina {tabela_sql}: {e}"); return []
+
 def _get(tabela: str, id: int) -> dict:
     async def _go():
         db = await get_db()
@@ -295,6 +331,25 @@ def _sem_campos_sensiveis(tabela: str, registro):
     return {k: v for k, v in registro.items() if k not in campos}
 
 def list(tabela: str): return [_sem_campos_sensiveis(tabela, r) for r in _list(_resolve(tabela))]
+
+def list_paginado(tabela: str, pagina: int = 1, por_pagina: int = 50, busca: str = None) -> dict:
+    pagina = max(1, pagina or 1)
+    por_pagina = max(1, min(por_pagina or 50, 200))
+    tabela_sql = _resolve(tabela)
+    campos_busca = _CAMPOS_BUSCA.get(tabela)
+    busca = (busca or "").strip() or None
+    offset = (pagina - 1) * por_pagina
+    dados = _list_pagina(tabela_sql, limit=por_pagina, offset=offset, campos_busca=campos_busca, busca=busca)
+    total = _count(tabela_sql, campos_busca=campos_busca, busca=busca)
+    total_paginas = max(1, -(-total // por_pagina)) if total else 1
+    return {
+        "data": [_sem_campos_sensiveis(tabela, r) for r in dados],
+        "total": total,
+        "pagina": pagina,
+        "por_pagina": por_pagina,
+        "total_paginas": total_paginas,
+    }
+
 def get(tabela: str, id: int): return _sem_campos_sensiveis(tabela, _get(_resolve(tabela), id))
 def create(tabela: str, data: dict): return _sem_campos_sensiveis(tabela, _create(_resolve(tabela), data))
 def update(tabela: str, id: int, data: dict): return _sem_campos_sensiveis(tabela, _update(_resolve(tabela), id, data))

@@ -82,32 +82,37 @@ export default function CRMPage() {
           <p className="text-xl font-bold text-emerald-400">{funil && funil.total_leads > 0 ? Math.round((funil.total_propostas / funil.total_leads) * 100) : 0}%</p>
         </div>
       </div>
-      <div className="flex items-center gap-3">
-        <button
-          onClick={importarBling}
-          disabled={blingStatus?.startsWith("Importando")}
-          className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs px-4 py-2 rounded-lg transition-colors"
-        >
-          {blingStatus?.startsWith("Importando") ? (
-            <span className="inline-flex items-center gap-1.5">
-              <svg xmlns="http://www.w3.org/2000/svg" width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-              Importando...
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5">
-              <Icon name="inbox" size={14} />
-              Importar do Bling
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={importarBling}
+            disabled={blingStatus?.startsWith("Importando")}
+            className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs px-4 py-2 rounded-lg transition-colors"
+          >
+            {blingStatus?.startsWith("Importando") ? (
+              <span className="inline-flex items-center gap-1.5">
+                <svg xmlns="http://www.w3.org/2000/svg" width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                Importando...
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5">
+                <Icon name="inbox" size={14} />
+                Importar Leads do Bling
+              </span>
+            )}
+          </button>
+          {blingStatus && !blingStatus.startsWith("Importando") && blingCounts && (
+            <span className="text-xs text-emerald-400">
+              {blingStatus} ({blingCounts.empresas} empresas, {blingCounts.leads} leads, {blingCounts.contatos} contatos no funil)
             </span>
           )}
-        </button>
-        {blingStatus && !blingStatus.startsWith("Importando") && blingCounts && (
-          <span className="text-xs text-emerald-400">
-            {blingStatus} ({blingCounts.empresas} empresas, {blingCounts.leads} leads, {blingCounts.contatos} contatos)
-          </span>
-        )}
-        {blingStatus && !blingStatus.startsWith("Importando") && !blingCounts && (
-          <span className="text-xs text-red-400">{blingStatus}</span>
-        )}
+          {blingStatus && !blingStatus.startsWith("Importando") && !blingCounts && (
+            <span className="text-xs text-red-400">{blingStatus}</span>
+          )}
+        </div>
+        <p className="text-[10px] text-neutral-500">
+          Alimenta o funil de Leads e Empresas abaixo.
+        </p>
       </div>
       <div>
         <h2 className="text-sm font-semibold text-neutral-300 mb-3">Funil de Vendas</h2>

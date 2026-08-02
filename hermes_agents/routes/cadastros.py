@@ -6,10 +6,26 @@ cadastros_bp = Blueprint("cadastros", __name__, url_prefix="/api/cadastros")
 
 @cadastros_bp.route("/<tabela>", methods=["GET"])
 def cad_list(tabela):
-    from core.cadastros import list as cad_list_fn, ALL_TABLES
+    from core.cadastros import list as cad_list_fn, list_paginado, ALL_TABLES
     if tabela not in ALL_TABLES:
         return jsonify({"error": "Tabela invalida"}), 404
-    return jsonify({"data": cad_list_fn(tabela)})
+
+    # ponytail: faltava @requer_permissao aqui — qualquer usuario com token
+    # valido (mesmo sem nenhuma permissao atribuida) conseguia listar
+    # /api/cadastros/empresas, /api/cadastros/usuarios etc. O CRM (crm.py) ja
+    # exige crm.ver pro mesmo tipo de rota; Cadastros ficou pra tras.
+    @requer_permissao("cadastros.ver")
+    def _go():
+        # ?pagina= opcional — sem ele mantem o comportamento antigo (ate 100
+        # registros, sem total) para nao quebrar telas que ja consomem esta
+        # rota sem paginacao (ClientesTab e as demais abas de Cadastros).
+        pagina = request.args.get("pagina", type=int)
+        if pagina is not None:
+            por_pagina = request.args.get("por_pagina", default=50, type=int)
+            busca = request.args.get("busca", default=None, type=str)
+            return jsonify(list_paginado(tabela, pagina, por_pagina, busca))
+        return jsonify({"data": cad_list_fn(tabela)})
+    return _go()
 
 
 @cadastros_bp.route("/<tabela>", methods=["POST"])
@@ -32,7 +48,11 @@ def cad_get(tabela, id):
     from core.cadastros import get as cad_get_fn, ALL_TABLES
     if tabela not in ALL_TABLES:
         return jsonify({"error": "Tabela invalida"}), 404
-    return jsonify(cad_get_fn(tabela, id))
+
+    @requer_permissao("cadastros.ver")
+    def _go():
+        return jsonify(cad_get_fn(tabela, id))
+    return _go()
 
 
 @cadastros_bp.route("/<tabela>/<int:id>", methods=["PUT"])
@@ -68,23 +88,39 @@ def cad_delete(tabela, id):
 @cadastros_bp.route("/permissoes/perfil", methods=["GET"])
 def cad_permissoes_perfil():
     from core.cadastros import permissoes_por_perfil
-    return jsonify({"data": permissoes_por_perfil()})
+
+    @requer_permissao("cadastros.ver")
+    def _go():
+        return jsonify({"data": permissoes_por_perfil()})
+    return _go()
 
 
 @cadastros_bp.route("/vendedores/comissao", methods=["GET"])
 def cad_vendedor_comissao():
     from core.cadastros import vendedor_comissao_resumo
-    return jsonify({"data": vendedor_comissao_resumo()})
+
+    @requer_permissao("cadastros.ver")
+    def _go():
+        return jsonify({"data": vendedor_comissao_resumo()})
+    return _go()
 
 
 @cadastros_bp.route("/vendedores/metas", methods=["GET"], defaults={"mes": None})
 @cadastros_bp.route("/vendedores/metas/<mes>", methods=["GET"])
 def cad_vendedor_metas(mes):
     from core.cadastros import vendedor_metas
-    return jsonify({"data": vendedor_metas(mes)})
+
+    @requer_permissao("cadastros.ver")
+    def _go():
+        return jsonify({"data": vendedor_metas(mes)})
+    return _go()
 
 
 @cadastros_bp.route("/fornecedores/resumo", methods=["GET"])
 def cad_fornecedor_resumo():
     from core.cadastros import fornecedor_resumo
-    return jsonify({"data": fornecedor_resumo()})
+
+    @requer_permissao("cadastros.ver")
+    def _go():
+        return jsonify({"data": fornecedor_resumo()})
+    return _go()

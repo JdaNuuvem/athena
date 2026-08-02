@@ -109,13 +109,34 @@ class TestUmStatusPorChamada(unittest.TestCase):
         self.assertEqual(len(r["response"]["order_list"]), 2)
 
     @patch("shopee.auth.requests.get")
-    def test_para_na_primeira_chamada_com_erro(self, mock_get):
+    def test_erro_em_todos_os_status_retorna_erro_concatenado(self, mock_get):
+        # Nao aborta na primeira falha: tenta todas as combinacoes
+        # status/janela e so' retorna {"error"} se NENHUMA deu certo — uma
+        # falha isolada (ex: janela sem pedidos que a Shopee rejeita) nao
+        # pode descartar pedidos reais ja agregados de outras combinacoes
+        # (ver comentario em get_orders_by_time_range).
         mock_get.return_value.status_code = 200
         mock_get.return_value.raise_for_status = MagicMock()
         mock_get.return_value.json.return_value = {"error": "order.order_list_invalid_time", "message": "..."}
         r = shopee_orders.get_orders_by_time_range(1000, 2000, ["READY_TO_SHIP", "PROCESSED"])
-        self.assertEqual(r.get("error"), "order.order_list_invalid_time")
-        self.assertEqual(mock_get.call_count, 1, "nao deveria continuar chamando apos erro")
+        self.assertEqual(mock_get.call_count, 2, "deve tentar todos os status antes de desistir")
+        self.assertIn("READY_TO_SHIP", r.get("error", ""))
+        self.assertIn("PROCESSED", r.get("error", ""))
+        self.assertIn("order.order_list_invalid_time", r.get("error", ""))
+
+    @patch("shopee.auth.requests.get")
+    def test_um_status_falha_outro_funciona_retorna_parcial(self, mock_get):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.raise_for_status = MagicMock()
+        mock_get.return_value.json.side_effect = [
+            {"error": "order.order_list_invalid_time", "message": "..."},
+            {"response": {"order_list": [{"order_sn": "B"}], "more": False, "next_cursor": ""}},
+        ]
+        r = shopee_orders.get_orders_by_time_range(1000, 2000, ["READY_TO_SHIP", "PROCESSED"])
+        self.assertNotIn("error", r)
+        self.assertEqual(len(r["response"]["order_list"]), 1)
+        self.assertEqual(r["response"]["order_list"][0]["order_sn"], "B")
+        self.assertEqual(r["erros_parciais"], ["READY_TO_SHIP [1000-2000]: order.order_list_invalid_time"])
 
 
 class TestJanelaDe15Dias(unittest.TestCase):

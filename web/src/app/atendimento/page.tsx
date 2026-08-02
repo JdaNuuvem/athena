@@ -3,12 +3,21 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import HelpTooltip from "@/app/_components/HelpTooltip";
+import { api } from "@/lib/api";
+
+interface CanalAtivo { id: number; nome: string; }
 
 export default function AtendimentoPage() {
   const [dash, setDash] = useState<any>(null);
+  const [canaisAtivos, setCanaisAtivos] = useState<CanalAtivo[]>([]);
 
   useEffect(() => {
     fetch("/api/atendimento/dashboard").then(r=>r.json()).then(setDash).catch(()=>{});
+    // Antes essa lista era hardcoded (["whatsapp","telegram",...]) — cadastrar
+    // ou desativar um canal em /atendimento/canais nunca refletia aqui.
+    api.atendList("canais")
+      .then(r => setCanaisAtivos(((r.data || []) as { id: number; nome: string; ativo: boolean }[]).filter(c => c.ativo)))
+      .catch(() => {});
   }, []);
 
   return (
@@ -31,11 +40,11 @@ export default function AtendimentoPage() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-        {["whatsapp","telegram","instagram","facebook","chat","email"].map(c => {
-          const canal = dash?.canais?.find((x:any) => x.canal === c);
-          return <div key={c} className="bg-neutral-800 border border-neutral-700 rounded-lg p-3 text-center">
-            <p className="text-xs text-neutral-500 capitalize">{c}</p>
-            <p className="text-lg font-bold text-neutral-200">{canal?.cnt ?? 0}</p>
+        {canaisAtivos.map(c => {
+          const stat = dash?.canais?.find((x:any) => x.canal === c.nome);
+          return <div key={c.id} className="bg-neutral-800 border border-neutral-700 rounded-lg p-3 text-center">
+            <p className="text-xs text-neutral-500 capitalize">{c.nome}</p>
+            <p className="text-lg font-bold text-neutral-200">{stat?.cnt ?? 0}</p>
           </div>
         })}
       </div>
