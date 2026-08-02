@@ -1008,6 +1008,90 @@ def shopee_logistica_rastreio():
 
 
 # ===========================================================================
+# Fulfillment — vincula pedido Shopee ao pedido/NF-e do Bling, despacho fica
+# registrado apos as rotas de logistica acima confirmarem sucesso
+# ===========================================================================
+
+@shopee_bp.route('/pedidos/<order_sn>/fulfillment', methods=['GET'])
+def shopee_fulfillment_status(order_sn):
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from core.shopee_fulfillment import status_fulfillment
+        loja_id = request.args.get("loja_id", type=int)
+        if not loja_id:
+            return jsonify({"erro": "loja_id e obrigatorio"}), 400
+        resultado = status_fulfillment(order_sn, loja_id)
+        return jsonify(resultado), (404 if "nao encontrado" in resultado.get("erro", "") else 400 if resultado.get("erro") else 200)
+    return _handler()
+
+@shopee_bp.route('/pedidos/<order_sn>/vincular-bling', methods=['POST'])
+def shopee_fulfillment_vincular_bling(order_sn):
+    from core.rbac import requer_permissao, requer_acesso_loja
+    @requer_acesso_loja
+    @requer_permissao("produtos.editar")
+    def _handler():
+        from core.shopee_fulfillment import vincular_pedido_bling
+        data = request.json or {}
+        loja_id = data.get("loja_id")
+        if not loja_id:
+            return jsonify({"erro": "loja_id e obrigatorio"}), 400
+        id_pedido_bling = data.get("id_pedido_bling")
+        resultado = vincular_pedido_bling(order_sn, int(loja_id), id_pedido_bling=int(id_pedido_bling) if id_pedido_bling else None)
+        return jsonify(resultado), (400 if resultado.get("erro") else 200)
+    return _handler()
+
+@shopee_bp.route('/pedidos/<order_sn>/emitir-nota', methods=['POST'])
+def shopee_fulfillment_emitir_nota(order_sn):
+    """Emite a NF-e no Bling — acao fiscal, nao reversivel pelo painel."""
+    from core.rbac import requer_permissao, requer_acesso_loja
+    @requer_acesso_loja
+    @requer_permissao("produtos.editar")
+    def _handler():
+        from core.shopee_fulfillment import emitir_nota_fiscal
+        data = request.json or {}
+        loja_id = data.get("loja_id")
+        if not loja_id:
+            return jsonify({"erro": "loja_id e obrigatorio"}), 400
+        resultado = emitir_nota_fiscal(order_sn, int(loja_id))
+        return jsonify(resultado), (400 if resultado.get("erro") else 200)
+    return _handler()
+
+@shopee_bp.route('/pedidos/<order_sn>/nota-pdf', methods=['GET'])
+def shopee_fulfillment_nota_pdf(order_sn):
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from core.shopee_fulfillment import baixar_nota_pdf
+        loja_id = request.args.get("loja_id", type=int)
+        if not loja_id:
+            return jsonify({"erro": "loja_id e obrigatorio"}), 400
+        conteudo, content_type = baixar_nota_pdf(order_sn, loja_id)
+        if not conteudo:
+            return jsonify({"erro": "PDF da nota nao disponivel — emita a nota fiscal antes"}), 404
+        from flask import Response
+        return Response(conteudo, mimetype=content_type or "application/pdf")
+    return _handler()
+
+@shopee_bp.route('/pedidos/<order_sn>/despachar-confirmar', methods=['POST'])
+def shopee_fulfillment_despachar_confirmar(order_sn):
+    """So' registra que o despacho aconteceu — chame DEPOIS que
+    /logistica/despachar (mass_ship_order) confirmar sucesso."""
+    from core.rbac import requer_permissao, requer_acesso_loja
+    @requer_acesso_loja
+    @requer_permissao("produtos.editar")
+    def _handler():
+        from core.shopee_fulfillment import marcar_despachado
+        data = request.json or {}
+        loja_id = data.get("loja_id")
+        if not loja_id:
+            return jsonify({"erro": "loja_id e obrigatorio"}), 400
+        resultado = marcar_despachado(order_sn, int(loja_id), package_number=data.get("package_number"))
+        return jsonify(resultado), (400 if resultado.get("erro") else 200)
+    return _handler()
+
+
+# ===========================================================================
 # Discount — desconto por item com janela de tempo
 # ===========================================================================
 

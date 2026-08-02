@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import type { ShopeePedidoSincronizado } from "@/lib/api";
 import Icon from "@/app/_components/Icon";
+import PainelFulfillment from "./_components/PainelFulfillment";
 
 interface LojaShopee {
   id: number;
@@ -267,6 +268,7 @@ export default function ShopeePedidosPage() {
                               ))}
                             </tbody>
                           </table>
+                          <PainelFulfillment orderSn={p.order_sn} lojaId={Number(lojaId)} />
                         </div>
                       )}
                     </div>
