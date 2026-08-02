@@ -86,7 +86,7 @@ def _estoque_por_loja_impl():
 
 @estoque_bp.route('/lojas', methods=['PUT'])
 def atualizar_estoque_loja():
-    """Atualiza quantidade de estoque em uma loja/deposito. Two-way sync via fila offline."""
+    """Atualiza quantidade de estoque em uma loja/deposito."""
     from core.estoque import ajustar_absoluto
     from core.rbac import usuario_atual_da_request
     dados = request.json or {}
@@ -125,30 +125,8 @@ def atualizar_estoque_loja():
             resultado["bling_sync"] = sincronizar_estoque_para_bling(sku, loja_nome, float(quantidade))
         except Exception as e:
             resultado["bling_sync"] = {"erro": str(e)}
-    try:
-        from shopee import sincronizar_estoque_todas_lojas_automatico
-        Thread(target=lambda: sincronizar_estoque_todas_lojas_automatico(sku, float(quantidade)), daemon=True).start()
-    except Exception:
-        pass
+    _sync_shopee_async(sku, float(quantidade))
     return jsonify(resultado)
-
-
-@estoque_bp.route('/sync/processar', methods=['POST'])
-def processar_fila_estoque():
-    """Fila de sync offline nunca foi implementada — `core.estoque.processar_fila_sync`
-    nao existe (e nunca existiu; o endpoint quebrava com ImportError/500 HTML).
-    Responde 501 explicito ate que a fila seja implementada de fato.
-    TODO(follow-up): implementar fila de retry de sync de estoque."""
-    return jsonify({"erro": "fila de sync de estoque nao implementada",
-                    "detalhe": "endpoint reservado; nenhuma fila offline existe hoje"}), 501
-
-
-@estoque_bp.route('/sync/status/<sku>', methods=['GET'])
-def status_sync_sku(sku):
-    """Idem processar_fila_estoque: `core.estoque.status_sync_sku` nao existe.
-    TODO(follow-up): expor status real quando a fila de sync existir."""
-    return jsonify({"sku": sku, "erro": "status de sync de estoque nao implementado",
-                    "detalhe": "endpoint reservado; nenhuma fila offline existe hoje"}), 501
 
 
 @estoque_bp.route('/buscar-codigo', methods=['GET'])
@@ -424,8 +402,18 @@ def _estoque_contagem_historico_impl():
 @estoque_bp.route('/relatorio-discrepancias', methods=['GET'])
 def estoque_relatorio_discrepancias():
     from core.estoque_relatorios import por_loja, por_operador
-    dias = request.args.get("dias", 30, type=int)
-    return jsonify({"por_loja": por_loja(dias), "por_operador": por_operador(dias)})
+    from core.rbac import requer_permissao
+    # ponytail: rota nao tinha NENHUMA checagem de permissao — qualquer usuario
+    # autenticado (vendedor, atendente, operador PDV) podia ver quem esta
+    # perdendo mais estoque, dado sensivel por operador/loja. As outras rotas
+    # de escrita deste blueprint ja usam "estoque.aprovar"; esta e' leitura,
+    # entao "estoque.ver" (mesmo padrao usado em crm.ver, chat, etc).
+    @requer_permissao("estoque.ver")
+    def _go():
+        dias = request.args.get("dias", 30, type=int)
+        dias = max(1, min(dias, 365))
+        return jsonify({"por_loja": por_loja(dias), "por_operador": por_operador(dias)})
+    return _go()
 
 
 @estoque_bp.route('/analise/giro', methods=['GET'])
