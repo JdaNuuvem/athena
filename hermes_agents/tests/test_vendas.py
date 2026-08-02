@@ -26,6 +26,7 @@ class _FakeDBPedidos:
         self.deleted_pagamentos_pedido_id = None
 
     async def fetchval(self, q, *a):
+        self.executed.append((q, a))
         if "SELECT id FROM vendas_pedidos" in q:
             return self.existing_id
         if "INSERT INTO vendas_pedidos" in q:
@@ -104,6 +105,40 @@ class TestSincronizarPedidosBling(unittest.TestCase):
             r = vendas.sincronizar_pedidos_bling()
         self.assertEqual(r["sync"], 1)
         self.assertTrue(any("555" in e for e in r["erros"]))
+
+
+class TestSincronizarPedidosShopee(unittest.TestCase):
+    """DRE por Loja soma frete de vendas_pedidos — sem gravar o frete real da
+    Shopee aqui, todo pedido Shopee entrava com frete=0 (default da coluna),
+    subestimando custo/superestimando lucro pra lojas virtuais."""
+
+    @patch("shopee.listar_pedidos_shopee_detalhado")
+    def test_grava_frete_do_pedido_shopee(self, mock_listar):
+        mock_listar.return_value = {"pedidos": [{
+            "order_sn": "SN1", "status": "COMPLETED", "create_time": 1700000000,
+            "total_amount": 150.0, "frete": 18.5, "recipient_nome": "Cliente Y", "itens": [],
+        }]}
+        db = _FakeDBPedidos(existing_id=None)
+        async def fake_get_db(): return db
+        with patch.object(vendas, "get_db", fake_get_db):
+            r = vendas.sincronizar_pedidos_shopee(dias=7, loja_id=7)
+        self.assertEqual(r["sync"], 1)
+        insert = next(e for e in db.executed if "INSERT INTO vendas_pedidos" in e[0])
+        self.assertIn(18.5, insert[1])
+
+    @patch("shopee.listar_pedidos_shopee_detalhado")
+    def test_atualiza_pedido_existente_tambem_grava_frete(self, mock_listar):
+        mock_listar.return_value = {"pedidos": [{
+            "order_sn": "SN1", "status": "COMPLETED", "create_time": 1700000000,
+            "total_amount": 150.0, "frete": 18.5, "recipient_nome": "Cliente Y", "itens": [],
+        }]}
+        db = _FakeDBPedidos(existing_id=33)
+        async def fake_get_db(): return db
+        with patch.object(vendas, "get_db", fake_get_db):
+            r = vendas.sincronizar_pedidos_shopee(dias=7, loja_id=7)
+        self.assertEqual(r["sync"], 1)
+        update = next(e for e in db.executed if "UPDATE vendas_pedidos" in e[0])
+        self.assertIn(18.5, update[1])
 
 
 if __name__ == "__main__":

@@ -133,6 +133,7 @@ class ReceitaLoja:
     loja_id: int
     loja_nome: str
     receita_online: float = 0.0
+    receita_shopee: float = 0.0
     receita_pdv: float = 0.0
     frete: float = 0.0
     custos_producao: float = 0.0

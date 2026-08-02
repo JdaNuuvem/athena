@@ -389,13 +389,16 @@ def fiscal_resumo(dias=30):
 
 def dre_por_loja(dias: int = 30) -> list:
     """Retorna DRE (receita, comissao, frete, lucro) por loja Shopee + PDV.
-    SOLID: DIP via FinanceiroRepository — injetavel via set_financeiro_repo()."""
-    comissao_pct = float(os.environ.get("SHOPEE_COMISSAO_PCT", "")) if os.environ.get("SHOPEE_COMISSAO_PCT") else 14.0
-    try:
-        from core.repositories_postgres import get_financeiro_repo
-        return _dre_via_repo(get_financeiro_repo(), dias, comissao_pct)
-    except Exception:
-        return _dre_via_query(dias, comissao_pct)
+    SOLID: DIP via FinanceiroRepository — injetavel via set_financeiro_repo().
+
+    comissao_pct segue a mesma cadeia de shopee/pricing.calcular_margem_produto
+    (env var -> config salva -> default 12%) — antes esta funcao tinha seu
+    proprio fallback hardcoded de 14%, uma segunda fonte de verdade divergente
+    pro mesmo numero."""
+    from core.config import get_config
+    comissao_pct = float(os.environ.get("SHOPEE_COMISSAO_PCT") or get_config("shopee", "comissao_pct") or 12)
+    from core.repositories_postgres import get_financeiro_repo
+    return _dre_via_repo(get_financeiro_repo(), dias, comissao_pct)
 
 
 def _dre_com_extras(base: list, dias: int) -> list:
@@ -406,7 +409,12 @@ def _dre_com_extras(base: list, dias: int) -> list:
         from core.pdv import historico_quebras
         from core.estoque_relatorios import por_loja as discrepancias_por_loja
         quebras = historico_quebras(dias=dias)
-        discrepancias = {d["loja"]: d for d in discrepancias_por_loja(dias)}
+        # estoque_aprovacoes/transferencias/contagens guardam loja como nome
+        # livre (VARCHAR), nao loja_id — join por string normalizada
+        # (trim + lowercase) pra nao perder o match so' por diferenca de
+        # maiuscula/espaco. Nao elimina 100% o risco de nome divergente
+        # (ex: abreviacao), mas cobre o caso mais comum.
+        discrepancias = {(d["loja"] or "").strip().lower(): d for d in discrepancias_por_loja(dias)}
         quebra_por_loja = {}
         for q in quebras:
             lid = q.get("loja_id")
@@ -414,9 +422,10 @@ def _dre_com_extras(base: list, dias: int) -> list:
             quebra_por_loja[lid] = quebra_por_loja.get(lid, 0) + float(q.get("diferenca") or 0)
         for item in base:
             item["quebra_caixa_acumulada"] = round(quebra_por_loja.get(item["loja_id"], 0), 2)
-            disc = discrepancias.get(item["loja_nome"], {})
+            disc = discrepancias.get((item["loja_nome"] or "").strip().lower(), {})
             item["discrepancia_unidades_falta"] = disc.get("unidades_falta_contagem", 0)
-    except Exception:
+    except Exception as e:
+        log(AGENT, f"Erro _dre_com_extras: {e}")
         for item in base:
             item.setdefault("quebra_caixa_acumulada", 0)
             item.setdefault("discrepancia_unidades_falta", 0)
@@ -429,75 +438,30 @@ def _dre_via_repo(repo, dias: int, comissao_pct: float) -> list:
         resultado = []
         for r in rows:
             receita = r.receita_online + r.receita_pdv
-            # comissao de marketplace incide so' sobre receita online — vendas
-            # da loja fisica (PDV) nao pagam comissao de Shopee/Bling.
-            comissao_valor = round(r.receita_online * comissao_pct / 100, 2)
+            # comissao de marketplace incide so' sobre receita Shopee de fato —
+            # vendas_pedidos tambem tem pedidos Bling/i9Logic (loja fisica), que
+            # nao pagam comissao de Shopee. custos_producao ja vem alocado
+            # proporcionalmente pelo repositorio (nao ha rastreio real por
+            # loja — fabrica e' unica, sem coluna loja_id em producao_custos).
+            comissao_valor = round(r.receita_shopee * comissao_pct / 100, 2)
             lucro = round(receita - comissao_valor - r.frete - r.custos_producao, 2)
             margem_pct = round((lucro / receita * 100) if receita > 0 else 0, 1)
             qtd_total = r.qtd_vendas + r.qtd_vendas_pdv
             ticket_medio = round(receita / qtd_total, 2) if qtd_total > 0 else 0
             resultado.append({
                 "loja_id": r.loja_id, "loja_nome": r.loja_nome,
-                "receita": receita, "receita_online": r.receita_online, "receita_pdv": r.receita_pdv,
+                "receita": receita, "receita_online": r.receita_online,
+                "receita_shopee": r.receita_shopee, "receita_pdv": r.receita_pdv,
                 "qtd_vendas": qtd_total, "ticket_medio": ticket_medio,
                 "comissao_pct": comissao_pct, "comissao_valor": comissao_valor,
                 "frete": r.frete, "custos_producao": r.custos_producao,
+                "custos_producao_alocado": True,
                 "lucro": lucro, "margem_pct": margem_pct,
                 "periodo_dias": dias,
             })
         resultado.sort(key=lambda x: x["lucro"], reverse=True)
         return _dre_com_extras(resultado, dias)
     try: return run_async(_go())
-    except Exception as e: return []
-
-
-def _dre_via_query(dias: int, comissao_pct: float) -> list:
-    """Fallback: query direta se repositorio nao disponivel."""
-    async def _go():
-        db = await get_db()
-        lojas = await db.fetch("SELECT id, nome FROM lojas WHERE ativa = TRUE ORDER BY nome")
-
-        resultado = []
-        for loja in lojas:
-            lid = loja["id"]
-            # receita Shopee/Bling (vendas_pedidos)
-            rec_online = await db.fetchval("""
-                SELECT COALESCE(SUM(total),0) FROM vendas_pedidos
-                WHERE loja_id = $1 AND data >= CURRENT_DATE - $2 AND status != 'cancelado'
-            """, lid, dias)
-            # receita PDV (pdv_vendas via pdv_caixas.loja_id)
-            rec_pdv = await db.fetchval("""
-                SELECT COALESCE(SUM(v.total),0) FROM pdv_vendas v
-                JOIN pdv_caixas c ON c.id = v.caixa_id
-                WHERE c.loja_id = $1 AND DATE(v.data) >= CURRENT_DATE - $2 AND v.status = 'finalizada'
-            """, lid, dias)
-            receita = float(rec_online or 0) + float(rec_pdv or 0)
-
-            frete = float((await db.fetchval("SELECT COALESCE(SUM(frete),0) FROM vendas_pedidos WHERE loja_id = $1 AND data >= CURRENT_DATE - $2 AND status != 'cancelado'", lid, dias)) or 0)
-            custos = float((await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM producao_custos WHERE loja_id = $1 AND data >= CURRENT_DATE - $2", lid, dias)) or 0)
-            qtd_online = int((await db.fetchval("SELECT COUNT(*) FROM vendas_pedidos WHERE loja_id = $1 AND data >= CURRENT_DATE - $2 AND status != 'cancelado'", lid, dias)) or 0)
-            qtd_pdv = int((await db.fetchval("SELECT COUNT(*) FROM pdv_vendas v JOIN pdv_caixas c ON c.id = v.caixa_id WHERE c.loja_id = $1 AND DATE(v.data) >= CURRENT_DATE - $2 AND v.status = 'finalizada'", lid, dias)) or 0)
-            qtd_vendas = qtd_online + qtd_pdv
-
-            # comissao de marketplace incide so' sobre receita online — vendas
-            # da loja fisica (PDV) nao pagam comissao de Shopee/Bling.
-            comissao_valor = round(float(rec_online or 0) * comissao_pct / 100, 2)
-            lucro = round(receita - comissao_valor - frete - custos, 2)
-            margem_pct = round((lucro / receita * 100) if receita > 0 else 0, 1)
-            ticket_medio = round(receita / qtd_vendas, 2) if qtd_vendas > 0 else 0
-
-            resultado.append({
-                "loja_id": lid, "loja_nome": loja["nome"],
-                "receita": receita, "receita_online": float(rec_online or 0), "receita_pdv": float(rec_pdv or 0),
-                "qtd_vendas": qtd_vendas, "ticket_medio": ticket_medio,
-                "comissao_pct": comissao_pct, "comissao_valor": comissao_valor,
-                "frete": frete, "custos_producao": custos,
-                "lucro": lucro, "margem_pct": margem_pct,
-                "periodo_dias": dias,
-            })
-
-        # ordenar por lucro descendente
-        resultado.sort(key=lambda x: x["lucro"], reverse=True)
-        return _dre_com_extras(resultado, dias)
-    try: return run_async(_go())
-    except Exception as e: return []
+    except Exception as e:
+        log(AGENT, f"Erro dre_por_loja: {e}")
+        return []

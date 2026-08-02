@@ -181,6 +181,25 @@ def rel_financeiro():
 
 @relatorios_bp.route("/dre-por-loja", methods=["GET"])
 def rel_dre_por_loja():
-    from core.relatorios import dre_por_loja
-    dias = request.args.get("dias", 30, type=int)
-    return jsonify({"data": dre_por_loja(dias)})
+    from core.rbac import requer_acesso_loja, usuario_atual_da_request
+    @requer_acesso_loja
+    def _handler():
+        from core.relatorios import dre_por_loja
+        dias = max(1, min(request.args.get("dias", 30, type=int), 365))
+        loja_id = request.args.get("loja_id", type=int)
+        resultado = dre_por_loja(dias)
+        if loja_id:
+            resultado = [r for r in resultado if r["loja_id"] == loja_id]
+        else:
+            # Sem loja_id explicito na request, requer_acesso_loja nao filtra
+            # nada (rota nao-escopada, por design) — sem esse filtro aqui, um
+            # usuario restrito a lojas especificas via usuario_lojas via essa
+            # rota especifica conseguia ver receita/lucro/margem de TODAS as
+            # lojas, quebrando o isolamento que as rotas irmas (/vendas,
+            # /lucro, /estoque...) ja respeitam.
+            from core.rbac_lojas import lojas_permitidas
+            permitidas = lojas_permitidas(usuario_atual_da_request().get("user_id"))
+            if permitidas is not None:
+                resultado = [r for r in resultado if r["loja_id"] in permitidas]
+        return jsonify({"data": resultado})
+    return _handler()

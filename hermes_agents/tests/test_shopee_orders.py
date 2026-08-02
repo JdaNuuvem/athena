@@ -199,6 +199,21 @@ class TestListarPedidosShopeeDetalhado(unittest.TestCase):
         self.assertIsInstance(detalhe_args[0], str)
         self.assertEqual(detalhe_args[0], "SN1")
 
+    @patch("shopee.orders.get_order_detail")
+    @patch("shopee.orders.obter_pedidos_shopee")
+    def test_mapeia_frete_do_estimated_shipping_fee(self, mock_resumo, mock_detalhe):
+        """DRE por Loja soma frete de vendas_pedidos pra compor lucro por loja —
+        sem esse campo, frete Shopee sempre gravava 0 (ver core/vendas.py
+        sincronizar_pedidos_shopee), subestimando custo/superestimando lucro."""
+        mock_resumo.return_value = {"response": {"order_list": [
+            {"order_sn": "SN1", "order_status": "READY_TO_SHIP", "create_time": 100},
+        ]}}
+        mock_detalhe.return_value = {"response": {"order_list": [
+            {"order_sn": "SN1", "total_amount": 99.9, "estimated_shipping_fee": 12.5, "item_list": []},
+        ]}}
+        r = shopee.listar_pedidos_shopee_detalhado(dias=7, loja_id=7)
+        self.assertEqual(r["pedidos"][0]["frete"], 12.5)
+
     @patch("shopee.orders.obter_pedidos_shopee")
     def test_erro_no_resumo_propaga_sem_chamar_detalhe(self, mock_resumo):
         mock_resumo.return_value = {"error": "order.order_list_invalid_time", "message": "..."}

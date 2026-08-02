@@ -35,7 +35,7 @@ def get_order_detail(order_sn: str, loja_id: int = None) -> dict:
     observacao do comprador, prazo de envio) — ver shopee_sync._upsert_pedido."""
     return _request("order/get_order_detail", {
         "order_sn_list": order_sn,
-        "response_optional_fields": "buyer_username,recipient_address,item_list,total_amount,payment_method,note,ship_by_date",
+        "response_optional_fields": "buyer_username,recipient_address,item_list,total_amount,payment_method,note,ship_by_date,estimated_shipping_fee",
     }, loja_id=loja_id)
 
 
@@ -124,6 +124,7 @@ def listar_pedidos_shopee_detalhado(dias: int = 7, loja_id: int = None, status: 
                 "create_time": det.get("create_time", o.get("create_time", 0)),
                 "update_time": det.get("update_time", o.get("update_time", 0)),
                 "total_amount": det.get("total_amount", 0),
+                "frete": det.get("estimated_shipping_fee", 0),
                 "buyer_username": det.get("buyer_username", ""),
                 "recipient_nome": (det.get("recipient_address", {}) or {}).get("name", ""),
                 "itens": [{

@@ -409,24 +409,25 @@ def sincronizar_pedidos_shopee(dias: int = 30, loja_id: int = None) -> dict:
                 cliente = ped.get("recipient_nome") or ped.get("buyer_username") or ""
                 status = MAPA_STATUS_SHOPEE.get(ped.get("status", ""), "aberto")
                 total_val = float(ped.get("total_amount", 0) or 0)
+                frete_val = float(ped.get("frete", 0) or 0)
                 data_pedido = None
                 if ped.get("create_time"):
                     from datetime import datetime
                     data_pedido = datetime.fromtimestamp(int(ped["create_time"])).date()
                 if existing:
                     await db.execute("""UPDATE vendas_pedidos SET
-                        cliente=$1, total=$2, status=$3, data=$4::date,
-                        marketplace='shopee', loja_id=$5, updated_at=NOW()
-                        WHERE shopee_order_sn=$6""",
-                        cliente, total_val, status, data_pedido, loja_id, order_sn)
+                        cliente=$1, total=$2, status=$3, data=$4::date, frete=$5,
+                        marketplace='shopee', loja_id=$6, updated_at=NOW()
+                        WHERE shopee_order_sn=$7""",
+                        cliente, total_val, status, data_pedido, frete_val, loja_id, order_sn)
                     pid = existing
                     await db.execute("DELETE FROM vendas_itens WHERE pedido_id = $1", pid)
                 else:
                     pid = await db.fetchval("""INSERT INTO vendas_pedidos
-                        (cliente, total, status, data, marketplace, origem, shopee_order_sn, loja_id)
-                        VALUES ($1,$2,$3,$4::date,'shopee','shopee',$5,$6)
+                        (cliente, total, frete, status, data, marketplace, origem, shopee_order_sn, loja_id)
+                        VALUES ($1,$2,$3,$4,$5::date,'shopee','shopee',$6,$7)
                         RETURNING id""",
-                        cliente, total_val, status, data_pedido, order_sn, loja_id)
+                        cliente, total_val, frete_val, status, data_pedido, order_sn, loja_id)
 
                 for idx, item in enumerate(ped.get("itens", []) or [], 1):
                     qtd = float(item.get("quantidade", 0) or 0)
