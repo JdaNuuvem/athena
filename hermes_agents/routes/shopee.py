@@ -245,6 +245,33 @@ def shopee_listar_pedidos():
             return jsonify({"error": str(e)}), 500
     return _handler()
 
+@shopee_bp.route('/pedidos-sincronizados', methods=['GET'])
+def shopee_pedidos_sincronizados():
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee_sync import listar_pedidos_sincronizados
+        loja_id = request.args.get("loja_id", type=int)
+        if not loja_id:
+            return jsonify({"error": "loja_id obrigatorio"}), 400
+        status = request.args.get("status") or None
+        busca = request.args.get("busca") or None
+        pagina = request.args.get("pagina", 1, type=int)
+        return jsonify(listar_pedidos_sincronizados(loja_id, status=status, busca=busca, pagina=pagina))
+    return _handler()
+
+@shopee_bp.route('/pedidos/sincronizar', methods=['POST'])
+def shopee_sincronizar_pedidos_detalhado():
+    from core.rbac import requer_acesso_loja
+    @requer_acesso_loja
+    def _handler():
+        from shopee_sync import sync_pedidos_shopee
+        data = request.json or {}
+        loja_id = data.get("loja_id")
+        dias = data.get("dias", 30)
+        return jsonify(sync_pedidos_shopee(dias=dias, loja_id=loja_id))
+    return _handler()
+
 @shopee_bp.route('/dashboard', methods=['GET'])
 def shopee_dashboard_consolidado():
     from core.lojas import listar_lojas_shopee

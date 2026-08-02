@@ -351,7 +351,7 @@ def listar_pedidos_sincronizados(loja_id: int, status: str = None, busca: str = 
         db = await get_db()
         shop_id = get_shopee_config(loja_id).get("shop_id") or ""
         if not shop_id:
-            return {"pedidos": [], "total": 0}
+            return {"pedidos": [], "total": 0, "valor_total": 0, "atrasados": 0}
         where = ["p.shop_id = $1"]
         params = [shop_id]
         if status:
@@ -365,6 +365,11 @@ def listar_pedidos_sincronizados(loja_id: int, status: str = None, busca: str = 
                            AND (i.sku ILIKE ${idx} OR i.nome ILIKE ${idx})))""")
         where_sql = " AND ".join(where)
         total = await db.fetchval(f"SELECT COUNT(*) FROM shopee_pedidos_sincronizados p WHERE {where_sql}", *params)
+        agregado = await db.fetchrow(f"""
+            SELECT COALESCE(SUM(total_amount), 0) AS valor_total,
+                   COUNT(*) FILTER (WHERE status = 'READY_TO_SHIP' AND prazo_envio IS NOT NULL AND prazo_envio < NOW()) AS atrasados
+            FROM shopee_pedidos_sincronizados p WHERE {where_sql}
+        """, *params)
         params_pagina = params + [por_pagina, (pagina - 1) * por_pagina]
         rows = await db.fetch(f"""
             SELECT p.* FROM shopee_pedidos_sincronizados p WHERE {where_sql}
@@ -379,12 +384,16 @@ def listar_pedidos_sincronizados(loja_id: int, status: str = None, busca: str = 
                 itens_por_pedido.setdefault(it["pedido_id"], []).append(dict(it))
             for p in pedidos:
                 p["itens"] = itens_por_pedido.get(p["id"], [])
-        return {"pedidos": pedidos, "total": total or 0}
+        return {
+            "pedidos": pedidos, "total": total or 0,
+            "valor_total": float(agregado["valor_total"]) if agregado else 0,
+            "atrasados": agregado["atrasados"] if agregado else 0,
+        }
     try:
         return run_async(_go())
     except Exception as e:
         log(AGENT, f"Erro listar_pedidos_sincronizados: {e}")
-        return {"pedidos": [], "total": 0}
+        return {"pedidos": [], "total": 0, "valor_total": 0, "atrasados": 0}
 
 def listar_produtos_sincronizados(loja_id: int) -> list:
     """Produtos ja sincronizados (tabela anuncios) para uma loja Shopee especifica —

@@ -341,5 +341,112 @@ class TestListarProdutosSincronizados(unittest.TestCase):
         self.assertEqual(r, [])
 
 
+class TestSyncPedidosShopee(unittest.TestCase):
+    """sync_pedidos_shopee grava pedido completo (cabecalho + itens) na tabela
+    local, cobrindo os 8 status da Shopee — substitui a busca em tempo real
+    antiga (so' 2 status por default) que deixava a aba Pedidos incompleta."""
+
+    @patch("shopee_sync.get_shopee_config")
+    @patch("shopee_sync.get_order_detail")
+    @patch("shopee_sync.get_orders_by_time_range")
+    @patch("shopee_sync.get_db")
+    def test_sync_grava_pedido_com_endereco_e_itens(self, mock_get_db, mock_get_orders, mock_get_detail, mock_cfg):
+        mock_cfg.return_value = {"shop_id": "1782908877"}
+        mock_get_orders.return_value = {"response": {"order_list": [{"order_sn": "SN-1"}]}}
+        mock_get_detail.return_value = {"response": {"order_list": [{
+            "order_sn": "SN-1", "order_status": "COMPLETED",
+            "create_time": 1700000000, "update_time": 1700000100,
+            "total_amount": 149.9, "buyer_username": "comprador1",
+            "recipient_address": {"name": "Maria Silva", "phone": "11999999999",
+                                   "full_address": "Rua A, 123", "city": "Sao Paulo",
+                                   "state": "SP", "zipcode": "01000-000"},
+            "payment_method": "Credit Card", "note": "Entregar de manha",
+            "item_list": [{"item_sku": "SKU-A", "item_name": "Produto A",
+                            "model_quantity_purchased": 2, "model_discounted_price": 74.95}],
+        }]}}
+        fake_db = AsyncMock()
+        fake_db.fetchval.return_value = 1
+        fake_db.fetchrow.return_value = {"id": 42}
+        mock_get_db.return_value = fake_db
+
+        r = shopee_sync.sync_pedidos_shopee(dias=30, loja_id=7)
+
+        self.assertEqual(r["total"], 1)
+        self.assertEqual(r["erros"], 0)
+        mock_get_orders.assert_called_once()
+        self.assertEqual(mock_get_orders.call_args.args[2], shopee_sync.STATUS_PEDIDOS)
+        upsert_call = next(c for c in fake_db.execute.call_args_list if "INSERT INTO shopee_pedidos_itens" in c.args[0])
+        self.assertIn("SKU-A", upsert_call.args)
+        self.assertIn("Produto A", upsert_call.args)
+        pedido_call = next(c for c in fake_db.fetchrow.call_args_list if "shopee_pedidos_sincronizados" in c.args[0])
+        self.assertIn("SN-1", pedido_call.args)
+        self.assertIn("Maria Silva", pedido_call.args)
+        self.assertIn("Credit Card", pedido_call.args)
+
+    @patch("shopee_sync.get_shopee_config")
+    @patch("shopee_sync.get_orders_by_time_range")
+    @patch("shopee_sync.get_db")
+    def test_sync_erro_na_listagem_nao_derruba_e_reporta(self, mock_get_db, mock_get_orders, mock_cfg):
+        mock_cfg.return_value = {"shop_id": "1782908877"}
+        mock_get_orders.return_value = {"error": "internal_error", "message": "falha na Shopee"}
+        fake_db = AsyncMock()
+        fake_db.fetchval.return_value = 1
+        mock_get_db.return_value = fake_db
+
+        r = shopee_sync.sync_pedidos_shopee(dias=30, loja_id=7)
+
+        self.assertEqual(r["total"], 0)
+        self.assertEqual(r["erros"], 1)
+
+
+class TestListarPedidosSincronizados(unittest.TestCase):
+
+    @patch("shopee_sync.get_shopee_config")
+    @patch("shopee_sync.get_db")
+    def test_lista_pedidos_com_itens_agrupados(self, mock_get_db, mock_cfg):
+        mock_cfg.return_value = {"shop_id": "1782908877"}
+        fake_db = AsyncMock()
+        fake_db.fetchval.return_value = 1
+        fake_db.fetchrow.return_value = {"valor_total": 149.9, "atrasados": 0}
+        fake_db.fetch.side_effect = [
+            [{"id": 1, "order_sn": "SN-1", "status": "COMPLETED", "recipient_nome": "Maria Silva"}],
+            [{"id": 10, "pedido_id": 1, "sku": "SKU-A", "nome": "Produto A", "quantidade": 2, "preco": 74.95}],
+        ]
+        mock_get_db.return_value = fake_db
+
+        r = shopee_sync.listar_pedidos_sincronizados(7)
+
+        self.assertEqual(r["total"], 1)
+        self.assertEqual(len(r["pedidos"]), 1)
+        self.assertEqual(r["pedidos"][0]["order_sn"], "SN-1")
+        self.assertEqual(len(r["pedidos"][0]["itens"]), 1)
+        self.assertEqual(r["pedidos"][0]["itens"][0]["sku"], "SKU-A")
+        self.assertEqual(r["valor_total"], 149.9)
+        self.assertEqual(r["atrasados"], 0)
+
+    @patch("shopee_sync.get_shopee_config")
+    @patch("shopee_sync.get_db")
+    def test_filtro_status_e_busca_entram_na_query(self, mock_get_db, mock_cfg):
+        mock_cfg.return_value = {"shop_id": "1782908877"}
+        fake_db = AsyncMock()
+        fake_db.fetchval.return_value = 0
+        fake_db.fetchrow.return_value = {"valor_total": 0, "atrasados": 0}
+        fake_db.fetch.return_value = []
+        mock_get_db.return_value = fake_db
+
+        shopee_sync.listar_pedidos_sincronizados(7, status="COMPLETED", busca="Maria")
+
+        count_query, count_params = fake_db.fetchval.call_args.args[0], fake_db.fetchval.call_args.args[1:]
+        self.assertIn("p.status = $2", count_query)
+        self.assertIn("ILIKE", count_query)
+        self.assertIn("COMPLETED", count_params)
+        self.assertIn("%Maria%", count_params)
+
+    @patch("shopee_sync.get_shopee_config", return_value={})
+    def test_loja_sem_shop_id_retorna_vazio_pedidos(self, mock_cfg):
+        r = shopee_sync.listar_pedidos_sincronizados(999)
+        self.assertEqual(r, {"pedidos": [], "total": 0, "valor_total": 0, "atrasados": 0})
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
