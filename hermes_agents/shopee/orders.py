@@ -30,10 +30,12 @@ def get_orders(status: str = "READY_TO_SHIP", limit: int = 50, loja_id: int = No
 
 
 def get_order_detail(order_sn: str, loja_id: int = None) -> dict:
-    """Detalhes de um pedido específico (ou varios, se order_sn for uma string CSV)."""
+    """Detalhes de um pedido específico (ou varios, se order_sn for uma string CSV).
+    payment_method/note/ship_by_date alimentam a aba Pedidos (forma de pagamento,
+    observacao do comprador, prazo de envio) — ver shopee_sync._upsert_pedido."""
     return _request("order/get_order_detail", {
         "order_sn_list": order_sn,
-        "response_optional_fields": "buyer_username,recipient_address,item_list,total_amount",
+        "response_optional_fields": "buyer_username,recipient_address,item_list,total_amount,payment_method,note,ship_by_date",
     }, loja_id=loja_id)
 
 
@@ -54,7 +56,13 @@ def get_orders_by_time_range(start_time: int, end_time: int, statuses: list = No
         fim = min(inicio + _RANGE_MAX_SEGUNDOS, end_time)
         janelas.append((inicio, fim))
         inicio = fim
+    # Nao aborta tudo no primeiro erro: com varios status x varias janelas de
+    # 15 dias, uma unica combinacao falhando (ex: janela antiga sem nenhum
+    # pedido, que a Shopee as vezes rejeita) descartava silenciosamente
+    # pedidos reais ja agregados de outras janelas/status que tinham funcionado
+    # — sync_pedidos() reportava 0 pedidos mesmo com pedidos existindo de verdade.
     agregados = []
+    erros = []
     for status in statuses:
         for janela_inicio, janela_fim in janelas:
             cursor = ""
@@ -64,7 +72,8 @@ def get_orders_by_time_range(start_time: int, end_time: int, statuses: list = No
                     "page_size": limit, "cursor": cursor, "order_status": status,
                 }, loja_id=loja_id)
                 if r.get("error"):
-                    return r
+                    erros.append(f"{status} [{janela_inicio}-{janela_fim}]: {r['error']}")
+                    break
                 resp = r.get("response", {}) or {}
                 agregados.extend(resp.get("order_list", []))
                 if not resp.get("more"):
@@ -72,7 +81,9 @@ def get_orders_by_time_range(start_time: int, end_time: int, statuses: list = No
                 cursor = resp.get("next_cursor", "")
                 if not cursor:
                     break
-    return {"response": {"order_list": agregados}}
+    if erros and not agregados:
+        return {"error": "; ".join(erros[:5])}
+    return {"response": {"order_list": agregados}, "erros_parciais": erros[:5] if erros else None}
 
 
 def get_logistics_channel_list(loja_id: int = None) -> dict:

@@ -74,9 +74,18 @@ def shopee_atualizar_preco(item_id):
 
 @integrations_bp.route("/api/shopee/produtos/sincronizar", methods=["POST"])
 def shopee_sync():
-    from shopee_sync import sync_produtos
+    # Sincroniza produtos/anuncios E pedidos numa tacada so' — antes so'
+    # chamava sync_produtos(), entao vendas/receita da Shopee nunca eram
+    # gravadas em `vendas` e o Painel Consolidado (dashboard) ficava sempre
+    # zerado, mesmo com anuncios sincronizados normalmente.
+    from shopee_sync import sync_produtos, sync_pedidos
     loja_id = (request.json or {}).get("loja_id")
     resultado = run_async(sync_produtos(loja_id=loja_id))
+    pedidos = run_async(sync_pedidos(loja_id=loja_id))
+    resultado["pedidos_total"] = pedidos.get("total", 0)
+    if pedidos.get("detalhes_erros"):
+        resultado["detalhes_erros"] = (resultado.get("detalhes_erros") or []) + pedidos["detalhes_erros"]
+        resultado["erros"] = resultado.get("erros", 0) + pedidos.get("erros", 0)
     return jsonify(resultado)
 
 

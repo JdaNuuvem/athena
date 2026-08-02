@@ -68,6 +68,29 @@ async def _init_tables():
             ON vendas (shopee_order_sn, sku) WHERE shopee_order_sn IS NOT NULL""")
     except Exception:
         pass
+    # Pedidos sincronizados (nivel de pedido, nao so' item) para a aba Shopee >
+    # Pedidos — distinta de 'vendas' (usada pelo AG-02/lucratividade, so' linhas
+    # de item sem endereco/pagamento/observacao). Cobre todos os 8 status da
+    # Shopee, nao so' os 2 que a busca em tempo real antiga usava por default.
+    await db.execute("""
+        CREATE TABLE IF NOT EXISTS shopee_pedidos_sincronizados (
+            id SERIAL PRIMARY KEY, order_sn VARCHAR(50) NOT NULL, shop_id VARCHAR(50) NOT NULL,
+            status VARCHAR(30), create_time TIMESTAMP, update_time TIMESTAMP,
+            total_amount NUMERIC(12,2) DEFAULT 0,
+            buyer_username VARCHAR(100), recipient_nome VARCHAR(200), recipient_telefone VARCHAR(30),
+            recipient_endereco TEXT, recipient_cidade VARCHAR(100), recipient_estado VARCHAR(100), recipient_cep VARCHAR(20),
+            forma_pagamento VARCHAR(50), observacao TEXT, prazo_envio TIMESTAMP,
+            ultima_sincronizacao TIMESTAMP DEFAULT NOW(),
+            UNIQUE(order_sn, shop_id)
+        )
+    """)
+    await db.execute("""
+        CREATE TABLE IF NOT EXISTS shopee_pedidos_itens (
+            id SERIAL PRIMARY KEY, pedido_id INT REFERENCES shopee_pedidos_sincronizados(id) ON DELETE CASCADE,
+            sku VARCHAR(50), nome VARCHAR(200), quantidade INT DEFAULT 0, preco NUMERIC(12,2) DEFAULT 0
+        )
+    """)
+    await db.execute("CREATE INDEX IF NOT EXISTS idx_shopee_pedidos_itens_pedido ON shopee_pedidos_itens (pedido_id)")
 
 async def _upsert_anuncio(db, shop_id: str, sku: str, anuncio_id: str, titulo: str,
                            preco: float, estoque: int, status: str, agora: datetime,
@@ -170,35 +193,55 @@ async def sync_produtos(loja_id: int = None) -> dict:
     return {"total": total, "erros": len(erros), "detalhes_erros": erros[:5]}
 
 async def sync_pedidos(dias: int = 30, loja_id: int = None) -> dict:
+    """order/get_order_list (usado para descobrir quais pedidos existem no
+    periodo) so' devolve order_sn/status/create_time — NUNCA item_list nem
+    total_amount. O codigo anterior lia o.get("items")/o.get("total_amount")
+    direto dessa resposta resumida, que nao tem esses campos: o loop de itens
+    nunca rodava e nenhuma linha ia pra `vendas`, mesmo com pedidos reais
+    encontrados. Precisa de uma segunda chamada, get_order_detail, pro
+    detalhe de fato — mesmo padrao ja usado (e testado) em
+    listar_pedidos_shopee_detalhado (shopee/orders.py)."""
     await _init_tables()
     db = await get_db()
     log_id = await db.fetchval("INSERT INTO shopee_sync_log (tipo, status) VALUES ('pedidos', 'executando') RETURNING id")
     total = 0
     erros = []
     now = int(time.time())
-    for status in ["READY_TO_SHIP", "PROCESSED", "SHIPPED", "COMPLETED"]:
-        r = get_orders_by_time_range(now - dias * 86400, now, [status], 100, loja_id=loja_id)
-        orders = r.get("response", {}).get("order_list", [])
-        for o in orders:
+
+    loja_param = loja_id
+    if loja_param is None:
+        shop_id_cfg = get_shopee_config(loja_id).get("shop_id") or ""
+        if shop_id_cfg:
+            row = await db.fetchval("SELECT id FROM lojas WHERE shopee_shop_id = $1 LIMIT 1", shop_id_cfg)
+            loja_param = row if row else None
+
+    r = get_orders_by_time_range(now - dias * 86400, now,
+                                  ["READY_TO_SHIP", "PROCESSED", "SHIPPED", "COMPLETED"], 100, loja_id=loja_id)
+    if r.get("error"):
+        await db.execute("UPDATE shopee_sync_log SET status='erro', erro=$1, concluido_em=NOW() WHERE id=$2", r["error"], log_id)
+        return {"total": 0, "erros": 1, "detalhes_erros": [r["error"]]}
+    resumo = (r.get("response", {}) or {}).get("order_list", [])
+
+    for i in range(0, len(resumo), 50):
+        lote = resumo[i:i + 50]
+        order_sns = [o.get("order_sn") for o in lote if o.get("order_sn")]
+        if not order_sns:
+            continue
+        d = get_order_detail(",".join(order_sns), loja_id=loja_id)
+        if d.get("error"):
+            erros.append(f"lote {i // 50}: {d['error']}")
+            continue
+        for o in (d.get("response", {}) or {}).get("order_list", []):
             try:
-                items = o.get("items", [])
-                receita = float(o.get("total_amount", 0))
-                data_criacao = datetime.fromtimestamp(o.get("create_time", now))
                 order_sn = str(o.get("order_sn", ""))
-                marketplace_fee = receita * 0.12
+                data_criacao = datetime.fromtimestamp(o.get("create_time", now))
                 # Inserir em vendas (tabela do AG-02) — ON CONFLICT protege contra
                 # duplicacao quando o mesmo pedido e' sincronizado mais de uma vez
                 # (o range de 'dias' se sobrepoe entre chamadas consecutivas).
-                for idx, item in enumerate(items):
+                for idx, item in enumerate(o.get("item_list", [])):
                     qtd = item.get("model_quantity_purchased", 1)
-                    preco_item = float(item.get("model_original_price", 0) or 0)
+                    preco_item = float(item.get("model_discounted_price") or item.get("model_original_price") or 0)
                     item_sku = item.get("item_sku", "") or f"{order_sn}-{idx}"
-                    loja_param = loja_id if loja_id else None
-                    if loja_param is None:
-                        shop_id_cfg = get_shopee_config(loja_id).get("shop_id") or ""
-                        if shop_id_cfg:
-                            row = await db.fetchval("SELECT id FROM lojas WHERE shopee_shop_id = $1 LIMIT 1", shop_id_cfg)
-                            loja_param = row if row else None
                     await db.execute("""
                         INSERT INTO vendas (data, sku, marketplace, loja_id, quantidade, preco_venda, receita_bruta,
                             taxa_marketplace_pct, taxa_marketplace_valor, frete, impostos, shopee_order_sn)
@@ -217,6 +260,131 @@ def sync_all(dias: int = 30, loja_id: int = None) -> dict:
     produtos = run_async(sync_produtos(loja_id))
     pedidos = run_async(sync_pedidos(dias, loja_id))
     return {"produtos": produtos, "pedidos": pedidos}
+
+# Todos os 8 status oficiais da Shopee — a busca em tempo real antiga (usada
+# pela aba Pedidos antes desta sincronizacao) so' cobria READY_TO_SHIP e
+# PROCESSED por default, escondendo concluidos/cancelados/aguardando pagamento.
+STATUS_PEDIDOS = ["UNPAID", "READY_TO_SHIP", "PROCESSED", "SHIPPED", "COMPLETED", "CANCELLED", "IN_CANCEL", "TO_RETURN"]
+
+async def _upsert_pedido(db, shop_id: str, det: dict) -> None:
+    """Upsert de 1 pedido completo (cabecalho + itens). det e' 1 entrada do
+    response de get_order_detail. Endereco/pagamento/observacao sao best-effort
+    contra a documentacao oficial da Shopee v2 — sem endpoint de raw-debug pra
+    pedido pra validar ao vivo (diferente do que foi feito pra imagem de
+    produto); campo ausente fica vazio/NULL sem quebrar o sync."""
+    endereco = det.get("recipient_address") or {}
+    order_sn = str(det.get("order_sn", ""))
+    row = await db.fetchrow("""
+        INSERT INTO shopee_pedidos_sincronizados (
+            order_sn, shop_id, status, create_time, update_time, total_amount,
+            buyer_username, recipient_nome, recipient_telefone, recipient_endereco,
+            recipient_cidade, recipient_estado, recipient_cep, forma_pagamento,
+            observacao, prazo_envio, ultima_sincronizacao
+        ) VALUES ($1,$2,$3,to_timestamp($4::bigint),to_timestamp($5::bigint),$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,to_timestamp($16::bigint),NOW())
+        ON CONFLICT (order_sn, shop_id) DO UPDATE SET
+            status=$3, update_time=to_timestamp($5::bigint), total_amount=$6, buyer_username=$7,
+            recipient_nome=$8, recipient_telefone=$9, recipient_endereco=$10,
+            recipient_cidade=$11, recipient_estado=$12, recipient_cep=$13,
+            forma_pagamento=$14, observacao=$15, prazo_envio=to_timestamp($16::bigint),
+            ultima_sincronizacao=NOW()
+        RETURNING id
+    """, order_sn, shop_id, det.get("order_status", ""), det.get("create_time") or None,
+        det.get("update_time") or None, float(det.get("total_amount", 0) or 0),
+        det.get("buyer_username", ""), endereco.get("name", ""), endereco.get("phone", ""),
+        endereco.get("full_address", ""), endereco.get("city", ""), endereco.get("state", ""),
+        endereco.get("zipcode", ""), det.get("payment_method", ""), det.get("note", ""),
+        det.get("ship_by_date") or None)
+    pedido_id = row["id"]
+    await db.execute("DELETE FROM shopee_pedidos_itens WHERE pedido_id = $1", pedido_id)
+    for item in det.get("item_list", []):
+        await db.execute("""
+            INSERT INTO shopee_pedidos_itens (pedido_id, sku, nome, quantidade, preco)
+            VALUES ($1, $2, $3, $4, $5)
+        """, pedido_id, item.get("item_sku", ""), item.get("item_name", ""),
+            item.get("model_quantity_purchased", 0),
+            float(item.get("model_discounted_price") or item.get("model_original_price") or 0))
+
+def sync_pedidos_shopee(dias: int = 30, loja_id: int = None) -> dict:
+    """Sincroniza pedidos com detalhe completo (endereco, pagamento, itens) pra
+    tabela local — cobre os 8 status da Shopee, usado pela aba Pedidos em vez
+    de bater na API a cada carregamento de tela (mesmo padrao de sync_produtos)."""
+    async def _go():
+        await _init_tables()
+        db = await get_db()
+        shop_id = get_shopee_config(loja_id).get("shop_id") or ""
+        log_id = await db.fetchval("INSERT INTO shopee_sync_log (tipo, status) VALUES ('pedidos_detalhado', 'executando') RETURNING id")
+        total = 0
+        erros = []
+        now = int(time.time())
+        r = get_orders_by_time_range(now - dias * 86400, now, STATUS_PEDIDOS, 100, loja_id=loja_id)
+        if r.get("error"):
+            erros.append(f"get_orders_by_time_range: {r.get('message', r['error'])}")
+        resumo = (r.get("response", {}) or {}).get("order_list", [])
+        order_sns = [o.get("order_sn") for o in resumo if o.get("order_sn")]
+        for i in range(0, len(order_sns), 50):
+            lote = order_sns[i:i + 50]
+            d = get_order_detail(",".join(lote), loja_id=loja_id)
+            if d.get("error"):
+                erros.append(f"get_order_detail lote {i}: {d.get('message', d['error'])}")
+                continue
+            for det in (d.get("response", {}) or {}).get("order_list", []):
+                try:
+                    await _upsert_pedido(db, shop_id, det)
+                    total += 1
+                except Exception as e:
+                    erros.append(f"pedido {det.get('order_sn')}: {e}")
+        await db.execute("UPDATE shopee_sync_log SET status='concluido', itens_processados=$1, erro=$2, concluido_em=NOW() WHERE id=$3",
+                          total, json.dumps(erros[:20]) if erros else None, log_id)
+        return {"total": total, "erros": len(erros), "detalhes_erros": erros[:5]}
+    try:
+        return run_async(_go())
+    except Exception as e:
+        return {"total": 0, "erros": 1, "detalhes_erros": [str(e)]}
+
+def listar_pedidos_sincronizados(loja_id: int, status: str = None, busca: str = None,
+                                  pagina: int = 1, por_pagina: int = 30) -> dict:
+    """Pedidos ja sincronizados (tabela shopee_pedidos_sincronizados) pra aba
+    Pedidos — filtro/busca/paginacao em SQL local, sem bater na API a cada
+    interacao do usuario. busca casa order_sn, nome do destinatario ou SKU/nome
+    de algum item do pedido."""
+    async def _go():
+        db = await get_db()
+        shop_id = get_shopee_config(loja_id).get("shop_id") or ""
+        if not shop_id:
+            return {"pedidos": [], "total": 0}
+        where = ["p.shop_id = $1"]
+        params = [shop_id]
+        if status:
+            params.append(status)
+            where.append(f"p.status = ${len(params)}")
+        if busca:
+            params.append(f"%{busca}%")
+            idx = len(params)
+            where.append(f"""(p.order_sn ILIKE ${idx} OR p.recipient_nome ILIKE ${idx}
+                OR EXISTS (SELECT 1 FROM shopee_pedidos_itens i WHERE i.pedido_id = p.id
+                           AND (i.sku ILIKE ${idx} OR i.nome ILIKE ${idx})))""")
+        where_sql = " AND ".join(where)
+        total = await db.fetchval(f"SELECT COUNT(*) FROM shopee_pedidos_sincronizados p WHERE {where_sql}", *params)
+        params_pagina = params + [por_pagina, (pagina - 1) * por_pagina]
+        rows = await db.fetch(f"""
+            SELECT p.* FROM shopee_pedidos_sincronizados p WHERE {where_sql}
+            ORDER BY p.create_time DESC LIMIT ${len(params_pagina) - 1} OFFSET ${len(params_pagina)}
+        """, *params_pagina)
+        pedidos = [dict(r) for r in rows]
+        if pedidos:
+            ids = [p["id"] for p in pedidos]
+            itens_rows = await db.fetch("SELECT * FROM shopee_pedidos_itens WHERE pedido_id = ANY($1::int[])", ids)
+            itens_por_pedido = {}
+            for it in itens_rows:
+                itens_por_pedido.setdefault(it["pedido_id"], []).append(dict(it))
+            for p in pedidos:
+                p["itens"] = itens_por_pedido.get(p["id"], [])
+        return {"pedidos": pedidos, "total": total or 0}
+    try:
+        return run_async(_go())
+    except Exception as e:
+        log(AGENT, f"Erro listar_pedidos_sincronizados: {e}")
+        return {"pedidos": [], "total": 0}
 
 def listar_produtos_sincronizados(loja_id: int) -> list:
     """Produtos ja sincronizados (tabela anuncios) para uma loja Shopee especifica —

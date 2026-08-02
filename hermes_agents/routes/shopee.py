@@ -261,8 +261,11 @@ def shopee_dashboard_consolidado():
                 FROM vendas WHERE marketplace = 'shopee' AND loja_id = %s AND data >= CURRENT_DATE - %s
             """, (l["id"], dias))
             vendas_row = cur.fetchone() or {}
+            # shopee_sync.py grava o item_status real da Shopee em minusculo
+            # ("normal", "unlist", "banned" — nunca "ativo"); o filtro errado
+            # fazia "Anuncios ativos" sempre mostrar 0 mesmo com produtos sincronizados.
             cur.execute("""
-                SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE status = 'ativo') AS ativos
+                SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE status = 'normal') AS ativos
                 FROM anuncios WHERE marketplace = 'shopee' AND shop_id = %s
             """, (shop_id,))
             anuncios_row = cur.fetchone() or {}
