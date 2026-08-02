@@ -98,6 +98,54 @@ def atend_listar_mensagens(id):
     return _go()
 
 
+@atendimento_bp.route("/tickets/<int:id>/anexo", methods=["POST"])
+def atend_upload_anexo(id):
+    @requer_permissao("atendimento.criar")
+    def _go():
+        import os, time
+        from werkzeug.utils import secure_filename
+        from core.rbac import usuario_atual_da_request
+        from core.atendimento import adicionar_mensagem
+
+        arquivo = request.files.get("arquivo")
+        if not arquivo:
+            return jsonify({"error": "arquivo obrigatorio"}), 400
+        TAMANHO_MAXIMO_BYTES = 25 * 1024 * 1024
+        conteudo = arquivo.read()
+        if len(conteudo) > TAMANHO_MAXIMO_BYTES:
+            return jsonify({"error": "Arquivo maior que 25MB"}), 413
+
+        upload_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "uploads", "atendimento")
+        os.makedirs(upload_dir, exist_ok=True)
+        nome_base = secure_filename(arquivo.filename) or "upload.bin"
+        nome_seguro = f"{id}_{int(time.time() * 1000)}_{nome_base}"
+        caminho_completo = os.path.realpath(os.path.join(upload_dir, nome_seguro))
+        if not caminho_completo.startswith(os.path.realpath(upload_dir) + os.sep):
+            return jsonify({"error": "nome de arquivo invalido"}), 400
+        with open(caminho_completo, "wb") as f:
+            f.write(conteudo)
+
+        usuario = usuario_atual_da_request()
+        remetente = usuario.get("nome") or usuario.get("email") or ""
+        mensagem = adicionar_mensagem(id, remetente, arquivo.filename, "anexo", anexo_url=nome_seguro)
+        return jsonify(mensagem)
+    return _go()
+
+
+@atendimento_bp.route("/tickets/<int:id>/anexo/<path:nome_arquivo>", methods=["GET"])
+def atend_download_anexo(id, nome_arquivo):
+    @requer_permissao("atendimento.ver")
+    def _go():
+        import os
+        from flask import send_file
+        upload_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "uploads", "atendimento")
+        caminho_completo = os.path.realpath(os.path.join(upload_dir, nome_arquivo))
+        if not caminho_completo.startswith(os.path.realpath(upload_dir) + os.sep) or not os.path.isfile(caminho_completo):
+            return jsonify({"error": "anexo invalido"}), 404
+        return send_file(caminho_completo, as_attachment=True)
+    return _go()
+
+
 @atendimento_bp.route("/tickets", methods=["GET"])
 def atend_listar_tickets():
     @requer_permissao("atendimento.ver")

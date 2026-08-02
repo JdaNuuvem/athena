@@ -139,5 +139,43 @@ class TestAtribuirTicketRota(unittest.TestCase):
         mock_atribuir.assert_called_once_with(1, 5)
 
 
+class TestUploadAnexoTicket(unittest.TestCase):
+    def setUp(self):
+        self._env_patch = patch.dict(os.environ, {"ATHENA_TOKEN": _TEST_TOKEN})
+        self._env_patch.start()
+        self.client = _app()
+
+    def tearDown(self):
+        self._env_patch.stop()
+
+    def test_upload_anexo_sem_permissao_nega(self):
+        token = rbac.gerar_token_sessao(7, "op@x.com", "Sem Papel")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=[]):
+            r = self.client.post(
+                "/api/atendimento/tickets/1/anexo", headers=headers,
+                data={"arquivo": (io.BytesIO(b"conteudo"), "teste.pdf")},
+                content_type="multipart/form-data")
+        self.assertEqual(r.status_code, 403)
+
+    def test_upload_anexo_com_permissao_grava_mensagem(self):
+        headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+        with patch("core.atendimento.adicionar_mensagem", return_value={"id": 9, "tipo": "anexo"}) as mock_add:
+            r = self.client.post(
+                "/api/atendimento/tickets/1/anexo", headers=headers,
+                data={"arquivo": (io.BytesIO(b"conteudo"), "teste.pdf")},
+                content_type="multipart/form-data")
+        self.assertEqual(r.status_code, 200)
+        mock_add.assert_called_once()
+        self.assertEqual(mock_add.call_args[0][0], 1)  # ticket_id
+        self.assertEqual(mock_add.call_args[0][3], "anexo")  # tipo
+
+    def test_upload_sem_arquivo_retorna_400(self):
+        headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+        r = self.client.post("/api/atendimento/tickets/1/anexo", headers=headers,
+                             data={}, content_type="multipart/form-data")
+        self.assertEqual(r.status_code, 400)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
