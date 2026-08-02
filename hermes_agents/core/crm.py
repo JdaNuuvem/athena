@@ -253,6 +253,12 @@ def get(tabela: str, id: int): return _get(f"crm_{_tabela_real(tabela)}", id)
 # significativo pro contador de propostas em aberto.
 STATUS_PROPOSTA = ["rascunho", "enviada", "aceita", "rejeitada", "vencida"]
 
+# pendente (assinatura em andamento) -> assinado (vigente) ou cancelado. Um
+# contrato normalmente nasce do evento "proposta aceita -> converter em
+# contrato" (core/entidades.ao_converter_proposta_em_contrato), mas tambem
+# pode ser criado manualmente aqui — daí a validacao valer pros dois caminhos.
+STATUS_CONTRATO = ["pendente", "assinado", "cancelado"]
+
 def _validar_campos(tabela: str, dados: dict, criando: bool) -> str | None:
     """Validacao de formato no boundary, antes de tocar o banco. Sem isso,
     um campo obrigatorio vazio ou invalido so' falhava (feio) na constraint
@@ -283,6 +289,30 @@ def _validar_campos(tabela: str, dados: dict, criando: bool) -> str | None:
         if dados.get("data_validade") and dados.get("data_envio") and str(dados["data_validade"]) < str(dados["data_envio"]):
             return "Data de validade não pode ser anterior à data de envio"
         return None
+    if tabela == "contratos":
+        if criando and not dados.get("negociacao_id"):
+            return "Negociação é obrigatória"
+        if "negociacao_id" in dados:
+            try:
+                if int(dados["negociacao_id"]) <= 0:
+                    return "Negociação inválida"
+            except (TypeError, ValueError):
+                return "Negociação inválida"
+        if "proposta_id" in dados and dados["proposta_id"] not in (None, ""):
+            try:
+                if int(dados["proposta_id"]) <= 0:
+                    return "Proposta inválida"
+            except (TypeError, ValueError):
+                return "Proposta inválida"
+        if dados.get("status") and dados["status"] not in STATUS_CONTRATO:
+            return f"Status inválido — use um de: {', '.join(STATUS_CONTRATO)}"
+        if "valor" in dados and dados["valor"] not in (None, ""):
+            try:
+                if float(dados["valor"]) < 0:
+                    return "Valor não pode ser negativo"
+            except (TypeError, ValueError):
+                return "Valor inválido"
+        return None
     if tabela != "empresas":
         return None
     from core.validadores import validar_cnpj, validar_email
@@ -298,6 +328,9 @@ def _validar_campos(tabela: str, dados: dict, criando: bool) -> str | None:
 
 def _gerar_numero_proposta(proposta_id: int) -> str:
     return f"PROP-{str(proposta_id).zfill(4)}"
+
+def _gerar_numero_contrato(contrato_id: int) -> str:
+    return f"CONT-{str(contrato_id).zfill(4)}"
 
 def create(tabela: str, data: dict) -> dict:
     tabela_real = _tabela_real(tabela)
@@ -315,6 +348,8 @@ def create(tabela: str, data: dict) -> dict:
     # query de COUNT separada) — so' quando o caller nao mandou um explicito.
     if tabela_real == "propostas" and not resultado.get("error") and not filtrado.get("numero"):
         resultado = _update("crm_propostas", resultado["id"], {"numero": _gerar_numero_proposta(resultado["id"])})
+    elif tabela_real == "contratos" and not resultado.get("error") and not filtrado.get("numero"):
+        resultado = _update("crm_contratos", resultado["id"], {"numero": _gerar_numero_contrato(resultado["id"])})
     return resultado
 
 def update(tabela: str, id: int, data: dict) -> dict:

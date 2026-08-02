@@ -717,6 +717,11 @@ export const api = {
 
   // Cadastros
   cadList: (tabela: string) => request<{ data: unknown[] }>(`/api/cadastros/${tabela}`),
+  cadListPaginado: (tabela: string, pagina: number, porPagina = 50, busca?: string) => {
+    const q = new URLSearchParams({ pagina: String(pagina), por_pagina: String(porPagina) });
+    if (busca) q.set("busca", busca);
+    return request<{ data: unknown[]; total: number; pagina: number; por_pagina: number; total_paginas: number }>(`/api/cadastros/${tabela}?${q}`);
+  },
   cadGet: (tabela: string, id: number) => request<Record<string, unknown>>(`/api/cadastros/${tabela}/${id}`),
   cadCreate: (tabela: string, data: Record<string, unknown>) => request<Record<string, unknown>>(`/api/cadastros/${tabela}`, { method: "POST", body: JSON.stringify(data) }),
   cadUpdate: (tabela: string, id: number, data: Record<string, unknown>) => request<Record<string, unknown>>(`/api/cadastros/${tabela}/${id}`, { method: "PUT", body: JSON.stringify(data) }),
@@ -732,6 +737,8 @@ export const api = {
   crmCreate: (tabela: string, data: Record<string, unknown>) => request<Record<string, unknown>>(`/api/crm/${tabela}`, { method: "POST", body: JSON.stringify(data) }),
   crmUpdate: (tabela: string, id: number, data: Record<string, unknown>) => request<Record<string, unknown>>(`/api/crm/${tabela}/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   crmDelete: (tabela: string, id: number) => request<{ success: boolean }>(`/api/crm/${tabela}/${id}`, { method: "DELETE" }),
+  crmConverterPropostaContrato: (id: number) =>
+    request<{ contrato_id?: number; ja_processada?: boolean; error?: string }>(`/api/eventos/crm/proposta/${id}/converter-contrato`, { method: "POST" }),
 
   // Financeiro
   finList: (tabela: string) => request<{ data: unknown[] }>(`/api/financeiro/${tabela}`),
