@@ -587,6 +587,8 @@ export const api = {
     request<Record<string, unknown>>(`/api/relatorios/clientes?dias=${dias}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
   relatorioRankingProdutos: (dias: number) =>
     request<{ itens: RankingProdutoItem[]; periodo_dias: number }>(`/api/relatorios/ranking-produtos?dias=${dias}`),
+  relatorioDrePorLoja: (dias: number, lojaId?: number) =>
+    request<{ data: DreLoja[] }>(`/api/relatorios/dre-por-loja?dias=${dias}${lojaId ? `&loja_id=${lojaId}` : ""}`),
 
   // Chat Interno
   chat: {
@@ -723,6 +725,13 @@ export const api = {
   cadVendedorComissao: () => request<{ vendedores: unknown[]; total_comissoes: number }>("/api/cadastros/vendedores/comissao"),
   cadVendedorMetas: (mes?: string) => request<{ data: unknown[] }>(`/api/cadastros/vendedores/metas${mes ? "/" + mes : ""}`),
   cadFornecedorResumo: () => request<{ data: unknown[] }>("/api/cadastros/fornecedores/resumo"),
+
+  // CRM
+  crmList: (tabela: string) => request<{ data: unknown[] }>(`/api/crm/${tabela}`),
+  crmGet: (tabela: string, id: number) => request<Record<string, unknown>>(`/api/crm/${tabela}/${id}`),
+  crmCreate: (tabela: string, data: Record<string, unknown>) => request<Record<string, unknown>>(`/api/crm/${tabela}`, { method: "POST", body: JSON.stringify(data) }),
+  crmUpdate: (tabela: string, id: number, data: Record<string, unknown>) => request<Record<string, unknown>>(`/api/crm/${tabela}/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  crmDelete: (tabela: string, id: number) => request<{ success: boolean }>(`/api/crm/${tabela}/${id}`, { method: "DELETE" }),
 
   // Financeiro
   finList: (tabela: string) => request<{ data: unknown[] }>(`/api/financeiro/${tabela}`),
@@ -1636,4 +1645,25 @@ export interface RankingProdutoItem {
   lucro: number;
   margem_pct: number;
   custo_cadastrado: boolean;
+}
+
+export interface DreLoja {
+  loja_id: number;
+  loja_nome: string;
+  receita: number;
+  receita_online: number;
+  receita_shopee: number;
+  receita_pdv: number;
+  qtd_vendas: number;
+  ticket_medio: number;
+  comissao_pct: number;
+  comissao_valor: number;
+  frete: number;
+  custos_producao: number;
+  custos_producao_alocado: boolean;
+  lucro: number;
+  margem_pct: number;
+  periodo_dias: number;
+  quebra_caixa_acumulada: number;
+  discrepancia_unidades_falta: number;
 }
