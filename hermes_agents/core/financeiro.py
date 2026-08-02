@@ -40,12 +40,14 @@ def _ensure_tables():
             id SERIAL PRIMARY KEY, cliente VARCHAR(200) NOT NULL, descricao VARCHAR(200),
             valor DECIMAL(12,2) DEFAULT 0, vencimento DATE, data_recebimento DATE,
             status VARCHAR(20) DEFAULT 'pendente', forma_pagamento VARCHAR(30),
+            bling_id BIGINT, origem VARCHAR(30) DEFAULT 'manual',
             created_at TIMESTAMP DEFAULT NOW()
         )""")
         await db.execute("""CREATE TABLE IF NOT EXISTS fin_contas_pagar (
             id SERIAL PRIMARY KEY, fornecedor VARCHAR(200) NOT NULL, descricao VARCHAR(200),
             valor DECIMAL(12,2) DEFAULT 0, vencimento DATE, data_pagamento DATE,
             status VARCHAR(20) DEFAULT 'pendente', forma_pagamento VARCHAR(30),
+            bling_id BIGINT, origem VARCHAR(30) DEFAULT 'manual',
             created_at TIMESTAMP DEFAULT NOW()
         )""")
         await db.execute("""CREATE TABLE IF NOT EXISTS fin_boletos (
@@ -146,6 +148,18 @@ def _ensure_tables():
             except Exception: pass
             try: await db.execute(f"ALTER TABLE {_tabela} ADD COLUMN IF NOT EXISTS aprovado_por_id INT")
             except Exception: pass
+        # ponytail: bling_id/origem sao lidos/gravados por 3 fluxos diferentes
+        # (webhook do Bling em bling_erp.py, sync manual em core/fiscal.py,
+        # migracao em core/entidades.py) mas so' 2 deles faziam o ALTER TABLE
+        # de seguranca antes de usar a coluna — o webhook nao fazia, entao
+        # num banco novo (CREATE TABLE aqui ainda nao tinha essas colunas) o
+        # primeiro webhook recebido quebrava com "column does not exist".
+        # Fonte unica de verdade agora: garantido aqui, sempre, no boot.
+        for _tabela in ("fin_contas_receber", "fin_contas_pagar"):
+            try: await db.execute(f"ALTER TABLE {_tabela} ADD COLUMN IF NOT EXISTS bling_id BIGINT")
+            except Exception: pass
+            try: await db.execute(f"ALTER TABLE {_tabela} ADD COLUMN IF NOT EXISTS origem VARCHAR(30) DEFAULT 'manual'")
+            except Exception: pass
 
         count = await db.fetchval("SELECT COUNT(*) FROM fin_dre")
         if count == 0:
@@ -214,24 +228,79 @@ def _delete(tabela: str, id: int) -> dict:
 
 # ── API helpers ──
 
+# ponytail: whitelist de colunas por tabela — _create/_update concatenam as
+# CHAVES do dict recebido direto na string SQL (so' os valores sao
+# parametrizados com $1, $2...). Sem essa whitelist, um cliente com permissao
+# financeiro.criar/financeiro.editar poderia injetar SQL arbitrario via nome
+# de campo no JSON (mesma classe de bug ja corrigida em core/crm.py e
+# core/atendimento.py).
+FIN_COLUNAS = {
+    "fluxo_caixa": {"data", "descricao", "tipo", "valor", "categoria", "conta_id"},
+    "contas_receber": {"cliente", "descricao", "valor", "vencimento", "data_recebimento",
+                        "status", "forma_pagamento", "bling_id", "origem"},
+    "contas_pagar": {"fornecedor", "descricao", "valor", "vencimento", "data_pagamento",
+                      "status", "forma_pagamento", "bling_id", "origem"},
+    "boletos": {"beneficiario", "valor", "vencimento", "nosso_numero", "codigo_barras", "status"},
+    "pix": {"chave", "tipo_chave", "descricao", "valor", "data_transacao", "status"},
+    "conciliacao": {"banco_id", "data", "descricao", "valor_extrato", "valor_sistema", "status"},
+    "bancos": {"nome", "agencia", "conta", "saldo", "status"},
+    "centro_custo": {"nome", "codigo", "descricao", "status"},
+    "plano_contas": {"codigo", "nome", "tipo", "natureza", "conta_pai_id"},
+    "dre": {"mes", "descricao", "valor", "tipo", "categoria"},
+}
+
+# aprovado_por/aprovado_por_id NAO entram no whitelist acima de proposito —
+# sao gravados so' pela injecao server-side em criar_pagamento/
+# atualizar_pagamento (ver _CAMPOS_SERVIDOR abaixo), nunca a partir do que o
+# cliente manda. Ficam numa whitelist separada, usada so' internamente por
+# create()/update() depois que a alcada ja validou quem aprovou de verdade.
+_COLUNAS_APROVACAO = {"aprovado_por", "aprovado_por_id"}
+
 def list(tabela: str): return _list(f"fin_{tabela}")
 def get(tabela: str, id: int): return _get(f"fin_{tabela}", id)
-def create(tabela: str, data: dict): return _create(f"fin_{tabela}", data)
-def update(tabela: str, id: int, data: dict): return _update(f"fin_{tabela}", id, data)
+
+def create(tabela: str, data: dict, colunas_extras: set = frozenset()) -> dict:
+    colunas_validas = FIN_COLUNAS.get(tabela)
+    if colunas_validas is None:
+        return {"error": "Tabela invalida"}
+    permitidas = colunas_validas | colunas_extras
+    filtrado = {k: v for k, v in data.items() if k in permitidas}
+    if not filtrado:
+        return {"error": "Nenhum campo valido informado"}
+    return _create(f"fin_{tabela}", filtrado)
+
+def update(tabela: str, id: int, data: dict, colunas_extras: set = frozenset()) -> dict:
+    colunas_validas = FIN_COLUNAS.get(tabela)
+    if colunas_validas is None:
+        return {"error": "Tabela invalida"}
+    permitidas = colunas_validas | colunas_extras
+    filtrado = {k: v for k, v in data.items() if k in permitidas}
+    if not filtrado:
+        return {"error": "Nenhum campo valido informado"}
+    return _update(f"fin_{tabela}", id, filtrado)
+
 def delete(tabela: str, id: int): return _delete(f"fin_{tabela}", id)
 
 # ── Criação/atualização com alçada ──
 
 def criar_pagamento(tabela: str, dados: dict, usuario_id=None, usuario_nome: str = "", tem_permissao_aprovar: bool = False) -> dict:
+    # ponytail: strip aprovado_por/aprovado_por_id vindos do cliente ANTES de
+    # decidir se precisa de aprovacao — sem isso, um usuario so' com
+    # financeiro.criar (sem financeiro.aprovar) podia mandar
+    # {"aprovado_por_id": 1, ...} num lancamento abaixo do limite (que nunca
+    # passa por _exige_aprovacao) e forjar um registro com aprovador falso,
+    # sem nenhuma aprovacao real ter acontecido.
+    dados = {k: v for k, v in dados.items() if k not in _COLUNAS_APROVACAO}
     valor = float(dados.get("valor") or 0)
     status = dados.get("status") or STATUS_PADRAO_TABELA.get(tabela, "")
     if _exige_aprovacao(tabela, valor, status):
         if not tem_permissao_aprovar:
             return {"error": f"Lancamento de R$ {valor:.2f} exige aprovacao (limite: R$ {limite_aprovacao_pagamento():.2f})"}
         dados = {**dados, "aprovado_por": usuario_nome, "aprovado_por_id": usuario_id}
-    return create(tabela, dados)
+    return create(tabela, dados, colunas_extras=_COLUNAS_APROVACAO)
 
 def atualizar_pagamento(tabela: str, id: int, dados: dict, usuario_id=None, usuario_nome: str = "", tem_permissao_aprovar: bool = False) -> dict:
+    dados = {k: v for k, v in dados.items() if k not in _COLUNAS_APROVACAO}
     if "status" in dados or "valor" in dados:
         atual = get(tabela, id)
         if atual.get("error"):
@@ -242,7 +311,7 @@ def atualizar_pagamento(tabela: str, id: int, dados: dict, usuario_id=None, usua
             if not tem_permissao_aprovar:
                 return {"error": f"Lancamento de R$ {valor:.2f} exige aprovacao (limite: R$ {limite_aprovacao_pagamento():.2f})"}
             dados = {**dados, "aprovado_por": usuario_nome, "aprovado_por_id": usuario_id}
-    return update(tabela, id, dados)
+    return update(tabela, id, dados, colunas_extras=_COLUNAS_APROVACAO)
 
 # ── Queries especiais ──
 
