@@ -219,3 +219,11 @@ def listar_tickets_filtrado(status=None, prioridade=None, canal=None, atendente_
         return [dict(r) for r in rows]
     try: return run_async(_go())
     except Exception as e: log(AGENT, f"listar_tickets_filtrado: {e}"); return []
+
+def listar_atendentes() -> list:
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch("SELECT id, nome FROM rbac_usuarios WHERE ativo = TRUE ORDER BY nome")
+        return [dict(r) for r in rows]
+    try: return run_async(_go())
+    except Exception as e: log(AGENT, f"listar_atendentes: {e}"); return []

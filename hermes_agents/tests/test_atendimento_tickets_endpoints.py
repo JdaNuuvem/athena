@@ -74,5 +74,32 @@ class TestListarTicketsFiltrado(unittest.TestCase):
         mock_list.assert_not_called()
 
 
+class TestListarAtendentes(unittest.TestCase):
+    def setUp(self):
+        self._env_patch = patch.dict(os.environ, {"ATHENA_TOKEN": _TEST_TOKEN})
+        self._env_patch.start()
+        self.client = _app()
+
+    def tearDown(self):
+        self._env_patch.stop()
+
+    def test_listar_atendentes_com_permissao_ver(self):
+        headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+        with patch("core.atendimento.listar_atendentes", return_value=[{"id": 5, "nome": "Joao"}]) as mock_list:
+            r = self.client.get("/api/atendimento/atendentes", headers=headers)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.get_json()["data"], [{"id": 5, "nome": "Joao"}])
+        mock_list.assert_called_once()
+
+    def test_listar_atendentes_sem_permissao_nega(self):
+        token = rbac.gerar_token_sessao(7, "op@x.com", "Sem Papel")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=[]), \
+             patch("core.atendimento.listar_atendentes") as mock_list:
+            r = self.client.get("/api/atendimento/atendentes", headers=headers)
+        self.assertEqual(r.status_code, 403)
+        mock_list.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

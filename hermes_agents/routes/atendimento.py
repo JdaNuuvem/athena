@@ -76,6 +76,15 @@ def atend_listar_tickets():
     return _go()
 
 
+@atendimento_bp.route("/atendentes", methods=["GET"])
+def atend_listar_atendentes():
+    @requer_permissao("atendimento.ver")
+    def _go():
+        from core.atendimento import listar_atendentes
+        return jsonify({"data": listar_atendentes()})
+    return _go()
+
+
 @atendimento_bp.route("/<tabela>", methods=["GET"])
 def atend_list(tabela):
     from core.atendimento import list as al, TABLES
