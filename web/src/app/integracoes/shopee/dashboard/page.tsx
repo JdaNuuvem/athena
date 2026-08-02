@@ -82,19 +82,19 @@ export default function ShopeeDashboardPage() {
       {lojas.length > 0 && (
         <div className="instrument-enter grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="instrument-hover bg-neutral-900 border border-neutral-800 rounded-lg p-3">
-            <p className="text-[10px] text-neutral-500 uppercase tracking-wider">Receita Total</p>
+            <p className="text-xs text-neutral-500 uppercase tracking-wider">Receita Total</p>
             <p className="text-lg text-emerald-400 numeric font-medium">R$ {totalReceita.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
           </div>
           <div className="instrument-hover bg-neutral-900 border border-neutral-800 rounded-lg p-3">
-            <p className="text-[10px] text-neutral-500 uppercase tracking-wider">Unidades Vendidas</p>
+            <p className="text-xs text-neutral-500 uppercase tracking-wider">Unidades Vendidas</p>
             <p className="text-lg text-neutral-200 numeric font-medium">{totalUnidades}</p>
           </div>
           <div className="instrument-hover bg-neutral-900 border border-neutral-800 rounded-lg p-3">
-            <p className="text-[10px] text-neutral-500 uppercase tracking-wider">Anúncios Ativos</p>
+            <p className="text-xs text-neutral-500 uppercase tracking-wider">Anúncios Ativos</p>
             <p className="text-lg text-neutral-200 numeric font-medium">{totalAnunciosAtivos}</p>
           </div>
           <div className="instrument-hover bg-neutral-900 border border-neutral-800 rounded-lg p-3">
-            <p className="text-[10px] text-neutral-500 uppercase tracking-wider">Estoque Baixo</p>
+            <p className="text-xs text-neutral-500 uppercase tracking-wider">Estoque Baixo</p>
             <p className={`text-lg numeric font-medium ${totalEstoqueBaixo > 0 ? "text-amber-400" : "text-neutral-200"}`}>{totalEstoqueBaixo}</p>
           </div>
         </div>
@@ -106,7 +106,7 @@ export default function ShopeeDashboardPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <p className="text-sm text-neutral-200 font-medium">{l.nome}</p>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium inline-flex items-center gap-1 ${l.tem_token ? "bg-green-900/40 text-green-400" : "bg-red-900/40 text-red-400"}`}>
+                <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium inline-flex items-center gap-1 ${l.tem_token ? "bg-green-900/40 text-green-400" : "bg-red-900/40 text-red-400"}`}>
                   {l.tem_token ? (
                     <svg xmlns="http://www.w3.org/2000/svg" width={8} height={8} viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10" /></svg>
                   ) : (
@@ -122,19 +122,19 @@ export default function ShopeeDashboardPage() {
             </div>
             <div className="grid grid-cols-4 gap-2 text-center">
               <div>
-                <p className="text-[10px] text-neutral-500">Unidades</p>
+                <p className="text-xs text-neutral-500">Unidades</p>
                 <p className="text-xs text-neutral-300 numeric">{l.unidades_vendidas}</p>
               </div>
               <div>
-                <p className="text-[10px] text-neutral-500">SKUs vendidos</p>
+                <p className="text-xs text-neutral-500">SKUs vendidos</p>
                 <p className="text-xs text-neutral-300 numeric">{l.skus_vendidos}</p>
               </div>
               <div>
-                <p className="text-[10px] text-neutral-500">Anúncios ativos</p>
+                <p className="text-xs text-neutral-500">Anúncios ativos</p>
                 <p className="text-xs text-neutral-300 numeric">{l.anuncios_ativos} / {l.anuncios_total}</p>
               </div>
               <div>
-                <p className="text-[10px] text-neutral-500">Estoque baixo</p>
+                <p className="text-xs text-neutral-500">Estoque baixo</p>
                 <p className={`text-xs numeric ${l.produtos_estoque_baixo > 0 ? "text-amber-400" : "text-neutral-300"}`}>{l.produtos_estoque_baixo}</p>
               </div>
             </div>
