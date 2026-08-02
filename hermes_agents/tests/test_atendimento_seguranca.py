@@ -99,6 +99,156 @@ class TestAtendimentoExigePermissao(unittest.TestCase):
             assert resultado == {"id": 55}
         mock_ponte.assert_called_once_with(55)
 
+    # ── GET generico (/<tabela>, /<tabela>/<id>) nao exigia NENHUMA
+    # permissao — nem autenticacao. Qualquer request anonima conseguia ler
+    # atend_canais (que guarda o token de integracao do canal!). ──
+
+    def test_listar_sla_sem_permissao_nega(self):
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=[]), \
+             patch("core.atendimento.list") as mock_list:
+            r = self.client.get("/api/atendimento/sla")
+        self.assertEqual(r.status_code, 403)
+        mock_list.assert_not_called()
+
+    def test_listar_sla_com_permissao_libera(self):
+        headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+        with patch("core.atendimento.list", return_value=[{"id": 1, "prioridade": "urgente"}]) as mock_list:
+            r = self.client.get("/api/atendimento/sla", headers=headers)
+        self.assertEqual(r.status_code, 200)
+        mock_list.assert_called_once_with("sla")
+
+    def test_listar_canais_sem_permissao_nega(self):
+        # atend_canais guarda token de integracao — o mais sensivel das
+        # tabelas genericas do modulo.
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=[]), \
+             patch("core.atendimento.list") as mock_list:
+            r = self.client.get("/api/atendimento/canais")
+        self.assertEqual(r.status_code, 403)
+        mock_list.assert_not_called()
+
+    def test_get_um_sla_sem_permissao_nega(self):
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=[]), \
+             patch("core.atendimento.get") as mock_get:
+            r = self.client.get("/api/atendimento/sla/1")
+        self.assertEqual(r.status_code, 403)
+        mock_get.assert_not_called()
+
+    def test_get_um_sla_com_permissao_libera(self):
+        headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+        with patch("core.atendimento.get", return_value={"id": 1, "prioridade": "urgente"}) as mock_get:
+            r = self.client.get("/api/atendimento/sla/1", headers=headers)
+        self.assertEqual(r.status_code, 200)
+        mock_get.assert_called_once_with("sla", 1)
+
+    def test_criar_sla_com_payload_invalido_retorna_400(self):
+        headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+        with patch("core.atendimento.create", return_value={"error": "Prioridade invalida — use uma de: baixa, normal, alta, urgente"}):
+            r = self.client.post("/api/atendimento/sla", json={"prioridade": "critica"}, headers=headers)
+        self.assertEqual(r.status_code, 400)
+
+
+class TestAtendimentoColunaWhitelist(unittest.TestCase):
+    """create()/update() genericos concatenam as CHAVES do dict recebido
+    direto na string SQL — sem whitelist, uma chave de JSON maliciosa vira
+    SQL injection (mesma classe de bug ja corrigida em core/crm.py)."""
+
+    def test_create_filtra_colunas_nao_whitelisted(self):
+        from core import atendimento as atend
+        payload = {
+            "prioridade": "alta", "tempo_resposta_min": 30, "tempo_resolucao_h": 4,
+            "id, extra) VALUES (999, 'x'); DROP TABLE atend_sla;--": "malicioso",
+        }
+        with patch.object(atend, "_create", return_value={"id": 1}) as mock_create:
+            atend.create("sla", payload)
+        mock_create.assert_called_once_with(
+            "atend_sla", {"prioridade": "alta", "tempo_resposta_min": 30, "tempo_resolucao_h": 4})
+
+    def test_create_todas_colunas_invalidas_nao_toca_banco(self):
+        from core import atendimento as atend
+        with patch.object(atend, "_create") as mock_create:
+            resultado = atend.create("sla", {"campo_inexistente": "y"})
+        mock_create.assert_not_called()
+        self.assertEqual(resultado, {"error": "Nenhum campo valido informado"})
+
+    def test_update_filtra_colunas_nao_whitelisted(self):
+        from core import atendimento as atend
+        with patch.object(atend, "_update", return_value={"id": 1}) as mock_update:
+            atend.update("sla", 1, {"tempo_resposta_min": 15, "outra_coluna_invasora": "x"})
+        mock_update.assert_called_once_with("atend_sla", 1, {"tempo_resposta_min": 15})
+
+    def test_create_tabela_invalida(self):
+        from core import atendimento as atend
+        resultado = atend.create("nao_existe", {"nome": "x"})
+        self.assertEqual(resultado, {"error": "Tabela invalida"})
+
+
+class TestAtendimentoCanaisValidacao(unittest.TestCase):
+    """create()/update() de 'canais' — o CRUD generico aceitava um canal sem
+    nome (violava a constraint NOT NULL do Postgres com erro cru) e uma
+    url_webhook em qualquer formato."""
+
+    def test_create_sem_nome_rejeita(self):
+        from core import atendimento as atend
+        with patch.object(atend, "_create") as mock_create:
+            resultado = atend.create("canais", {"url_webhook": "https://x.com/hook"})
+        mock_create.assert_not_called()
+        self.assertEqual(resultado, {"error": "Nome e obrigatorio"})
+
+    def test_create_com_url_webhook_invalida_rejeita(self):
+        from core import atendimento as atend
+        with patch.object(atend, "_create") as mock_create:
+            resultado = atend.create("canais", {"nome": "whatsapp", "url_webhook": "nao-e-url"})
+        mock_create.assert_not_called()
+        self.assertIn("URL do webhook invalida", resultado["error"])
+
+    def test_create_com_dados_validos_libera(self):
+        from core import atendimento as atend
+        with patch.object(atend, "_create", return_value={"id": 1, "nome": "whatsapp", "token": "segredo"}):
+            resultado = atend.create("canais", {"nome": "whatsapp", "url_webhook": "https://evolution.exemplo.com/hook", "token": "segredo"})
+        # token nao deve voltar na resposta, mesmo tendo sido salvo
+        self.assertNotIn("token", resultado)
+        self.assertEqual(resultado["nome"], "whatsapp")
+
+    def test_update_esvaziando_nome_rejeita(self):
+        from core import atendimento as atend
+        with patch.object(atend, "_update") as mock_update:
+            resultado = atend.update("canais", 1, {"nome": "  "})
+        mock_update.assert_not_called()
+        self.assertEqual(resultado, {"error": "Nome nao pode ser vazio"})
+
+    def test_update_parcial_sem_nome_nao_exige_nome(self):
+        from core import atendimento as atend
+        with patch.object(atend, "_update", return_value={"id": 1, "ativo": False}) as mock_update:
+            resultado = atend.update("canais", 1, {"ativo": False})
+        mock_update.assert_called_once()
+        self.assertEqual(resultado, {"id": 1, "ativo": False})
+
+
+class TestAtendimentoCanaisTokenSensivel(unittest.TestCase):
+    """token de canal e' credencial de integracao externa (ex.: API key do
+    WhatsApp/Evolution) — list()/get() nao devem devolve-lo pra quem tem
+    apenas atendimento.ver, mesmo endpoint generico usado por outras 5
+    tabelas do modulo."""
+
+    def test_list_filtra_token(self):
+        from core import atendimento as atend
+        with patch.object(atend, "_list", return_value=[{"id": 1, "nome": "whatsapp", "token": "segredo-123", "ativo": True}]):
+            resultado = atend.list("canais")
+        self.assertNotIn("token", resultado[0])
+        self.assertEqual(resultado[0]["nome"], "whatsapp")
+
+    def test_get_filtra_token(self):
+        from core import atendimento as atend
+        with patch.object(atend, "_get", return_value={"id": 1, "nome": "whatsapp", "token": "segredo-123"}):
+            resultado = atend.get("canais", 1)
+        self.assertNotIn("token", resultado)
+
+    def test_filtro_nao_afeta_outras_tabelas(self):
+        from core import atendimento as atend
+        with patch.object(atend, "_list", return_value=[{"id": 1, "prioridade": "alta", "tempo_resposta_min": 30}]):
+            resultado = atend.list("sla")
+        self.assertEqual(resultado, [{"id": 1, "prioridade": "alta", "tempo_resposta_min": 30}])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

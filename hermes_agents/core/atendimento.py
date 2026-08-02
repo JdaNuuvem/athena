@@ -1,4 +1,5 @@
 """Atendimento Core — Tickets, Chat, Canais, SLA, Base Conhecimento"""
+import builtins
 from core import get_db, run_async, log, hoje
 
 AGENT = "Atendimento Core"
@@ -66,7 +67,7 @@ _ensure_tables()
 
 # ── CRUD ──
 
-def _list(t: str, cols="*", order="id DESC", limit=100) -> list:
+def _list(t: str, cols="*", order="id DESC", limit=500) -> list:
     async def _go():
         db = await get_db()
         rows = await db.fetch(f"SELECT {cols} FROM {t} ORDER BY {order} LIMIT {limit}")
@@ -116,13 +117,126 @@ def _delete(t: str, id: int) -> dict:
     except Exception as e: return {"error": str(e)}
 
 TABLES = ["tickets","mensagens","chat_sessoes","canais","sla","kb_artigos"]
-def list(t: str): return _list(f"atend_{t}")
-def get(t: str, i: int): return _get(f"atend_{t}", i)
-def create(t: str, d: dict): return _create(f"atend_{t}", d)
-def update(t: str, i: int, d: dict): return _update(f"atend_{t}", i, d)
+
+# ponytail: whitelist de colunas por tabela — _create/_update concatenam as
+# CHAVES do dict recebido direto na string SQL (so' os valores sao
+# parametrizados com $1, $2...). Sem essa whitelist, um cliente com permissao
+# atendimento.criar/atendimento.editar poderia injetar SQL arbitrario via
+# nome de campo no JSON (mesma classe de bug ja corrigida em core/crm.py).
+ATEND_COLUNAS = {
+    "tickets": {"cliente", "email", "telefone", "assunto", "canal", "prioridade",
+                "status", "atendente_id", "sla_vencimento", "data_abertura",
+                "data_fechamento", "tempo_resposta_min", "numero", "observacoes"},
+    "mensagens": {"ticket_id", "remetente", "conteudo", "tipo", "anexo_url", "enviado_em"},
+    "chat_sessoes": {"cliente", "atendente", "status", "data_inicio", "data_fim", "canal"},
+    "canais": {"nome", "token", "url_webhook", "ativo", "config"},
+    "sla": {"prioridade", "tempo_resposta_min", "tempo_resolucao_h", "ativo"},
+    "kb_artigos": {"titulo", "categoria", "conteudo", "tags", "publicado"},
+}
+
+PRIORIDADES_SLA = ["baixa", "normal", "alta", "urgente"]
+
+def _validar_campos(tabela: str, dados: dict, criando: bool) -> str | None:
+    """Validacao de formato no boundary, antes de tocar o banco. Sem isso,
+    um campo obrigatorio vazio ou invalido so' falhava (feio) na constraint
+    do Postgres, sem mensagem util pro frontend."""
+    if tabela == "sla":
+        if criando and not str(dados.get("prioridade", "")).strip():
+            return "Prioridade e obrigatoria"
+        if dados.get("prioridade") and dados["prioridade"] not in PRIORIDADES_SLA:
+            return f"Prioridade invalida — use uma de: {', '.join(PRIORIDADES_SLA)}"
+        for campo, rotulo in (("tempo_resposta_min", "Tempo de resposta"), ("tempo_resolucao_h", "Tempo de resolucao")):
+            if campo in dados and dados[campo] not in (None, ""):
+                try:
+                    if int(dados[campo]) <= 0:
+                        return f"{rotulo} deve ser maior que zero"
+                except (TypeError, ValueError):
+                    return f"{rotulo} invalido"
+        return None
+    if tabela == "canais":
+        from core.validadores import validar_url
+        if criando and not str(dados.get("nome", "")).strip():
+            return "Nome e obrigatorio"
+        if "nome" in dados and not str(dados.get("nome", "")).strip():
+            return "Nome nao pode ser vazio"
+        if dados.get("url_webhook") and not validar_url(dados["url_webhook"]):
+            return "URL do webhook invalida — use http:// ou https://"
+        return None
+    return None
+
+# campos que nunca devem sair pela API generica, mesmo para quem tem
+# permissao atendimento.ver — token de canal e' credencial de integracao
+# externa (ex.: API key do WhatsApp/Evolution), nao ha motivo legitimo pro
+# frontend le-lo de volta so' pra listar/editar o canal.
+_CAMPOS_SENSIVEIS = {"canais": {"token"}}
+
+def _sem_campos_sensiveis(tabela: str, registro):
+    # ponytail: isinstance(x, list) quebra aqui — "list" nesse modulo e' a
+    # funcao publica de CRUD (list(t), linha abaixo), nao o builtin. Precisa
+    # do builtins.list explicito.
+    campos = _CAMPOS_SENSIVEIS.get(tabela)
+    if not campos:
+        return registro
+    if isinstance(registro, builtins.list):
+        return [{k: v for k, v in r.items() if k not in campos} if isinstance(r, dict) else r for r in registro]
+    if isinstance(registro, dict):
+        return {k: v for k, v in registro.items() if k not in campos}
+    return registro
+
+def list(t: str): return _sem_campos_sensiveis(t, _list(f"atend_{t}"))
+def get(t: str, i: int): return _sem_campos_sensiveis(t, _get(f"atend_{t}", i))
+
+def create(t: str, d: dict) -> dict:
+    colunas_validas = ATEND_COLUNAS.get(t)
+    if colunas_validas is None:
+        return {"error": "Tabela invalida"}
+    filtrado = {k: v for k, v in d.items() if k in colunas_validas}
+    if not filtrado:
+        return {"error": "Nenhum campo valido informado"}
+    erro = _validar_campos(t, filtrado, criando=True)
+    if erro:
+        return {"error": erro}
+    return _sem_campos_sensiveis(t, _create(f"atend_{t}", filtrado))
+
+def update(t: str, i: int, d: dict) -> dict:
+    colunas_validas = ATEND_COLUNAS.get(t)
+    if colunas_validas is None:
+        return {"error": "Tabela invalida"}
+    filtrado = {k: v for k, v in d.items() if k in colunas_validas}
+    if not filtrado:
+        return {"error": "Nenhum campo valido informado"}
+    erro = _validar_campos(t, filtrado, criando=False)
+    if erro:
+        return {"error": erro}
+    return _sem_campos_sensiveis(t, _update(f"atend_{t}", i, filtrado))
+
 def delete(t: str, i: int): return _delete(f"atend_{t}", i)
 
 # ── Operacoes especificas ──
+
+def visualizar_artigo_kb(id: int) -> dict:
+    """Incrementa o contador de visualizacoes de um artigo da KB — chamado
+    quando o atendente abre o artigo completo (nao a cada listagem)."""
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow(
+            "UPDATE atend_kb_artigos SET visualizacoes = visualizacoes + 1 WHERE id = $1 RETURNING *", id)
+        return dict(row) if row else {"error": "not found"}
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
+
+def votar_artigo_kb(id: int, util: bool) -> dict:
+    """Registra um voto de utilidade (util_sim/util_nao) num artigo da KB.
+    coluna e' escolhida entre 2 literais fixos (nunca vem direto do cliente),
+    entao nao ha risco de injecao ao interpolar na query."""
+    coluna = "util_sim" if util else "util_nao"
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow(
+            f"UPDATE atend_kb_artigos SET {coluna} = {coluna} + 1 WHERE id = $1 RETURNING *", id)
+        return dict(row) if row else {"error": "not found"}
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
 
 def criar_ticket(cliente: str, assunto: str, canal="whatsapp", prioridade="normal") -> dict:
     """Cria ticket com SLA aplicado — vencimento e tempo de resposta da regra da prioridade."""

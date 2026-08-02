@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from core.rbac import requer_permissao
+from core.api_utils import status_for_resultado as _status_for
 
 atendimento_bp = Blueprint("atendimento", __name__, url_prefix="/api/atendimento")
 
@@ -97,12 +98,38 @@ def atend_listar_atendentes():
     return _go()
 
 
+@atendimento_bp.route("/kb_artigos/<int:id>/visualizar", methods=["POST"])
+def atend_kb_visualizar(id):
+    @requer_permissao("atendimento.ver")
+    def _go():
+        from core.atendimento import visualizar_artigo_kb
+        resultado = visualizar_artigo_kb(id)
+        return jsonify(resultado), _status_for(resultado)
+    return _go()
+
+
+@atendimento_bp.route("/kb_artigos/<int:id>/votar", methods=["POST"])
+def atend_kb_votar(id):
+    data = request.json or {}
+
+    @requer_permissao("atendimento.ver")
+    def _go():
+        from core.atendimento import votar_artigo_kb
+        resultado = votar_artigo_kb(id, bool(data.get("util")))
+        return jsonify(resultado), _status_for(resultado)
+    return _go()
+
+
 @atendimento_bp.route("/<tabela>", methods=["GET"])
 def atend_list(tabela):
     from core.atendimento import list as al, TABLES
     if tabela not in TABLES:
         return jsonify({"error": "Tabela invalida"}), 404
-    return jsonify({"data": al(tabela)})
+
+    @requer_permissao("atendimento.ver")
+    def _go():
+        return jsonify({"data": al(tabela)})
+    return _go()
 
 
 @atendimento_bp.route("/<tabela>", methods=["POST"])
@@ -114,7 +141,8 @@ def atend_create(tabela):
 
     @requer_permissao("atendimento.criar")
     def _go():
-        return jsonify(ac(tabela, data))
+        resultado = ac(tabela, data)
+        return jsonify(resultado), _status_for(resultado)
     return _go()
 
 
@@ -123,7 +151,12 @@ def atend_get(tabela, id):
     from core.atendimento import get as ag, TABLES
     if tabela not in TABLES:
         return jsonify({"error": "Tabela invalida"}), 404
-    return jsonify(ag(tabela, id))
+
+    @requer_permissao("atendimento.ver")
+    def _go():
+        resultado = ag(tabela, id)
+        return jsonify(resultado), _status_for(resultado)
+    return _go()
 
 
 @atendimento_bp.route("/<tabela>/<int:id>", methods=["PUT"])
@@ -135,7 +168,8 @@ def atend_update(tabela, id):
 
     @requer_permissao("atendimento.editar")
     def _go():
-        return jsonify(au(tabela, id, data))
+        resultado = au(tabela, id, data)
+        return jsonify(resultado), _status_for(resultado)
     return _go()
 
 
@@ -152,5 +186,5 @@ def atend_delete(tabela, id):
         resultado = ad(tabela, id)
         if not resultado.get("error"):
             auditar_exclusao("atendimento", tabela, id, dados_antes if not dados_antes.get("error") else None)
-        return jsonify(resultado)
+        return jsonify(resultado), _status_for(resultado)
     return _go()

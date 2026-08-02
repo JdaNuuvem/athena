@@ -62,5 +62,61 @@ class TestNumeroTicket(unittest.TestCase):
         self.assertEqual(args["numero"], "#0007")
 
 
+class TestSLAValidacao(unittest.TestCase):
+    """create()/update() de 'sla' — a UI antiga aceitava prioridade texto
+    livre (nunca casava com criar_ticket, que so' consulta baixa/normal/
+    alta/urgente) e tempo_resposta_min/tempo_resolucao_h zero ou negativo."""
+
+    def test_create_sem_prioridade_rejeita(self):
+        with patch.object(atend, "_create") as mock_create:
+            resultado = atend.create("sla", {"tempo_resposta_min": 30, "tempo_resolucao_h": 4})
+        mock_create.assert_not_called()
+        self.assertEqual(resultado, {"error": "Prioridade e obrigatoria"})
+
+    def test_create_com_prioridade_fora_do_enum_rejeita(self):
+        with patch.object(atend, "_create") as mock_create:
+            resultado = atend.create("sla", {"prioridade": "criticassima", "tempo_resposta_min": 10, "tempo_resolucao_h": 1})
+        mock_create.assert_not_called()
+        self.assertIn("error", resultado)
+
+    def test_create_com_tempo_resposta_zero_rejeita(self):
+        with patch.object(atend, "_create") as mock_create:
+            resultado = atend.create("sla", {"prioridade": "baixa", "tempo_resposta_min": 0, "tempo_resolucao_h": 4})
+        mock_create.assert_not_called()
+        self.assertIn("error", resultado)
+
+    def test_create_com_tempo_resolucao_negativo_rejeita(self):
+        with patch.object(atend, "_create") as mock_create:
+            resultado = atend.create("sla", {"prioridade": "baixa", "tempo_resposta_min": 10, "tempo_resolucao_h": -2})
+        mock_create.assert_not_called()
+        self.assertIn("error", resultado)
+
+    def test_create_com_dados_validos_libera(self):
+        with patch.object(atend, "_create", return_value={"id": 1, "prioridade": "alta"}) as mock_create:
+            resultado = atend.create("sla", {"prioridade": "alta", "tempo_resposta_min": 15, "tempo_resolucao_h": 4})
+        mock_create.assert_called_once()
+        self.assertEqual(resultado, {"id": 1, "prioridade": "alta"})
+
+    def test_update_parcial_sem_prioridade_nao_exige_prioridade(self):
+        # so' mudar tempo_resposta_min (ex: ajustar regra existente) nao deve
+        # exigir reenviar prioridade — mesmo padrao de update parcial do CRM.
+        with patch.object(atend, "_update", return_value={"id": 1, "tempo_resposta_min": 20}) as mock_update:
+            resultado = atend.update("sla", 1, {"tempo_resposta_min": 20})
+        mock_update.assert_called_once()
+        self.assertEqual(resultado, {"id": 1, "tempo_resposta_min": 20})
+
+    def test_update_com_prioridade_fora_do_enum_rejeita(self):
+        with patch.object(atend, "_update") as mock_update:
+            resultado = atend.update("sla", 1, {"prioridade": "nao-existe"})
+        mock_update.assert_not_called()
+        self.assertIn("error", resultado)
+
+    def test_validacao_nao_se_aplica_a_outras_tabelas(self):
+        with patch.object(atend, "_create", return_value={"id": 1}) as mock_create:
+            resultado = atend.create("kb_artigos", {"titulo": "Artigo sem validacao de SLA"})
+        mock_create.assert_called_once()
+        self.assertEqual(resultado, {"id": 1})
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

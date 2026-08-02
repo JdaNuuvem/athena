@@ -593,6 +593,7 @@ export const api = {
   // Chat Interno
   chat: {
     listarConversas: () => request<{ data: ConversaChat[] }>("/api/chat/conversas"),
+    listarUsuarios: () => request<{ data: { id: number; nome: string }[] }>("/api/chat/usuarios"),
     criarConversaDm: (userId: number) =>
       request<ConversaChat>("/api/chat/conversas", {
         method: "POST", body: JSON.stringify({ tipo: "dm", user_id: userId }),
@@ -739,6 +740,17 @@ export const api = {
   crmDelete: (tabela: string, id: number) => request<{ success: boolean }>(`/api/crm/${tabela}/${id}`, { method: "DELETE" }),
   crmConverterPropostaContrato: (id: number) =>
     request<{ contrato_id?: number; ja_processada?: boolean; error?: string }>(`/api/eventos/crm/proposta/${id}/converter-contrato`, { method: "POST" }),
+
+  // Atendimento
+  atendList: (tabela: string) => request<{ data: unknown[] }>(`/api/atendimento/${tabela}`),
+  atendGet: (tabela: string, id: number) => request<Record<string, unknown>>(`/api/atendimento/${tabela}/${id}`),
+  atendCreate: (tabela: string, data: Record<string, unknown>) => request<Record<string, unknown>>(`/api/atendimento/${tabela}`, { method: "POST", body: JSON.stringify(data) }),
+  atendUpdate: (tabela: string, id: number, data: Record<string, unknown>) => request<Record<string, unknown>>(`/api/atendimento/${tabela}/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  atendDelete: (tabela: string, id: number) => request<{ success: boolean }>(`/api/atendimento/${tabela}/${id}`, { method: "DELETE" }),
+  atendCriarTicket: (data: Record<string, unknown>) => request<Record<string, unknown>>("/api/atendimento/tickets/criar", { method: "POST", body: JSON.stringify(data) }),
+  atendAtendentes: () => request<{ data: { id: number; nome: string }[] }>("/api/atendimento/atendentes"),
+  atendKbVisualizar: (id: number) => request<Record<string, unknown>>(`/api/atendimento/kb_artigos/${id}/visualizar`, { method: "POST" }),
+  atendKbVotar: (id: number, util: boolean) => request<Record<string, unknown>>(`/api/atendimento/kb_artigos/${id}/votar`, { method: "POST", body: JSON.stringify({ util }) }),
 
   // Financeiro
   finList: (tabela: string) => request<{ data: unknown[] }>(`/api/financeiro/${tabela}`),
