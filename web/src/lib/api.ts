@@ -293,6 +293,18 @@ export const api = {
   },
   shopeeDashboard: (dias?: number) =>
     request<{ lojas: ShopeeDashboardLoja[]; dias: number; error?: string }>(`/api/shopee/dashboard${dias ? `?dias=${dias}` : ""}`),
+  shopeePedidosSincronizados: (lojaId: number, opts?: { status?: string; busca?: string; pagina?: number }) => {
+    const q = new URLSearchParams({ loja_id: String(lojaId) });
+    if (opts?.status) q.set("status", opts.status);
+    if (opts?.busca) q.set("busca", opts.busca);
+    if (opts?.pagina) q.set("pagina", String(opts.pagina));
+    return request<{ pedidos: ShopeePedidoSincronizado[]; total: number; valor_total: number; atrasados: number; error?: string }>(`/api/shopee/pedidos-sincronizados?${q}`);
+  },
+  shopeeSincronizarPedidos: (lojaId?: number, dias?: number) =>
+    request<{ total: number; erros: number; detalhes_erros?: string[] }>("/api/shopee/pedidos/sincronizar", {
+      method: "POST",
+      body: JSON.stringify({ loja_id: lojaId, dias: dias || 30 }),
+    }),
 
   // Shopee — Account Health (saude da loja, 100% leitura)
   shopeeSaudePerformance: (lojaId: number) =>
@@ -813,6 +825,28 @@ export interface ShopeePedido {
   buyer_username: string;
   recipient_nome: string;
   itens: Array<{ sku: string; nome: string; quantidade: number; preco: number | string }>;
+}
+
+export interface ShopeePedidoSincronizado {
+  id: number;
+  order_sn: string;
+  shop_id: string;
+  status: string;
+  create_time: string | null;
+  update_time: string | null;
+  total_amount: number | string;
+  buyer_username: string;
+  recipient_nome: string;
+  recipient_telefone: string;
+  recipient_endereco: string;
+  recipient_cidade: string;
+  recipient_estado: string;
+  recipient_cep: string;
+  forma_pagamento: string;
+  observacao: string;
+  prazo_envio: string | null;
+  ultima_sincronizacao: string;
+  itens: Array<{ id: number; pedido_id: number; sku: string; nome: string; quantidade: number; preco: number | string }>;
 }
 
 export interface ShopeeDashboardLoja {
