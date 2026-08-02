@@ -111,6 +111,8 @@ def atend_upload_anexo(id):
         if not arquivo:
             return jsonify({"error": "arquivo obrigatorio"}), 400
         TAMANHO_MAXIMO_BYTES = 25 * 1024 * 1024
+        if request.content_length and request.content_length > TAMANHO_MAXIMO_BYTES:
+            return jsonify({"error": "Arquivo maior que 25MB"}), 413
         conteudo = arquivo.read()
         if len(conteudo) > TAMANHO_MAXIMO_BYTES:
             return jsonify({"error": "Arquivo maior que 25MB"}), 413
@@ -118,12 +120,20 @@ def atend_upload_anexo(id):
         upload_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "uploads", "atendimento")
         os.makedirs(upload_dir, exist_ok=True)
         nome_base = secure_filename(arquivo.filename) or "upload.bin"
+        NOME_MAXIMO_CHARS = 100
+        if len(nome_base) > NOME_MAXIMO_CHARS:
+            raiz, ext = os.path.splitext(nome_base)
+            ext = ext[:20]
+            nome_base = raiz[:NOME_MAXIMO_CHARS - len(ext)] + ext
         nome_seguro = f"{id}_{int(time.time() * 1000)}_{nome_base}"
         caminho_completo = os.path.realpath(os.path.join(upload_dir, nome_seguro))
         if not caminho_completo.startswith(os.path.realpath(upload_dir) + os.sep):
             return jsonify({"error": "nome de arquivo invalido"}), 400
-        with open(caminho_completo, "wb") as f:
-            f.write(conteudo)
+        try:
+            with open(caminho_completo, "wb") as f:
+                f.write(conteudo)
+        except OSError:
+            return jsonify({"error": "falha ao salvar anexo"}), 400
 
         usuario = usuario_atual_da_request()
         remetente = usuario.get("nome") or usuario.get("email") or ""

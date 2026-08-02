@@ -176,6 +176,40 @@ class TestUploadAnexoTicket(unittest.TestCase):
                              data={}, content_type="multipart/form-data")
         self.assertEqual(r.status_code, 400)
 
+    def test_upload_anexo_filename_com_traversal_e_sanitizado(self):
+        """Regressao de seguranca: nome de arquivo com ../ nao deve sobreviver
+        a secure_filename() nem gerar anexo_url fora do diretorio de uploads."""
+        headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+        with patch("core.atendimento.adicionar_mensagem", return_value={"id": 9, "tipo": "anexo"}) as mock_add:
+            r = self.client.post(
+                "/api/atendimento/tickets/1/anexo", headers=headers,
+                data={"arquivo": (io.BytesIO(b"conteudo"), "../../../etc/passwd")},
+                content_type="multipart/form-data")
+        self.assertEqual(r.status_code, 200)
+        anexo_url = mock_add.call_args.kwargs["anexo_url"]
+        self.assertNotIn("..", anexo_url)
+        self.assertNotIn("/", anexo_url)
+        self.assertNotIn("\\", anexo_url)
+
+    def test_download_anexo_com_traversal_retorna_404(self):
+        """Regressao de seguranca: nome_arquivo com ../ nao deve escapar do
+        diretorio de uploads e servir arquivo arbitrario do disco."""
+        headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+        r = self.client.get(
+            "/api/atendimento/tickets/1/anexo/../../../../etc/passwd", headers=headers)
+        self.assertEqual(r.status_code, 404)
+
+    def test_upload_anexo_maior_que_25mb_retorna_413(self):
+        headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+        conteudo_grande = b"x" * (25 * 1024 * 1024 + 1)
+        with patch("core.atendimento.adicionar_mensagem") as mock_add:
+            r = self.client.post(
+                "/api/atendimento/tickets/1/anexo", headers=headers,
+                data={"arquivo": (io.BytesIO(conteudo_grande), "grande.bin")},
+                content_type="multipart/form-data")
+        self.assertEqual(r.status_code, 413)
+        mock_add.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
