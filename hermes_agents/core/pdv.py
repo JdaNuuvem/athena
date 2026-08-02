@@ -274,6 +274,7 @@ def _ensure_tables():
             bandeira VARCHAR(30), parcelas INT DEFAULT 1,
             autorizacao VARCHAR(50), data TIMESTAMP DEFAULT NOW()
         )""")
+        await db.execute("ALTER TABLE pdv_pagamentos ADD COLUMN IF NOT EXISTS maquineta VARCHAR(50)")
         await db.execute("""CREATE TABLE IF NOT EXISTS pdv_sangrias (
             id SERIAL PRIMARY KEY, caixa_id INT REFERENCES pdv_caixas(id),
             valor DECIMAL(12,2) DEFAULT 0, motivo TEXT, operador VARCHAR(100),
@@ -283,6 +284,24 @@ def _ensure_tables():
             id SERIAL PRIMARY KEY, caixa_id INT REFERENCES pdv_caixas(id),
             valor DECIMAL(12,2) DEFAULT 0, motivo TEXT, operador VARCHAR(100),
             data TIMESTAMP DEFAULT NOW()
+        )""")
+        await db.execute("""CREATE TABLE IF NOT EXISTS pdv_caixa_contagem (
+            id SERIAL PRIMARY KEY,
+            caixa_id INT NOT NULL REFERENCES pdv_caixas(id),
+            denominacao VARCHAR(10) NOT NULL,
+            quantidade INT NOT NULL DEFAULT 0,
+            subtotal DECIMAL(10,2) GENERATED ALWAYS AS (quantidade * denominacao::numeric) STORED,
+            created_at TIMESTAMP DEFAULT NOW()
+        )""")
+        await db.execute("""CREATE TABLE IF NOT EXISTS pdv_caixa_conferencia (
+            id SERIAL PRIMARY KEY,
+            caixa_id INT NOT NULL REFERENCES pdv_caixas(id),
+            maquineta VARCHAR(50) NOT NULL,
+            forma_pagamento VARCHAR(30) NOT NULL,
+            valor_sistema DECIMAL(12,2) NOT NULL DEFAULT 0,
+            valor_conferido DECIMAL(12,2),
+            diferenca DECIMAL(12,2) GENERATED ALWAYS AS (COALESCE(valor_conferido,0) - valor_sistema) STORED,
+            created_at TIMESTAMP DEFAULT NOW()
         )""")
         
         await db.execute("""CREATE TABLE IF NOT EXISTS pdv_operadores (
