@@ -65,6 +65,21 @@ def atend_mudar_status(id):
     return _go()
 
 
+@atendimento_bp.route("/tickets/<int:id>/atribuir", methods=["PUT"])
+def atend_atribuir(id):
+    data = request.json or {}
+
+    @requer_permissao("atendimento.editar")
+    def _go():
+        atendente_id = data.get("atendente_id")
+        if not atendente_id:
+            return jsonify({"error": "atendente_id obrigatorio"}), 400
+        from core.atendimento import atribuir_ticket
+        resultado = atribuir_ticket(id, int(atendente_id))
+        return jsonify(resultado), (400 if resultado.get("error") else 200)
+    return _go()
+
+
 @atendimento_bp.route("/tickets", methods=["GET"])
 def atend_listar_tickets():
     @requer_permissao("atendimento.ver")

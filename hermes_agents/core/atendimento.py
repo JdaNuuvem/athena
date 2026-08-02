@@ -327,6 +327,48 @@ def mudar_status_ticket(ticket_id: int, novo_status: str) -> dict:
             })
     return resultado
 
+def atribuir_ticket(ticket_id: int, atendente_id: int) -> dict:
+    """Atribui um atendente ao ticket: valida que o atendente existe e esta
+    ativo, atualiza o ticket, avisa participantes da conversa via WS e manda
+    notificacao + evento WS direto pro atendente designado."""
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow("SELECT id, nome FROM rbac_usuarios WHERE id=$1 AND ativo=TRUE", atendente_id)
+        return dict(row) if row else None
+    try:
+        atendente = run_async(_go())
+    except Exception as e:
+        return {"error": str(e)}
+    if not atendente:
+        return {"error": "Atendente nao encontrado ou inativo"}
+
+    resultado = update("tickets", ticket_id, {"atendente_id": atendente_id})
+    if resultado.get("error"):
+        return resultado
+
+    from core.chat import conversa_id_do_ticket
+    from core.chat_ws import broadcast_para_participantes, enviar_para_usuario
+    from core.notificacoes import criar_notificacao
+
+    conversa_id = conversa_id_do_ticket(ticket_id)
+    if conversa_id:
+        broadcast_para_participantes(conversa_id, {
+            "evento": "ticket_atendente_alterado", "ticket_id": ticket_id,
+            "atendente_id": atendente_id, "atendente_nome": atendente["nome"], "conversa_id": conversa_id,
+        })
+
+    numero = resultado.get("numero") or f"#{ticket_id}"
+    notificacao = criar_notificacao(
+        atendente_id, "ticket_atribuido",
+        f"Ticket {numero} atribuido a voce",
+        resultado.get("assunto") or "",
+        f"/atendimento/tickets/{ticket_id}",
+    )
+    if not notificacao.get("error"):
+        payload = {k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in notificacao.items()}
+        enviar_para_usuario(atendente_id, {"evento": "notificacao", **payload})
+    return resultado
+
 def dashboard() -> dict:
     async def _go():
         db = await get_db()
