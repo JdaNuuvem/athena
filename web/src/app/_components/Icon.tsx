@@ -39,6 +39,7 @@ const paths: Record<string, string> = {
   alert: "M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z",
   inbox: "M3 8l2-5h14l2 5m-18 0v10a2 2 0 002 2h14a2 2 0 002-2V8m-18 0h5a2 2 0 002 2v1a1 1 0 001 1h2a1 1 0 001-1v-1a2 2 0 002-2h5",
   check: "M5 13l4 4L19 7",
+  bell: "M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9",
 };
 
 export default function Icon({ name, size = 20, className = "", style }: { name: string; size?: number; className?: string; style?: React.CSSProperties }) {

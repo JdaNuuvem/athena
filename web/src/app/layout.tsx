@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { JetBrains_Mono } from "next/font/google";
 import { api } from "@/lib/api";
 import Icon from "./_components/Icon";
+import NotificationBell from "./_components/NotificationBell";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { StoreProvider, useStore, type LojaInfo } from "@/lib/store-context";
 import "./globals.css";
@@ -316,14 +317,17 @@ function Sidebar({ sidebarOpen, setSidebarOpen }: { sidebarOpen: boolean; setSid
                 <div className="text-xs font-medium truncate" style={{ color: "var(--ink-300)" }}>{user.name}</div>
                 <div className="text-[9px] uppercase tracking-wide" style={{ color: "var(--ink-700)" }}>{user.role}</div>
               </div>
-              <button
-                onClick={logout}
-                aria-label="Sair"
-                className="p-1.5 rounded shrink-0 transition-colors hover:bg-white/5"
-                style={{ color: "var(--ink-700)" }}
-              >
-                <Icon name="power" size={14} />
-              </button>
+              <div className="flex items-center gap-1 shrink-0">
+                <NotificationBell />
+                <button
+                  onClick={logout}
+                  aria-label="Sair"
+                  className="p-1.5 rounded shrink-0 transition-colors hover:bg-white/5"
+                  style={{ color: "var(--ink-700)" }}
+                >
+                  <Icon name="power" size={14} />
+                </button>
+              </div>
             </div>
           ) : (
             <button
