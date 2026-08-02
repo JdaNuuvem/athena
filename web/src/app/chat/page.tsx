@@ -7,6 +7,7 @@ import type { ConversaChat, MensagemChat } from "@/lib/types/chat";
 import ConversaSidebar from "./_components/ConversaSidebar";
 import MensagensPainel from "./_components/MensagensPainel";
 import ThreadPainel from "./_components/ThreadPainel";
+import NovaConversaModal from "./_components/NovaConversaModal";
 
 export default function ChatPage() {
   const { user } = useAuth();
@@ -19,9 +20,15 @@ export default function ChatPage() {
   const [threadAberta, setThreadAberta] = useState<MensagemChat | null>(null);
   const [digitandoUserId, setDigitandoUserId] = useState<number | null>(null);
   const [presencas, setPresencas] = useState<Record<number, string>>({});
+  const [novaConversaAberta, setNovaConversaAberta] = useState(false);
+  const [carregandoConversas, setCarregandoConversas] = useState(true);
+  const [erroConversas, setErroConversas] = useState("");
 
   const carregarConversas = useCallback(() => {
-    api.chat.listarConversas().then((r) => setConversas(r.data)).catch(() => {});
+    api.chat.listarConversas()
+      .then((r) => { setConversas(r.data); setErroConversas(""); })
+      .catch((e) => setErroConversas(e instanceof Error ? e.message : "Erro ao carregar conversas"))
+      .finally(() => setCarregandoConversas(false));
   }, []);
 
   useEffect(() => { carregarConversas(); }, [carregarConversas]);
@@ -31,6 +38,12 @@ export default function ChatPage() {
     setThreadAberta(null);
     api.chat.listarMensagens(conversa.id).then((r) => setMensagens(r.data)).catch(() => {});
   }, []);
+
+  const aoCriarConversa = useCallback((conversa: ConversaChat) => {
+    setNovaConversaAberta(false);
+    setConversas((atual) => (atual.some((c) => c.id === conversa.id && c.tipo === conversa.tipo) ? atual : [conversa, ...atual]));
+    selecionarConversa(conversa);
+  }, [selecionarConversa]);
 
   useEffect(() => {
     return on((evento: EventoChatSocket) => {
@@ -60,7 +73,8 @@ export default function ChatPage() {
   const enviar = (texto: string, anexoId?: number) => {
     if (!conversaSelecionada) return;
     if (conversaSelecionada.tipo === "ticket") {
-      api.chat.enviarMensagem(conversaSelecionada.id, texto, anexoId).catch(() => {});
+      api.chat.enviarMensagem(conversaSelecionada.id, texto, anexoId)
+        .catch((e) => alert(e instanceof Error ? e.message : "Erro ao enviar mensagem"));
       return;
     }
     enviarMensagem(conversaSelecionada.id, texto, anexoId);
@@ -89,7 +103,13 @@ export default function ChatPage() {
         conversaSelecionadaId={conversaSelecionada?.id ?? null}
         onSelecionar={selecionarConversa}
         presencas={presencas}
+        onNovaConversa={() => setNovaConversaAberta(true)}
+        carregando={carregandoConversas}
+        erro={erroConversas}
       />
+      {novaConversaAberta && (
+        <NovaConversaModal onFechar={() => setNovaConversaAberta(false)} onCriada={aoCriarConversa} />
+      )}
       {conversaSelecionada ? (
         <MensagensPainel
           conversa={conversaSelecionada}

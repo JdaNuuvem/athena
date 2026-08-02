@@ -24,7 +24,7 @@ const COR_PRESENCA: Record<string, string> = {
 };
 
 export default function ConversaSidebar({
-  conversas, conversaSelecionadaId, onSelecionar, presencas = {},
+  conversas, conversaSelecionadaId, onSelecionar, presencas = {}, onNovaConversa, carregando = false, erro = "",
 }: {
   conversas: ConversaChat[];
   conversaSelecionadaId: number | null;
@@ -34,13 +34,36 @@ export default function ConversaSidebar({
    * participantes, entao nao da pra identificar "o outro" da DM sem uma chamada
    * extra. Fica para a Fase 2 junto com o avatar do participante. */
   presencas?: Record<number, string>;
+  onNovaConversa: () => void;
+  carregando?: boolean;
+  erro?: string;
 }) {
   return (
     <div className="w-72 shrink-0 border-r border-neutral-800 bg-neutral-900 overflow-y-auto">
-      <div className="px-4 py-3 border-b border-neutral-800">
+      <div className="px-4 py-3 border-b border-neutral-800 flex items-center justify-between">
         <h1 className="text-sm font-bold text-neutral-200">Chat</h1>
+        <button
+          onClick={onNovaConversa}
+          title="Nova conversa"
+          className="rounded-md p-1 text-neutral-400 hover:bg-neutral-800 hover:text-indigo-400"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14m-7-7h14" /></svg>
+        </button>
       </div>
-      {conversas.map((c) => {
+      {carregando ? (
+        <div className="px-4 py-3 space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="h-10 rounded-lg bg-neutral-800 animate-pulse" />
+          ))}
+        </div>
+      ) : erro ? (
+        <div className="mx-4 mt-3 text-xs px-3 py-2 rounded-lg border bg-red-950/40 border-red-900/50 text-red-400">{erro}</div>
+      ) : conversas.length === 0 ? (
+        <div className="px-4 py-8 text-center">
+          <p className="text-xs text-neutral-500">Nenhuma conversa ainda</p>
+          <button onClick={onNovaConversa} className="mt-2 text-xs text-indigo-400 hover:text-indigo-300">Iniciar uma conversa</button>
+        </div>
+      ) : conversas.map((c) => {
         const titulo = c.tipo === "ticket" ? `${c.cliente || "Cliente"} — ${c.canal_externo || ""}` : (c.nome || "Conversa");
         const status = c.tipo === "dm" && c.criado_por != null ? presencas[c.criado_por] : undefined;
         return (

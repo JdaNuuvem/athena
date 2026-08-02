@@ -31,7 +31,10 @@ def init_sock(app):
     def chat_socket(ws):
         token = request.args.get("token", "")
         payload = verificar_token_sessao(token)
-        if not payload or not payload.get("user_id"):
+        # ponytail: conta master (login ATHENA_ADMIN_EMAIL) tem user_id=0 —
+        # "not payload.get('user_id')" tratava 0 como falsy e fechava a conexao
+        # na hora. 0 e' um user_id valido, so' payload ausente e' nao-autenticado.
+        if not payload or payload.get("user_id") is None:
             ws.close()
             return
         user_id = int(payload["user_id"])

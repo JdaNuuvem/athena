@@ -209,7 +209,17 @@ def participantes_ids(conversa_id: int) -> list:
     return []
 
 
-def usuario_e_participante(conversa_id: int, user_id: int) -> bool:
+def usuario_e_participante(conversa_id: int, user_id: int, is_master: bool = False) -> bool:
+    """is_master destrava canal_departamento/ticket (visao corporativa, sem dono
+    fixo) mas NAO destrava dm/grupo — conta master (login via ATHENA_ADMIN_EMAIL)
+    nao tem linha real em rbac_usuarios, entao nunca aparece em chat_participantes;
+    dar bypass geral deixaria o master ler DM privada de qualquer usuario so'
+    adivinhando o conversa_id, o que quebra a expectativa de privacidade mesmo
+    pra conta admin."""
+    if is_master:
+        conversa = _obter_conversa(conversa_id)
+        if conversa and conversa.get("tipo") in ("canal_departamento", "ticket"):
+            return True
     return user_id in participantes_ids(conversa_id)
 
 
@@ -384,9 +394,7 @@ def marcar_lido(conversa_id: int, user_id: int, ultima_mensagem_id: int) -> dict
     except Exception as e: return {"error": str(e)}
 
 
-def _canais_departamento_permitidos(user_id: int) -> list:
-    from core.rbac import get_permissoes_por_usuario
-    perms = set(get_permissoes_por_usuario(user_id))
+def _canais_departamento_permitidos(user_id: int, is_master: bool = False) -> list:
     async def _go():
         db = await get_db()
         rows = await db.fetch("""
@@ -396,18 +404,23 @@ def _canais_departamento_permitidos(user_id: int) -> list:
         return [dict(r) for r in rows]
     try: canais = run_async(_go())
     except Exception: canais = []
+    if is_master:
+        return canais
+    from core.rbac import get_permissoes_por_usuario
+    perms = set(get_permissoes_por_usuario(user_id))
     return [c for c in canais if f"{c['departamento']}.ver" in perms]
 
 
-def listar_canais_departamento(user_id: int) -> list:
-    return _canais_departamento_permitidos(user_id)
+def listar_canais_departamento(user_id: int, is_master: bool = False) -> list:
+    return _canais_departamento_permitidos(user_id, is_master)
 
 
-def _conversas_ticket_permitidas(user_id: int) -> list:
-    from core.rbac import get_permissoes_por_usuario
-    perms = set(get_permissoes_por_usuario(user_id))
-    if "atendimento.ver" not in perms:
-        return []
+def _conversas_ticket_permitidas(user_id: int, is_master: bool = False) -> list:
+    if not is_master:
+        from core.rbac import get_permissoes_por_usuario
+        perms = set(get_permissoes_por_usuario(user_id))
+        if "atendimento.ver" not in perms:
+            return []
     async def _go():
         db = await get_db()
         rows = await db.fetch("""
@@ -422,9 +435,13 @@ def _conversas_ticket_permitidas(user_id: int) -> list:
     except Exception: return []
 
 
-def listar_conversas_usuario(user_id: int) -> list:
+def listar_conversas_usuario(user_id: int, is_master: bool = False) -> list:
     """Une DM/grupo (participante), canal de departamento (permissao) e ticket
-    (permissao atendimento.ver), ordenado por atividade mais recente."""
+    (permissao atendimento.ver), ordenado por atividade mais recente.
+
+    is_master (login ATHENA_ADMIN_EMAIL, sem linha real em rbac_usuarios) nunca
+    tem DM/grupo — chat_participantes.user_id e' FK+PK pra rbac_usuarios(id),
+    entao so' ve canais de departamento e tickets (visao corporativa)."""
     async def _go():
         db = await get_db()
         rows = await db.fetch("""
@@ -437,13 +454,13 @@ def listar_conversas_usuario(user_id: int) -> list:
     try: internas = run_async(_go())
     except Exception: internas = []
 
-    todas = internas + _canais_departamento_permitidos(user_id) + _conversas_ticket_permitidas(user_id)
+    todas = internas + _canais_departamento_permitidos(user_id, is_master) + _conversas_ticket_permitidas(user_id, is_master)
     todas.sort(key=lambda c: c.get("ultima_atividade") or c.get("created_at") or datetime.min, reverse=True)
     return todas
 
 
-def buscar_mensagens(user_id: int, termo: str) -> list:
-    conversa_ids = [c["id"] for c in listar_conversas_usuario(user_id) if c["tipo"] in ("dm", "grupo", "canal_departamento")]
+def buscar_mensagens(user_id: int, termo: str, is_master: bool = False) -> list:
+    conversa_ids = [c["id"] for c in listar_conversas_usuario(user_id, is_master) if c["tipo"] in ("dm", "grupo", "canal_departamento")]
     if not conversa_ids:
         return []
     async def _go():

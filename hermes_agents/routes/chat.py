@@ -38,21 +38,48 @@ def _adaptar_mensagem_ticket(m: dict, conversa_id: int) -> dict:
     }
 
 
+@chat_bp.route("/usuarios", methods=["GET"])
+def chat_listar_usuarios():
+    """Lista enxuta (id, nome) de usuarios ativos pra escolher em nova DM/grupo.
+
+    ponytail: /api/rbac/usuarios exige "configuracoes.ver" (permissao
+    administrativa) e devolve email/role_id/ativo — nao da pra reusar aqui
+    sem quebrar pra qualquer usuario comum tentando so' iniciar uma conversa.
+    Exposicao minima: so' id+nome, so' ativos, sem permissao extra alem de
+    estar logado (mesmo requisito de qualquer outra rota do chat)."""
+    usuario = usuario_atual_da_request()
+    if usuario.get("user_id") is None:
+        return jsonify({"error": "Nao autenticado"}), 401
+    from core.rbac import list_usuarios
+    todos = list_usuarios()
+    return jsonify({"data": [{"id": u["id"], "nome": u["nome"]} for u in todos if u.get("ativo")]})
+
+
 @chat_bp.route("/conversas", methods=["GET"])
 def chat_listar_conversas():
     usuario = usuario_atual_da_request()
-    if not usuario.get("user_id"):
+    # ponytail: user_id da conta master (login ATHENA_ADMIN_EMAIL) e' 0 —
+    # "if not usuario.get('user_id')" tratava 0 como falsy e barrava a conta
+    # master de TODO o chat (redirecionava pro login). 0 e' um user_id valido,
+    # so' ausencia de token (None) e' que significa nao-autenticado.
+    if usuario.get("user_id") is None:
         return jsonify({"error": "Nao autenticado"}), 401
-    return jsonify({"data": listar_conversas_usuario(int(usuario["user_id"]))})
+    return jsonify({"data": listar_conversas_usuario(int(usuario["user_id"]), bool(usuario.get("is_master")))})
 
 
 @chat_bp.route("/conversas", methods=["POST"])
 def chat_criar_conversa():
     usuario = usuario_atual_da_request()
-    if not usuario.get("user_id"):
+    if usuario.get("user_id") is None:
         return jsonify({"error": "Nao autenticado"}), 401
     data = request.json or {}
     tipo = data.get("tipo")
+    if tipo in ("dm", "grupo") and usuario.get("is_master"):
+        # ponytail: conta master nao tem linha em rbac_usuarios (login via env
+        # var, sem cadastro real) — chat_participantes.user_id e' FK+PK pra
+        # rbac_usuarios(id), entao o INSERT quebraria com erro cru de FK.
+        # Bloqueia cedo com mensagem clara em vez de deixar estourar no banco.
+        return jsonify({"error": "Conta master (login administrativo via variavel de ambiente) nao pode iniciar mensagens diretas ou grupos — entre com uma conta de usuario cadastrada para isso."}), 400
     criado_por = int(usuario["user_id"])
     if tipo == "dm":
         outro_user_id = data.get("user_id")
@@ -71,7 +98,8 @@ def chat_criar_conversa():
 def chat_listar_mensagens(conversa_id):
     usuario = usuario_atual_da_request()
     user_id = usuario.get("user_id")
-    if not user_id or not usuario_e_participante(conversa_id, int(user_id)):
+    is_master = bool(usuario.get("is_master"))
+    if user_id is None or not usuario_e_participante(conversa_id, int(user_id), is_master):
         return jsonify({"error": "Permissao negada"}), 403
     conversa = obter_conversa(conversa_id)
     if conversa and conversa.get("tipo") == "ticket":
@@ -86,7 +114,8 @@ def chat_listar_mensagens(conversa_id):
 def chat_enviar_mensagem(conversa_id):
     usuario = usuario_atual_da_request()
     user_id = usuario.get("user_id")
-    if not user_id or not usuario_e_participante(conversa_id, int(user_id)):
+    is_master = bool(usuario.get("is_master"))
+    if user_id is None or not usuario_e_participante(conversa_id, int(user_id), is_master):
         return jsonify({"error": "Permissao negada"}), 403
     data = request.json or {}
     anexo_id = data.get("anexo_id")
@@ -106,6 +135,12 @@ def chat_enviar_mensagem(conversa_id):
         mensagem = _adaptar_mensagem_ticket(criada, conversa_id)
         broadcast_para_participantes(conversa_id, {"evento": "nova_mensagem", "mensagem": _serializar(mensagem)})
         return jsonify(mensagem)
+    if is_master:
+        # ponytail: chat_mensagens.remetente_id e' FK pra rbac_usuarios(id) —
+        # conta master nao tem linha real la. So' consegue ver canal/ticket
+        # (acima), nao enviar. Ticket escapa disso porque atend_mensagens
+        # guarda o remetente como texto livre, nao FK.
+        return jsonify({"error": "Conta master (login administrativo via variavel de ambiente) pode visualizar este canal, mas nao pode enviar mensagens — entre com uma conta de usuario cadastrada para participar."}), 400
     mensagem = enviar_mensagem(conversa_id, int(user_id), data.get("texto", ""),
                                 data.get("anexo_id"), data.get("thread_pai_id"))
     if not mensagem.get("error"):
@@ -117,7 +152,7 @@ def chat_enviar_mensagem(conversa_id):
 def chat_editar_mensagem(mensagem_id):
     usuario = usuario_atual_da_request()
     user_id = usuario.get("user_id")
-    if not user_id:
+    if user_id is None:
         return jsonify({"error": "Nao autenticado"}), 401
     data = request.json or {}
     mensagem = editar_mensagem(mensagem_id, int(user_id), data.get("texto", ""))
@@ -131,7 +166,7 @@ def chat_editar_mensagem(mensagem_id):
 def chat_excluir_mensagem(mensagem_id):
     usuario = usuario_atual_da_request()
     user_id = usuario.get("user_id")
-    if not user_id:
+    if user_id is None:
         return jsonify({"error": "Nao autenticado"}), 401
     mensagem = excluir_mensagem(mensagem_id, int(user_id))
     if mensagem.get("error"):
@@ -144,8 +179,12 @@ def chat_excluir_mensagem(mensagem_id):
 def chat_upload_anexo():
     usuario = usuario_atual_da_request()
     user_id = usuario.get("user_id")
-    if not user_id:
+    if user_id is None:
         return jsonify({"error": "Nao autenticado"}), 401
+    if usuario.get("is_master"):
+        # chat_anexos.enviado_por e' FK pra rbac_usuarios(id) — conta master
+        # nao tem linha real la, o INSERT quebraria com erro cru de FK.
+        return jsonify({"error": "Conta master (login administrativo via variavel de ambiente) nao pode enviar anexos no chat — entre com uma conta de usuario cadastrada."}), 400
     if request.content_length and request.content_length > TAMANHO_MAXIMO_BYTES:
         return jsonify({"error": "Arquivo maior que 25MB"}), 413
     arquivo = request.files.get("arquivo")
@@ -169,10 +208,10 @@ def chat_upload_anexo():
 def chat_download_anexo(anexo_id):
     usuario = usuario_atual_da_request()
     user_id = usuario.get("user_id")
-    if not user_id:
+    if user_id is None:
         return jsonify({"error": "Nao autenticado"}), 401
     conversa_id = conversa_do_anexo(anexo_id)
-    if conversa_id is None or not usuario_e_participante(conversa_id, int(user_id)):
+    if conversa_id is None or not usuario_e_participante(conversa_id, int(user_id), bool(usuario.get("is_master"))):
         return jsonify({"error": "Permissao negada"}), 403
     anexo = obter_anexo(anexo_id)
     if anexo.get("error"):
@@ -187,7 +226,7 @@ def chat_download_anexo(anexo_id):
 def chat_adicionar_participante(conversa_id):
     usuario = usuario_atual_da_request()
     user_id = usuario.get("user_id")
-    if not user_id:
+    if user_id is None:
         return jsonify({"error": "Nao autenticado"}), 401
     if papel_do_usuario(conversa_id, int(user_id)) not in ("owner", "admin", "moderador"):
         return jsonify({"error": "Permissao negada"}), 403
@@ -202,7 +241,7 @@ def chat_adicionar_participante(conversa_id):
 def chat_remover_participante(conversa_id, membro_id):
     usuario = usuario_atual_da_request()
     user_id = usuario.get("user_id")
-    if not user_id:
+    if user_id is None:
         return jsonify({"error": "Nao autenticado"}), 401
     if papel_do_usuario(conversa_id, int(user_id)) not in ("owner", "admin", "moderador"):
         return jsonify({"error": "Permissao negada"}), 403
@@ -213,8 +252,14 @@ def chat_remover_participante(conversa_id, membro_id):
 def chat_marcar_lido(conversa_id):
     usuario = usuario_atual_da_request()
     user_id = usuario.get("user_id")
-    if not user_id or not usuario_e_participante(conversa_id, int(user_id)):
+    is_master = bool(usuario.get("is_master"))
+    if user_id is None or not usuario_e_participante(conversa_id, int(user_id), is_master):
         return jsonify({"error": "Permissao negada"}), 403
+    if is_master:
+        # chat_leituras.user_id e' FK pra rbac_usuarios(id) — sem linha real,
+        # so' devolve sucesso sem persistir (master nao tem estado de leitura
+        # proprio pra rastrear).
+        return jsonify({"success": True})
     data = request.json or {}
     return jsonify(marcar_lido(conversa_id, int(user_id), data.get("ultima_mensagem_id")))
 
@@ -223,7 +268,7 @@ def chat_marcar_lido(conversa_id):
 def chat_listar_participantes(conversa_id):
     usuario = usuario_atual_da_request()
     user_id = usuario.get("user_id")
-    if not user_id or not usuario_e_participante(conversa_id, int(user_id)):
+    if user_id is None or not usuario_e_participante(conversa_id, int(user_id), bool(usuario.get("is_master"))):
         return jsonify({"error": "Permissao negada"}), 403
     return jsonify({"data": participantes_info(conversa_id)})
 
@@ -232,15 +277,15 @@ def chat_listar_participantes(conversa_id):
 def chat_busca():
     usuario = usuario_atual_da_request()
     user_id = usuario.get("user_id")
-    if not user_id:
+    if user_id is None:
         return jsonify({"error": "Nao autenticado"}), 401
-    return jsonify({"data": buscar_mensagens(int(user_id), request.args.get("q", ""))})
+    return jsonify({"data": buscar_mensagens(int(user_id), request.args.get("q", ""), bool(usuario.get("is_master")))})
 
 
 @chat_bp.route("/canais-departamento", methods=["GET"])
 def chat_canais_departamento():
     usuario = usuario_atual_da_request()
     user_id = usuario.get("user_id")
-    if not user_id:
+    if user_id is None:
         return jsonify({"error": "Nao autenticado"}), 401
-    return jsonify({"data": listar_canais_departamento(int(user_id))})
+    return jsonify({"data": listar_canais_departamento(int(user_id), bool(usuario.get("is_master")))})
