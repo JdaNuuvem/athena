@@ -229,6 +229,7 @@ from routes.fiscal import fiscal_bp
 from routes.automacoes import automacoes_bp
 from routes.producao import producao_bp
 from routes.atendimento import atendimento_bp
+from routes.notificacoes import notificacoes_bp
 from routes.compras import compras_bp
 from routes.crm import crm_bp
 from routes.documentos import documentos_bp, seguranca_bp
@@ -263,6 +264,7 @@ app.register_blueprint(fiscal_bp)
 app.register_blueprint(automacoes_bp)
 app.register_blueprint(producao_bp)
 app.register_blueprint(atendimento_bp)
+app.register_blueprint(notificacoes_bp)
 app.register_blueprint(compras_bp)
 app.register_blueprint(crm_bp)
 app.register_blueprint(documentos_bp)
