@@ -75,6 +75,7 @@ import type {
   IndicadorCobertura,
 } from "@/lib/types/domain";
 import type { ConversaChat, MensagemChat, AnexoChat, ParticipanteChat } from "@/lib/types/chat";
+import type { Ticket, MensagemTicket, Atendente, Notificacao } from "@/lib/types/atendimento";
 
 export type TipoLoja = "fisica" | "virtual" | "hibrida" | "marketplace";
 
@@ -659,6 +660,50 @@ export const api = {
       return res.json();
     },
     urlDownloadAnexo: (anexoId: number) => `/api/chat/anexos/${anexoId}`,
+  },
+
+  // Atendimento — Tickets
+  atendimento: {
+    listar: (filtros: Record<string, string>) => {
+      const qs = new URLSearchParams(filtros).toString();
+      return request<{ data: Ticket[] }>(`/api/atendimento/tickets${qs ? `?${qs}` : ""}`);
+    },
+    criar: (dados: { cliente: string; email?: string; telefone?: string; assunto: string; canal: string; prioridade: string }) =>
+      request<Ticket>("/api/atendimento/tickets/criar", { method: "POST", body: JSON.stringify(dados) }),
+    obter: (id: number) => request<Ticket>(`/api/atendimento/tickets/${id}`),
+    atualizar: (id: number, dados: Record<string, unknown>) =>
+      request<{ success?: boolean; error?: string }>(`/api/atendimento/tickets/${id}`, { method: "PUT", body: JSON.stringify(dados) }),
+    mudarStatus: (id: number, status: string) =>
+      request<Ticket>(`/api/atendimento/tickets/${id}/status`, { method: "PUT", body: JSON.stringify({ status }) }),
+    atribuir: (id: number, atendenteId: number) =>
+      request<Ticket>(`/api/atendimento/tickets/${id}/atribuir`, { method: "PUT", body: JSON.stringify({ atendente_id: atendenteId }) }),
+    listarMensagens: (id: number) => request<{ data: MensagemTicket[] }>(`/api/atendimento/tickets/${id}/mensagens`),
+    enviarMensagem: (id: number, conteudo: string) =>
+      request<MensagemTicket>(`/api/atendimento/tickets/${id}/mensagem`, { method: "POST", body: JSON.stringify({ conteudo, tipo: "texto" }) }),
+    listarAtendentes: () => request<{ data: Atendente[] }>("/api/atendimento/atendentes"),
+    uploadAnexo: async (ticketId: number, arquivo: File): Promise<MensagemTicket> => {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      const formData = new FormData();
+      formData.append("arquivo", arquivo);
+      const res = await fetch(`/api/atendimento/tickets/${ticketId}/anexo`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: "include",
+        body: formData,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+      return res.json();
+    },
+  },
+
+  // Notificacoes
+  notificacoes: {
+    listar: () => request<{ data: Notificacao[] }>("/api/notificacoes"),
+    marcarLida: (id: number) => request<Notificacao>(`/api/notificacoes/${id}/lida`, { method: "POST" }),
+    marcarTodasLidas: () => request<{ success: boolean }>("/api/notificacoes/marcar-todas-lidas", { method: "POST" }),
   },
 
   // Hermes Chat (legado)
@@ -1313,104 +1358,88 @@ export function abrirNFeDANFE(idNota: number): void {
 
 // ── Fiscal ──
 
+// ponytail: toda essa familia fiscalXxx usava fetch() cru — sem Authorization
+// header (dependia so' do cookie, inconsistente com o resto do app), sem
+// checar res.ok (um 403/500 com corpo JSON {"error":...} virava sucesso
+// silencioso: r.data undefined -> "Nenhum registro encontrado" na tela, sem
+// nenhum aviso de que o usuario nao tinha permissao). Migrado pra request<T>(),
+// mesmo padrao usado em api.chat/api.crmList/etc.
 export async function fiscalDashboard(): Promise<import("@/lib/types/domain").FiscalDashboard> {
-  const res = await fetch("/api/fiscal/dashboard");
-  return res.json();
+  return request("/api/fiscal/dashboard");
 }
 
-export async function fiscalList(tabela: string): Promise<{ data: unknown[] }> {
-  const res = await fetch(`/api/fiscal/${tabela}`);
-  return res.json();
+export async function fiscalList(
+  tabela: string,
+  filtro?: { data_inicio?: string; data_fim?: string; dias?: number }
+): Promise<{ data: unknown[] }> {
+  const q = new URLSearchParams();
+  if (filtro?.data_inicio) q.set("data_inicio", filtro.data_inicio);
+  if (filtro?.data_fim) q.set("data_fim", filtro.data_fim);
+  if (filtro?.dias) q.set("dias", String(filtro.dias));
+  const qs = q.toString();
+  return request(`/api/fiscal/${tabela}${qs ? "?" + qs : ""}`);
 }
 
 export async function fiscalGet(tabela: string, id: number): Promise<Record<string, unknown>> {
-  const res = await fetch(`/api/fiscal/${tabela}/${id}`);
-  return res.json();
+  return request(`/api/fiscal/${tabela}/${id}`);
 }
 
 export async function fiscalCreate(tabela: string, data: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const res = await fetch(`/api/fiscal/${tabela}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  return res.json();
+  return request(`/api/fiscal/${tabela}`, { method: "POST", body: JSON.stringify(data) });
 }
 
 export async function fiscalUpdate(tabela: string, id: number, data: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const res = await fetch(`/api/fiscal/${tabela}/${id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  return res.json();
+  return request(`/api/fiscal/${tabela}/${id}`, { method: "PUT", body: JSON.stringify(data) });
 }
 
 export async function fiscalDelete(tabela: string, id: number): Promise<{ success: boolean }> {
-  const res = await fetch(`/api/fiscal/${tabela}/${id}`, { method: "DELETE" });
-  return res.json();
+  return request(`/api/fiscal/${tabela}/${id}`, { method: "DELETE" });
 }
 
 export async function fiscalCalcularTributos(notaId: number): Promise<Record<string, unknown>> {
-  const res = await fetch(`/api/fiscal/tributos/calcular/${notaId}`);
-  return res.json();
+  return request(`/api/fiscal/tributos/calcular/${notaId}`);
 }
 
 export async function fiscalObrigacoesProximas(dias?: number): Promise<{ data: unknown[] }> {
-  const res = await fetch(`/api/fiscal/obrigacoes/proximas${dias ? "?dias=" + dias : ""}`);
-  return res.json();
+  return request(`/api/fiscal/obrigacoes/proximas${dias ? "?dias=" + dias : ""}`);
 }
 
 export async function fiscalObrigacoesAtrasadas(): Promise<{ data: unknown[] }> {
-  const res = await fetch("/api/fiscal/obrigacoes/atrasadas");
-  return res.json();
+  return request("/api/fiscal/obrigacoes/atrasadas");
 }
 
 export async function fiscalBaixarObrigacao(id: number): Promise<Record<string, unknown>> {
-  const res = await fetch(`/api/fiscal/obrigacoes/${id}/baixar`, { method: "POST" });
-  return res.json();
+  return request(`/api/fiscal/obrigacoes/${id}/baixar`, { method: "POST" });
 }
 
 export async function fiscalSyncNotasFiscais(pagina?: number, limite?: number): Promise<{ sync: number; error?: string }> {
-  const res = await fetch("/api/fiscal/sync/notas-fiscais", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ pagina: pagina || 1, limite: limite || 100 }),
+  return request("/api/fiscal/sync/notas-fiscais", {
+    method: "POST", body: JSON.stringify({ pagina: pagina || 1, limite: limite || 100 }),
   });
-  return res.json();
 }
 
 export async function fiscalSyncContasReceber(pagina?: number, limite?: number): Promise<{ sync: number; error?: string }> {
-  const res = await fetch("/api/fiscal/sync/contas-receber", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ pagina: pagina || 1, limite: limite || 100 }),
+  return request("/api/fiscal/sync/contas-receber", {
+    method: "POST", body: JSON.stringify({ pagina: pagina || 1, limite: limite || 100 }),
   });
-  return res.json();
 }
 
 export async function fiscalSyncContasPagar(pagina?: number, limite?: number): Promise<{ sync: number; error?: string }> {
-  const res = await fetch("/api/fiscal/sync/contas-pagar", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ pagina: pagina || 1, limite: limite || 100 }),
+  return request("/api/fiscal/sync/contas-pagar", {
+    method: "POST", body: JSON.stringify({ pagina: pagina || 1, limite: limite || 100 }),
   });
-  return res.json();
 }
 
 export async function fiscalSyncTudo(): Promise<{ notas_fiscais: number; contas_receber: number; contas_pagar: number }> {
-  const res = await fetch("/api/fiscal/sync/tudo", { method: "POST" });
-  return res.json();
+  return request("/api/fiscal/sync/tudo", { method: "POST" });
 }
 
 export async function fiscalNFItens(notaId: number): Promise<{ data: unknown[] }> {
-  const res = await fetch(`/api/fiscal/notas-fiscais/${notaId}/itens`);
-  return res.json();
+  return request(`/api/fiscal/notas-fiscais/${notaId}/itens`);
 }
 
 export async function fiscalNFImpostos(notaId: number): Promise<{ data: unknown[] }> {
-  const res = await fetch(`/api/fiscal/notas-fiscais/${notaId}/impostos`);
-  return res.json();
+  return request(`/api/fiscal/notas-fiscais/${notaId}/impostos`);
 }
 
 // ── Vendas ──
