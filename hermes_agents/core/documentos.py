@@ -6,6 +6,27 @@ from core import get_db, run_async, log, hoje
 AGENT = "Documentos Core"
 STORAGE_DIR = _os.environ.get("DOCUMENTOS_STORAGE", _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "storage"))
 
+# ponytail: mime_type vem cru do Content-Type que o CLIENTE manda no upload
+# (nao e' detectado no servidor) — sem whitelist, um upload de .html/.svg com
+# Content-Type manipulado, servido depois inline (GET /api/documentos/<id>,
+# as_attachment=False) executava no contexto de origem do app: XSS
+# armazenado. So' os tipos abaixo sao aceitos; so' os "inline seguros" saem
+# sem forcar download.
+MIME_TYPES_IMAGEM = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+MIME_TYPES_VIDEO = {"video/mp4", "video/webm", "video/quicktime"}
+# core/lojas_midia.py reusa este modulo pra logo/banner/fotos/galeria/video
+# de loja — "video" e' um tipo valido la, entao precisa estar na whitelist.
+# "application/octet-stream" (default do parametro mime_type, usado quando o
+# caller nao informa um Content-Type especifico) tambem e' permitido — e'
+# generico o bastante pro navegador nunca renderiza-lo como HTML/script,
+# mas fica de fora do INLINE_SEGUROS abaixo, entao download() sempre forca
+# anexo pra ele.
+MIME_TYPES_PERMITIDOS = MIME_TYPES_IMAGEM | MIME_TYPES_VIDEO | {"application/pdf", "application/octet-stream"}
+# imagem/video sao tipos binarios que o navegador nao interpreta como
+# HTML/script — seguros pra servir inline. PDF fica de fora: alguns leitores
+# embutidos no browser executam JS de dentro do PDF.
+MIME_TYPES_INLINE_SEGUROS = MIME_TYPES_IMAGEM | MIME_TYPES_VIDEO
+
 def _ensure_tables():
     async def _go():
         db = await get_db()
@@ -46,6 +67,8 @@ def upload(file_data: bytes, nome_original: str, entidade_tipo: str = "", entida
     """Salva arquivo no disco e registra no banco. "tags" e' usado por
     consumidores como core/lojas_midia.py pra marcar o proposito do arquivo
     (ex: "logo", "banner", "foto_fachada")."""
+    if mime_type not in MIME_TYPES_PERMITIDOS:
+        return {"error": f"Tipo de arquivo nao permitido: {mime_type}"}
     ext = _os.path.splitext(nome_original)[1] or ""
     nome_armazenado = f"{uuid.uuid4().hex}{ext}"
     filepath = _os.path.join(STORAGE_DIR, nome_armazenado)

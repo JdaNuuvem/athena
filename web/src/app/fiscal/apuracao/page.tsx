@@ -5,6 +5,8 @@ import PageHeader from "@/app/_components/PageHeader";
 import LoadingState from "@/app/_components/LoadingState";
 import ErrorAlert from "@/app/_components/ErrorAlert";
 import { fmtBRL } from "@/lib/format";
+import { fiscalApuracao, fiscalApuracaoFechar, fiscalApuracaoReabrir } from "@/lib/api";
+import { Can } from "@/lib/auth";
 
 interface ResumoApuracao {
   total_notas: number; valor_total: number; valor_produtos: number;
@@ -17,6 +19,14 @@ interface MensalRow {
   valor_total: number; icms: number; pis: number; cofins: number; ipi: number; total_tributos: number;
 }
 
+interface Fechamento {
+  fechado: boolean;
+  fechado_por?: string;
+  fechado_em?: string;
+  divergente?: boolean;
+  total_tributos_no_fechamento?: number;
+}
+
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
 export default function ApuracaoPage() {
@@ -26,17 +36,67 @@ export default function ApuracaoPage() {
   const [erro, setErro] = useState<string | null>(null);
   const [dias, setDias] = useState(365);
 
+  const [mesSelecionado, setMesSelecionado] = useState<MensalRow | null>(null);
+  const [fechamento, setFechamento] = useState<Fechamento | null>(null);
+  const [carregandoFechamento, setCarregandoFechamento] = useState(false);
+  const [processando, setProcessando] = useState(false);
+  const [erroFechamento, setErroFechamento] = useState<string | null>(null);
+
   const carregar = async (d: number) => {
     setLoading(true); setErro(null);
     try {
-      const r = await fetch(`/api/fiscal/apuracao?dias=${d}`);
-      const data = await r.json();
+      const data = await fiscalApuracao({ dias: d });
       if (data.error) { setErro(data.error); return; }
-      setResumo(data.resumo || null);
-      setMensal(data.mensal || []);
+      setResumo((data.resumo as unknown as ResumoApuracao) || null);
+      setMensal((data.mensal as unknown as MensalRow[]) || []);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao carregar");
     } finally { setLoading(false); }
+  };
+
+  const abrirMes = async (m: MensalRow) => {
+    setMesSelecionado(m);
+    setFechamento(null);
+    setErroFechamento(null);
+    setCarregandoFechamento(true);
+    try {
+      const data = await fiscalApuracao({ ano: m.ano, mes: m.mes });
+      if (data.error) { setErroFechamento(data.error); return; }
+      setFechamento(data.fechamento || { fechado: false });
+    } catch (e) {
+      setErroFechamento(e instanceof Error ? e.message : "Erro ao carregar fechamento");
+    } finally {
+      setCarregandoFechamento(false);
+    }
+  };
+
+  const fecharMes = async () => {
+    if (!mesSelecionado) return;
+    setProcessando(true); setErroFechamento(null);
+    try {
+      const r = await fiscalApuracaoFechar(mesSelecionado.ano, mesSelecionado.mes);
+      if (r.error) { setErroFechamento(String(r.error)); return; }
+      await abrirMes(mesSelecionado);
+    } catch (e) {
+      setErroFechamento(e instanceof Error ? e.message : "Erro ao fechar apuração");
+    } finally {
+      setProcessando(false);
+    }
+  };
+
+  const reabrirMes = async () => {
+    if (!mesSelecionado) return;
+    if (!confirm(`Reabrir a apuração de ${MESES[mesSelecionado.mes - 1]}/${mesSelecionado.ano}? O fechamento atual será removido.`)) return;
+    setProcessando(true); setErroFechamento(null);
+    try {
+      const r = await fiscalApuracaoReabrir(mesSelecionado.ano, mesSelecionado.mes);
+      if (r.error) { setErroFechamento(String(r.error)); return; }
+      await abrirMes(mesSelecionado);
+    } catch (e) {
+      setErroFechamento(e instanceof Error ? e.message : "Erro ao reabrir apuração");
+    } finally {
+      setProcessando(false);
+    }
   };
 
   useEffect(() => { carregar(dias); }, [dias]);
@@ -128,13 +188,16 @@ export default function ApuracaoPage() {
                       <th className="text-right p-2">IPI</th>
                       <th className="text-right p-2 font-bold">Total Tributos</th>
                       <th className="text-right p-2">% Carga</th>
+                      <th className="text-right p-2">Fechamento</th>
                     </tr>
                   </thead>
                   <tbody>
                     {mensal.map((m, i) => {
                       const pct = m.valor_total > 0 ? (Number(m.total_tributos || 0) / Number(m.valor_total || 1)) * 100 : 0;
                       return (
-                        <tr key={`${m.ano}-${m.mes}`} className={`border-b border-neutral-700/50 ${i % 2 === 0 ? "bg-neutral-800" : "bg-neutral-800/50"}`}>
+                        <tr key={`${m.ano}-${m.mes}`}
+                          onClick={() => abrirMes(m)}
+                          className={`border-b border-neutral-700/50 cursor-pointer hover:bg-neutral-700/40 ${i % 2 === 0 ? "bg-neutral-800" : "bg-neutral-800/50"}`}>
                           <td className="p-2 text-neutral-200">{MESES[m.mes - 1] || m.mes}/{m.ano}</td>
                           <td className="p-2 text-right text-neutral-300">{m.total_notas}</td>
                           <td className="p-2 text-right text-emerald-400 font-mono">{fmtBRL(m.valor_total)}</td>
@@ -148,6 +211,9 @@ export default function ApuracaoPage() {
                               {pct.toFixed(1)}%
                             </span>
                           </td>
+                          <td className="p-2 text-right">
+                            <span className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2">Detalhes</span>
+                          </td>
                         </tr>
                       );
                     })}
@@ -157,6 +223,66 @@ export default function ApuracaoPage() {
             </div>
           )}
         </>
+      )}
+
+      {mesSelecionado && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setMesSelecionado(null)}>
+          <div className="w-full max-w-[440px] rounded-xl border border-neutral-700 bg-neutral-800 shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-neutral-700/70 px-5 py-4">
+              <h3 className="text-sm font-semibold text-neutral-100">
+                Fechamento — {MESES[mesSelecionado.mes - 1]}/{mesSelecionado.ano}
+              </h3>
+              <button onClick={() => setMesSelecionado(null)} className="text-neutral-500 hover:text-neutral-300 text-xs">✕</button>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              {carregandoFechamento ? (
+                <p className="text-xs text-neutral-500">Carregando...</p>
+              ) : (
+                <>
+                  {erroFechamento && (
+                    <div className="text-xs px-3 py-2 rounded-lg border bg-red-950/40 border-red-900/50 text-red-400">{erroFechamento}</div>
+                  )}
+                  {fechamento?.fechado ? (
+                    <div className="space-y-2">
+                      <div className="text-xs px-3 py-2 rounded-lg border bg-emerald-950/30 border-emerald-800 text-emerald-400">
+                        Fechado {fechamento.fechado_por ? `por ${fechamento.fechado_por}` : ""}
+                        {fechamento.fechado_em ? ` em ${new Date(fechamento.fechado_em).toLocaleString("pt-BR")}` : ""}.
+                      </div>
+                      {fechamento.divergente && (
+                        <div className="text-xs px-3 py-2 rounded-lg border bg-amber-950/30 border-amber-800 text-amber-400">
+                          ⚠ O total de tributos ao vivo diverge do valor fechado ({fmtBRL(fechamento.total_tributos_no_fechamento || 0)}).
+                          Alguma nota deste período foi alterada ou cancelada depois do fechamento.
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-neutral-400">Este período ainda não foi fechado.</p>
+                  )}
+                </>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 border-t border-neutral-700/70 px-5 py-4">
+              <button onClick={() => setMesSelecionado(null)} className="rounded-lg px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-200">
+                Fechar janela
+              </button>
+              {!carregandoFechamento && (fechamento?.fechado ? (
+                <Can permission="fiscal.excluir">
+                  <button onClick={reabrirMes} disabled={processando}
+                    className="rounded-lg bg-amber-600 px-3.5 py-1.5 text-xs font-medium text-white hover:bg-amber-500 disabled:opacity-50">
+                    {processando ? "Reabrindo..." : "Reabrir apuração"}
+                  </button>
+                </Can>
+              ) : (
+                <Can permission="fiscal.editar">
+                  <button onClick={fecharMes} disabled={processando}
+                    className="rounded-lg bg-indigo-600 px-3.5 py-1.5 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-50">
+                    {processando ? "Fechando..." : "Fechar apuração"}
+                  </button>
+                </Can>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

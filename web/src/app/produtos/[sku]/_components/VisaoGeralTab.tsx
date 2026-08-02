@@ -7,10 +7,10 @@ interface Props {
   formatarMoeda: (v: unknown) => string;
 }
 
-const vendasDiariasMock = [
-  { dia: "01/07", vendas: 12 }, { dia: "05/07", vendas: 18 }, { dia: "10/07", vendas: 8 },
-  { dia: "15/07", vendas: 22 }, { dia: "20/07", vendas: 15 }, { dia: "25/07", vendas: 28 }, { dia: "30/07", vendas: 10 },
-];
+function fmtDiaMes(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  return m ? `${m[3]}/${m[2]}` : iso;
+}
 
 export default function VisaoGeralTab({ produto, formatarMoeda }: Props) {
   const custo = Number(produto.preco_custo || 0);
@@ -18,6 +18,22 @@ export default function VisaoGeralTab({ produto, formatarMoeda }: Props) {
   const margemReal = custo && valor ? (((valor - custo) / valor) * 100).toFixed(1) : null;
   const estoqueMin = produto.estoque_minimo != null ? Number(produto.estoque_minimo) : null;
   const abaixoMinimo = estoqueMin != null && Number(produto.estoque_atual || 0) < estoqueMin;
+
+  // vendas_30d ja vem pronto do backend (ate 90 registros, um por
+  // venda/marketplace/dia) — antes essa aba plotava um mock estatico que
+  // nunca refletia o produto real, mesmo com o dado real disponivel.
+  const vendasPorDia = (() => {
+    const registros = Array.isArray(produto.vendas_30d) ? (produto.vendas_30d as Array<Record<string, unknown>>) : [];
+    const porDia = new Map<string, number>();
+    for (const r of registros) {
+      const data = String(r.data || "");
+      if (!data) continue;
+      porDia.set(data, (porDia.get(data) || 0) + Number(r.quantidade || 0));
+    }
+    return Array.from(porDia.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([data, vendas]) => ({ dia: fmtDiaMes(data), vendas }));
+  })();
 
   return (
     <div className="space-y-6">
@@ -65,15 +81,19 @@ export default function VisaoGeralTab({ produto, formatarMoeda }: Props) {
       <section>
         <h2 className="text-sm font-medium text-neutral-400 mb-3">Vendas Diárias (30d)</h2>
         <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4">
+          {vendasPorDia.length === 0 ? (
+            <div className="h-[200px] flex items-center justify-center text-xs text-neutral-500">Sem vendas registradas nos últimos 90 dias</div>
+          ) : (
           <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={vendasDiariasMock}>
+            <LineChart data={vendasPorDia}>
               <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
               <XAxis dataKey="dia" tick={{ fill: "#71717a", fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: "#71717a", fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: "#71717a", fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
               <Tooltip contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: "8px", fontSize: 12 }} labelStyle={{ color: "#a1a1aa" }} />
               <Line type="monotone" dataKey="vendas" stroke="#818cf8" strokeWidth={2} dot={{ fill: "#818cf8", r: 3 }} />
             </LineChart>
           </ResponsiveContainer>
+          )}
         </div>
       </section>
 

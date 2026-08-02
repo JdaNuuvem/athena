@@ -30,12 +30,17 @@ def doc_upload():
 
 @documentos_bp.route("/<int:id>", methods=["GET"])
 def doc_download(id):
-    from core.documentos import download
+    from core.documentos import download, MIME_TYPES_INLINE_SEGUROS
     from flask import send_file
     filepath, nome, mime = download(id)
     if filepath is None:
         return jsonify({"error": "Arquivo nao encontrado"}), 404
-    return send_file(filepath, mimetype=mime, as_attachment=False, download_name=nome)
+    # so' os mime types na whitelist "inline segura" (imagens) sao servidos
+    # dentro da pagina — qualquer outro tipo (inclusive uploads antigos
+    # anteriores a essa whitelist, ou algo que escapou dela) forca download,
+    # pra nao arriscar um HTML/SVG malicioso executando no contexto da app.
+    inline = mime in MIME_TYPES_INLINE_SEGUROS
+    return send_file(filepath, mimetype=mime, as_attachment=not inline, download_name=nome)
 
 
 @documentos_bp.route("/<int:id>", methods=["DELETE"])

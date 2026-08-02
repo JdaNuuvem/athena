@@ -124,7 +124,11 @@ export default function ProdutosPage() {
         return;
       }
 
-      const r = await api.listarProdutos({ busca: search, pagina: p, variacoes: v, loja: lojaId === "todas" ? undefined : lojaId });
+      // porPagina precisa bater com POR_PAGINA usado pelo componente Pagination
+      // pra calcular totalPaginas — sem isso, o backend usava o proprio
+      // default (50) e a paginacao visivel (calculada com 30) descasava do
+      // que a API realmente retornava por pagina.
+      const r = await api.listarProdutos({ busca: search, pagina: p, porPagina: POR_PAGINA, variacoes: v, loja: lojaId === "todas" ? undefined : lojaId });
       setProdutos((r.produtos ?? []) as Product[]);
       setTotal(r.total ?? 0);
       if (!search) setPagina(p);

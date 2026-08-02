@@ -100,6 +100,11 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
   const handleImageUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     setUploading(true); setUploadMsg("");
+    // Ultimo arquivo enviado vira a imagem de capa do produto — o upload
+    // so' salvava em `documentos` (generico), sem nunca atualizar
+    // catalogo_produtos.imagem_url. A UI dizia "Imagem enviada!" mas a foto
+    // exibida no produto nunca mudava.
+    let ultimoDocId: number | null = null;
     for (const file of Array.from(files)) {
       const formData = new FormData();
       formData.append("file", file);
@@ -108,7 +113,16 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
       formData.append("criado_por", "Admin");
       const r = await fetch("/api/documentos", { method: "POST", body: formData });
       const d = await r.json();
-      if (d.error) { setUploadMsg(d.error); break; }
+      if (d.error) { setUploadMsg(d.error); setUploading(false); return; }
+      ultimoDocId = d.id ?? null;
+    }
+    if (ultimoDocId != null) {
+      const rp = await fetch("/api/produtos/" + sku, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imagem_url: `/api/documentos/${ultimoDocId}` }),
+      });
+      const dp = await rp.json();
+      if (dp.error) { setUploadMsg("Imagem salva, mas não foi possível vincular ao produto: " + dp.error); setUploading(false); return; }
     }
     setUploading(false);
     setUploadMsg("Imagem enviada!");

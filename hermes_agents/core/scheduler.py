@@ -61,10 +61,23 @@ def _sync_pedidos_shopee():
     except Exception as e: pass
 
 def _sync_contatos():
+    """sincronizar_contatos_bling() so' processa uma pagina por chamada — sem
+    paginar aqui, o job sempre re-sincronizava os mesmos 100 primeiros
+    contatos do Bling a cada execucao e nunca alcancava o resto da base."""
     try:
         from core.entidades import sincronizar_contatos_bling
-        r = sincronizar_contatos_bling()
-        if r.get("sync", 0) > 0: log(AGENT, f"Contatos sync: {r['sync']}")
+        pagina = 1
+        total = 0
+        while True:
+            r = sincronizar_contatos_bling(pagina=pagina, limite=100)
+            if r.get("error"):
+                log(AGENT, f"Erro sync contatos (pagina {pagina}): {r['error']}")
+                break
+            total += r.get("sync", 0)
+            if r.get("recebidos", 0) < 100:
+                break
+            pagina += 1
+        if total > 0: log(AGENT, f"Contatos sync: {total}")
     except Exception as e: pass
 
 def _sync_nf():
@@ -157,7 +170,7 @@ def _sync_categorias():
 # add_job(_sync_pedidos, "bling-pedidos", 300)          # 5 min
 add_job(_sync_pedidos_shopee, "shopee-pedidos", 300)   # 5 min
 # add_job(_sync_nf, "bling-nf", 600)                     # 10 min
-# add_job(_sync_contatos, "bling-contatos", 1800)        # 30 min
+add_job(_sync_contatos, "bling-contatos", 1800)        # 30 min
 # add_job(_sync_cr_cp, "bling-cr-cp", 3600)              # 1 hour
 # add_job(_sync_categorias, "bling-categorias", 7200)     # 2 hours
 add_job(_persistir_rotacao_estoque, "estoque-rotacao", 86400)  # daily

@@ -57,3 +57,12 @@ def validar_email(email: str) -> bool:
     if not email:
         return True
     return bool(_EMAIL_RE.match(email.strip()))
+
+
+_URL_RE = re.compile(r"^https?://[^\s]+\.[^\s]+$")
+
+
+def validar_url(url: str) -> bool:
+    if not url:
+        return True  # campo opcional
+    return bool(_URL_RE.match(url.strip()))
