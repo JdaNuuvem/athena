@@ -1,4 +1,4 @@
-import type { CurvaABCItem, IndicadorGiro, IndicadorRuptura, IndicadorCobertura } from "@/lib/types/domain";
+import type { CurvaABCItem } from "@/lib/types/domain";
 
 interface SkuInfo { sku: string; produto: string; consumo: number; estoque_atual: number; demanda_diaria: number; estoque_min: number; estoque_max: number }
 
@@ -43,50 +43,6 @@ export function gerarCurvaABC(): CurvaABCItem[] {
       giro: Math.round((p.demanda_diaria * 30 / (p.estoque_atual || 1)) * 10) / 10,
       estoque_atual: p.estoque_atual,
       cobertura_dias: Math.round(p.estoque_atual / (p.demanda_diaria || 1)),
-    };
-  });
-}
-
-export function gerarIndicadoresGiro(): IndicadorGiro[] {
-  return SKUS.map(p => {
-    const saidas = p.demanda_diaria * 30;
-    const giro = Math.round((saidas / (p.estoque_atual || 1)) * 10) / 10;
-    const tendencia: "up" | "down" | "stable" = giro > 3 ? "up" : giro < 1 ? "down" : "stable";
-    return {
-      sku: p.sku, produto: p.produto,
-      saidas_30d: Math.round(saidas),
-      estoque_medio: Math.round(p.estoque_atual),
-      giro,
-      tendencia,
-    };
-  });
-}
-
-export function gerarIndicadoresRuptura(): IndicadorRuptura[] {
-  return SKUS
-    .filter(p => p.estoque_atual < p.estoque_min)
-    .map(p => ({
-      sku: p.sku, produto: p.produto,
-      dias_ruptura: Math.floor(Math.random() * 7) + 1,
-      vendas_perdidas_estimadas: Math.floor(Math.random() * 30) + 5,
-      impacto_receita: Math.floor(Math.random() * 5000) + 500,
-      ultimo_abastecimento: new Date(Date.now() - Math.random() * 15 * 86400000).toISOString().split("T")[0],
-    }));
-}
-
-export function gerarIndicadoresCobertura(): IndicadorCobertura[] {
-  return SKUS.map(p => {
-    const cob = Math.round(p.estoque_atual / (p.demanda_diaria || 1));
-    const status: IndicadorCobertura["status"] =
-      cob > 60 ? "excesso" : cob < 3 ? "critico" : cob < 7 ? "baixo" : "normal";
-    return {
-      sku: p.sku, produto: p.produto,
-      estoque_atual: p.estoque_atual,
-      demanda_diaria_media: p.demanda_diaria,
-      cobertura_dias: cob,
-      estoque_minimo: p.estoque_min,
-      estoque_maximo: p.estoque_max,
-      status,
     };
   });
 }

@@ -13,6 +13,9 @@ from core.config import get_config
 AGENT = "I9Logic Reconciliacao"
 
 BASE_URL = os.environ.get("I9LOGIC_BASE_URL") or get_config("i9logic", "base_url") or ""
+# I9LOGIC_BASE_URL deve incluir "/v1" (ex.: "https://api.i9logic.net/v1") — o
+# client HTTP nao concatena "/v1" por conta propria, pra nao arriscar
+# duplicar o path se a env var ja vier com ele.
 RATE_LIMIT_SLEEP_SEGUNDOS = 2.5  # ~24 req/min, margem sob o limite de 30/min da API
 PER_PAGE_PADRAO = 200
 
@@ -104,6 +107,18 @@ def buscar_codigo_athena(tipo: str, id_i9logic):
     except Exception: return None
 
 
+def buscar_id_i9logic(tipo: str, codigo_athena: str):
+    """Inverso de buscar_codigo_athena — resolve o id_i9logic a partir do
+    codigo Athena (usado pra achar a filial i9Logic de uma loja pelo nome)."""
+    async def _go():
+        db = await get_db()
+        return await db.fetchval(
+            "SELECT id_i9logic FROM de_para_i9logic WHERE tipo=$1 AND codigo_athena=$2",
+            tipo, codigo_athena)
+    try: return run_async(_go())
+    except Exception: return None
+
+
 def listar_mapeamentos(tipo: str = None) -> list:
     async def _go():
         db = await get_db()
@@ -169,7 +184,7 @@ def _paginar(endpoint: str, params: dict, on_pagina=None) -> list:
         for tentativa in range(MAX_TENTATIVAS_PAGINA):
             try:
                 resp = requests.get(
-                    f"{BASE_URL}/v1/{endpoint}",
+                    f"{BASE_URL}/{endpoint}",
                     params={**params, "page": pagina, "per_page": PER_PAGE_PADRAO},
                     headers={"X-Client-Id": _client_id(), "Authorization": f"Bearer {_api_key()}"},
                     timeout=30,
@@ -197,6 +212,53 @@ def _paginar(endpoint: str, params: dict, on_pagina=None) -> list:
 
 def _paginar_estoques(filial_id_i9logic: int, tipoestoque: int) -> list:
     return _paginar("produtos_estoques", {"filial": filial_id_i9logic, "tipoestoque": tipoestoque})
+
+
+# ── Leitura ao vivo (sob demanda, fora do job de coleta) ──
+
+def estoque_fisico_filial(filial_id_i9logic: int) -> list | dict:
+    """Le o fisico (tipoestoque=1) direto da i9Logic AGORA (nao espera o job
+    de coleta) e enriquece com sku_athena/descricao via catalogo_produtos.
+    id_i9logic — usado pela tela de estoque de loja fisica. Erro de
+    rede/API vira {"erro": ...} em vez de propagar a excecao pra rota."""
+    try:
+        fisicos = _paginar_estoques(filial_id_i9logic, 1)
+    except Exception as e:
+        return {"erro": str(e)}
+    async def _catalogo():
+        db = await get_db()
+        rows = await db.fetch(
+            "SELECT id_i9logic, sku, descricao FROM catalogo_produtos WHERE id_i9logic IS NOT NULL")
+        return {r["id_i9logic"]: r for r in rows}
+    try:
+        catalogo_por_id = run_async(_catalogo())
+    except Exception:
+        catalogo_por_id = {}
+    resultado = []
+    for item in fisicos:
+        produto = catalogo_por_id.get(str(item.get("idproduto")))
+        resultado.append({
+            **item,
+            "sku_athena": produto["sku"] if produto else None,
+            "descricao": produto["descricao"] if produto else None,
+        })
+    return resultado
+
+
+def estoque_fisico_por_loja(loja_athena: str) -> dict:
+    """Resolve a loja (pelo nome Athena) pra filial i9Logic via de-para e
+    devolve o fisico ao vivo. Erro claro se a loja ainda nao tem mapeamento
+    de filial — sem isso, o chamador nao tem como diferenciar 'loja sem
+    integracao i9Logic' de uma falha de rede generica."""
+    id_i9logic = buscar_id_i9logic("filial", loja_athena)
+    if id_i9logic is None:
+        return {"erro": f"mapeamento de filial i9Logic nao encontrado para a loja '{loja_athena}' "
+                         f"(cadastre em /api/integrations/i9logic/depara antes)"}
+    filial_id = int(id_i9logic)
+    dados = estoque_fisico_filial(filial_id)
+    if isinstance(dados, dict) and dados.get("erro"):
+        return dados
+    return {"ok": True, "filial_i9logic": filial_id, "data": dados}
 
 
 # ── Snapshot (staging) ──

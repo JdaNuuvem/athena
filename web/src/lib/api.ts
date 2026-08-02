@@ -45,8 +45,11 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     handleUnauthorized();
   }
   if (!res.ok) {
+    // Modulos como core.crm/core.atendimento usam a chave "error"; core.i9logic/
+    // core.estoque/core.lojas usam "erro" — sem os dois fallbacks, metade das
+    // rotas do backend perde a mensagem detalhada e cai no "HTTP 400" generico.
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || `HTTP ${res.status}`);
+    throw new Error(err.error || err.erro || `HTTP ${res.status}`);
   }
   return res.json();
 }
@@ -67,8 +70,13 @@ import type {
   BlingResumoVendas,
   BlingWebhook,
   Integration,
+  IndicadorGiro,
+  IndicadorRuptura,
+  IndicadorCobertura,
 } from "@/lib/types/domain";
 import type { ConversaChat, MensagemChat, AnexoChat, ParticipanteChat } from "@/lib/types/chat";
+
+export type TipoLoja = "fisica" | "virtual" | "hibrida" | "marketplace";
 
 export const api = {
   // Auth
@@ -417,11 +425,12 @@ export const api = {
     }),
 
   // Produtos
-  listarProdutos: (params?: { busca?: string; loja?: string; pagina?: number; variacoes?: boolean }) => {
+  listarProdutos: (params?: { busca?: string; loja?: string; pagina?: number; porPagina?: number; variacoes?: boolean }) => {
     const q = new URLSearchParams();
     if (params?.busca) q.set("busca", params.busca);
     if (params?.loja) q.set("loja", params.loja);
     if (params?.pagina) q.set("pagina", String(params.pagina));
+    if (params?.porPagina) q.set("por_pagina", String(params.porPagina));
     if (params?.variacoes) q.set("variacoes", "1");
     return request<{ produtos: unknown[]; total: number; pagina: number }>(`/api/produtos?${q}`);
   },
@@ -515,6 +524,14 @@ export const api = {
   estoqueContagemHistorico: (loja?: string) =>
     request<{ historico: EstoqueContagemHistorico[] }>(`/api/estoque/contagem/historico${loja ? `?loja=${encodeURIComponent(loja)}` : ""}`),
 
+  // Estoque — analise (giro/ruptura/cobertura)
+  estoqueAnaliseGiro: (loja?: string, dias = 30) =>
+    request<{ data: IndicadorGiro[] }>(`/api/estoque/analise/giro?dias=${dias}${loja ? `&loja=${encodeURIComponent(loja)}` : ""}`),
+  estoqueAnaliseRuptura: (loja?: string) =>
+    request<{ data: IndicadorRuptura[] }>(`/api/estoque/analise/ruptura${loja ? `?loja=${encodeURIComponent(loja)}` : ""}`),
+  estoqueAnaliseCobertura: (loja?: string) =>
+    request<{ data: IndicadorCobertura[] }>(`/api/estoque/analise/cobertura${loja ? `?loja=${encodeURIComponent(loja)}` : ""}`),
+
   // Estoque — relatorio de discrepancias
   estoqueRelatorioDiscrepancias: (dias = 30) =>
     request<{ por_loja: EstoqueDiscrepanciaLoja[]; por_operador: EstoqueDiscrepanciaOperador[] }>(`/api/estoque/relatorio-discrepancias?dias=${dias}`),
@@ -523,8 +540,8 @@ export const api = {
   lojas: (periodo?: number) =>
     request<unknown[]>(`/api/lojas${periodo ? `?periodo=${periodo}` : ""}`),
   lojasManage: () => request<{ lojas: Array<{ id: number; nome: string; ativa: boolean }> }>("/api/lojas/manage"),
-  lojasCriar: (nome: string, tipo?: "fisica" | "virtual") => request<{ loja: { id: number; nome: string; tipo?: string } }>("/api/lojas/manage", { method: "POST", body: JSON.stringify({ nome, tipo }) }),
-  lojasAtualizar: (id: number, nome: string, shopee_markup_pct?: number, grupos_publicacao?: string, tipo?: "fisica" | "virtual") => request<{ success: boolean }>(`/api/lojas/manage/${id}`, { method: "PUT", body: JSON.stringify({ nome, shopee_markup_pct, grupos_publicacao, tipo }) }),
+  lojasCriar: (nome: string, tipo?: TipoLoja) => request<{ loja: { id: number; nome: string; tipo?: string } }>("/api/lojas/manage", { method: "POST", body: JSON.stringify({ nome, tipo }) }),
+  lojasAtualizar: (id: number, nome: string, shopee_markup_pct?: number, grupos_publicacao?: string, tipo?: TipoLoja) => request<{ success: boolean }>(`/api/lojas/manage/${id}`, { method: "PUT", body: JSON.stringify({ nome, shopee_markup_pct, grupos_publicacao, tipo }) }),
   lojasDeletar: (id: number) => request<{ success: boolean }>(`/api/lojas/manage/${id}`, { method: "DELETE" }),
   lojasSyncBling: () => request<{ sync: number; lojas: Array<{ acao: string; id: number; nome: string }> }>("/api/lojas/sync/bling", { method: "POST" }),
   lojasDepositoMap: () => request<{ map: Array<{ loja_id: number; nome: string; deposito_id: number }> }>("/api/lojas/deposito-map"),
@@ -801,6 +818,9 @@ export type {
   BlingResumoVendas,
   BlingWebhook,
   Integration,
+  IndicadorGiro,
+  IndicadorRuptura,
+  IndicadorCobertura,
 } from "@/lib/types/domain";
 
 export interface ShopeeCategoria {
@@ -1579,6 +1599,21 @@ export const estoqueRatear = (params: {
     body: JSON.stringify(params),
     headers: { "Content-Type": "application/json" },
   });
+
+// ── Estoque fisico i9Logic (lojas do tipo "fisica") ──
+
+export interface EstoqueI9LogicItem {
+  idproduto: number;
+  codproduto: string;
+  qtd: number;
+  sku_athena: string | null;
+  descricao: string | null;
+}
+
+export const i9logicEstoquePorLoja = (lojaId: number) =>
+  request<{ ok: boolean; filial_i9logic: number; data: EstoqueI9LogicItem[] }>(
+    `/api/integrations/i9logic/estoque/${lojaId}`
+  );
 
 // ── Produtos por Loja ──
 

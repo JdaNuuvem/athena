@@ -47,6 +47,18 @@ class TestDeParaCRUD(unittest.TestCase):
             resultado = i9logic.buscar_codigo_athena("produto", 999)
         self.assertIsNone(resultado)
 
+    def test_buscar_id_i9logic_encontrado(self):
+        with patch("core.i9logic.get_db") as mock_get_db:
+            mock_get_db.return_value = AsyncMock(fetchval=AsyncMock(return_value="63"))
+            resultado = i9logic.buscar_id_i9logic("filial", "Loja Matriz")
+        self.assertEqual(resultado, "63")
+
+    def test_buscar_id_i9logic_nao_encontrado_retorna_none(self):
+        with patch("core.i9logic.get_db") as mock_get_db:
+            mock_get_db.return_value = AsyncMock(fetchval=AsyncMock(return_value=None))
+            resultado = i9logic.buscar_id_i9logic("filial", "Loja Inexistente")
+        self.assertIsNone(resultado)
+
     def test_listar_mapeamentos_filtra_por_tipo(self):
         async def _fetch(query, *args):
             self.assertIn("tipo=$1", query)
@@ -531,6 +543,75 @@ class TestSeedInicial(unittest.TestCase):
         self.assertTrue(resultado["ok"])
 
 
+class TestEstoqueFisicoFilial(unittest.TestCase):
+    """estoque_fisico_filial(filial_id) le o fisico (tipoestoque=1) direto da
+    i9Logic sob demanda (fora do job de coleta) e enriquece com sku_athena
+    via catalogo_produtos.id_i9logic — usado pela tela /estoque pra lojas
+    fisicas."""
+
+    def test_enriquece_com_sku_via_catalogo_produtos(self):
+        def _paginar(filial, tipoestoque):
+            self.assertEqual(filial, 63)
+            self.assertEqual(tipoestoque, 1)
+            return [{"idproduto": 1, "codproduto": "COD-1", "qtd": 10},
+                    {"idproduto": 2, "codproduto": "COD-2", "qtd": 5}]
+        async def _fetch(query, *args):
+            self.assertIn("id_i9logic", query)
+            return [{"id_i9logic": "1", "sku": "SKU-1", "descricao": "Produto 1"},
+                    {"id_i9logic": "2", "sku": "SKU-2", "descricao": "Produto 2"}]
+        with patch("core.i9logic._paginar_estoques", side_effect=_paginar), \
+             patch("core.i9logic.get_db") as mock_get_db:
+            mock_get_db.return_value = AsyncMock(fetch=_fetch)
+            resultado = i9logic.estoque_fisico_filial(63)
+        self.assertEqual(len(resultado), 2)
+        primeiro = next(r for r in resultado if r["idproduto"] == 1)
+        self.assertEqual(primeiro["sku_athena"], "SKU-1")
+        self.assertEqual(primeiro["descricao"], "Produto 1")
+        self.assertEqual(primeiro["qtd"], 10)
+
+    def test_produto_sem_match_no_catalogo_mantem_sku_athena_none(self):
+        def _paginar(filial, tipoestoque):
+            return [{"idproduto": 99, "codproduto": "COD-99", "qtd": 3}]
+        async def _fetch(query, *args):
+            return []
+        with patch("core.i9logic._paginar_estoques", side_effect=_paginar), \
+             patch("core.i9logic.get_db") as mock_get_db:
+            mock_get_db.return_value = AsyncMock(fetch=_fetch)
+            resultado = i9logic.estoque_fisico_filial(63)
+        self.assertEqual(len(resultado), 1)
+        self.assertIsNone(resultado[0]["sku_athena"])
+
+    def test_erro_de_rede_propaga_como_erro(self):
+        with patch("core.i9logic._paginar_estoques", side_effect=Exception("timeout")):
+            resultado = i9logic.estoque_fisico_filial(63)
+        self.assertIn("erro", resultado)
+
+
+class TestEstoqueFisicoPorLoja(unittest.TestCase):
+    """estoque_fisico_por_loja(loja) resolve o nome da loja pra filial
+    i9Logic via de-para e devolve o fisico ao vivo — ou erro claro se a loja
+    ainda nao tiver mapeamento de filial."""
+
+    def test_loja_sem_mapeamento_retorna_erro_claro(self):
+        with patch("core.i9logic.buscar_id_i9logic", return_value=None):
+            resultado = i9logic.estoque_fisico_por_loja("Loja Sem Mapa")
+        self.assertIn("erro", resultado)
+        self.assertIn("mapeamento", resultado["erro"])
+
+    def test_loja_mapeada_delega_para_estoque_fisico_filial(self):
+        with patch("core.i9logic.buscar_id_i9logic", return_value="63"), \
+             patch("core.i9logic.estoque_fisico_filial", return_value=[{"idproduto": 1, "qtd": 10}]) as mock_filial:
+            resultado = i9logic.estoque_fisico_por_loja("Loja Matriz")
+        mock_filial.assert_called_once_with(63)
+        self.assertEqual(resultado, {"ok": True, "filial_i9logic": 63, "data": [{"idproduto": 1, "qtd": 10}]})
+
+    def test_estoque_fisico_filial_com_erro_propaga(self):
+        with patch("core.i9logic.buscar_id_i9logic", return_value="63"), \
+             patch("core.i9logic.estoque_fisico_filial", return_value={"erro": "falha na i9logic"}):
+            resultado = i9logic.estoque_fisico_por_loja("Loja Matriz")
+        self.assertIn("erro", resultado)
+
+
 from flask import Flask
 import core.rbac as rbac
 
@@ -775,3 +856,47 @@ class TestRotasI9Logic(unittest.TestCase):
             r = self.client.post("/api/integrations/i9logic/vendas/sincronizar", headers=headers, json={})
         self.assertEqual(r.status_code, 200)
         mock_sync.assert_called_once_with(data_de=None, data_ate=None)
+
+    def test_estoque_por_loja_exige_estoque_ver(self):
+        headers = self._headers_com_permissao([])
+        with patch("core.rbac.usuario_tem_permissao", return_value=False):
+            r = self.client.get("/api/integrations/i9logic/estoque/1", headers=headers)
+        self.assertEqual(r.status_code, 403)
+
+    def test_estoque_por_loja_inexistente_retorna_404(self):
+        headers = self._headers_com_permissao(["estoque.ver"])
+        with patch("core.rbac.usuario_tem_permissao", return_value=True), \
+             patch("routes.i9logic.obter_loja", return_value=None):
+            r = self.client.get("/api/integrations/i9logic/estoque/999", headers=headers)
+        self.assertEqual(r.status_code, 404)
+
+    def test_estoque_por_loja_virtual_retorna_400(self):
+        headers = self._headers_com_permissao(["estoque.ver"])
+        with patch("core.rbac.usuario_tem_permissao", return_value=True), \
+             patch("routes.i9logic.obter_loja", return_value={"id": 1, "nome": "Shopee Loja", "tipo": "virtual"}):
+            r = self.client.get("/api/integrations/i9logic/estoque/1", headers=headers)
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("fisica", r.get_json()["erro"])
+
+    def test_estoque_por_loja_fisica_com_permissao_libera(self):
+        headers = self._headers_com_permissao(["estoque.ver"])
+        with patch("core.rbac.usuario_tem_permissao", return_value=True), \
+             patch("routes.i9logic.obter_loja", return_value={"id": 1, "nome": "Loja Matriz", "tipo": "fisica"}), \
+             patch("routes.i9logic.estoque_fisico_por_loja",
+                   return_value={"ok": True, "filial_i9logic": 63, "data": []}) as mock_estoque:
+            r = self.client.get("/api/integrations/i9logic/estoque/1", headers=headers)
+        self.assertEqual(r.status_code, 200)
+        mock_estoque.assert_called_once_with("Loja Matriz")
+
+    def test_estoque_por_loja_sem_mapeamento_retorna_404(self):
+        headers = self._headers_com_permissao(["estoque.ver"])
+        with patch("core.rbac.usuario_tem_permissao", return_value=True), \
+             patch("routes.i9logic.obter_loja", return_value={"id": 1, "nome": "Loja Nova", "tipo": "fisica"}), \
+             patch("routes.i9logic.estoque_fisico_por_loja",
+                   return_value={"erro": "mapeamento de filial i9Logic nao encontrado para a loja 'Loja Nova'"}):
+            r = self.client.get("/api/integrations/i9logic/estoque/1", headers=headers)
+        self.assertEqual(r.status_code, 404)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

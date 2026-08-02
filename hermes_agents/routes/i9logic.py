@@ -5,9 +5,11 @@ from core.i9logic import (
     criar_mapeamento, listar_mapeamentos, executar_matching_automatico,
     executar_coleta_todas_filiais, listar_itens_para_revisao, marcar_revisado,
     aplicar_ajuste_divergencia, comparar_com_athena, seed_inicial,
+    estoque_fisico_por_loja,
 )
 from core.i9logic_catalogo import sincronizar_catalogo_i9logic
 from core.i9logic_vendas import sincronizar_pedidos_i9logic
+from core.lojas import obter as obter_loja
 
 i9logic_bp = Blueprint("i9logic", __name__, url_prefix="/api/integrations/i9logic")
 
@@ -128,4 +130,25 @@ def i9logic_sincronizar_vendas():
         dados = request.get_json(silent=True) or {}
         return jsonify(sincronizar_pedidos_i9logic(
             data_de=dados.get("data_de"), data_ate=dados.get("data_ate")))
+    return _go()
+
+
+@i9logic_bp.route("/estoque/<int:loja_id>", methods=["GET"])
+def i9logic_estoque_por_loja(loja_id):
+    """Estoque fisico ao vivo (i9Logic) de uma loja fisica — usado pela tela
+    /estoque quando a loja selecionada e' do tipo 'fisica'. Lojas virtuais
+    nao tem filial i9Logic; a tela deve usar o estoque local (Athena) pra
+    elas, nao este endpoint."""
+    @requer_permissao("estoque.ver")
+    def _go():
+        loja = obter_loja(loja_id)
+        if not loja:
+            return jsonify({"erro": "loja nao encontrada"}), 404
+        if loja.get("tipo") != "fisica":
+            return jsonify({"erro": "estoque i9Logic so' se aplica a lojas do tipo fisica"}), 400
+        resultado = estoque_fisico_por_loja(loja["nome"])
+        if resultado.get("erro"):
+            eh_nao_encontrado = "nao encontrado" in resultado["erro"]
+            return jsonify(resultado), (404 if eh_nao_encontrado else 400)
+        return jsonify(resultado)
     return _go()

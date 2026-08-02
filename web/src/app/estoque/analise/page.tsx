@@ -1,17 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useCallback, useState } from "react";
 import type { KpiMetric, Column } from "@/lib/types/ui";
 import PageHeader from "@/app/_components/PageHeader";
 import KpiCard from "@/app/_components/KpiCard";
 import TabBar from "@/app/_components/TabBar";
 import DataTable from "@/app/_components/DataTable";
 import StatusBadge from "@/app/_components/StatusBadge";
-import Icon from "@/app/_components/Icon";
-import type { IndicadorGiro, IndicadorRuptura, IndicadorCobertura } from "@/lib/types/domain";
+import LoadingState from "@/app/_components/LoadingState";
+import ErrorAlert from "@/app/_components/ErrorAlert";
+import { api, type IndicadorGiro, type IndicadorRuptura, type IndicadorCobertura } from "@/lib/api";
 import type { StatusBadgeVariant } from "@/lib/types/ui";
 import { formatCurrency } from "../types";
-import { gerarIndicadoresGiro, gerarIndicadoresRuptura, gerarIndicadoresCobertura } from "../data/custos";
+import { useStore } from "@/lib/store-context";
 
 const TABS = [
   { key: "giro", label: "Giro de Estoque" },
@@ -35,8 +36,8 @@ const GIRO_COLUMNS: Column<IndicadorGiro>[] = [
     key: "tendencia", label: "Tendência", align: "center",
     render: (v, row) => {
       const t = row.tendencia;
-      return <span className={`inline-flex items-center justify-center ${t === "up" ? "text-emerald-400" : t === "down" ? "text-red-400" : "text-neutral-400"}`}>
-        {t === "up" ? <Icon name="chevronDown" size={14} style={{ transform: "rotate(180deg)" }} /> : t === "down" ? <Icon name="chevronDown" size={14} /> : "—"}
+      return <span className={t === "up" ? "text-emerald-400" : t === "down" ? "text-red-400" : "text-neutral-400"}>
+        {t === "up" ? "▲" : t === "down" ? "▼" : "—"}
       </span>;
     },
   },
@@ -77,16 +78,40 @@ const COBERTURA_COLUMNS: Column<IndicadorCobertura>[] = [
 ];
 
 export default function AnalisePage() {
+  const { lojas } = useStore();
+  const [loja, setLoja] = useState("");
   const [tab, setTab] = useState("giro");
+  const [giro, setGiro] = useState<IndicadorGiro[]>([]);
+  const [ruptura, setRuptura] = useState<IndicadorRuptura[]>([]);
+  const [cobertura, setCobertura] = useState<IndicadorCobertura[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState("");
 
-  const giro = useMemo(() => gerarIndicadoresGiro(), []);
-  const ruptura = useMemo(() => gerarIndicadoresRuptura(), []);
-  const cobertura = useMemo(() => gerarIndicadoresCobertura(), []);
+  const carregar = useCallback(async () => {
+    setLoading(true);
+    setErro("");
+    try {
+      const [g, r, c] = await Promise.all([
+        api.estoqueAnaliseGiro(loja || undefined),
+        api.estoqueAnaliseRuptura(loja || undefined),
+        api.estoqueAnaliseCobertura(loja || undefined),
+      ]);
+      setGiro(g.data || []);
+      setRuptura(r.data || []);
+      setCobertura(c.data || []);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro ao carregar indicadores de estoque");
+    } finally {
+      setLoading(false);
+    }
+  }, [loja]);
 
-  const giroMedio = Math.round(giro.reduce((s, g) => s + g.giro, 0) / giro.length * 10) / 10;
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const giroMedio = giro.length ? Math.round(giro.reduce((s, g) => s + g.giro, 0) / giro.length * 10) / 10 : 0;
   const totalRuptura = ruptura.length;
   const impactoRuptura = ruptura.reduce((s, r) => s + r.impacto_receita, 0);
-  const coberturaMedia = Math.round(cobertura.reduce((s, c) => s + c.cobertura_dias, 0) / cobertura.length);
+  const coberturaMedia = cobertura.length ? Math.round(cobertura.reduce((s, c) => s + c.cobertura_dias, 0) / cobertura.length) : 0;
   const criticos = cobertura.filter(c => c.status === "critico" || c.status === "baixo").length;
 
   const kpis: KpiMetric[] = [
@@ -101,42 +126,54 @@ export default function AnalisePage() {
     <div className="p-6 space-y-4">
       <PageHeader title="Análise de Estoque" subtitle="Indicadores de giro, ruptura e cobertura para tomada de decisão" />
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        {kpis.map(kpi => <KpiCard key={kpi.label} metric={kpi} />)}
+      <div className="flex items-center gap-2 max-w-xs">
+        <label className="text-[10px] text-neutral-500 uppercase tracking-wider shrink-0">Loja</label>
+        <select value={loja} onChange={e => setLoja(e.target.value)}
+          className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-indigo-500">
+          <option value="">Todas as lojas</option>
+          {lojas.map(l => <option key={l.id} value={l.nome}>{l.nome}</option>)}
+        </select>
       </div>
 
-      <TabBar tabs={TABS} active={tab} onChange={setTab} />
+      {erro && <ErrorAlert message={erro} />}
 
-      {tab === "giro" && (
-        <div className="space-y-1">
-          <p className="text-xs text-neutral-500">Giro = Saídas no período / Estoque médio. Acima de 3x é saudável.</p>
-          <DataTable columns={GIRO_COLUMNS} data={giro} keyExtractor={g => g.sku} countLabel={`${giro.length} SKUs`} />
-        </div>
-      )}
+      {loading ? <LoadingState message="Calculando indicadores..." /> : (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            {kpis.map(kpi => <KpiCard key={kpi.label} metric={kpi} />)}
+          </div>
 
-      {tab === "ruptura" && (
-        <div className="space-y-1">
-          {totalRuptura === 0 ? (
-            <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-8 text-center">
-              <p className="text-emerald-400 text-sm flex items-center justify-center gap-1.5">
-                <svg xmlns="http://www.w3.org/2000/svg" width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7" /></svg>
-                Nenhum SKU em ruptura no momento
-              </p>
+          <TabBar tabs={TABS} active={tab} onChange={setTab} />
+
+          {tab === "giro" && (
+            <div className="space-y-1">
+              <p className="text-xs text-neutral-500">Giro = Saídas no período / Estoque médio (aproximado pelo saldo atual). Acima de 3x é saudável.</p>
+              <DataTable columns={GIRO_COLUMNS} data={giro} keyExtractor={g => g.sku} countLabel={`${giro.length} SKUs`} />
             </div>
-          ) : (
-            <>
-              <p className="text-xs text-neutral-500">SKUs com estoque abaixo do mínimo. Vendas perdidas estimadas.</p>
-              <DataTable columns={RUPTURA_COLUMNS} data={ruptura} keyExtractor={r => r.sku} countLabel={`${ruptura.length} SKUs em ruptura`} />
-            </>
           )}
-        </div>
-      )}
 
-      {tab === "cobertura" && (
-        <div className="space-y-1">
-          <p className="text-xs text-neutral-500">Cobertura = Estoque atual / Demanda diária média. Ideal: 7-30 dias.</p>
-          <DataTable columns={COBERTURA_COLUMNS} data={cobertura} keyExtractor={c => c.sku} countLabel={`${cobertura.length} SKUs`} />
-        </div>
+          {tab === "ruptura" && (
+            <div className="space-y-1">
+              {totalRuptura === 0 ? (
+                <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-8 text-center">
+                  <p className="text-emerald-400 text-sm">✓ Nenhum SKU em ruptura no momento</p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-xs text-neutral-500">SKUs com estoque abaixo do mínimo. Vendas perdidas estimadas pela velocidade de venda pré-ruptura.</p>
+                  <DataTable columns={RUPTURA_COLUMNS} data={ruptura} keyExtractor={r => r.sku} countLabel={`${ruptura.length} SKUs em ruptura`} />
+                </>
+              )}
+            </div>
+          )}
+
+          {tab === "cobertura" && (
+            <div className="space-y-1">
+              <p className="text-xs text-neutral-500">Cobertura = Estoque atual / Demanda diária média. Ideal: 7-30 dias.</p>
+              <DataTable columns={COBERTURA_COLUMNS} data={cobertura} keyExtractor={c => c.sku} countLabel={`${cobertura.length} SKUs`} />
+            </div>
+          )}
+        </>
       )}
     </div>
   );
