@@ -4,8 +4,6 @@ import sys, os, unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from unittest.mock import patch, AsyncMock
 
-os.environ.setdefault("ATHENA_JWT_SECRET", "test-secret-32-bytes-long-enough!!")
-
 async def _mock_pool(*a, **kw):
     m = AsyncMock()
     m.acquire.return_value = AsyncMock(__aenter__=AsyncMock(return_value=AsyncMock(
@@ -27,6 +25,13 @@ _REDIRECT_URI = "https://chat.exemplo.com/_oauth/hermes"
 
 
 class TestAuthorizationCode(unittest.TestCase):
+    def setUp(self):
+        self._env_patch = patch.dict(os.environ, {"ATHENA_JWT_SECRET": "test-secret-32-bytes-long-enough!!"})
+        self._env_patch.start()
+
+    def tearDown(self):
+        self._env_patch.stop()
+
     def test_code_valido_retorna_user_id(self):
         code = gerar_authorization_code(42, _CLIENT_ID, _REDIRECT_URI)
         self.assertEqual(validar_authorization_code(code, _CLIENT_ID, _REDIRECT_URI), 42)
@@ -58,6 +63,13 @@ class TestAuthorizationCode(unittest.TestCase):
 
 
 class TestAccessToken(unittest.TestCase):
+    def setUp(self):
+        self._env_patch = patch.dict(os.environ, {"ATHENA_JWT_SECRET": "test-secret-32-bytes-long-enough!!"})
+        self._env_patch.start()
+
+    def tearDown(self):
+        self._env_patch.stop()
+
     def test_token_valido_retorna_user_id(self):
         token = gerar_access_token(42)
         self.assertEqual(validar_access_token(token), 42)

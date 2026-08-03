@@ -6,7 +6,6 @@ from unittest.mock import patch, AsyncMock
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 _TEST_SECRET = "test-secret-32-bytes-long-enough!!"
-os.environ.setdefault("ATHENA_JWT_SECRET", _TEST_SECRET)
 
 async def _mp(*a, **kw):
     m = AsyncMock()
@@ -28,6 +27,7 @@ _CLIENT_SECRET = "segredo-de-teste"
 _REDIRECT_URI = "https://chat.exemplo.com/_oauth/hermes"
 
 _ENV_OAUTH = {
+    "ATHENA_JWT_SECRET": _TEST_SECRET,
     "ROCKETCHAT_OAUTH_CLIENT_ID": _CLIENT_ID,
     "ROCKETCHAT_OAUTH_CLIENT_SECRET": _CLIENT_SECRET,
     "ROCKETCHAT_OAUTH_REDIRECT_URI": _REDIRECT_URI,
