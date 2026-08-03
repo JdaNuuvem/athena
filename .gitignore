@@ -5,6 +5,7 @@ node_modules
 .env
 .env.*
 !.env.*.example
+!deploy/**/.env.example
 hermes_agents/config/api_config.json
 
 # Bytecode Python
