@@ -5,6 +5,7 @@ Database connection, config loading, shared utilities.
 import os
 import json
 import asyncio
+import threading
 from datetime import date, datetime
 from pathlib import Path
 from typing import Optional, Any
@@ -73,24 +74,41 @@ class FactoryConfig:
 # Database
 # ---------------------------------------------------------------------------
 
-_db_pool: Optional[Any] = None
-_db_pool_loop: Optional[Any] = None
+_db_pools: dict = {}  # id(loop) -> pool; pool asyncpg fica preso ao loop em que foi criado
+_worker_loop: Optional[asyncio.AbstractEventLoop] = None
+_worker_loop_lock = threading.Lock()
+
+
+def _get_worker_loop() -> asyncio.AbstractEventLoop:
+    """Loop asyncio unico, vivo pelo processo inteiro numa thread dedicada —
+    caminho comum de toda chamada (requests Flask, scheduler).
+
+    Antes, run_async() criava um asyncio.run() (loop novo) a cada chamada,
+    entao get_db() recriava o pool sempre que o loop mudava — e o pool
+    anterior nunca era fechado, vazando conexoes ate estourar
+    max_connections do Postgres. Mantendo um unico loop persistente, o
+    pool desse loop so' e' criado uma vez e nunca precisa ser recriado.
+    """
+    global _worker_loop
+    if _worker_loop is None:
+        with _worker_loop_lock:
+            if _worker_loop is None:
+                loop = asyncio.new_event_loop()
+                threading.Thread(target=loop.run_forever, daemon=True, name="hermes-db-loop").start()
+                _worker_loop = loop
+    return _worker_loop
+
 
 async def get_db():
-    """Retorna ou cria pool de conexões asyncpg.
-
-    run_async() roda cada chamada em um asyncio.run() novo (loop novo e
-    descartado ao final). Um pool asyncpg fica preso ao loop em que foi
-    criado, entao cachear _db_pool globalmente quebra silenciosamente a
-    partir da segunda chamada. Recriamos o pool sempre que o loop mudar.
-    """
-    global _db_pool, _db_pool_loop
+    """Retorna ou cria o pool asyncpg do loop atual (cacheado por loop)."""
+    global _db_pools
     if not HAS_ASYNCPG:
         raise RuntimeError("asyncpg não instalado")
-    current_loop = asyncio.get_running_loop()
-    if _db_pool is None or _db_pool_loop is not current_loop:
+    key = id(asyncio.get_running_loop())
+    pool = _db_pools.get(key)
+    if pool is None:
         cfg = FactoryConfig.load()
-        _db_pool = await asyncpg.create_pool(
+        pool = await asyncpg.create_pool(
             host=cfg.db_host,
             port=cfg.db_port,
             database=cfg.db_name,
@@ -99,20 +117,41 @@ async def get_db():
             min_size=2,
             max_size=10,
         )
-        _db_pool_loop = current_loop
-    return _db_pool
+        _db_pools[key] = pool
+    return pool
 
 def run_async(coro):
-    """Helper para rodar async em contexto síncrono."""
+    """Roda coro no loop persistente (thread dedicada), bloqueando a thread
+    chamadora ate' o resultado — funciona tanto de codigo sync quanto de
+    dentro de outro loop (ex.: jobs assincronos do scheduler).
+
+    Chamada reentrante (run_async disparado de dentro de uma coroutine que
+    ja' esta' rodando no proprio loop persistente — ex.: import tardio no
+    meio de um _ensure_tables() que dispara o _ensure_tables() de outro
+    modulo) usa um loop isolado e descartavel: rodar no loop persistente
+    travaria pra sempre, pois a chamada de fora esta' ocupando o unico
+    thread que serve esse loop. O pool desse loop isolado e' fechado ao
+    final pra nao vazar conexao."""
+    worker_loop = _get_worker_loop()
     try:
-        loop = asyncio.get_running_loop()
+        reentrante = asyncio.get_running_loop() is worker_loop
     except RuntimeError:
-        loop = None
-    if loop and loop.is_running():
+        reentrante = False
+    if reentrante:
         import concurrent.futures
-        with concurrent.futures.ThreadPoolExecutor() as ex:
-            return ex.submit(lambda: asyncio.run(coro)).result()
-    return asyncio.run(coro)
+
+        async def _isolado():
+            try:
+                return await coro
+            finally:
+                loop = asyncio.get_running_loop()
+                pool = _db_pools.pop(id(loop), None)
+                if pool is not None:
+                    await pool.close()
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+            return ex.submit(asyncio.run, _isolado()).result()
+    return asyncio.run_coroutine_threadsafe(coro, worker_loop).result()
 
 # ---------------------------------------------------------------------------
 # Logging & utils
