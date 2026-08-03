@@ -114,6 +114,7 @@ class TestToken(unittest.TestCase):
     def test_troca_code_valido_por_access_token(self):
         code = self._obter_code()
         r = self.client.post("/oauth/token", data={
+            "grant_type": "authorization_code",
             "client_id": _CLIENT_ID, "client_secret": _CLIENT_SECRET,
             "code": code, "redirect_uri": _REDIRECT_URI,
         })
@@ -121,10 +122,12 @@ class TestToken(unittest.TestCase):
         body = r.get_json()
         self.assertIn("access_token", body)
         self.assertEqual(body["token_type"], "Bearer")
+        self.assertEqual(body["expires_in"], 3600)
 
     def test_client_secret_errado_rejeita(self):
         code = self._obter_code()
         r = self.client.post("/oauth/token", data={
+            "grant_type": "authorization_code",
             "client_id": _CLIENT_ID, "client_secret": "errado",
             "code": code, "redirect_uri": _REDIRECT_URI,
         })
@@ -132,10 +135,28 @@ class TestToken(unittest.TestCase):
 
     def test_code_invalido_rejeita(self):
         r = self.client.post("/oauth/token", data={
+            "grant_type": "authorization_code",
             "client_id": _CLIENT_ID, "client_secret": _CLIENT_SECRET,
             "code": "code-invalido", "redirect_uri": _REDIRECT_URI,
         })
         self.assertEqual(r.status_code, 400)
+
+    def test_grant_type_ausente_ou_errado_rejeita(self):
+        code = self._obter_code()
+        r = self.client.post("/oauth/token", data={
+            "client_id": _CLIENT_ID, "client_secret": _CLIENT_SECRET,
+            "code": code, "redirect_uri": _REDIRECT_URI,
+        })
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.get_json()["error"], "unsupported_grant_type")
+
+        r = self.client.post("/oauth/token", data={
+            "grant_type": "client_credentials",
+            "client_id": _CLIENT_ID, "client_secret": _CLIENT_SECRET,
+            "code": code, "redirect_uri": _REDIRECT_URI,
+        })
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.get_json()["error"], "unsupported_grant_type")
 
 
 class TestUserinfo(unittest.TestCase):

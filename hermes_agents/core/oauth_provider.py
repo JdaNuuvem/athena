@@ -5,7 +5,13 @@ pyjwt, sem framework OAuth novo.
 `code` e `access_token` sao os dois JWTs curtos do fluxo Authorization
 Code — cada um carrega um claim `typ` (`oauth_code` / `oauth_access`) para
 que um nao possa ser usado no lugar do outro mesmo sendo ambos JWTs
-assinados com o mesmo secret."""
+assinados com o mesmo secret.
+
+Tradeoff deliberado: o `code` nao e' single-use-enforced — nada impede que o
+mesmo `code` seja trocado por access_token mais de uma vez dentro do seu TTL
+de 60s (sem estado em memoria/banco, sem lista de revogacao). A troca ainda
+exige o `client_secret` correto (`/oauth/token`), o que mantem o risco
+pratico baixo, e a janela de exposicao e' curta pelo TTL."""
 from datetime import datetime, timedelta, timezone
 import jwt as _jwt
 from core.rbac import _jwt_secret, JWT_ALGORITHM

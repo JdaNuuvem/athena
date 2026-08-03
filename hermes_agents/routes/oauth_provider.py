@@ -3,6 +3,7 @@ atuar como Identity Provider para clientes externos — hoje so' o
 Rocket.Chat. Ver hermes_agents/core/oauth_provider.py para a geracao/
 validacao de code e access_token."""
 import os
+import hmac
 from urllib.parse import quote
 from flask import Blueprint, request, jsonify, redirect
 from core import get_db, run_async
@@ -10,6 +11,7 @@ from core.rbac import verificar_token_sessao
 from core.oauth_provider import (
     gerar_authorization_code, validar_authorization_code,
     gerar_access_token, validar_access_token,
+    ACCESS_TOKEN_EXPIRACAO_SEGUNDOS,
 )
 
 oauth_provider_bp = Blueprint("oauth_provider", __name__, url_prefix="/oauth")
@@ -65,12 +67,16 @@ def authorize():
 
 @oauth_provider_bp.route("/token", methods=["POST"])
 def token():
+    if request.form.get("grant_type") != "authorization_code":
+        return jsonify({"error": "unsupported_grant_type"}), 400
+
     client_id = request.form.get("client_id", "")
     client_secret = request.form.get("client_secret", "")
     code = request.form.get("code", "")
     redirect_uri = request.form.get("redirect_uri", "")
 
-    if not _client_id() or not _client_secret() or client_id != _client_id() or client_secret != _client_secret():
+    if (not _client_id() or not _client_secret() or client_id != _client_id()
+            or not hmac.compare_digest(client_secret, _client_secret())):
         return jsonify({"error": "invalid_client"}), 401
 
     user_id = validar_authorization_code(code, client_id, redirect_uri)
@@ -78,7 +84,10 @@ def token():
         return jsonify({"error": "invalid_grant"}), 400
 
     access_token = gerar_access_token(user_id)
-    return jsonify({"access_token": access_token, "token_type": "Bearer", "expires_in": 3600})
+    return jsonify({
+        "access_token": access_token, "token_type": "Bearer",
+        "expires_in": ACCESS_TOKEN_EXPIRACAO_SEGUNDOS,
+    })
 
 
 async def _buscar_usuario(user_id: int):

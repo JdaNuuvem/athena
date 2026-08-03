@@ -38,13 +38,24 @@ def gerar_token_sessao(user_id, email: str, role: str, is_master: bool = False) 
     return _jwt.encode(payload, _jwt_secret(), algorithm=JWT_ALGORITHM)
 
 def verificar_token_sessao(token: str):
-    """Decodifica e valida um token de sessao. Retorna o payload (dict) ou None se invalido/expirado."""
+    """Decodifica e valida um token de sessao. Retorna o payload (dict) ou None se invalido/expirado.
+    ponytail: rejeita qualquer payload com claim `typ` — os tokens do OAuth
+    provider (core/oauth_provider.py: `oauth_code`/`oauth_access`) sao JWTs
+    assinados com esse mesmo ATHENA_JWT_SECRET e carregam user_id, mas sao
+    validos so' pra uma troca pontual (code) ou pro /oauth/userinfo (access
+    token). Sem essa checagem, um access_token OAuth de 1h viraria uma sessao
+    completa do Hermes em qualquer /api/* — o access_token so' foi pensado
+    pra autorizar UMA chamada ao /oauth/userinfo. Tokens de sessao normais
+    (gerar_token_sessao) nunca setam `typ`."""
     if not token:
         return None
     try:
-        return _jwt.decode(token, _jwt_secret(), algorithms=[JWT_ALGORITHM])
+        payload = _jwt.decode(token, _jwt_secret(), algorithms=[JWT_ALGORITHM])
     except Exception:
         return None
+    if payload.get("typ"):
+        return None
+    return payload
 
 def usuario_atual_da_request() -> dict:
     """Extrai {user_id, nome, email, role, is_master} do token da request atual,
