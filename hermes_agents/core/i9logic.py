@@ -5,7 +5,7 @@ table de snapshot, classificacao de divergencia, job de coleta e seed inicial.
 Fisico (tipoestoque=1) semeia estoque_saldos (Fase 1); contabil (tipoestoque=2)
 nunca vira bucket, so' serve como sinal de auditoria. Nenhum ajuste automatico
 de saldo — toda decisao sobre divergencia e' manual."""
-import os, time, requests
+import os, time, requests, threading
 from datetime import datetime
 from core import get_db, run_async, log
 from core.config import get_config
@@ -18,6 +18,12 @@ BASE_URL = os.environ.get("I9LOGIC_BASE_URL") or get_config("i9logic", "base_url
 # duplicar o path se a env var ja vier com ele.
 RATE_LIMIT_SLEEP_SEGUNDOS = 2.5  # ~24 req/min, margem sob o limite de 30/min da API
 PER_PAGE_PADRAO = 200
+
+FRESCOR_MAXIMO_MINUTOS = 30  # snapshot mais velho que isso dispara nova coleta em background
+
+_coleta_em_andamento = set()  # filial_id -> coleta rodando agora, evita disparo duplicado
+_coleta_erro_recente = {}  # filial_id -> mensagem de erro da ultima tentativa
+_coleta_lock = threading.Lock()
 
 LIMIAR_ALERTA_ABSOLUTO = 5
 LIMIAR_ALERTA_PERCENTUAL = 0.10
@@ -214,51 +220,100 @@ def _paginar_estoques(filial_id_i9logic: int, tipoestoque: int) -> list:
     return _paginar("produtos_estoques", {"filial": filial_id_i9logic, "tipoestoque": tipoestoque})
 
 
-# ── Leitura ao vivo (sob demanda, fora do job de coleta) ──
+# ── Leitura ao vivo (snapshot + coleta em background) ──
+# Filiais grandes (~9k produtos, ~47 paginas com rate limit de 2.5s entre
+# elas) levam ~2min pra paginar — puxar isso direto dentro do request da
+# tela /estoque estourava o timeout do proxy (Cloudflare, ~100s). Em vez
+# disso: le o snapshot mais recente (rapido, so' leitura de banco) e dispara
+# a coleta completa numa thread em background quando ele nao existe ou esta'
+# velho; o chamador poll'a de novo ate' o status virar "pronto".
 
-def estoque_fisico_filial(filial_id_i9logic: int) -> list | dict:
-    """Le o fisico (tipoestoque=1) direto da i9Logic AGORA (nao espera o job
-    de coleta) e enriquece com sku_athena/descricao via catalogo_produtos.
-    id_i9logic — usado pela tela de estoque de loja fisica. Erro de
-    rede/API vira {"erro": ...} em vez de propagar a excecao pra rota."""
-    try:
-        fisicos = _paginar_estoques(filial_id_i9logic, 1)
-    except Exception as e:
-        return {"erro": str(e)}
-    async def _catalogo():
+def snapshot_mais_recente(filial_id_i9logic: int):
+    """(data_coleta, itens) da corrida mais recente da filial no snapshot,
+    enriquecido com descricao via catalogo_produtos.id_i9logic. (None, [])
+    se essa filial nunca foi coletada."""
+    async def _go():
         db = await get_db()
-        rows = await db.fetch(
-            "SELECT id_i9logic, sku, descricao FROM catalogo_produtos WHERE id_i9logic IS NOT NULL")
-        return {r["id_i9logic"]: r for r in rows}
+        data_coleta = await db.fetchval(
+            "SELECT MAX(data_coleta) FROM i9logic_estoque_snapshot WHERE filial_i9logic=$1",
+            filial_id_i9logic)
+        if data_coleta is None:
+            return None, []
+        rows = await db.fetch("""
+            SELECT s.idproduto_i9logic AS idproduto, s.codproduto_i9logic AS codproduto,
+                   s.sku_athena, s.qtd_fisico AS qtd, c.descricao
+            FROM i9logic_estoque_snapshot s
+            LEFT JOIN catalogo_produtos c ON c.id_i9logic = s.idproduto_i9logic::text
+            WHERE s.filial_i9logic=$1 AND s.data_coleta=$2
+        """, filial_id_i9logic, data_coleta)
+        return data_coleta, [dict(r) for r in rows]
     try:
-        catalogo_por_id = run_async(_catalogo())
+        return run_async(_go())
     except Exception:
-        catalogo_por_id = {}
-    resultado = []
-    for item in fisicos:
-        produto = catalogo_por_id.get(str(item.get("idproduto")))
-        resultado.append({
-            **item,
-            "sku_athena": produto["sku"] if produto else None,
-            "descricao": produto["descricao"] if produto else None,
-        })
-    return resultado
+        return None, []
+
+
+def _coleta_em_background(filial_id_i9logic: int):
+    """Roda a coleta completa fora do request. Sempre libera o lock ao
+    final, mesmo em erro — senao a filial fica presa em 'processando' pra
+    sempre e nunca mais tenta de novo."""
+    try:
+        executar_coleta_filial(filial_id_i9logic)
+        _coleta_erro_recente.pop(filial_id_i9logic, None)
+    except Exception as e:
+        _coleta_erro_recente[filial_id_i9logic] = str(e)
+        log(AGENT, f"Erro na coleta em background da filial {filial_id_i9logic}: {e}")
+    finally:
+        with _coleta_lock:
+            _coleta_em_andamento.discard(filial_id_i9logic)
+
+
+def _disparar_coleta_se_necessario(filial_id_i9logic: int, data_coleta) -> bool:
+    """Dispara coleta em background se nao houver uma rodando e o snapshot
+    estiver ausente ou mais velho que FRESCOR_MAXIMO_MINUTOS. Retorna True
+    se a filial ficou (ou ja estava) em processamento."""
+    precisa_coletar = data_coleta is None or (
+        (datetime.now() - data_coleta).total_seconds() / 60 > FRESCOR_MAXIMO_MINUTOS)
+    with _coleta_lock:
+        ja_rodando = filial_id_i9logic in _coleta_em_andamento
+        deve_iniciar = precisa_coletar and not ja_rodando
+        if deve_iniciar:
+            _coleta_em_andamento.add(filial_id_i9logic)
+    # thread disparada fora do lock: _coleta_em_background tenta readquiri-lo
+    # no finally, e o Thread.start() pode rodar o alvo na mesma thread
+    # (sincrono, como em testes) — segurando o lock aqui seria autodeadlock.
+    if deve_iniciar:
+        threading.Thread(target=_coleta_em_background, args=(filial_id_i9logic,), daemon=True).start()
+    return ja_rodando or deve_iniciar
 
 
 def estoque_fisico_por_loja(loja_athena: str) -> dict:
     """Resolve a loja (pelo nome Athena) pra filial i9Logic via de-para e
-    devolve o fisico ao vivo. Erro claro se a loja ainda nao tem mapeamento
-    de filial — sem isso, o chamador nao tem como diferenciar 'loja sem
-    integracao i9Logic' de uma falha de rede generica."""
+    devolve o fisico do snapshot mais recente, disparando coleta em
+    background quando ausente/desatualizado (nunca bloqueia esperando a
+    paginacao). Erro claro se a loja ainda nao tem mapeamento de filial —
+    sem isso, o chamador nao tem como diferenciar 'loja sem integracao
+    i9Logic' de uma falha de rede generica."""
     id_i9logic = buscar_id_i9logic("filial", loja_athena)
     if id_i9logic is None:
         return {"erro": f"mapeamento de filial i9Logic nao encontrado para a loja '{loja_athena}' "
                          f"(cadastre em /api/integrations/i9logic/depara antes)"}
     filial_id = int(id_i9logic)
-    dados = estoque_fisico_filial(filial_id)
-    if isinstance(dados, dict) and dados.get("erro"):
-        return dados
-    return {"ok": True, "filial_i9logic": filial_id, "data": dados}
+    data_coleta, itens = snapshot_mais_recente(filial_id)
+    processando = _disparar_coleta_se_necessario(filial_id, data_coleta)
+    resultado = {
+        "ok": True,
+        "status": "processando" if processando else "pronto",
+        "filial_i9logic": filial_id,
+        "data": itens,
+    }
+    if data_coleta is not None:
+        resultado["coletado_em"] = data_coleta.isoformat()
+        resultado["idade_minutos"] = round((datetime.now() - data_coleta).total_seconds() / 60, 1)
+    erro_recente = _coleta_erro_recente.get(filial_id)
+    if erro_recente:
+        resultado["erro_ultima_coleta"] = erro_recente
+    return resultado
 
 
 # ── Snapshot (staging) ──

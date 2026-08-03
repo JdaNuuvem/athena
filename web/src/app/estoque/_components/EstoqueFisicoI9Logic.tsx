@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { i9logicEstoquePorLoja, estoqueAtualizar, type EstoqueI9LogicItem } from "@/lib/api";
 
 interface Props {
@@ -8,28 +8,53 @@ interface Props {
   lojaNome: string;
 }
 
+const POLL_INTERVAL_MS = 5000;
+
 export default function EstoqueFisicoI9Logic({ lojaId, lojaNome }: Props) {
   const [itens, setItens] = useState<EstoqueI9LogicItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [atualizando, setAtualizando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [avisoColeta, setAvisoColeta] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
   const [editando, setEditando] = useState<number | null>(null);
   const [novaQtd, setNovaQtd] = useState("");
   const [salvando, setSalvando] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const carregar = useCallback(async () => {
-    setLoading(true);
+  const cancelarPoll = () => {
+    if (pollRef.current) {
+      clearTimeout(pollRef.current);
+      pollRef.current = null;
+    }
+  };
+
+  const carregar = useCallback(async (primeiraVez = false) => {
+    cancelarPoll();
+    if (primeiraVez) setLoading(true);
     setErro(null);
     try {
       const r = await i9logicEstoquePorLoja(lojaId);
       setItens(r.data || []);
+      setAvisoColeta(r.erro_ultima_coleta || null);
+      const processando = r.status === "processando";
+      setAtualizando(processando);
+      if (processando) {
+        pollRef.current = setTimeout(() => carregar(false), POLL_INTERVAL_MS);
+      }
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao carregar estoque i9Logic");
+      setAtualizando(false);
     } finally {
-      setLoading(false);
+      if (primeiraVez) setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lojaId]);
-  useEffect(() => { carregar(); }, [carregar]);
+
+  useEffect(() => {
+    carregar(true);
+    return () => cancelarPoll();
+  }, [carregar]);
 
   const iniciarEdicao = (item: EstoqueI9LogicItem) => {
     setEditando(item.idproduto);
@@ -47,7 +72,7 @@ export default function EstoqueFisicoI9Logic({ lojaId, lojaNome }: Props) {
         return;
       }
       setEditando(null);
-      await carregar();
+      await carregar(true);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao ajustar estoque");
     } finally {
@@ -69,9 +94,9 @@ export default function EstoqueFisicoI9Logic({ lojaId, lojaNome }: Props) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-xs text-neutral-500">
-          Estoque fisico ao vivo — <span className="text-neutral-400">{lojaNome}</span> · fonte: i9Logic
+          Estoque fisico — <span className="text-neutral-400">{lojaNome}</span> · fonte: i9Logic
         </p>
-        <button onClick={() => carregar()} className="px-3 py-1.5 bg-neutral-700 text-neutral-300 text-xs rounded-lg hover:bg-neutral-600">
+        <button onClick={() => carregar(true)} className="px-3 py-1.5 bg-neutral-700 text-neutral-300 text-xs rounded-lg hover:bg-neutral-600">
           Atualizar
         </button>
       </div>
@@ -87,6 +112,16 @@ export default function EstoqueFisicoI9Logic({ lojaId, lojaNome }: Props) {
         </div>
       )}
 
+      {!erro && atualizando && (
+        <div className="bg-indigo-900/20 border border-indigo-800/60 text-indigo-300 text-xs px-3 py-2 rounded-lg">
+          Coletando estoque atualizado da i9Logic em segundo plano — filiais grandes podem levar alguns minutos.
+          A lista atualiza sozinha quando terminar.
+          {avisoColeta && (
+            <p className="mt-1 text-amber-400/90">Ultima tentativa falhou ({avisoColeta}) — tentando de novo.</p>
+          )}
+        </div>
+      )}
+
       {!erro && (
         <input type="text" value={busca} onChange={e => setBusca(e.target.value)}
           placeholder="Buscar SKU, codigo i9Logic ou descricao..."
@@ -97,7 +132,9 @@ export default function EstoqueFisicoI9Logic({ lojaId, lojaNome }: Props) {
         <div className="text-neutral-500 text-sm py-8 text-center">Consultando i9Logic...</div>
       ) : erro ? null : filtrados.length === 0 ? (
         <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-8 text-center">
-          <p className="text-neutral-400 text-sm">Nenhum produto encontrado</p>
+          <p className="text-neutral-400 text-sm">
+            {atualizando ? "Nenhum dado coletado ainda — aguardando a primeira coleta da i9Logic..." : "Nenhum produto encontrado"}
+          </p>
         </div>
       ) : (
         <div className="instrument-enter bg-neutral-800 border border-neutral-700 rounded-lg overflow-x-auto">

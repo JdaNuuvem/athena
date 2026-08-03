@@ -1,6 +1,7 @@
 """Testes de integracao — reconciliacao i9Logic."""
 import sys, os, unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from datetime import datetime, timedelta
 from unittest.mock import patch, AsyncMock, MagicMock
 
 async def _mp(*a, **kw):
@@ -543,54 +544,77 @@ class TestSeedInicial(unittest.TestCase):
         self.assertTrue(resultado["ok"])
 
 
-class TestEstoqueFisicoFilial(unittest.TestCase):
-    """estoque_fisico_filial(filial_id) le o fisico (tipoestoque=1) direto da
-    i9Logic sob demanda (fora do job de coleta) e enriquece com sku_athena
-    via catalogo_produtos.id_i9logic — usado pela tela /estoque pra lojas
-    fisicas."""
+class ThreadSincrona:
+    """Substitui threading.Thread nos testes — .start() roda o target na
+    hora, na mesma thread, pra nao depender de timing real."""
+    def __init__(self, target, args=(), daemon=None, name=None):
+        self._target = target
+        self._args = args
 
-    def test_enriquece_com_sku_via_catalogo_produtos(self):
-        def _paginar(filial, tipoestoque):
-            self.assertEqual(filial, 63)
-            self.assertEqual(tipoestoque, 1)
-            return [{"idproduto": 1, "codproduto": "COD-1", "qtd": 10},
-                    {"idproduto": 2, "codproduto": "COD-2", "qtd": 5}]
+    def start(self):
+        self._target(*self._args)
+
+
+class TestSnapshotMaisRecente(unittest.TestCase):
+    """snapshot_mais_recente(filial_id) le a corrida mais recente do
+    i9logic_estoque_snapshot, enriquecida com descricao via
+    catalogo_produtos.id_i9logic."""
+
+    def test_sem_snapshot_retorna_none_e_lista_vazia(self):
+        with patch("core.i9logic.get_db") as mock_get_db:
+            mock_get_db.return_value = AsyncMock(fetchval=AsyncMock(return_value=None))
+            data_coleta, itens = i9logic.snapshot_mais_recente(63)
+        self.assertIsNone(data_coleta)
+        self.assertEqual(itens, [])
+
+    def test_com_snapshot_devolve_data_coleta_e_itens(self):
+        agora = datetime.now()
         async def _fetch(query, *args):
-            self.assertIn("id_i9logic", query)
-            return [{"id_i9logic": "1", "sku": "SKU-1", "descricao": "Produto 1"},
-                    {"id_i9logic": "2", "sku": "SKU-2", "descricao": "Produto 2"}]
-        with patch("core.i9logic._paginar_estoques", side_effect=_paginar), \
-             patch("core.i9logic.get_db") as mock_get_db:
-            mock_get_db.return_value = AsyncMock(fetch=_fetch)
-            resultado = i9logic.estoque_fisico_filial(63)
-        self.assertEqual(len(resultado), 2)
-        primeiro = next(r for r in resultado if r["idproduto"] == 1)
-        self.assertEqual(primeiro["sku_athena"], "SKU-1")
-        self.assertEqual(primeiro["descricao"], "Produto 1")
-        self.assertEqual(primeiro["qtd"], 10)
+            return [{"idproduto": 1, "codproduto": "COD-1", "sku_athena": "SKU-1",
+                      "qtd": 10, "descricao": "Produto 1"}]
+        with patch("core.i9logic.get_db") as mock_get_db:
+            mock_get_db.return_value = AsyncMock(
+                fetchval=AsyncMock(return_value=agora), fetch=_fetch)
+            data_coleta, itens = i9logic.snapshot_mais_recente(63)
+        self.assertEqual(data_coleta, agora)
+        self.assertEqual(len(itens), 1)
+        self.assertEqual(itens[0]["sku_athena"], "SKU-1")
 
-    def test_produto_sem_match_no_catalogo_mantem_sku_athena_none(self):
-        def _paginar(filial, tipoestoque):
-            return [{"idproduto": 99, "codproduto": "COD-99", "qtd": 3}]
-        async def _fetch(query, *args):
-            return []
-        with patch("core.i9logic._paginar_estoques", side_effect=_paginar), \
-             patch("core.i9logic.get_db") as mock_get_db:
-            mock_get_db.return_value = AsyncMock(fetch=_fetch)
-            resultado = i9logic.estoque_fisico_filial(63)
-        self.assertEqual(len(resultado), 1)
-        self.assertIsNone(resultado[0]["sku_athena"])
 
-    def test_erro_de_rede_propaga_como_erro(self):
-        with patch("core.i9logic._paginar_estoques", side_effect=Exception("timeout")):
-            resultado = i9logic.estoque_fisico_filial(63)
-        self.assertIn("erro", resultado)
+class TestColetaEmBackground(unittest.TestCase):
+    """_coleta_em_background roda executar_coleta_filial fora do request,
+    registrando erro (se houver) e sempre liberando o lock ao final."""
+
+    def setUp(self):
+        i9logic._coleta_em_andamento.clear()
+        i9logic._coleta_erro_recente.clear()
+
+    def test_sucesso_limpa_erro_anterior_e_libera_lock(self):
+        i9logic._coleta_em_andamento.add(63)
+        i9logic._coleta_erro_recente[63] = "erro antigo"
+        with patch("core.i9logic.executar_coleta_filial", return_value={"ok": True}):
+            i9logic._coleta_em_background(63)
+        self.assertNotIn(63, i9logic._coleta_em_andamento)
+        self.assertNotIn(63, i9logic._coleta_erro_recente)
+
+    def test_falha_registra_erro_e_libera_lock(self):
+        i9logic._coleta_em_andamento.add(63)
+        with patch("core.i9logic.executar_coleta_filial", side_effect=Exception("timeout")):
+            i9logic._coleta_em_background(63)
+        self.assertNotIn(63, i9logic._coleta_em_andamento)
+        self.assertEqual(i9logic._coleta_erro_recente[63], "timeout")
 
 
 class TestEstoqueFisicoPorLoja(unittest.TestCase):
     """estoque_fisico_por_loja(loja) resolve o nome da loja pra filial
-    i9Logic via de-para e devolve o fisico ao vivo — ou erro claro se a loja
-    ainda nao tiver mapeamento de filial."""
+    i9Logic via de-para e devolve o fisico do snapshot mais recente,
+    disparando coleta em background quando ausente/desatualizado — nunca
+    bloqueia o request esperando a paginacao (filiais grandes estouram
+    timeout de proxy). Erro claro se a loja nao tiver mapeamento de filial."""
+
+    def setUp(self):
+        i9logic._coleta_em_andamento.clear()
+        i9logic._coleta_erro_recente.clear()
 
     def test_loja_sem_mapeamento_retorna_erro_claro(self):
         with patch("core.i9logic.buscar_id_i9logic", return_value=None):
@@ -598,18 +622,58 @@ class TestEstoqueFisicoPorLoja(unittest.TestCase):
         self.assertIn("erro", resultado)
         self.assertIn("mapeamento", resultado["erro"])
 
-    def test_loja_mapeada_delega_para_estoque_fisico_filial(self):
+    def test_sem_snapshot_dispara_coleta_e_retorna_processando(self):
         with patch("core.i9logic.buscar_id_i9logic", return_value="63"), \
-             patch("core.i9logic.estoque_fisico_filial", return_value=[{"idproduto": 1, "qtd": 10}]) as mock_filial:
+             patch("core.i9logic.snapshot_mais_recente", return_value=(None, [])), \
+             patch("core.i9logic.threading.Thread", ThreadSincrona), \
+             patch("core.i9logic.executar_coleta_filial", return_value={"ok": True}) as mock_coleta:
             resultado = i9logic.estoque_fisico_por_loja("Loja Matriz")
-        mock_filial.assert_called_once_with(63)
-        self.assertEqual(resultado, {"ok": True, "filial_i9logic": 63, "data": [{"idproduto": 1, "qtd": 10}]})
+        mock_coleta.assert_called_once_with(63)
+        self.assertEqual(resultado["status"], "processando")
+        self.assertEqual(resultado["data"], [])
+        self.assertNotIn(63, i9logic._coleta_em_andamento)  # ThreadSincrona ja rodou e liberou
 
-    def test_estoque_fisico_filial_com_erro_propaga(self):
+    def test_coleta_ja_em_andamento_nao_dispara_de_novo(self):
+        i9logic._coleta_em_andamento.add(63)
         with patch("core.i9logic.buscar_id_i9logic", return_value="63"), \
-             patch("core.i9logic.estoque_fisico_filial", return_value={"erro": "falha na i9logic"}):
+             patch("core.i9logic.snapshot_mais_recente", return_value=(None, [])), \
+             patch("core.i9logic.threading.Thread") as mock_thread:
             resultado = i9logic.estoque_fisico_por_loja("Loja Matriz")
-        self.assertIn("erro", resultado)
+        mock_thread.assert_not_called()
+        self.assertEqual(resultado["status"], "processando")
+
+    def test_snapshot_fresco_retorna_pronto_sem_disparar_coleta(self):
+        agora = datetime.now()
+        itens = [{"idproduto": 1, "codproduto": "COD-1", "sku_athena": "SKU-1", "qtd": 10, "descricao": "P1"}]
+        with patch("core.i9logic.buscar_id_i9logic", return_value="63"), \
+             patch("core.i9logic.snapshot_mais_recente", return_value=(agora, itens)), \
+             patch("core.i9logic.threading.Thread") as mock_thread:
+            resultado = i9logic.estoque_fisico_por_loja("Loja Matriz")
+        mock_thread.assert_not_called()
+        self.assertEqual(resultado["status"], "pronto")
+        self.assertEqual(resultado["data"], itens)
+        self.assertEqual(resultado["coletado_em"], agora.isoformat())
+
+    def test_snapshot_velho_dispara_nova_coleta_mas_devolve_dado_stale(self):
+        velho = datetime.now() - timedelta(minutes=i9logic.FRESCOR_MAXIMO_MINUTOS + 5)
+        itens = [{"idproduto": 1, "codproduto": "COD-1", "sku_athena": "SKU-1", "qtd": 10, "descricao": "P1"}]
+        with patch("core.i9logic.buscar_id_i9logic", return_value="63"), \
+             patch("core.i9logic.snapshot_mais_recente", return_value=(velho, itens)), \
+             patch("core.i9logic.threading.Thread") as mock_thread:
+            resultado = i9logic.estoque_fisico_por_loja("Loja Matriz")
+        mock_thread.assert_called_once()
+        self.assertEqual(resultado["status"], "processando")
+        self.assertEqual(resultado["data"], itens)  # stale-while-revalidate
+
+    def test_erro_da_ultima_tentativa_aparece_mas_nao_bloqueia_retry(self):
+        i9logic._coleta_erro_recente[63] = "timeout"
+        with patch("core.i9logic.buscar_id_i9logic", return_value="63"), \
+             patch("core.i9logic.snapshot_mais_recente", return_value=(None, [])), \
+             patch("core.i9logic.threading.Thread") as mock_thread:
+            resultado = i9logic.estoque_fisico_por_loja("Loja Matriz")
+        mock_thread.assert_called_once()  # dispara retry mesmo com erro anterior
+        self.assertEqual(resultado.get("erro_ultima_coleta"), "timeout")
+        self.assertEqual(resultado["status"], "processando")
 
 
 from flask import Flask

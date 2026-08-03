@@ -709,7 +709,7 @@ export const api = {
       request<Ticket>(`/api/atendimento/tickets/${id}/status`, { method: "PUT", body: JSON.stringify({ status }) }),
     atribuir: (id: number, atendenteId: number) =>
       request<Ticket>(`/api/atendimento/tickets/${id}/atribuir`, { method: "PUT", body: JSON.stringify({ atendente_id: atendenteId }) }),
-    listarMensagens: (id: number) => request<{ data: MensagemTicket[] }>(`/api/atendimento/tickets/${id}/mensagens`),
+    listarMensagens: (id: number) => request<{ data: MensagemTicket[]; conversa_id: number | null }>(`/api/atendimento/tickets/${id}/mensagens`),
     enviarMensagem: (id: number, conteudo: string) =>
       request<MensagemTicketRaw>(`/api/atendimento/tickets/${id}/mensagem`, { method: "POST", body: JSON.stringify({ conteudo, tipo: "texto" }) }),
     listarAtendentes: () => request<{ data: Atendente[] }>("/api/atendimento/atendentes"),
@@ -1751,8 +1751,18 @@ export interface EstoqueI9LogicItem {
   descricao: string | null;
 }
 
+export interface EstoqueI9LogicResposta {
+  ok: boolean;
+  status: "pronto" | "processando";
+  filial_i9logic: number;
+  data: EstoqueI9LogicItem[];
+  coletado_em?: string;
+  idade_minutos?: number;
+  erro_ultima_coleta?: string;
+}
+
 export const i9logicEstoquePorLoja = (lojaId: number) =>
-  request<{ ok: boolean; filial_i9logic: number; data: EstoqueI9LogicItem[] }>(
+  request<EstoqueI9LogicResposta>(
     `/api/integrations/i9logic/estoque/${lojaId}`
   );
 
