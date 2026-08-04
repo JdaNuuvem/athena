@@ -246,6 +246,7 @@ from routes.produtos import produtos_bp
 from routes.financeiro import financeiro_bp
 from routes.bi import bi_bp
 from routes.chat import chat_bp
+from routes.oauth_provider import oauth_provider_bp
 from routes.chat_ws import init_sock
 from routes.i9logic import i9logic_bp
 app.register_blueprint(bling_bp)
@@ -282,6 +283,7 @@ app.register_blueprint(produtos_bp)
 app.register_blueprint(financeiro_bp)
 app.register_blueprint(bi_bp)
 app.register_blueprint(chat_bp)
+app.register_blueprint(oauth_provider_bp)
 app.register_blueprint(i9logic_bp)
 init_sock(app)
 

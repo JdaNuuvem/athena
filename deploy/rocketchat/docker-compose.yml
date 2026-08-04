@@ -1,0 +1,83 @@
+# deploy/rocketchat/docker-compose.yml
+services:
+  rocketchat:
+    image: registry.rocket.chat/rocketchat/rocket.chat:8.6.1
+    container_name: rocketchat
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      ROOT_URL: "${ROCKETCHAT_ROOT_URL}"
+      PORT: "3000"
+      DEPLOY_METHOD: "docker"
+      MONGO_URL: "mongodb://mongodb:27017/rocketchat?replicaSet=rs0"
+      MONGO_OPLOG_URL: "mongodb://mongodb:27017/local?replicaSet=rs0"
+      # Custom OAuth "Hermes" — o Rocket.Chat le essas variaveis no boot e
+      # registra o provider sozinho (initCustomOAuthServices.ts), sem
+      # precisar de nenhuma chamada a Admin API.
+      Accounts_OAuth_Custom_Hermes: "true"
+      Accounts_OAuth_Custom_Hermes_id: "${ROCKETCHAT_OAUTH_CLIENT_ID}"
+      Accounts_OAuth_Custom_Hermes_secret: "${ROCKETCHAT_OAUTH_CLIENT_SECRET}"
+      Accounts_OAuth_Custom_Hermes_url: "${HERMES_PUBLIC_URL}"
+      Accounts_OAuth_Custom_Hermes_token_path: "/oauth/token"
+      Accounts_OAuth_Custom_Hermes_identity_path: "/oauth/userinfo"
+      Accounts_OAuth_Custom_Hermes_authorize_path: "/oauth/authorize"
+      Accounts_OAuth_Custom_Hermes_scope: "openid"
+      Accounts_OAuth_Custom_Hermes_login_style: "redirect"
+      # Rocket.Chat envia o access_token como query param por padrao
+      # (identity_token_sent_via: default -> token_sent_via: default -> payload).
+      # Fixamos os dois explicitamente: header para o /oauth/userinfo (Flask so'
+      # aceita Authorization: Bearer / cookie, nunca query param, pra nao vazar
+      # o token em URL/logs) e payload para o /oauth/token (ja' e' o default
+      # efetivo hoje — fixado pra um futuro default do Rocket.Chat nao quebrar
+      # isso silenciosamente).
+      Accounts_OAuth_Custom_Hermes_identity_token_sent_via: "header"
+      Accounts_OAuth_Custom_Hermes_token_sent_via: "payload"
+      # "id" (numerico, unico) — nao "username" (local-part do email, que pode
+      # colidir entre usuarios distintos, ex: joao@empresa.com e joao@gmail.com
+      # e' merge_users:true mesclaria as duas contas no Rocket.Chat).
+      Accounts_OAuth_Custom_Hermes_key_field: "id"
+      Accounts_OAuth_Custom_Hermes_username_field: "username"
+      Accounts_OAuth_Custom_Hermes_email_field: "email"
+      Accounts_OAuth_Custom_Hermes_name_field: "name"
+      Accounts_OAuth_Custom_Hermes_merge_users: "true"
+      Accounts_OAuth_Custom_Hermes_show_button: "true"
+    volumes:
+      - rocketchat_uploads:/app/uploads
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/v1/info"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  mongodb:
+    image: mongodb/mongodb-community-server:8.2-ubi8
+    container_name: rocketchat_mongodb
+    restart: unless-stopped
+    command: ["--replSet", "rs0", "--oplogSize", "128"]
+    volumes:
+      - rocketchat_mongodb:/data/db
+    healthcheck:
+      test: >
+        mongosh --quiet --eval "
+          try {
+            var status = rs.status();
+            if (status.ok === 1) quit(0);
+            else quit(1);
+          } catch(e) {
+            rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongodb:27017' }] });
+            quit(1);
+          }
+        "
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+
+volumes:
+  rocketchat_uploads:
+  rocketchat_mongodb:

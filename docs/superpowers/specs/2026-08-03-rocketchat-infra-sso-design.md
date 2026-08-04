@@ -41,7 +41,17 @@ Usuário abre o Rocket.Chat (ainda standalone nesta fase, sem iframe) → sem se
 
 ## Erros
 
-- `auth_token` expirado durante o fluxo → cai no `/login` normal do Hermes, retoma o authorize depois de logar.
+- `auth_token` expirado durante o fluxo → cai no `/login` normal do Hermes.
+  **Limitação conhecida (decisão explícita de escopo):** a implementação
+  atual redireciona para o `/login` bare, sem `next=` — o login **não**
+  retoma o `/oauth/authorize` automaticamente depois. Implementar isso direito
+  exige mudança no frontend (`web/src/app/login`), fora de escopo desta fase
+  (backend + infra). Afeta só o caso de sessão ausente/expirada nesse
+  instante exato; usuário com sessão ativa não é afetado — ele só precisa
+  clicar de novo no Rocket.Chat depois de logar. Suporte a `next=` (com
+  validação de mesma origem, para não reabrir um open redirect) fica para
+  fase futura. Documentado também em `deploy/rocketchat/README.md`
+  ("Limitações conhecidas").
 - Client OAuth mal configurado (client_id/secret divergente) → erro logado no Flask; Rocket.Chat expõe erro de login (fora do nosso controle direto de UI).
 - Rocket.Chat ou MongoDB fora do ar → falha de infra, sem relação com o fluxo OAuth — tratamento de disponibilidade fica para a Fase 3 (embed), quando existe UI do Hermes cobrindo esse caso.
 

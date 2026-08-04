@@ -84,6 +84,39 @@ class TestTokenSessao(unittest.TestCase):
             self.assertIsNotNone(rbac.verificar_token_sessao(token))
 
 
+class TestTokenSessaoRejeitaTokensOAuth(unittest.TestCase):
+    """Regressao: um code/access_token do OAuth provider (core/oauth_provider.py)
+    e' assinado com o mesmo ATHENA_JWT_SECRET e carrega user_id, mas NAO pode
+    valer como sessao completa do Hermes — verificar_token_sessao deve
+    rejeitar qualquer payload com claim `typ` (so' os tokens OAuth setam essa
+    claim; tokens de sessao normais, gerados por gerar_token_sessao, nunca
+    setam)."""
+
+    def setUp(self):
+        self._env_patch = patch.dict(os.environ, {"ATHENA_JWT_SECRET": "test-secret-32-bytes-long-enough!!"})
+        self._env_patch.start()
+
+    def tearDown(self):
+        self._env_patch.stop()
+
+    def test_oauth_access_token_nao_vale_como_sessao(self):
+        from core.oauth_provider import gerar_access_token
+        token = gerar_access_token(7)
+        self.assertIsNone(rbac.verificar_token_sessao(token))
+
+    def test_oauth_authorization_code_nao_vale_como_sessao(self):
+        from core.oauth_provider import gerar_authorization_code
+        code = gerar_authorization_code(7, "client-x", "https://exemplo.com/cb")
+        self.assertIsNone(rbac.verificar_token_sessao(code))
+
+    def test_token_de_sessao_normal_continua_valido(self):
+        """Sem regressao no caminho de auth normal, usado em todo o resto do app."""
+        token = rbac.gerar_token_sessao(7, "op@x.com", "Operador")
+        payload = rbac.verificar_token_sessao(token)
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload["user_id"], 7)
+
+
 class TestRequerPermissao(unittest.TestCase):
     def setUp(self):
         self._env_patch = patch.dict(os.environ, {"ATHENA_TOKEN": _TEST_TOKEN})
