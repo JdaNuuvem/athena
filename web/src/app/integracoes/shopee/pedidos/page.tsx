@@ -2,10 +2,12 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { api } from "@/lib/api";
-import type { ShopeePedidoSincronizado } from "@/lib/api";
+import type { ShopeePedidoSincronizado, ShopeePedidosEstatisticas } from "@/lib/api";
 import Icon from "@/app/_components/Icon";
 import PainelFulfillment from "./_components/PainelFulfillment";
+import MapaBrasilPedidos from "./_components/MapaBrasilPedidos";
 
 interface LojaShopee {
   id: number;
@@ -32,6 +34,29 @@ function statusColor(status: string) {
   if (status === "CANCELLED" || status === "IN_CANCEL") return "text-red-400";
   if (status === "SHIPPED" || status === "READY_TO_SHIP") return "text-blue-400";
   return "text-amber-400";
+}
+
+function statusHex(status: string) {
+  if (status === "COMPLETED") return "#4ade80";
+  if (status === "CANCELLED" || status === "IN_CANCEL") return "#f87171";
+  if (status === "SHIPPED" || status === "READY_TO_SHIP") return "#60a5fa";
+  return "#fbbf24";
+}
+
+function fmtHoras(h: number | null) {
+  if (h === null || h === undefined) return "—";
+  if (h < 24) return `${h.toFixed(1)}h`;
+  return `${Math.floor(h / 24)}d ${Math.round(h % 24)}h`;
+}
+
+function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2 text-xs shadow-lg">
+      <div className="text-neutral-500">{label}</div>
+      <div className="numeric text-neutral-200 mt-0.5">{payload[0].value}</div>
+    </div>
+  );
 }
 
 function fmtBRL(v: number | string) {
@@ -62,6 +87,8 @@ export default function ShopeePedidosPage() {
   const [pagina, setPagina] = useState(1);
   const [diasSync, setDiasSync] = useState(30);
   const [sincronizando, setSincronizando] = useState(false);
+  const [diasEstatisticas, setDiasEstatisticas] = useState(90);
+  const [estatisticas, setEstatisticas] = useState<ShopeePedidosEstatisticas | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -106,6 +133,13 @@ export default function ShopeePedidosPage() {
   }, [lojaId, statusFiltro, busca, pagina]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  useEffect(() => {
+    if (!lojaId) { setEstatisticas(null); return; }
+    api.shopeePedidosEstatisticas(Number(lojaId), diasEstatisticas)
+      .then((r) => setEstatisticas(r.error ? null : r))
+      .catch(() => setEstatisticas(null));
+  }, [lojaId, diasEstatisticas]);
 
   const sincronizar = async () => {
     if (!lojaId) return;
@@ -173,6 +207,89 @@ export default function ShopeePedidosPage() {
 
       {lojas.length > 0 && (
         <>
+          <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs text-neutral-500 uppercase tracking-wider">Onde estão os pedidos</p>
+              <select
+                value={diasEstatisticas}
+                onChange={(e) => setDiasEstatisticas(Number(e.target.value))}
+                className="bg-neutral-800 border border-neutral-700 rounded-lg px-2 py-1 text-xs text-neutral-200"
+              >
+                <option value={30}>Últimos 30 dias</option>
+                <option value={90}>Últimos 90 dias</option>
+                <option value={180}>Últimos 180 dias</option>
+              </select>
+            </div>
+            <MapaBrasilPedidos dados={estatisticas?.por_estado || []} />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4">
+              <p className="text-xs text-neutral-500 uppercase tracking-wider mb-3">Pedidos por dia</p>
+              {estatisticas && estatisticas.serie_diaria.length > 0 ? (
+                <ResponsiveContainer width="100%" height={180}>
+                  <LineChart data={estatisticas.serie_diaria.map((p) => ({ ...p, diaLabel: p.dia.slice(8, 10) + "/" + p.dia.slice(5, 7) }))}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#262626" />
+                    <XAxis dataKey="diaLabel" stroke="#737373" tick={{ fontSize: 10, fill: "#737373" }} />
+                    <YAxis stroke="#737373" tick={{ fontSize: 10, fill: "#737373" }} allowDecimals={false} width={30} />
+                    <Tooltip content={<ChartTooltip />} />
+                    <Line type="monotone" dataKey="total" stroke="#34d399" strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="text-sm text-center py-14 text-neutral-500">Sem dados no período</div>
+              )}
+            </div>
+
+            <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4">
+              <p className="text-xs text-neutral-500 uppercase tracking-wider mb-3">Distribuição por status</p>
+              {estatisticas && estatisticas.por_status.length > 0 ? (
+                <ResponsiveContainer width="100%" height={180}>
+                  <BarChart
+                    data={estatisticas.por_status.map((s) => ({ ...s, label: STATUS_LABEL[s.status] || s.status }))}
+                    layout="vertical"
+                    margin={{ left: 90 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#262626" />
+                    <XAxis type="number" stroke="#737373" tick={{ fontSize: 10, fill: "#737373" }} allowDecimals={false} />
+                    <YAxis type="category" dataKey="label" stroke="#737373" tick={{ fontSize: 10, fill: "#737373" }} width={90} />
+                    <Tooltip content={<ChartTooltip />} />
+                    <Bar dataKey="total" radius={[0, 3, 3, 0]}>
+                      {estatisticas.por_status.map((s, i) => <Cell key={i} fill={statusHex(s.status)} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="text-sm text-center py-14 text-neutral-500">Sem dados no período</div>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            <div className="lg:col-span-2 bg-neutral-900 border border-neutral-800 rounded-lg p-4">
+              <p className="text-xs text-neutral-500 uppercase tracking-wider mb-3">Clientes recorrentes no período</p>
+              {estatisticas && estatisticas.clientes_recorrentes.length > 0 ? (
+                <div className="space-y-1.5">
+                  {estatisticas.clientes_recorrentes.map((c, i) => (
+                    <div key={c.cliente + i} className="flex items-center gap-3 text-sm">
+                      <span className="text-xs text-neutral-600 w-4 shrink-0">{i + 1}</span>
+                      <span className="flex-1 min-w-0 truncate text-neutral-300">{c.cliente}</span>
+                      <span className="text-xs text-neutral-500 numeric shrink-0">{c.total} pedidos</span>
+                      <span className="text-emerald-400 numeric shrink-0 w-24 text-right">{fmtBRL(c.valor)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-center py-6 text-neutral-500">Nenhum comprador com mais de 1 pedido no período.</p>
+              )}
+            </div>
+            <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-3 flex flex-col justify-center">
+              <p className="text-xs text-neutral-500 uppercase tracking-wider">Tempo médio de despacho</p>
+              <p className="text-lg text-neutral-200 numeric font-medium mt-1">{fmtHoras(estatisticas?.tempo_medio_despacho_horas ?? null)}</p>
+              <p className="text-xs text-neutral-600 mt-1">Do pedido pago até o despacho registrado.</p>
+            </div>
+          </div>
+
           <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 flex flex-wrap items-center gap-3">
             <input
               type="text"
@@ -233,8 +350,11 @@ export default function ShopeePedidosPage() {
                         <div className="border-t border-neutral-800 p-3 space-y-3">
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                             <div>
-                              <p className="text-neutral-500 uppercase tracking-wider text-[10px] mb-1">Entrega</p>
-                              <p className="text-neutral-300">{p.recipient_nome || "—"}</p>
+                              <p className="text-neutral-500 uppercase tracking-wider text-[10px] mb-1">Cliente & entrega</p>
+                              <p className="text-neutral-300 font-medium">{p.recipient_nome || "—"}</p>
+                              {p.buyer_username && p.buyer_username !== p.recipient_nome && (
+                                <p className="text-neutral-500">Usuário Shopee: @{p.buyer_username}</p>
+                              )}
                               <p className="text-neutral-400">{p.recipient_telefone || "—"}</p>
                               <p className="text-neutral-400">{p.recipient_endereco || "—"}</p>
                               <p className="text-neutral-400">

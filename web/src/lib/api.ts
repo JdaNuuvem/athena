@@ -281,6 +281,8 @@ export const api = {
     request<{ item?: Record<string, unknown>; error?: string }>(`/api/shopee/produtos/${itemId}${lojaId ? `?loja_id=${lojaId}` : ""}`),
   shopeeDesconectarLoja: (lojaId: number) =>
     request<{ id?: number; nome?: string; error?: string }>(`/api/shopee/lojas/${lojaId}`, { method: "DELETE" }),
+  shopeePedidosEstatisticas: (lojaId: number, dias = 90) =>
+    request<ShopeePedidosEstatisticas & { error?: string }>(`/api/shopee/pedidos-sincronizados/estatisticas?loja_id=${lojaId}&dias=${dias}`),
   shopeeSyncLog: () =>
     request<{ log: ShopeeSyncLogEntry[] }>("/api/shopee/sync-log"),
   shopeePedidos: (lojaId?: number, dias?: number, status?: string) => {
@@ -968,6 +970,14 @@ export interface ShopeePedidoSincronizado {
   bling_nota_fiscal_id?: number | null;
   package_number?: string | null;
   despachado_em?: string | null;
+}
+
+export interface ShopeePedidosEstatisticas {
+  por_estado: Array<{ estado: string; total: number; valor: number }>;
+  serie_diaria: Array<{ dia: string; total: number }>;
+  por_status: Array<{ status: string; total: number }>;
+  clientes_recorrentes: Array<{ cliente: string; total: number; valor: number }>;
+  tempo_medio_despacho_horas: number | null;
 }
 
 export interface ShopeeFulfillmentStatus {
