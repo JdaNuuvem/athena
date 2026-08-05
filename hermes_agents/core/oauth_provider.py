@@ -14,6 +14,7 @@ exige o `client_secret` correto (`/oauth/token`), o que mantem o risco
 pratico baixo, e a janela de exposicao e' curta pelo TTL."""
 from datetime import datetime, timedelta, timezone
 import jwt as _jwt
+from core import log
 from core.rbac import _jwt_secret, JWT_ALGORITHM
 
 AGENT = "OAuth Provider"
@@ -63,8 +64,10 @@ def validar_access_token(token: str) -> "int | None":
         return None
     try:
         payload = _jwt.decode(token, _jwt_secret(), algorithms=[JWT_ALGORITHM])
-    except Exception:
+    except Exception as e:
+        log("OAuth Provider", f"DEBUG validar_access_token: decode falhou: {type(e).__name__}: {e}")
         return None
     if payload.get("typ") != "oauth_access":
+        log("OAuth Provider", f"DEBUG validar_access_token: typ inesperado: {payload.get('typ')!r}")
         return None
     return payload.get("user_id")
