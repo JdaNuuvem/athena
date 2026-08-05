@@ -402,25 +402,36 @@ def listar_pedidos_sincronizados(loja_id: int, status: str = None, busca: str = 
         log(AGENT, f"Erro listar_pedidos_sincronizados: {e}")
         return {"pedidos": [], "total": 0, "valor_total": 0, "atrasados": 0}
 
-_ESTATISTICAS_VAZIAS = {"por_estado": [], "serie_diaria": [], "por_status": [], "clientes_recorrentes": [], "tempo_medio_despacho_horas": None}
+_ESTATISTICAS_VAZIAS = {"por_estado": [], "serie_diaria": [], "por_status": [], "clientes_recorrentes": [], "tempo_medio_despacho_horas": None, "enderecos_mascarados": False}
+
+# A Shopee mascara campos de endereco/nome do destinatario como "****" (protecao
+# de dados do comprador via API — nao e' algo que o Hermes decida ou controle);
+# buyer_username nao e' mascarado. "~ '^\*+$'" filtra qualquer sequencia de so'
+# asteriscos, nao so' o caso exato de 4.
+_NAO_MASCARADO = "!~ '^\\*+$'"
 
 def estatisticas_pedidos_sincronizados(loja_id: int, dias: int = 90) -> dict:
     """Agregados pra pagina Pedidos: distribuicao por UF (mapa), serie diaria de
-    volume, distribuicao por status, clientes recorrentes (mesmo comprador/
-    destinatario em mais de 1 pedido) e tempo medio de despacho. Mesma tabela
-    de listar_pedidos_sincronizados acima."""
+    volume, distribuicao por status, clientes recorrentes (por buyer_username,
+    unico campo de identificacao do comprador que a Shopee nao mascara) e tempo
+    medio de despacho. Mesma tabela de listar_pedidos_sincronizados acima."""
     async def _go():
         db = await get_db()
         shop_id = get_shopee_config(loja_id).get("shop_id") or ""
         if not shop_id:
             return _ESTATISTICAS_VAZIAS
-        por_estado = await db.fetch("""
+        por_estado = await db.fetch(f"""
             SELECT UPPER(TRIM(recipient_estado)) AS estado, COUNT(*) AS total, COALESCE(SUM(total_amount),0) AS valor
             FROM shopee_pedidos_sincronizados
             WHERE shop_id = $1 AND create_time >= NOW() - (INTERVAL '1 day' * $2)
-              AND recipient_estado IS NOT NULL AND recipient_estado != ''
+              AND recipient_estado IS NOT NULL AND recipient_estado != '' AND recipient_estado {_NAO_MASCARADO}
             GROUP BY UPPER(TRIM(recipient_estado)) ORDER BY total DESC
         """, shop_id, dias)
+        total_periodo = await db.fetchval("""
+            SELECT COUNT(*) FROM shopee_pedidos_sincronizados
+            WHERE shop_id = $1 AND create_time >= NOW() - (INTERVAL '1 day' * $2)
+        """, shop_id, dias)
+        enderecos_mascarados = total_periodo > 0 and not por_estado
         serie_diaria = await db.fetch("""
             SELECT DATE(create_time) AS dia, COUNT(*) AS total
             FROM shopee_pedidos_sincronizados
@@ -433,12 +444,12 @@ def estatisticas_pedidos_sincronizados(loja_id: int, dias: int = 90) -> dict:
             WHERE shop_id = $1 AND create_time >= NOW() - (INTERVAL '1 day' * $2)
             GROUP BY status ORDER BY total DESC
         """, shop_id, dias)
-        clientes_recorrentes = await db.fetch("""
-            SELECT COALESCE(NULLIF(recipient_nome, ''), buyer_username) AS cliente, COUNT(*) AS total, COALESCE(SUM(total_amount),0) AS valor
+        clientes_recorrentes = await db.fetch(f"""
+            SELECT buyer_username AS cliente, COUNT(*) AS total, COALESCE(SUM(total_amount),0) AS valor
             FROM shopee_pedidos_sincronizados
             WHERE shop_id = $1 AND create_time >= NOW() - (INTERVAL '1 day' * $2)
-              AND COALESCE(NULLIF(recipient_nome, ''), buyer_username) IS NOT NULL
-            GROUP BY cliente HAVING COUNT(*) > 1 ORDER BY total DESC LIMIT 10
+              AND buyer_username IS NOT NULL AND buyer_username != '' AND buyer_username {_NAO_MASCARADO}
+            GROUP BY buyer_username HAVING COUNT(*) > 1 ORDER BY total DESC LIMIT 10
         """, shop_id, dias)
         tempo_row = await db.fetchrow("""
             SELECT AVG(EXTRACT(EPOCH FROM (despachado_em - create_time)) / 3600.0) AS horas
@@ -451,6 +462,7 @@ def estatisticas_pedidos_sincronizados(loja_id: int, dias: int = 90) -> dict:
             "por_status": [{"status": r["status"], "total": r["total"]} for r in (por_status or [])],
             "clientes_recorrentes": [{"cliente": r["cliente"], "total": r["total"], "valor": float(r["valor"] or 0)} for r in (clientes_recorrentes or [])],
             "tempo_medio_despacho_horas": float(tempo_row["horas"]) if tempo_row and tempo_row["horas"] is not None else None,
+            "enderecos_mascarados": enderecos_mascarados,
         }
     try:
         return run_async(_go())

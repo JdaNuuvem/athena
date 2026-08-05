@@ -978,6 +978,7 @@ export interface ShopeePedidosEstatisticas {
   por_status: Array<{ status: string; total: number }>;
   clientes_recorrentes: Array<{ cliente: string; total: number; valor: number }>;
   tempo_medio_despacho_horas: number | null;
+  enderecos_mascarados: boolean;
 }
 
 export interface ShopeeFulfillmentStatus {

@@ -63,6 +63,19 @@ function fmtBRL(v: number | string) {
   return "R$ " + Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// A Shopee mascara nome/endereco do destinatario como "****" (protecao de dados
+// do comprador) — buyer_username nao vem mascarado, entao e' o identificador
+// mais confiavel do cliente quando isso acontece.
+function mascarado(v: string | null | undefined) {
+  return !v || /^\*+$/.test(v);
+}
+
+function nomeCliente(p: { recipient_nome: string; buyer_username: string }) {
+  if (!mascarado(p.recipient_nome)) return p.recipient_nome;
+  if (!mascarado(p.buyer_username)) return `@${p.buyer_username}`;
+  return "Cliente não identificado";
+}
+
 function formatarData(iso: string | null) {
   if (!iso) return "—";
   return new Date(iso).toLocaleString("pt-BR");
@@ -220,7 +233,13 @@ export default function ShopeePedidosPage() {
                 <option value={180}>Últimos 180 dias</option>
               </select>
             </div>
-            <MapaBrasilPedidos dados={estatisticas?.por_estado || []} />
+            {estatisticas?.enderecos_mascarados ? (
+              <p className="text-sm text-center py-6 text-neutral-500">
+                A Shopee não está enviando o estado do destinatário para esta conta (endereço protegido pela API — vem mascarado como &quot;****&quot;). Sem esse dado não há como montar o mapa.
+              </p>
+            ) : (
+              <MapaBrasilPedidos dados={estatisticas?.por_estado || []} />
+            )}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -337,7 +356,7 @@ export default function ShopeePedidosPage() {
                         <div className="min-w-0">
                           <p className="text-sm text-neutral-200 font-mono">{p.order_sn}</p>
                           <p className="text-xs text-neutral-500 truncate">
-                            {p.recipient_nome || p.buyer_username || "Cliente não identificado"} · {formatarData(p.create_time)}
+                            {nomeCliente(p)} · {formatarData(p.create_time)}
                           </p>
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
@@ -351,15 +370,21 @@ export default function ShopeePedidosPage() {
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                             <div>
                               <p className="text-neutral-500 uppercase tracking-wider text-[10px] mb-1">Cliente & entrega</p>
-                              <p className="text-neutral-300 font-medium">{p.recipient_nome || "—"}</p>
-                              {p.buyer_username && p.buyer_username !== p.recipient_nome && (
+                              <p className="text-neutral-300 font-medium">{nomeCliente(p)}</p>
+                              {!mascarado(p.recipient_nome) && !mascarado(p.buyer_username) && (
                                 <p className="text-neutral-500">Usuário Shopee: @{p.buyer_username}</p>
                               )}
-                              <p className="text-neutral-400">{p.recipient_telefone || "—"}</p>
-                              <p className="text-neutral-400">{p.recipient_endereco || "—"}</p>
-                              <p className="text-neutral-400">
-                                {[p.recipient_cidade, p.recipient_estado, p.recipient_cep].filter(Boolean).join(" · ") || "—"}
-                              </p>
+                              {mascarado(p.recipient_telefone) && mascarado(p.recipient_endereco) ? (
+                                <p className="text-neutral-600 italic mt-1">Endereço protegido pela Shopee (não disponível via API)</p>
+                              ) : (
+                                <>
+                                  <p className="text-neutral-400">{p.recipient_telefone || "—"}</p>
+                                  <p className="text-neutral-400">{p.recipient_endereco || "—"}</p>
+                                  <p className="text-neutral-400">
+                                    {[p.recipient_cidade, p.recipient_estado, p.recipient_cep].filter(Boolean).join(" · ") || "—"}
+                                  </p>
+                                </>
+                              )}
                             </div>
                             <div>
                               <p className="text-neutral-500 uppercase tracking-wider text-[10px] mb-1">Pagamento & prazo</p>
