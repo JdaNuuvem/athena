@@ -4,7 +4,10 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { api } from "@/lib/api";
-import type { ShopeeDashboardLoja, ShopeeSerieDiariaPonto, ShopeeTopProdutoHoje, ShopeeEstoqueRisco, ShopeeShopPerformance } from "@/lib/api";
+import type {
+  ShopeeDashboardLoja, ShopeeSerieDiariaPonto, ShopeeTopProdutoHoje, ShopeeEstoqueRisco,
+  ShopeeShopPerformance, ShopeeFunilFulfillment, ShopeeAdsPerformanceRow, ShopeeAdsInsight, ShopeeSyncLogEntry,
+} from "@/lib/api";
 import Icon from "@/app/_components/Icon";
 import RankingProdutosModal from "@/app/_components/RankingProdutosModal";
 
@@ -16,6 +19,22 @@ const RATING_META: Record<number, { label: string; className: string }> = {
   3: { label: "Boa", className: "bg-emerald-950/40 border-emerald-900/50 text-emerald-400" },
   4: { label: "Excelente", className: "bg-emerald-950/40 border-emerald-900/50 text-emerald-300" },
 };
+
+const SEVERITY_META: Record<string, { label: string; className: string }> = {
+  alta: { label: "Alta", className: "bg-red-950/40 border-red-900/50 text-red-400" },
+  high: { label: "Alta", className: "bg-red-950/40 border-red-900/50 text-red-400" },
+  media: { label: "Média", className: "bg-amber-950/40 border-amber-900/50 text-amber-400" },
+  média: { label: "Média", className: "bg-amber-950/40 border-amber-900/50 text-amber-400" },
+  medium: { label: "Média", className: "bg-amber-950/40 border-amber-900/50 text-amber-400" },
+  baixa: { label: "Baixa", className: "bg-neutral-800 text-neutral-400" },
+  low: { label: "Baixa", className: "bg-neutral-800 text-neutral-400" },
+};
+
+function diasAte(iso: string | null): number | null {
+  if (!iso) return null;
+  const diff = new Date(iso).getTime() - Date.now();
+  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+}
 
 function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; name: string }>; label?: string }) {
   if (!active || !payload?.length) return null;
@@ -29,8 +48,30 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
   );
 }
 
+interface SaudeLojaState {
+  loading: boolean;
+  performance?: ShopeeShopPerformance;
+  pontosPenalidade?: number;
+  punicoesAtivas?: number;
+  anunciosComProblema?: number;
+  pedidosAtrasados?: number;
+  descontosAtivos?: number;
+  vouchersAtivos?: number;
+  erro?: string;
+}
+
 interface SaudeState {
-  [lojaId: number]: { loading: boolean; performance?: ShopeeShopPerformance; erro?: string };
+  [lojaId: number]: SaudeLojaState;
+}
+
+function StatCard({ label, value, tone = "neutral" }: { label: string; value: string | number; tone?: "emerald" | "amber" | "red" | "neutral" }) {
+  const cor = tone === "emerald" ? "text-emerald-400" : tone === "amber" ? "text-amber-400" : tone === "red" ? "text-red-400" : "text-neutral-200";
+  return (
+    <div className="instrument-hover bg-neutral-900 border border-neutral-800 rounded-lg p-3">
+      <p className="text-xs text-neutral-500 uppercase tracking-wider">{label}</p>
+      <p className={`text-lg numeric font-medium ${cor}`}>{value}</p>
+    </div>
+  );
 }
 
 export default function ShopeeDashboardPage() {
@@ -38,11 +79,15 @@ export default function ShopeeDashboardPage() {
   const [serieDiaria, setSerieDiaria] = useState<ShopeeSerieDiariaPonto[]>([]);
   const [topProdutosHoje, setTopProdutosHoje] = useState<ShopeeTopProdutoHoje[]>([]);
   const [estoqueRisco, setEstoqueRisco] = useState<ShopeeEstoqueRisco[]>([]);
+  const [funil, setFunil] = useState<ShopeeFunilFulfillment>({ total: 0, sem_bling: 0, sem_nota: 0, nao_despachado: 0 });
   const [dias, setDias] = useState(30);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [showRanking, setShowRanking] = useState(false);
   const [saude, setSaude] = useState<SaudeState>({});
+  const [syncLog, setSyncLog] = useState<ShopeeSyncLogEntry[]>([]);
+  const [adsPerf, setAdsPerf] = useState<ShopeeAdsPerformanceRow[]>([]);
+  const [adsInsights, setAdsInsights] = useState<ShopeeAdsInsight[]>([]);
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -54,6 +99,7 @@ export default function ShopeeDashboardPage() {
       setSerieDiaria(r.serie_diaria || []);
       setTopProdutosHoje(r.top_produtos_hoje || []);
       setEstoqueRisco(r.estoque_risco || []);
+      setFunil(r.funil_fulfillment || { total: 0, sem_bling: 0, sem_nota: 0, nao_despachado: 0 });
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao carregar painel");
     } finally {
@@ -64,19 +110,49 @@ export default function ShopeeDashboardPage() {
   useEffect(() => { carregar(); }, [carregar]);
 
   useEffect(() => {
+    api.shopeeSyncLog().then((r) => setSyncLog(r.log || [])).catch(() => {});
+    api.shopeeAdsPerformance().then(setAdsPerf).catch(() => {});
+    api.shopeeAdsInsights().then(setAdsInsights).catch(() => {});
+  }, []);
+
+  useEffect(() => {
     const lojasAtivas = lojas.filter((l) => l.tem_token);
     if (lojasAtivas.length === 0) return;
     lojasAtivas.forEach((l) => {
       setSaude((s) => ({ ...s, [l.loja_id]: { loading: true } }));
-      api.shopeeSaudePerformance(l.loja_id)
-        .then((r) => {
-          if (r.error || !r.response) {
-            setSaude((s) => ({ ...s, [l.loja_id]: { loading: false, erro: r.error || "Indisponível" } }));
-          } else {
-            setSaude((s) => ({ ...s, [l.loja_id]: { loading: false, performance: r.response } }));
-          }
-        })
-        .catch((e) => setSaude((s) => ({ ...s, [l.loja_id]: { loading: false, erro: e instanceof Error ? e.message : "Erro" } })));
+      Promise.allSettled([
+        api.shopeeSaudePerformance(l.loja_id),
+        api.shopeeSaudePenalidades(l.loja_id),
+        api.shopeeSaudePunicoes(l.loja_id, 1),
+        api.shopeeSaudeAnunciosComProblema(l.loja_id),
+        api.shopeeSaudePedidosAtrasados(l.loja_id),
+        api.shopeeListarDescontos(l.loja_id, "ongoing"),
+        api.shopeeListarVouchers(l.loja_id, "ongoing"),
+      ]).then(([perf, penal, punic, anunc, atraso, desc, vouch]) => {
+        const val = <T,>(r: PromiseSettledResult<T>) => (r.status === "fulfilled" ? r.value : null);
+        const performance = val(perf) as Awaited<ReturnType<typeof api.shopeeSaudePerformance>> | null;
+        const penalidades = val(penal) as Awaited<ReturnType<typeof api.shopeeSaudePenalidades>> | null;
+        const punicoes = val(punic) as Awaited<ReturnType<typeof api.shopeeSaudePunicoes>> | null;
+        const anuncios = val(anunc) as Awaited<ReturnType<typeof api.shopeeSaudeAnunciosComProblema>> | null;
+        const atrasados = val(atraso) as Awaited<ReturnType<typeof api.shopeeSaudePedidosAtrasados>> | null;
+        const descontos = val(desc) as Awaited<ReturnType<typeof api.shopeeListarDescontos>> | null;
+        const vouchers = val(vouch) as Awaited<ReturnType<typeof api.shopeeListarVouchers>> | null;
+        const semNenhumDado = !performance?.response && !penalidades?.response && !punicoes?.response && !anuncios?.response && !atrasados?.response;
+        setSaude((s) => ({
+          ...s,
+          [l.loja_id]: {
+            loading: false,
+            performance: performance?.response,
+            pontosPenalidade: (penalidades?.response?.penalty_point_list || []).reduce((sum, p) => sum + Number(p.latest_point_num || 0), 0),
+            punicoesAtivas: punicoes?.response?.total_count ?? punicoes?.response?.punishment_list?.length,
+            anunciosComProblema: anuncios?.response?.total_count ?? anuncios?.response?.listing_list?.length,
+            pedidosAtrasados: atrasados?.response?.total_count ?? atrasados?.response?.late_order_list?.length,
+            descontosAtivos: descontos?.response?.discount_list?.length,
+            vouchersAtivos: vouchers?.response?.voucher_list?.length,
+            erro: semNenhumDado ? "Indisponível" : undefined,
+          },
+        }));
+      });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lojas.map((l) => l.loja_id).join(",")]);
@@ -84,6 +160,8 @@ export default function ShopeeDashboardPage() {
   const totalReceita = lojas.reduce((s, l) => s + Number(l.receita || 0), 0);
   const totalUnidades = lojas.reduce((s, l) => s + Number(l.unidades_vendidas || 0), 0);
   const totalAnunciosAtivos = lojas.reduce((s, l) => s + Number(l.anuncios_ativos || 0), 0);
+  const totalAnunciosPausados = lojas.reduce((s, l) => s + Number(l.anuncios_pausados || 0), 0);
+  const totalAnunciosBanidos = lojas.reduce((s, l) => s + Number(l.anuncios_banidos || 0), 0);
   const totalEstoqueBaixo = lojas.reduce((s, l) => s + Number(l.produtos_estoque_baixo || 0), 0);
   const maiorReceita = Math.max(1, ...lojas.map(l => Number(l.receita || 0)));
 
@@ -92,7 +170,41 @@ export default function ShopeeDashboardPage() {
   const unidadesHoje = lojas.reduce((s, l) => s + Number(l.unidades_hoje || 0), 0);
   const ticketMedioHoje = pedidosHoje > 0 ? receitaHoje / pedidosHoje : 0;
 
+  const saudeValores = Object.values(saude);
+  const totalPedidosAtrasados = saudeValores.reduce((s, v) => s + Number(v.pedidosAtrasados || 0), 0);
+  const totalPontosPenalidade = saudeValores.reduce((s, v) => s + Number(v.pontosPenalidade || 0), 0);
+  const totalPunicoesAtivas = saudeValores.reduce((s, v) => s + Number(v.punicoesAtivas || 0), 0);
+  const totalAnunciosComProblema = saudeValores.reduce((s, v) => s + Number(v.anunciosComProblema || 0), 0);
+  const totalDescontosAtivos = saudeValores.reduce((s, v) => s + Number(v.descontosAtivos || 0), 0);
+  const totalVouchersAtivos = saudeValores.reduce((s, v) => s + Number(v.vouchersAtivos || 0), 0);
+
+  const adsCost = adsPerf.reduce((s, p) => s + Number(p.cost || 0), 0);
+  const adsRevenue = adsPerf.reduce((s, p) => s + Number(p.revenue || 0), 0);
+  const adsRoas = adsCost > 0 ? adsRevenue / adsCost : 0;
+  const adsInsightsPendentes = adsInsights.filter((i) => !i.action_taken);
+
+  const syncUltimo = syncLog[0];
+  const syncComErro = !!syncUltimo?.erro || syncUltimo?.status === "erro";
+  const syncExecutando = syncUltimo?.status === "executando";
+
+  const lojasComTokenExpirando = lojas.filter((l) => {
+    const d = diasAte(l.shopee_token_expira_em);
+    return d !== null && d <= 7;
+  });
+
   const chartData = serieDiaria.map((p) => ({ ...p, diaLabel: p.dia.slice(8, 10) + "/" + p.dia.slice(5, 7) }));
+
+  const alertas: Array<{ texto: string; tone: "red" | "amber" }> = [];
+  if (totalPedidosAtrasados > 0) alertas.push({ texto: `${totalPedidosAtrasados} pedido${totalPedidosAtrasados === 1 ? "" : "s"} atrasado${totalPedidosAtrasados === 1 ? "" : "s"} pra envio`, tone: "red" });
+  if (totalPunicoesAtivas > 0) alertas.push({ texto: `${totalPunicoesAtivas} punição${totalPunicoesAtivas === 1 ? "" : "ões"} ativa${totalPunicoesAtivas === 1 ? "" : "s"} na conta`, tone: "red" });
+  if (totalAnunciosBanidos > 0) alertas.push({ texto: `${totalAnunciosBanidos} anúncio${totalAnunciosBanidos === 1 ? "" : "s"} banido${totalAnunciosBanidos === 1 ? "" : "s"}`, tone: "red" });
+  if (syncComErro) alertas.push({ texto: `Última sincronização com erro${syncUltimo?.erro ? `: ${syncUltimo.erro}` : ""}`, tone: "red" });
+  lojasComTokenExpirando.forEach((l) => {
+    const d = diasAte(l.shopee_token_expira_em);
+    alertas.push({ texto: `Token de "${l.nome}" ${d !== null && d <= 0 ? "expirado" : `expira em ${d}d`}`, tone: "amber" });
+  });
+  if (totalAnunciosComProblema > 0) alertas.push({ texto: `${totalAnunciosComProblema} anúncio${totalAnunciosComProblema === 1 ? "" : "s"} sinalizado${totalAnunciosComProblema === 1 ? "" : "s"} pela Shopee`, tone: "amber" });
+  if (totalPontosPenalidade > 0) alertas.push({ texto: `${totalPontosPenalidade} ponto${totalPontosPenalidade === 1 ? "" : "s"} de penalidade no trimestre`, tone: "amber" });
 
   return (
     <div className="p-6 space-y-4 max-w-5xl">
@@ -139,25 +251,25 @@ export default function ShopeeDashboardPage() {
 
       {lojas.length > 0 && (
         <>
+          {alertas.length > 0 && (
+            <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-3 space-y-1.5">
+              <p className="text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Alertas</p>
+              {alertas.map((a, i) => (
+                <div key={i} className={`flex items-center gap-2 text-xs ${a.tone === "red" ? "text-red-400" : "text-amber-400"}`}>
+                  <span aria-hidden className={`w-1.5 h-1.5 rounded-full shrink-0 ${a.tone === "red" ? "bg-red-500" : "bg-amber-500"}`} />
+                  {a.texto}
+                </div>
+              ))}
+            </div>
+          )}
+
           <div>
             <p className="text-xs text-neutral-500 uppercase tracking-wider mb-2">Hoje</p>
             <div className="instrument-enter grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="instrument-hover bg-neutral-900 border border-neutral-800 rounded-lg p-3">
-                <p className="text-xs text-neutral-500 uppercase tracking-wider">Vendido Hoje</p>
-                <p className="text-lg text-emerald-400 numeric font-medium">{fmtBRL(receitaHoje)}</p>
-              </div>
-              <div className="instrument-hover bg-neutral-900 border border-neutral-800 rounded-lg p-3">
-                <p className="text-xs text-neutral-500 uppercase tracking-wider">Pedidos Hoje</p>
-                <p className="text-lg text-neutral-200 numeric font-medium">{pedidosHoje}</p>
-              </div>
-              <div className="instrument-hover bg-neutral-900 border border-neutral-800 rounded-lg p-3">
-                <p className="text-xs text-neutral-500 uppercase tracking-wider">Unidades Hoje</p>
-                <p className="text-lg text-neutral-200 numeric font-medium">{unidadesHoje}</p>
-              </div>
-              <div className="instrument-hover bg-neutral-900 border border-neutral-800 rounded-lg p-3">
-                <p className="text-xs text-neutral-500 uppercase tracking-wider">Ticket Médio Hoje</p>
-                <p className="text-lg text-neutral-200 numeric font-medium">{fmtBRL(ticketMedioHoje)}</p>
-              </div>
+              <StatCard label="Vendido Hoje" value={fmtBRL(receitaHoje)} tone="emerald" />
+              <StatCard label="Pedidos Hoje" value={pedidosHoje} />
+              <StatCard label="Unidades Hoje" value={unidadesHoje} />
+              <StatCard label="Ticket Médio Hoje" value={fmtBRL(ticketMedioHoje)} />
             </div>
           </div>
 
@@ -197,23 +309,87 @@ export default function ShopeeDashboardPage() {
           <div>
             <p className="text-xs text-neutral-500 uppercase tracking-wider mb-2">Período selecionado ({dias} dias)</p>
             <div className="instrument-enter grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="instrument-hover bg-neutral-900 border border-neutral-800 rounded-lg p-3">
-                <p className="text-xs text-neutral-500 uppercase tracking-wider">Receita Total</p>
-                <p className="text-lg text-emerald-400 numeric font-medium">{fmtBRL(totalReceita)}</p>
-              </div>
-              <div className="instrument-hover bg-neutral-900 border border-neutral-800 rounded-lg p-3">
-                <p className="text-xs text-neutral-500 uppercase tracking-wider">Unidades Vendidas</p>
-                <p className="text-lg text-neutral-200 numeric font-medium">{totalUnidades}</p>
-              </div>
-              <div className="instrument-hover bg-neutral-900 border border-neutral-800 rounded-lg p-3">
-                <p className="text-xs text-neutral-500 uppercase tracking-wider">Anúncios Ativos</p>
-                <p className="text-lg text-neutral-200 numeric font-medium">{totalAnunciosAtivos}</p>
-              </div>
-              <div className="instrument-hover bg-neutral-900 border border-neutral-800 rounded-lg p-3">
-                <p className="text-xs text-neutral-500 uppercase tracking-wider">Estoque Baixo</p>
-                <p className={`text-lg numeric font-medium ${totalEstoqueBaixo > 0 ? "text-amber-400" : "text-neutral-200"}`}>{totalEstoqueBaixo}</p>
+              <StatCard label="Receita Total" value={fmtBRL(totalReceita)} tone="emerald" />
+              <StatCard label="Unidades Vendidas" value={totalUnidades} />
+              <StatCard label="Anúncios Ativos" value={totalAnunciosAtivos} />
+              <StatCard label="Estoque Baixo" value={totalEstoqueBaixo} tone={totalEstoqueBaixo > 0 ? "amber" : "neutral"} />
+            </div>
+          </div>
+
+          {(totalAnunciosPausados > 0 || totalAnunciosBanidos > 0) && (
+            <div className="instrument-enter grid grid-cols-2 gap-3">
+              <StatCard label="Anúncios Pausados" value={totalAnunciosPausados} tone={totalAnunciosPausados > 0 ? "amber" : "neutral"} />
+              <StatCard label="Anúncios Banidos" value={totalAnunciosBanidos} tone={totalAnunciosBanidos > 0 ? "red" : "neutral"} />
+            </div>
+          )}
+
+          {funil.total > 0 && (
+            <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4">
+              <p className="text-xs text-neutral-500 uppercase tracking-wider mb-1">Funil de fulfillment ({dias} dias)</p>
+              <p className="text-xs text-neutral-600 mb-3">Pedidos Shopee do período, do vínculo com o Bling até o despacho.</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <StatCard label="Pedidos no período" value={funil.total} />
+                <StatCard label="Sem vínculo Bling" value={funil.sem_bling} tone={funil.sem_bling > 0 ? "amber" : "neutral"} />
+                <StatCard label="Sem nota emitida" value={funil.sem_nota} tone={funil.sem_nota > 0 ? "amber" : "neutral"} />
+                <StatCard label="Não despachados" value={funil.nao_despachado} tone={funil.nao_despachado > 0 ? "amber" : "neutral"} />
               </div>
             </div>
+          )}
+
+          {(totalDescontosAtivos > 0 || totalVouchersAtivos > 0) && (
+            <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4">
+              <p className="text-xs text-neutral-500 uppercase tracking-wider mb-3">Promoções ativas</p>
+              <div className="grid grid-cols-2 gap-3">
+                <StatCard label="Descontos (flash deals)" value={totalDescontosAtivos} />
+                <StatCard label="Cupons" value={totalVouchersAtivos} />
+              </div>
+            </div>
+          )}
+
+          <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs text-neutral-500 uppercase tracking-wider">Shopee Ads</p>
+              <Link href="/integracoes/shopee-ads" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Ver campanhas →</Link>
+            </div>
+            {adsPerf.length > 0 ? (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <StatCard label="Gasto (90d)" value={fmtBRL(adsCost)} />
+                <StatCard label="Receita gerada" value={fmtBRL(adsRevenue)} tone="emerald" />
+                <StatCard label="ROAS" value={adsRoas.toFixed(2) + "x"} tone={adsRoas >= 3 ? "emerald" : adsRoas > 0 ? "amber" : "neutral"} />
+                <StatCard label="Insights pendentes" value={adsInsightsPendentes.length} tone={adsInsightsPendentes.length > 0 ? "amber" : "neutral"} />
+              </div>
+            ) : (
+              <p className="text-sm text-center py-4 text-neutral-500">Sem campanhas sincronizadas ainda.</p>
+            )}
+            {adsInsightsPendentes.length > 0 && (
+              <div className="space-y-1.5 mt-3 pt-3 border-t border-neutral-800">
+                {adsInsightsPendentes.slice(0, 5).map((ins) => {
+                  const sev = SEVERITY_META[ins.severity?.toLowerCase()] || { label: ins.severity, className: "bg-neutral-800 text-neutral-400" };
+                  return (
+                    <div key={ins.id} className="flex items-center gap-2 text-xs">
+                      <span className={`px-1.5 py-0.5 rounded-full font-medium shrink-0 ${sev.className}`}>{sev.label}</span>
+                      <span className="text-neutral-400 truncate">{ins.message}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4">
+            <p className="text-xs text-neutral-500 uppercase tracking-wider mb-3">Sincronização</p>
+            {syncUltimo ? (
+              <div className="flex items-center gap-3 text-sm">
+                <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${syncComErro ? "bg-red-950/40 text-red-400" : syncExecutando ? "bg-amber-950/40 text-amber-400" : "bg-emerald-950/40 text-emerald-400"}`}>
+                  {syncComErro ? "Erro" : syncExecutando ? "Sincronizando" : "OK"}
+                </span>
+                <span className="text-neutral-300 capitalize">{syncUltimo.tipo}</span>
+                <span className="text-neutral-500 text-xs">{new Date(syncUltimo.iniciado_em).toLocaleString("pt-BR")}</span>
+                {syncUltimo.itens_processados > 0 && <span className="text-neutral-500 text-xs">· {syncUltimo.itens_processados} itens</span>}
+              </div>
+            ) : (
+              <p className="text-sm text-neutral-500">Sem histórico de sincronização.</p>
+            )}
           </div>
 
           {estoqueRisco.length > 0 && (
@@ -239,6 +415,7 @@ export default function ShopeeDashboardPage() {
               const s = saude[l.loja_id];
               const rating = s?.performance?.overall_performance?.rating;
               const ratingMeta = rating ? RATING_META[rating] : null;
+              const tokenDias = diasAte(l.shopee_token_expira_em);
               return (
                 <div key={l.loja_id} className="instrument-hover bg-neutral-900 border border-neutral-800 rounded-lg p-4 space-y-2">
                   <div className="flex items-center justify-between">
@@ -262,6 +439,23 @@ export default function ShopeeDashboardPage() {
                       )}
                       {l.tem_token && s && !s.loading && s.erro && !ratingMeta && (
                         <span className="text-xs px-1.5 py-0.5 rounded-full bg-neutral-800 text-neutral-600">Saúde indisponível</span>
+                      )}
+                      {!!s?.pedidosAtrasados && (
+                        <span className="text-xs px-1.5 py-0.5 rounded-full bg-red-950/40 text-red-400 font-medium">{s.pedidosAtrasados} atrasado{s.pedidosAtrasados === 1 ? "" : "s"}</span>
+                      )}
+                      {!!s?.punicoesAtivas && (
+                        <span className="text-xs px-1.5 py-0.5 rounded-full bg-red-950/40 text-red-400 font-medium">{s.punicoesAtivas} punição{s.punicoesAtivas === 1 ? "" : "ões"}</span>
+                      )}
+                      {!!s?.anunciosComProblema && (
+                        <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-950/40 text-amber-400 font-medium">{s.anunciosComProblema} anúncio{s.anunciosComProblema === 1 ? "" : "s"} c/ problema</span>
+                      )}
+                      {!!s?.pontosPenalidade && (
+                        <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-950/40 text-amber-400 font-medium">{s.pontosPenalidade} pts penalidade</span>
+                      )}
+                      {tokenDias !== null && tokenDias <= 7 && (
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${tokenDias <= 0 ? "bg-red-950/40 text-red-400" : "bg-amber-950/40 text-amber-400"}`}>
+                          {tokenDias <= 0 ? "Token expirado" : `Token expira em ${tokenDias}d`}
+                        </span>
                       )}
                     </div>
                     <span className="text-sm text-emerald-400 numeric font-medium">{fmtBRL(l.receita)}</span>
@@ -287,6 +481,12 @@ export default function ShopeeDashboardPage() {
                       <p className={`text-xs numeric ${l.produtos_estoque_baixo > 0 ? "text-amber-400" : "text-neutral-300"}`}>{l.produtos_estoque_baixo}</p>
                     </div>
                   </div>
+                  {(!!s?.descontosAtivos || !!s?.vouchersAtivos) && (
+                    <div className="flex items-center gap-3 text-xs text-neutral-500 pt-1 border-t border-neutral-800/70">
+                      {!!s?.descontosAtivos && <span>{s.descontosAtivos} desconto{s.descontosAtivos === 1 ? "" : "s"} ativo{s.descontosAtivos === 1 ? "" : "s"}</span>}
+                      {!!s?.vouchersAtivos && <span>{s.vouchersAtivos} cupom{s.vouchersAtivos === 1 ? "" : "s"} ativo{s.vouchersAtivos === 1 ? "" : "s"}</span>}
+                    </div>
+                  )}
                 </div>
               );
             })}

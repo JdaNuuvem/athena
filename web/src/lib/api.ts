@@ -291,7 +291,7 @@ export const api = {
     return request<{ pedidos: ShopeePedido[]; error?: string }>(`/api/shopee/pedidos?${q}`);
   },
   shopeeDashboard: (dias?: number) =>
-    request<{ lojas: ShopeeDashboardLoja[]; dias: number; serie_diaria: ShopeeSerieDiariaPonto[]; top_produtos_hoje: ShopeeTopProdutoHoje[]; estoque_risco: ShopeeEstoqueRisco[]; error?: string }>(`/api/shopee/dashboard${dias ? `?dias=${dias}` : ""}`),
+    request<{ lojas: ShopeeDashboardLoja[]; dias: number; serie_diaria: ShopeeSerieDiariaPonto[]; top_produtos_hoje: ShopeeTopProdutoHoje[]; estoque_risco: ShopeeEstoqueRisco[]; funil_fulfillment: ShopeeFunilFulfillment; error?: string }>(`/api/shopee/dashboard${dias ? `?dias=${dias}` : ""}`),
   shopeePedidosSincronizados: (lojaId: number, opts?: { status?: string; busca?: string; pagina?: number }) => {
     const q = new URLSearchParams({ loja_id: String(lojaId) });
     if (opts?.status) q.set("status", opts.status);
@@ -737,6 +737,8 @@ export const api = {
 
   // Shopee Ads
   shopeeAdsCampaigns: () => request<unknown[]>("/api/shopee-ads/campaigns"),
+  shopeeAdsPerformance: () => request<ShopeeAdsPerformanceRow[]>("/api/shopee-ads/performance"),
+  shopeeAdsInsights: () => request<ShopeeAdsInsight[]>("/api/shopee-ads/insights"),
 
   // ML
   mlStatus: () => request<{ modelo_treinado: boolean }>("/api/ml/status"),
@@ -989,11 +991,14 @@ export interface ShopeeDashboardLoja {
   skus_vendidos: number;
   anuncios_total: number;
   anuncios_ativos: number;
+  anuncios_pausados: number;
+  anuncios_banidos: number;
   produtos_estoque_baixo: number;
   receita_hoje: number;
   unidades_hoje: number;
   pedidos_hoje: number;
   ticket_medio_hoje: number;
+  shopee_token_expira_em: string | null;
 }
 
 export interface ShopeeSerieDiariaPonto {
@@ -1015,6 +1020,39 @@ export interface ShopeeEstoqueRisco {
   vendidos: number;
   estoque_atual: number;
   estoque_minimo: number;
+}
+
+export interface ShopeeFunilFulfillment {
+  total: number;
+  sem_bling: number;
+  sem_nota: number;
+  nao_despachado: number;
+}
+
+export interface ShopeeAdsPerformanceRow {
+  id: number;
+  campaign_id: string;
+  data: string;
+  impressions: number;
+  clicks: number;
+  cost: number;
+  orders: number;
+  revenue: number;
+  ctr: number;
+  cpc: number;
+  conversion_rate: number;
+  roas: number;
+}
+
+export interface ShopeeAdsInsight {
+  id: number;
+  campaign_id: string;
+  insight_type: string;
+  message: string;
+  severity: string;
+  confidence: number;
+  action_taken: boolean;
+  created_at: string;
 }
 
 export interface ShopeeShopPerformance {

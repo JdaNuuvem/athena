@@ -292,7 +292,8 @@ def shopee_dashboard_consolidado():
             # ("normal", "unlist", "banned" — nunca "ativo"); o filtro errado
             # fazia "Anuncios ativos" sempre mostrar 0 mesmo com produtos sincronizados.
             cur.execute("""
-                SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE status = 'normal') AS ativos
+                SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE status = 'normal') AS ativos,
+                       COUNT(*) FILTER (WHERE status = 'unlist') AS pausados, COUNT(*) FILTER (WHERE status = 'banned') AS banidos
                 FROM anuncios WHERE marketplace = 'shopee' AND shop_id = %s
             """, (shop_id,))
             anuncios_row = cur.fetchone() or {}
@@ -313,14 +314,18 @@ def shopee_dashboard_consolidado():
             hoje_row = cur.fetchone() or {}
             receita_hoje = float(hoje_row.get("receita") or 0)
             pedidos_hoje = int(hoje_row.get("pedidos") or 0)
+            token_expira = l.get("shopee_token_expira_em")
             resultado.append({
                 "loja_id": l["id"], "nome": l["nome"], "shop_id": shop_id,
                 "tem_token": l.get("tem_token", False),
+                "shopee_token_expira_em": token_expira.isoformat() if token_expira else None,
                 "receita": float(vendas_row.get("receita") or 0),
                 "unidades_vendidas": int(vendas_row.get("unidades") or 0),
                 "skus_vendidos": int(vendas_row.get("skus_vendidos") or 0),
                 "anuncios_total": int(anuncios_row.get("total") or 0),
                 "anuncios_ativos": int(anuncios_row.get("ativos") or 0),
+                "anuncios_pausados": int(anuncios_row.get("pausados") or 0),
+                "anuncios_banidos": int(anuncios_row.get("banidos") or 0),
                 "produtos_estoque_baixo": estoque_baixo,
                 "receita_hoje": receita_hoje,
                 "unidades_hoje": int(hoje_row.get("unidades") or 0),
@@ -358,15 +363,36 @@ def shopee_dashboard_consolidado():
         """, (dias,))
         estoque_risco = [{"sku": r["sku"], "descricao": r["descricao"], "vendidos": int(r["vendidos"] or 0), "estoque_atual": int(r["estoque_atual"] or 0), "estoque_minimo": int(r["estoque_minimo"] or 0)} for r in (cur.fetchall() or [])]
 
+        shop_ids = [l.get("shopee_shop_id") for l in lojas if l.get("shopee_shop_id")]
+        funil_fulfillment = {"total": 0, "sem_bling": 0, "sem_nota": 0, "nao_despachado": 0}
+        if shop_ids:
+            cur.execute("""
+                SELECT COUNT(*) AS total,
+                       COUNT(*) FILTER (WHERE bling_pedido_id IS NULL) AS sem_bling,
+                       COUNT(*) FILTER (WHERE bling_nota_fiscal_id IS NULL) AS sem_nota,
+                       COUNT(*) FILTER (WHERE despachado_em IS NULL) AS nao_despachado
+                FROM shopee_pedidos_sincronizados
+                WHERE shop_id = ANY(%s) AND create_time >= NOW() - (INTERVAL '1 day' * %s)
+            """, (shop_ids, dias))
+            funil_row = cur.fetchone() or {}
+            funil_fulfillment = {
+                "total": int(funil_row.get("total") or 0),
+                "sem_bling": int(funil_row.get("sem_bling") or 0),
+                "sem_nota": int(funil_row.get("sem_nota") or 0),
+                "nao_despachado": int(funil_row.get("nao_despachado") or 0),
+            }
+
         cur.close(); conn.close()
         return jsonify({
             "lojas": resultado, "dias": dias,
             "serie_diaria": serie_diaria,
             "top_produtos_hoje": top_produtos_hoje,
             "estoque_risco": estoque_risco,
+            "funil_fulfillment": funil_fulfillment,
         })
     except Exception as e:
-        return jsonify({"error": str(e), "lojas": [], "serie_diaria": [], "top_produtos_hoje": [], "estoque_risco": []})
+        return jsonify({"error": str(e), "lojas": [], "serie_diaria": [], "top_produtos_hoje": [], "estoque_risco": [],
+                         "funil_fulfillment": {"total": 0, "sem_bling": 0, "sem_nota": 0, "nao_despachado": 0}})
 
 @shopee_bp.route('/lojas/<int:destino_id>/replicar-de/<int:origem_id>', methods=['POST'])
 def shopee_replicar_produtos(destino_id, origem_id):
