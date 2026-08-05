@@ -6,7 +6,7 @@ import os
 import hmac
 from urllib.parse import quote
 from flask import Blueprint, request, jsonify, redirect
-from core import get_db, run_async
+from core import get_db, run_async, log
 from core.rbac import verificar_token_sessao
 from core.oauth_provider import (
     gerar_authorization_code, validar_authorization_code,
@@ -104,7 +104,10 @@ async def _buscar_usuario(user_id: int):
 
 @oauth_provider_bp.route("/userinfo", methods=["GET"])
 def userinfo():
-    user_id = validar_access_token(_token_da_request())
+    token = _token_da_request()
+    log("OAuth Provider", f"DEBUG userinfo: auth_header={request.headers.get('Authorization', '')!r} "
+        f"cookie={request.cookies.get('auth_token', '')!r} token_usado={token!r}")
+    user_id = validar_access_token(token)
     if user_id is None:
         return jsonify({"error": "invalid_token"}), 401
 
