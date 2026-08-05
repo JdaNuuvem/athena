@@ -72,6 +72,21 @@ class TestAuthorize(unittest.TestCase):
         self.assertIn("code=", location)
         self.assertIn("state=xyz", location)
 
+    def test_com_sessao_valida_user_id_zero_redireciona_com_code(self):
+        """user_id=0 e' um id real neste projeto (admin bootstrap) — 0 e'
+        falsy em Python, entao um check tipo 'not payload.get(user_id)'
+        trata sessao valida como ausente. Regressao ja vista em
+        routes/chat.py e routes/chat_ws.py; ver test_chat_conta_master.py."""
+        token = rbac.gerar_token_sessao(0, "admin@athena.com", "admin", is_master=True)
+        r = self.client.get(
+            "/oauth/authorize",
+            query_string={"response_type": "code", "client_id": _CLIENT_ID, "redirect_uri": _REDIRECT_URI},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        self.assertEqual(r.status_code, 302)
+        self.assertTrue(r.headers["Location"].startswith(_REDIRECT_URI))
+        self.assertIn("code=", r.headers["Location"])
+
     def test_client_id_errado_rejeita(self):
         token = rbac.gerar_token_sessao(7, "op@x.com", "Operador")
         r = self.client.get(
@@ -123,6 +138,16 @@ class TestToken(unittest.TestCase):
         self.assertIn("access_token", body)
         self.assertEqual(body["token_type"], "Bearer")
         self.assertEqual(body["expires_in"], 3600)
+
+    def test_troca_code_valido_user_id_zero_por_access_token(self):
+        code = self._obter_code(user_id=0)
+        r = self.client.post("/oauth/token", data={
+            "grant_type": "authorization_code",
+            "client_id": _CLIENT_ID, "client_secret": _CLIENT_SECRET,
+            "code": code, "redirect_uri": _REDIRECT_URI,
+        })
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("access_token", r.get_json())
 
     def test_client_secret_errado_rejeita(self):
         code = self._obter_code()
@@ -180,6 +205,15 @@ class TestUserinfo(unittest.TestCase):
         self.assertEqual(body["email"], "fulano@x.com")
         self.assertEqual(body["username"], "fulano")
         self.assertEqual(body["name"], "Fulano da Silva")
+
+    def test_token_valido_user_id_zero_retorna_dados_do_usuario(self):
+        from core.oauth_provider import gerar_access_token
+        token = gerar_access_token(0)
+        usuario = {"id": 0, "nome": "Admin Athena", "email": "admin@athena.com"}
+        with patch("routes.oauth_provider._buscar_usuario", AsyncMock(return_value=usuario)):
+            r = self.client.get("/oauth/userinfo", headers={"Authorization": f"Bearer {token}"})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.get_json()["id"], 0)
 
     def test_token_invalido_rejeita(self):
         r = self.client.get("/oauth/userinfo", headers={"Authorization": "Bearer invalido"})

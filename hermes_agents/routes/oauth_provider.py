@@ -53,7 +53,11 @@ def authorize():
         return jsonify({"error": "invalid_redirect_uri"}), 400
 
     payload = verificar_token_sessao(_token_da_request())
-    if not payload or not payload.get("user_id"):
+    # ponytail: "not payload.get('user_id')" tratava user_id=0 como sessao
+    # ausente (0 e' falsy em Python) — o admin bootstrap deste projeto tem
+    # id=0 de verdade, entao login com sessao valida nunca completava o
+    # OAuth. "is None" e' o unico jeito correto de checar "sem sessao".
+    if not payload or payload.get("user_id") is None:
         return redirect(_hermes_login_url())
 
     code = gerar_authorization_code(payload["user_id"], client_id, redirect_uri)
@@ -80,7 +84,7 @@ def token():
         return jsonify({"error": "invalid_client"}), 401
 
     user_id = validar_authorization_code(code, client_id, redirect_uri)
-    if not user_id:
+    if user_id is None:
         return jsonify({"error": "invalid_grant"}), 400
 
     access_token = gerar_access_token(user_id)
@@ -101,7 +105,7 @@ async def _buscar_usuario(user_id: int):
 @oauth_provider_bp.route("/userinfo", methods=["GET"])
 def userinfo():
     user_id = validar_access_token(_token_da_request())
-    if not user_id:
+    if user_id is None:
         return jsonify({"error": "invalid_token"}), 401
 
     usuario = run_async(_buscar_usuario(user_id))
