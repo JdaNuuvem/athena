@@ -305,6 +305,14 @@ def shopee_dashboard_consolidado():
                 GROUP BY a.sku HAVING COALESCE(SUM(e.quantidade), 0) <= MAX(c.estoque_minimo)
             """, (shop_id,))
             estoque_baixo = len(cur.fetchall() or [])
+            cur.execute("""
+                SELECT COALESCE(SUM(receita_bruta),0) AS receita, COALESCE(SUM(quantidade),0) AS unidades,
+                       COUNT(DISTINCT COALESCE(shopee_order_sn, id::text)) AS pedidos
+                FROM vendas WHERE marketplace = 'shopee' AND loja_id = %s AND data = CURRENT_DATE
+            """, (l["id"],))
+            hoje_row = cur.fetchone() or {}
+            receita_hoje = float(hoje_row.get("receita") or 0)
+            pedidos_hoje = int(hoje_row.get("pedidos") or 0)
             resultado.append({
                 "loja_id": l["id"], "nome": l["nome"], "shop_id": shop_id,
                 "tem_token": l.get("tem_token", False),
@@ -314,11 +322,51 @@ def shopee_dashboard_consolidado():
                 "anuncios_total": int(anuncios_row.get("total") or 0),
                 "anuncios_ativos": int(anuncios_row.get("ativos") or 0),
                 "produtos_estoque_baixo": estoque_baixo,
+                "receita_hoje": receita_hoje,
+                "unidades_hoje": int(hoje_row.get("unidades") or 0),
+                "pedidos_hoje": pedidos_hoje,
+                "ticket_medio_hoje": round(receita_hoje / pedidos_hoje, 2) if pedidos_hoje else 0.0,
             })
+
+        cur.execute("""
+            SELECT data AS dia, COALESCE(SUM(receita_bruta),0) AS receita,
+                   COUNT(DISTINCT COALESCE(shopee_order_sn, id::text)) AS pedidos
+            FROM vendas WHERE marketplace = 'shopee' AND data >= CURRENT_DATE - %s
+            GROUP BY data ORDER BY data
+        """, (dias,))
+        serie_diaria = [{"dia": r["dia"].isoformat(), "receita": float(r["receita"] or 0), "pedidos": int(r["pedidos"] or 0)} for r in (cur.fetchall() or [])]
+
+        cur.execute("""
+            SELECT v.sku, COALESCE(c.descricao, v.sku) AS descricao,
+                   SUM(v.quantidade) AS quantidade, SUM(v.receita_bruta) AS receita
+            FROM vendas v LEFT JOIN catalogo_produtos c ON c.sku = v.sku
+            WHERE v.marketplace = 'shopee' AND v.data = CURRENT_DATE
+            GROUP BY v.sku, c.descricao ORDER BY quantidade DESC LIMIT 8
+        """)
+        top_produtos_hoje = [{"sku": r["sku"], "descricao": r["descricao"], "quantidade": int(r["quantidade"] or 0), "receita": float(r["receita"] or 0)} for r in (cur.fetchall() or [])]
+
+        cur.execute("""
+            SELECT v.sku, COALESCE(c.descricao, v.sku) AS descricao, SUM(v.quantidade) AS vendidos,
+                   COALESCE(e.estoque_total, 0) AS estoque_atual, c.estoque_minimo
+            FROM vendas v
+            JOIN catalogo_produtos c ON c.sku = v.sku
+            LEFT JOIN (SELECT sku, SUM(quantidade) AS estoque_total FROM estoque_lojas GROUP BY sku) e ON e.sku = v.sku
+            WHERE v.marketplace = 'shopee' AND v.data >= CURRENT_DATE - %s AND c.estoque_minimo IS NOT NULL
+            GROUP BY v.sku, c.descricao, e.estoque_total, c.estoque_minimo
+            HAVING COALESCE(e.estoque_total, 0) <= c.estoque_minimo
+            ORDER BY SUM(v.quantidade) DESC LIMIT 10
+        """, (dias,))
+        estoque_risco = [{"sku": r["sku"], "descricao": r["descricao"], "vendidos": int(r["vendidos"] or 0), "estoque_atual": int(r["estoque_atual"] or 0), "estoque_minimo": int(r["estoque_minimo"] or 0)} for r in (cur.fetchall() or [])]
+
         cur.close(); conn.close()
-        return jsonify({"lojas": resultado, "dias": dias})
+        return jsonify({
+            "lojas": resultado, "dias": dias,
+            "serie_diaria": serie_diaria,
+            "top_produtos_hoje": top_produtos_hoje,
+            "estoque_risco": estoque_risco,
+        })
     except Exception as e:
-        return jsonify({"error": str(e), "lojas": []})
+        return jsonify({"error": str(e), "lojas": [], "serie_diaria": [], "top_produtos_hoje": [], "estoque_risco": []})
 
 @shopee_bp.route('/lojas/<int:destino_id>/replicar-de/<int:origem_id>', methods=['POST'])
 def shopee_replicar_produtos(destino_id, origem_id):
