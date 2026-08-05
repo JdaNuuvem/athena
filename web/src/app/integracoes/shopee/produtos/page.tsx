@@ -1,11 +1,11 @@
 "use client";
 
-import { Fragment, useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import type { ShopeeProdutoSincronizado } from "@/lib/api";
 import Icon from "@/app/_components/Icon";
-import RateioShopeeModal from "./_components/RateioShopeeModal";
+import ProdutoVariacoesModal from "./_components/ProdutoVariacoesModal";
 
 type EstoqueFiltro = "todos" | "zerado" | "baixo" | "normal";
 type ModoVisualizacao = "cards" | "lista";
@@ -60,12 +60,6 @@ const ROTULO_ESTOQUE: Record<EstoqueFiltro, string> = {
   baixo: "Baixo estoque (<10)",
   normal: "Estoque normal (≥10)",
 };
-
-function itemIdDoAnuncio(anuncioId: string): number | null {
-  const base = anuncioId.split("_")[0];
-  const n = Number(base);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
 
 function ProdutoThumb({ url, titulo, tamanho = "w-12 h-12" }: { url?: string | null; titulo: string; tamanho?: string }) {
   const [falhou, setFalhou] = useState(false);
@@ -153,12 +147,7 @@ export default function ShopeeProdutosPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [enviando, setEnviando] = useState<string | null>(null);
   const [quantidades, setQuantidades] = useState<Record<string, string>>({});
-  const [gruposExpandidos, setGruposExpandidos] = useState<Set<string>>(new Set());
-  const [duplicando, setDuplicando] = useState<{ sku: string; novoSku: string } | null>(null);
-  const [salvandoDuplicata, setSalvandoDuplicata] = useState(false);
-  const [clonando, setClonando] = useState<{ sku: string; itemId: number; destino: number | "" } | null>(null);
-  const [clonandoEnviando, setClonandoEnviando] = useState(false);
-  const [rateando, setRateando] = useState<{ sku: string; nome: string } | null>(null);
+  const [modalGrupo, setModalGrupo] = useState<GrupoProduto | null>(null);
   const [busca, setBusca] = useState("");
   const [statusFiltro, setStatusFiltro] = useState("");
   const [estoqueFiltro, setEstoqueFiltro] = useState<EstoqueFiltro>("todos");
@@ -170,8 +159,6 @@ export default function ShopeeProdutosPage() {
     () => Array.from(new Set(produtos.map(p => p.status))).sort(),
     [produtos]
   );
-
-  const filtroAtivo = busca.trim() !== "" || statusFiltro !== "" || estoqueFiltro !== "todos";
 
   const gruposFiltrados = useMemo(() => {
     const q = busca.trim().toLowerCase();
@@ -187,14 +174,6 @@ export default function ShopeeProdutosPage() {
   }, [produtos, busca, statusFiltro, estoqueFiltro, somenteVariacao]);
 
   const totalLinhasFiltradas = gruposFiltrados.reduce((s, g) => s + g.variacoesFiltradas.length, 0);
-
-  const toggleGrupo = (itemId: string) => {
-    setGruposExpandidos(prev => {
-      const next = new Set(prev);
-      if (next.has(itemId)) next.delete(itemId); else next.add(itemId);
-      return next;
-    });
-  };
 
   useEffect(() => {
     api.shopeeLojas().then(r => {
@@ -255,45 +234,6 @@ export default function ShopeeProdutosPage() {
     }
   };
 
-  const confirmarDuplicar = async () => {
-    if (!duplicando || !duplicando.novoSku.trim()) return;
-    setSalvandoDuplicata(true);
-    setMsg(null);
-    setErro(null);
-    try {
-      const r = await api.shopeeDuplicarProduto(duplicando.sku, duplicando.novoSku.trim());
-      if (r.error) setErro(r.error);
-      else { setMsg(`Produto duplicado: ${r.produto?.sku}. Publique na aba Shopee dele.`); setDuplicando(null); }
-    } catch (e) {
-      setErro(e instanceof Error ? e.message : "Erro ao duplicar produto");
-    } finally {
-      setSalvandoDuplicata(false);
-    }
-  };
-
-  const abrirClonar = (p: ShopeeProdutoSincronizado) => {
-    const itemId = itemIdDoAnuncio(p.anuncio_id);
-    if (!itemId) { setErro(`${p.sku}: anuncio_id invalido para clonagem`); return; }
-    setClonando({ sku: p.sku, itemId, destino: "" });
-  };
-
-  const confirmarClonar = async () => {
-    if (!clonando || !lojaId || clonando.destino === "") return;
-    setClonandoEnviando(true);
-    setMsg(null);
-    setErro(null);
-    try {
-      const r = await api.shopeeClonarProdutoParaLoja(clonando.itemId, Number(lojaId), Number(clonando.destino));
-      if (r.error) setErro(r.error);
-      else if (r.sucesso === false) setErro(r.mensagem || "Falha ao clonar produto");
-      else { setMsg(r.mensagem || `${clonando.sku}: clonado com sucesso`); setClonando(null); }
-    } catch (e) {
-      setErro(e instanceof Error ? e.message : "Erro ao clonar produto para outra loja");
-    } finally {
-      setClonandoEnviando(false);
-    }
-  };
-
   function LinhaProduto({ p, indentado, variacaoLabel }: { p: ShopeeProdutoSincronizado; indentado?: boolean; variacaoLabel?: string }) {
     return (
       <>
@@ -345,97 +285,7 @@ export default function ShopeeProdutosPage() {
               </button>
             </div>
           </td>
-          <td className="px-4 py-3">
-            <div className="flex items-center justify-center gap-1">
-              <button
-                onClick={() => setDuplicando({ sku: p.sku, novoSku: "" })}
-                className="text-xs bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-2 py-1 rounded"
-              >
-                Duplicar
-              </button>
-              <button
-                onClick={() => abrirClonar(p)}
-                disabled={lojas.length < 2}
-                title={lojas.length < 2 ? "Conecte outra loja Shopee para clonar" : "Clonar este produto para outra loja Shopee"}
-                className="text-xs bg-indigo-700 hover:bg-indigo-600 disabled:opacity-40 text-white px-2 py-1 rounded"
-              >
-                Clonar p/ loja
-              </button>
-              <button
-                onClick={() => setRateando({ sku: p.sku, nome: p.titulo })}
-                disabled={lojas.length < 2}
-                title={lojas.length < 2 ? "Conecte outra loja Shopee para ratear" : "Ratear estoque entre várias lojas Shopee"}
-                className="text-xs bg-teal-600 hover:bg-teal-500 disabled:opacity-40 text-white px-2 py-1 rounded"
-              >
-                Ratear
-              </button>
-            </div>
-          </td>
         </tr>
-        {duplicando?.sku === p.sku && (
-          <tr className="border-b border-neutral-800/50 bg-neutral-800/30">
-            <td colSpan={9} className="px-4 py-3">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-neutral-400">Novo SKU para a cópia de <span className="font-mono">{p.sku}</span>:</span>
-                <input
-                  type="text"
-                  autoFocus
-                  value={duplicando.novoSku}
-                  onChange={(e) => setDuplicando(d => d && { ...d, novoSku: e.target.value })}
-                  onKeyDown={(e) => { if (e.key === "Enter") confirmarDuplicar(); if (e.key === "Escape") setDuplicando(null); }}
-                  placeholder="ex: SKU-COPIA"
-                  className="bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-xs text-neutral-200 w-40"
-                />
-                <button
-                  onClick={confirmarDuplicar}
-                  disabled={salvandoDuplicata || !duplicando.novoSku.trim()}
-                  className="text-xs bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-2 py-1 rounded"
-                >
-                  {salvandoDuplicata ? "..." : "Confirmar"}
-                </button>
-                <button
-                  onClick={() => setDuplicando(null)}
-                  className="text-xs bg-neutral-700 hover:bg-neutral-600 text-neutral-300 px-2 py-1 rounded"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </td>
-          </tr>
-        )}
-        {clonando?.sku === p.sku && (
-          <tr className="border-b border-neutral-800/50 bg-neutral-800/30">
-            <td colSpan={9} className="px-4 py-3">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-neutral-400">Clonar <span className="font-mono">{p.sku}</span> para:</span>
-                <select
-                  autoFocus
-                  value={clonando.destino}
-                  onChange={(e) => setClonando(c => c && { ...c, destino: e.target.value ? Number(e.target.value) : "" })}
-                  className="bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-xs text-neutral-200"
-                >
-                  <option value="">Selecione a loja destino</option>
-                  {lojas.filter(l => l.id !== Number(lojaId)).map(l => (
-                    <option key={l.id} value={l.id}>{l.nome}</option>
-                  ))}
-                </select>
-                <button
-                  onClick={confirmarClonar}
-                  disabled={clonandoEnviando || clonando.destino === ""}
-                  className="text-xs bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-2 py-1 rounded"
-                >
-                  {clonandoEnviando ? "..." : "Confirmar"}
-                </button>
-                <button
-                  onClick={() => setClonando(null)}
-                  className="text-xs bg-neutral-700 hover:bg-neutral-600 text-neutral-300 px-2 py-1 rounded"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </td>
-          </tr>
-        )}
       </>
     );
   }
@@ -464,94 +314,8 @@ export default function ShopeeProdutosPage() {
         >
           Editar
         </Link>
-        <button
-          onClick={() => setDuplicando({ sku: p.sku, novoSku: "" })}
-          className="text-xs bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-2 py-1 rounded"
-        >
-          Duplicar
-        </button>
-        <button
-          onClick={() => abrirClonar(p)}
-          disabled={lojas.length < 2}
-          title={lojas.length < 2 ? "Conecte outra loja Shopee para clonar" : "Clonar este produto para outra loja Shopee"}
-          className="text-xs bg-indigo-700 hover:bg-indigo-600 disabled:opacity-40 text-white px-2 py-1 rounded"
-        >
-          Clonar p/ loja
-        </button>
-        <button
-          onClick={() => setRateando({ sku: p.sku, nome: p.titulo })}
-          disabled={lojas.length < 2}
-          title={lojas.length < 2 ? "Conecte outra loja Shopee para ratear" : "Ratear estoque entre várias lojas Shopee"}
-          className="text-xs bg-teal-600 hover:bg-teal-500 disabled:opacity-40 text-white px-2 py-1 rounded"
-        >
-          Ratear
-        </button>
       </div>
     );
-  }
-
-  function PainelAcoesExtra({ p }: { p: ShopeeProdutoSincronizado }) {
-    if (duplicando?.sku === p.sku) {
-      return (
-        <div className="flex items-center gap-2 flex-wrap bg-neutral-800/50 rounded-lg p-2">
-          <span className="text-xs text-neutral-400">Novo SKU para a cópia de <span className="font-mono">{p.sku}</span>:</span>
-          <input
-            type="text"
-            autoFocus
-            value={duplicando.novoSku}
-            onChange={(e) => setDuplicando(d => d && { ...d, novoSku: e.target.value })}
-            onKeyDown={(e) => { if (e.key === "Enter") confirmarDuplicar(); if (e.key === "Escape") setDuplicando(null); }}
-            placeholder="ex: SKU-COPIA"
-            className="bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-xs text-neutral-200 w-36"
-          />
-          <button
-            onClick={confirmarDuplicar}
-            disabled={salvandoDuplicata || !duplicando.novoSku.trim()}
-            className="text-xs bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-2 py-1 rounded"
-          >
-            {salvandoDuplicata ? "..." : "Confirmar"}
-          </button>
-          <button
-            onClick={() => setDuplicando(null)}
-            className="text-xs bg-neutral-700 hover:bg-neutral-600 text-neutral-300 px-2 py-1 rounded"
-          >
-            Cancelar
-          </button>
-        </div>
-      );
-    }
-    if (clonando?.sku === p.sku) {
-      return (
-        <div className="flex items-center gap-2 flex-wrap bg-neutral-800/50 rounded-lg p-2">
-          <span className="text-xs text-neutral-400">Clonar <span className="font-mono">{p.sku}</span> para:</span>
-          <select
-            autoFocus
-            value={clonando.destino}
-            onChange={(e) => setClonando(c => c && { ...c, destino: e.target.value ? Number(e.target.value) : "" })}
-            className="bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-xs text-neutral-200"
-          >
-            <option value="">Selecione a loja destino</option>
-            {lojas.filter(l => l.id !== Number(lojaId)).map(l => (
-              <option key={l.id} value={l.id}>{l.nome}</option>
-            ))}
-          </select>
-          <button
-            onClick={confirmarClonar}
-            disabled={clonandoEnviando || clonando.destino === ""}
-            className="text-xs bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-2 py-1 rounded"
-          >
-            {clonandoEnviando ? "..." : "Confirmar"}
-          </button>
-          <button
-            onClick={() => setClonando(null)}
-            className="text-xs bg-neutral-700 hover:bg-neutral-600 text-neutral-300 px-2 py-1 rounded"
-          >
-            Cancelar
-          </button>
-        </div>
-      );
-    }
-    return null;
   }
 
   function LinhaCard({ p, variacaoLabel }: { p: ShopeeProdutoSincronizado; variacaoLabel?: string }) {
@@ -571,7 +335,6 @@ export default function ShopeeProdutosPage() {
           <span className={`text-xs px-2 py-0.5 rounded-full border capitalize shrink-0 ${statusPillClasses(p.status)}`}>{p.status}</span>
         </div>
         <ProdutoAcoes p={p} />
-        <PainelAcoesExtra p={p} />
       </div>
     );
   }
@@ -712,12 +475,11 @@ export default function ShopeeProdutosPage() {
                   );
                 }
                 const parcial = grupo.variacoesFiltradas.length < grupo.variacoes.length;
-                const expandido = gruposExpandidos.has(grupo.itemId) || (filtroAtivo && parcial);
                 const estoqueTotal = grupo.variacoesFiltradas.reduce((s, v) => s + Number(v.estoque || 0), 0);
                 const cfg = DENSIDADE_CARDS[densidade];
                 return (
                   <div key={grupo.itemId} className="instrument-hover bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden">
-                    <div onClick={() => toggleGrupo(grupo.itemId)} className={`${cfg.padding} flex items-center gap-3 cursor-pointer`}>
+                    <div onClick={() => setModalGrupo(grupo)} className={`${cfg.padding} flex items-center gap-3 cursor-pointer`}>
                       <ProdutoThumb url={grupo.variacoesFiltradas[0].imagem_url} titulo={grupo.variacoesFiltradas[0].titulo} tamanho={cfg.thumb} />
                       <div className="flex-1 min-w-0">
                         <p className={`${cfg.titulo} text-neutral-200 truncate`}>{nomeBaseProduto(grupo.variacoesFiltradas[0].titulo)}</p>
@@ -732,15 +494,8 @@ export default function ShopeeProdutosPage() {
                         <span className={`numeric text-xs font-medium ${estoqueTotal <= 0 ? "text-red-400" : "text-neutral-400"}`}>{estoqueTotal} un total</span>
                         <EstoqueHealthBar variacoes={grupo.variacoesFiltradas} />
                       </div>
-                      <span className={`text-neutral-600 transition-transform shrink-0 ${expandido ? "rotate-90" : ""}`}><Icon name="chevronRight" size={14} /></span>
+                      <span className="text-neutral-600 shrink-0"><Icon name="chevronRight" size={14} /></span>
                     </div>
-                    {expandido && (
-                      <div className="border-t border-neutral-800 divide-y divide-neutral-800/70 bg-neutral-950/30">
-                        {grupo.variacoesFiltradas.map((v) => (
-                          <LinhaCard key={v.sku} p={v} variacaoLabel={sufixoVariacao(v.titulo)} />
-                        ))}
-                      </div>
-                    )}
                   </div>
                 );
               })}
@@ -759,7 +514,6 @@ export default function ShopeeProdutosPage() {
                       <th className="text-left px-4 py-3 font-medium">Status</th>
                       <th className="text-center px-4 py-3 font-medium">Editar</th>
                       <th className="text-center px-4 py-3 font-medium">Enviar estoque</th>
-                      <th className="text-center px-4 py-3 font-medium">Ações</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -768,33 +522,28 @@ export default function ShopeeProdutosPage() {
                         return <LinhaProduto key={grupo.itemId} p={grupo.variacoesFiltradas[0]} />;
                       }
                       const parcial = grupo.variacoesFiltradas.length < grupo.variacoes.length;
-                      const expandido = gruposExpandidos.has(grupo.itemId) || (filtroAtivo && parcial);
                       const estoqueTotal = grupo.variacoesFiltradas.reduce((s, v) => s + Number(v.estoque || 0), 0);
                       return (
-                        <Fragment key={grupo.itemId}>
-                          <tr
-                            onClick={() => toggleGrupo(grupo.itemId)}
-                            className="border-b border-neutral-800/50 hover:bg-neutral-800/40 cursor-pointer bg-neutral-800/10"
-                          >
-                            <td className="px-4 py-3 text-neutral-500 text-xs" colSpan={3}>
-                              <span className="inline-flex items-center gap-1.5">
-                                <span className={`text-neutral-600 transition-transform ${expandido ? "rotate-90" : ""}`}><Icon name="chevronRight" size={14} /></span>
-                                <span className="text-neutral-200">{nomeBaseProduto(grupo.variacoesFiltradas[0].titulo)}</span>
-                                <span className="text-xs bg-indigo-900/30 text-indigo-400 px-1.5 py-0.5 rounded-full shrink-0">
-                                  {parcial ? `${grupo.variacoesFiltradas.length} de ${grupo.variacoes.length} variações` : `${grupo.variacoes.length} variações`}
-                                </span>
+                        <tr
+                          key={grupo.itemId}
+                          onClick={() => setModalGrupo(grupo)}
+                          className="border-b border-neutral-800/50 hover:bg-neutral-800/40 cursor-pointer bg-neutral-800/10"
+                        >
+                          <td className="px-4 py-3 text-neutral-500 text-xs" colSpan={3}>
+                            <span className="inline-flex items-center gap-1.5">
+                              <span className="text-neutral-600"><Icon name="chevronRight" size={14} /></span>
+                              <span className="text-neutral-200">{nomeBaseProduto(grupo.variacoesFiltradas[0].titulo)}</span>
+                              <span className="text-xs bg-indigo-900/30 text-indigo-400 px-1.5 py-0.5 rounded-full shrink-0">
+                                {parcial ? `${grupo.variacoesFiltradas.length} de ${grupo.variacoes.length} variações` : `${grupo.variacoes.length} variações`}
                               </span>
-                            </td>
-                            <td className="px-4 py-3 text-right text-neutral-600 numeric text-xs">—</td>
-                            <td className="px-4 py-3 text-right numeric font-medium text-xs">
-                              <span className={estoqueTotal <= 0 ? "text-red-400" : "text-neutral-400"}>{estoqueTotal} total</span>
-                            </td>
-                            <td colSpan={4}></td>
-                          </tr>
-                          {expandido && grupo.variacoesFiltradas.map((v) => (
-                            <LinhaProduto key={v.sku} p={v} indentado variacaoLabel={sufixoVariacao(v.titulo)} />
-                          ))}
-                        </Fragment>
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right text-neutral-600 numeric text-xs">—</td>
+                          <td className="px-4 py-3 text-right numeric font-medium text-xs">
+                            <span className={estoqueTotal <= 0 ? "text-red-400" : "text-neutral-400"}>{estoqueTotal} total</span>
+                          </td>
+                          <td colSpan={3}></td>
+                        </tr>
                       );
                     })}
                   </tbody>
@@ -804,13 +553,15 @@ export default function ShopeeProdutosPage() {
           )}
         </>
       )}
-      {rateando && (
-        <RateioShopeeModal
-          sku={rateando.sku}
-          produtoNome={rateando.nome}
-          lojas={lojas}
-          onClose={() => setRateando(null)}
-          onSucesso={() => carregar()}
+      {modalGrupo && (
+        <ProdutoVariacoesModal
+          itemId={modalGrupo.itemId}
+          variacoes={modalGrupo.variacoes}
+          quantidades={quantidades}
+          setQuantidades={setQuantidades}
+          enviando={enviando}
+          onEnviarEstoque={enviarEstoque}
+          onClose={() => setModalGrupo(null)}
         />
       )}
     </div>
