@@ -105,8 +105,10 @@ async def _buscar_usuario(user_id: int):
 @oauth_provider_bp.route("/userinfo", methods=["GET"])
 def userinfo():
     token = _token_da_request()
-    log("OAuth Provider", f"DEBUG userinfo: auth_header={request.headers.get('Authorization', '')!r} "
-        f"cookie={request.cookies.get('auth_token', '')!r} token_usado={token!r}")
+    auth_header = request.headers.get("Authorization", "")
+    log("OAuth Provider", f"DEBUG userinfo: auth_header_presente={bool(auth_header)} "
+        f"auth_header_prefixo={auth_header[:10]!r} cookie_presente={bool(request.cookies.get('auth_token'))} "
+        f"token_usado_presente={bool(token)} token_len={len(token)}")
     user_id = validar_access_token(token)
     if user_id is None:
         return jsonify({"error": "invalid_token"}), 401
