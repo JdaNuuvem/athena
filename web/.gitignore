@@ -12,6 +12,10 @@ node_modules/
 
 # Debug
 npm-debug.log*
+*.log
+
+# Playwright
+test-results/
 
 # TypeScript
 *.tsbuildinfo
