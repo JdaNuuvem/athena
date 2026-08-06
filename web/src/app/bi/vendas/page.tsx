@@ -7,6 +7,7 @@ import {
 } from "recharts";
 import type { KpiMetric, VendaDiaria, CategoriaVenda } from "../types";
 import { formatCurrency } from "../types";
+import { useTheme, chartAxisColors } from "@/lib/theme-context";
 import { gerarVendasDiarias, gerarCategorias } from "../data/vendas";
 import PageHeader from "@/app/_components/PageHeader";
 import KpiCard from "@/app/_components/KpiCard";
@@ -26,6 +27,9 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
 const margemColor = (m: number) => m >= 25 ? "#22c55e" : m >= 15 ? "#f59e0b" : "#ef4444";
 
 export default function VendasPage() {
+  const { theme } = useTheme();
+  const { grid: gridColor, axis: axisColor } = chartAxisColors(theme);
+  const lineColor = theme === "dark" ? "#818cf8" : "#4338ca";
   const [diarias, setDiarias] = useState<VendaDiaria[]>([]);
   const [categorias, setCategorias] = useState<CategoriaVenda[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,11 +72,11 @@ export default function VendasPage() {
         <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-4">
           <ResponsiveContainer width="100%" height={240}>
             <LineChart data={diarias}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-              <XAxis dataKey="dia" tick={{ fill: "#71717a", fontSize: 10 }} axisLine={false} tickLine={false} interval={4} />
-              <YAxis tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} tick={{ fill: "#71717a", fontSize: 10 }} axisLine={false} tickLine={false} width={48} />
+              <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+              <XAxis dataKey="dia" tick={{ fill: axisColor, fontSize: 10 }} axisLine={false} tickLine={false} interval={4} />
+              <YAxis tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} tick={{ fill: axisColor, fontSize: 10 }} axisLine={false} tickLine={false} width={48} />
               <Tooltip content={<ChartTooltip />} />
-              <Line type="monotone" dataKey="valor" stroke="#818cf8" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: "#818cf8" }} />
+              <Line type="monotone" dataKey="valor" stroke={lineColor} strokeWidth={2} dot={false} activeDot={{ r: 4, fill: lineColor }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -90,7 +94,7 @@ export default function VendasPage() {
             <BarChart data={categorias} layout="vertical" margin={{ top: 0, right: 8, left: 8, bottom: 0 }}>
               <XAxis type="number" tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} tick={{ fill: "#71717a", fontSize: 10 }} axisLine={false} tickLine={false} />
               <YAxis type="category" dataKey="categoria" tick={{ fill: "#71717a", fontSize: 10 }} axisLine={false} tickLine={false} width={120} />
-              <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
+              <Tooltip content={<ChartTooltip />} cursor={{ fill: theme === "dark" ? "rgba(255,255,255,0.04)" : "rgba(15,23,32,0.04)" }} />
               <Bar dataKey="valor" radius={[0, 4, 4, 0]} barSize={20}>
                 {categorias.map((entry, i) => (
                   <Cell key={i} fill={margemColor(entry.produtos.reduce((s, p) => s + p.margem, 0) / entry.produtos.length)} />

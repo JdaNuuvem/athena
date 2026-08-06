@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { api } from "@/lib/api";
+import { useTheme, chartAxisColors } from "@/lib/theme-context";
 import type { ShopeePedidoSincronizado, ShopeePedidosEstatisticas } from "@/lib/api";
 import Icon from "@/app/_components/Icon";
 import PainelFulfillment from "./_components/PainelFulfillment";
@@ -84,6 +85,8 @@ function formatarData(iso: string | null) {
 const POR_PAGINA = 30;
 
 export default function ShopeePedidosPage() {
+  const { theme } = useTheme();
+  const { grid: gridColor, axis: axisColor } = chartAxisColors(theme);
   const [lojas, setLojas] = useState<LojaShopee[]>([]);
   const [lojaId, setLojaId] = useState<number | "">("");
   const [pedidos, setPedidos] = useState<ShopeePedidoSincronizado[]>([]);
@@ -248,11 +251,11 @@ export default function ShopeePedidosPage() {
               {estatisticas && estatisticas.serie_diaria.length > 0 ? (
                 <ResponsiveContainer width="100%" height={180}>
                   <LineChart data={estatisticas.serie_diaria.map((p) => ({ ...p, diaLabel: p.dia.slice(8, 10) + "/" + p.dia.slice(5, 7) }))}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#262626" />
-                    <XAxis dataKey="diaLabel" stroke="#737373" tick={{ fontSize: 10, fill: "#737373" }} />
-                    <YAxis stroke="#737373" tick={{ fontSize: 10, fill: "#737373" }} allowDecimals={false} width={30} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                    <XAxis dataKey="diaLabel" stroke={axisColor} tick={{ fontSize: 10, fill: axisColor }} />
+                    <YAxis stroke={axisColor} tick={{ fontSize: 10, fill: axisColor }} allowDecimals={false} width={30} />
                     <Tooltip content={<ChartTooltip />} />
-                    <Line type="monotone" dataKey="total" stroke="#34d399" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="total" stroke={theme === "dark" ? "#34d399" : "#059669"} strokeWidth={2} dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
@@ -269,9 +272,9 @@ export default function ShopeePedidosPage() {
                     layout="vertical"
                     margin={{ left: 90 }}
                   >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#262626" />
-                    <XAxis type="number" stroke="#737373" tick={{ fontSize: 10, fill: "#737373" }} allowDecimals={false} />
-                    <YAxis type="category" dataKey="label" stroke="#737373" tick={{ fontSize: 10, fill: "#737373" }} width={90} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                    <XAxis type="number" stroke={axisColor} tick={{ fontSize: 10, fill: axisColor }} allowDecimals={false} />
+                    <YAxis type="category" dataKey="label" stroke={axisColor} tick={{ fontSize: 10, fill: axisColor }} width={90} />
                     <Tooltip content={<ChartTooltip />} />
                     <Bar dataKey="total" radius={[0, 3, 3, 0]}>
                       {estatisticas.por_status.map((s, i) => <Cell key={i} fill={statusHex(s.status)} />)}

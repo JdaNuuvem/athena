@@ -1,5 +1,7 @@
 "use client";
 
+import { useTheme } from "@/lib/theme-context";
+
 interface Props {
   dados: Array<{ estado: string; total: number; valor: number }>;
 }
@@ -23,6 +25,10 @@ const POSICOES: Record<string, [number, number]> = {
 const fmtBRL = (v: number) => "R$ " + Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function MapaBrasilPedidos({ dados }: Props) {
+  const { theme } = useTheme();
+  const corVazio = theme === "dark" ? "rgba(38, 38, 38, 0.6)" : "rgba(226, 232, 240, 0.8)";
+  const corTextoFraco = theme === "dark" ? "#a3a3a3" : "#64748b";
+  const corTextoForte = "#052e1f";
   const porUf = new Map(dados.map((d) => [d.estado, d]));
   const maxTotal = Math.max(1, ...dados.map((d) => d.total));
 
@@ -44,8 +50,8 @@ export default function MapaBrasilPedidos({ dados }: Props) {
               style={{
                 gridColumn: col + 1,
                 gridRow: row + 1,
-                background: total > 0 ? `rgba(52, 211, 153, ${intensidade})` : "rgba(38, 38, 38, 0.6)",
-                color: total > 0 && intensidade > 0.5 ? "#052e1f" : "#a3a3a3",
+                background: total > 0 ? `rgba(52, 211, 153, ${intensidade})` : corVazio,
+                color: total > 0 && intensidade > 0.5 ? corTextoForte : corTextoFraco,
               }}
             >
               {uf}

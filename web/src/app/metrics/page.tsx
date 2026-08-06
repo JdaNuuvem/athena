@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { api } from "@/lib/api";
+import { useTheme, chartAxisColors } from "@/lib/theme-context";
 
 type Loja = { id: number; tipo: string; nome: string; receita: number; pedidos: number; ticket_medio: number };
 
@@ -20,6 +21,9 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
 }
 
 export default function MetricsPage() {
+  const { theme } = useTheme();
+  const { grid: gridColor, axis: axisColor } = chartAxisColors(theme);
+  const cursorFill = theme === "dark" ? "rgba(255,255,255,0.04)" : "rgba(15,23,32,0.04)";
   const [lojas, setLojas] = useState<Loja[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,18 +59,18 @@ export default function MetricsPage() {
               <BarChart data={chartData} margin={{ top: 4, right: 4, left: 8, bottom: 4 }}>
                 <XAxis
                   dataKey="nome"
-                  tick={{ fill: "#737373", fontSize: 11 }}
-                  axisLine={{ stroke: "#262626" }}
+                  tick={{ fill: axisColor, fontSize: 11 }}
+                  axisLine={{ stroke: gridColor }}
                   tickLine={false}
                 />
                 <YAxis
                   tickFormatter={fmtBRL}
-                  tick={{ fill: "#737373", fontSize: 11 }}
+                  tick={{ fill: axisColor, fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
                   width={64}
                 />
-                <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
+                <Tooltip content={<ChartTooltip />} cursor={{ fill: cursorFill }} />
                 <Bar dataKey="receita" radius={[4, 4, 0, 0]}>
                   {chartData.map((entry, i) => (
                     <Cell key={i} fill={entry.tipo === "fisica" ? "#4f46e5" : "#7c3aed"} />

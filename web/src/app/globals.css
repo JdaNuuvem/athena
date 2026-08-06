@@ -2,15 +2,16 @@
 
 /* ─────────────────────────────────────────────────────────────────────
    System-wide retheme: every screen still styled with stock Tailwind
-   neutral/indigo/emerald/red/amber utilities inherits the instrument
+   neutral/indigo/emerald/red/amber/etc utilities inherits the instrument
    panel world through these overrides — no per-file edits required.
-   Values alias the :root tokens below so there is one source of truth.
+   Every stop aliases a :root (dark) / [data-theme="light"] token below,
+   so light mode is a second value set for the same names, not a rewrite.
    ───────────────────────────────────────────────────────────────────── */
 @theme {
   --color-neutral-100: var(--ink-100);
-  --color-neutral-200: #d3dbe4;
+  --color-neutral-200: var(--ink-200);
   --color-neutral-300: var(--ink-300);
-  --color-neutral-400: #96a6b8;
+  --color-neutral-400: var(--ink-400);
   --color-neutral-500: var(--ink-500);
   --color-neutral-600: var(--ink-700);
   --color-neutral-700: var(--panel-border);
@@ -20,73 +21,73 @@
   --color-neutral-900: var(--panel-900);
   --color-neutral-950: var(--panel-950);
 
-  --color-indigo-300: #8fe3ff;
+  --color-indigo-300: var(--indigo-300);
   --color-indigo-400: var(--accent-400);
-  --color-indigo-500: #1a90bd;
-  --color-indigo-600: #0d6d92;
-  --color-indigo-700: #0a5675;
-  --color-indigo-900: #0a2a38;
+  --color-indigo-500: var(--indigo-500);
+  --color-indigo-600: var(--indigo-600);
+  --color-indigo-700: var(--indigo-700);
+  --color-indigo-900: var(--indigo-900);
 
-  --color-emerald-300: #7ee8c3;
+  --color-emerald-300: var(--emerald-300);
   --color-emerald-400: var(--status-ok);
-  --color-emerald-500: #22b384;
-  --color-emerald-600: #189a70;
-  --color-emerald-800: #0f5c44;
-  --color-emerald-900: #0a3d2d;
-  --color-emerald-950: #061f17;
+  --color-emerald-500: var(--emerald-500);
+  --color-emerald-600: var(--emerald-600);
+  --color-emerald-800: var(--emerald-800);
+  --color-emerald-900: var(--emerald-900);
+  --color-emerald-950: var(--emerald-950);
 
-  --color-red-200: #ffd6dc;
-  --color-red-300: #ffb3bf;
+  --color-red-200: var(--red-200);
+  --color-red-300: var(--red-300);
   --color-red-400: var(--status-crit);
-  --color-red-500: #e83a53;
-  --color-red-600: #d12744;
-  --color-red-800: #6b1524;
-  --color-red-900: #4a0f1a;
-  --color-red-950: #2c0910;
+  --color-red-500: var(--red-500);
+  --color-red-600: var(--red-600);
+  --color-red-800: var(--red-800);
+  --color-red-900: var(--red-900);
+  --color-red-950: var(--red-950);
 
-  --color-amber-300: #ffd98f;
+  --color-amber-300: var(--amber-300);
   --color-amber-400: var(--status-warn);
-  --color-amber-500: #e0a02a;
-  --color-amber-600: #c2841c;
-  --color-amber-800: #5c4110;
-  --color-amber-900: #3d2b0b;
-  --color-amber-950: #241a07;
+  --color-amber-500: var(--amber-500);
+  --color-amber-600: var(--amber-600);
+  --color-amber-800: var(--amber-800);
+  --color-amber-900: var(--amber-900);
+  --color-amber-950: var(--amber-950);
 
   /* Secondary/categorical hues (tags, channels, chart series) — kept
      distinct from the accent and status colors, recalibrated to the
-     same darker instrument-glass character instead of stock SaaS candy. */
-  --color-blue-300: #a8d4ff;
-  --color-blue-400: #5fa8f5;
-  --color-blue-500: #3b82c9;
-  --color-blue-600: #2864a3;
-  --color-blue-900: #12314f;
+     same instrument-glass character instead of stock SaaS candy. */
+  --color-blue-300: var(--blue-300);
+  --color-blue-400: var(--blue-400);
+  --color-blue-500: var(--blue-500);
+  --color-blue-600: var(--blue-600);
+  --color-blue-900: var(--blue-900);
 
-  --color-green-300: #a6e8b4;
-  --color-green-400: #6ad17e;
-  --color-green-500: #4bb862;
-  --color-green-600: #359a4a;
-  --color-green-900: #163d21;
-  --color-green-950: #0c2213;
+  --color-green-300: var(--green-300);
+  --color-green-400: var(--green-400);
+  --color-green-500: var(--green-500);
+  --color-green-600: var(--green-600);
+  --color-green-900: var(--green-900);
+  --color-green-950: var(--green-950);
 
-  --color-purple-300: #d4b8f7;
-  --color-purple-400: #b98ff5;
-  --color-purple-600: #7c4fc9;
-  --color-purple-900: #2e1a4f;
+  --color-purple-300: var(--purple-300);
+  --color-purple-400: var(--purple-400);
+  --color-purple-600: var(--purple-600);
+  --color-purple-900: var(--purple-900);
 
-  --color-orange-400: #f5a35f;
-  --color-orange-500: #e08530;
-  --color-orange-600: #c26b1c;
+  --color-orange-400: var(--orange-400);
+  --color-orange-500: var(--orange-500);
+  --color-orange-600: var(--orange-600);
 
-  --color-teal-500: #22a89e;
-  --color-teal-600: #1a8f8a;
+  --color-teal-500: var(--teal-500);
+  --color-teal-600: var(--teal-600);
 
-  --color-pink-500: #dd6398;
-  --color-pink-600: #c9457f;
+  --color-pink-500: var(--pink-500);
+  --color-pink-600: var(--pink-600);
 
-  --color-yellow-400: #f0d55f;
-  --color-yellow-500: #d4b82a;
-  --color-yellow-600: #b89a1c;
-  --color-yellow-900: #3d3308;
+  --color-yellow-400: var(--yellow-400);
+  --color-yellow-500: var(--yellow-500);
+  --color-yellow-600: var(--yellow-600);
+  --color-yellow-900: var(--yellow-900);
 
   /* Card corner language: every `rounded-lg`/`rounded-xl` card (both used
      app-wide for the same bordered-panel element, inconsistently) now
@@ -99,8 +100,13 @@
    Instrument panel — design world for Athena's operate surfaces.
    Every instrument (card) is a dedicated readout: one number, one label,
    one state color. Color is never decorative — it reports status only.
+   DARK is the default cockpit; [data-theme="light"] below restates the
+   same tokens for a daylight instrument panel — same world, same parts,
+   different ambient light. Toggle lives in the sidebar header.
    ───────────────────────────────────────────────────────────────────── */
 :root {
+  color-scheme: dark;
+
   /* Panel ground — cooler and darker than a stock neutral scale, closer
      to the glass of a lit instrument against a dark cockpit. */
   --panel-950: #05070a;
@@ -113,7 +119,9 @@
   --panel-border-lit: #34495e;
 
   --ink-100: #e7ecf2;
+  --ink-200: #d3dbe4;
   --ink-300: #b3c0cf;
+  --ink-400: #96a6b8;
   --ink-500: #7c8ba0;
   --ink-700: #4c5866;
 
@@ -129,13 +137,183 @@
   --status-warn-dim: rgba(245, 185, 66, 0.14);
   --status-crit: #f3556a;
   --status-crit-dim: rgba(243, 85, 106, 0.16);
+
+  /* Hue stops behind the @theme aliases above — 300/400 read as bright
+     text/icon/line on the dark ground; 800/900/950 read as near-black
+     translucent chip/badge fills (e.g. bg-red-950/40 border-red-900/50). */
+  --indigo-300: #8fe3ff;
+  --indigo-500: #1a90bd;
+  --indigo-600: #0d6d92;
+  --indigo-700: #0a5675;
+  --indigo-900: #0a2a38;
+
+  --emerald-300: #7ee8c3;
+  --emerald-500: #22b384;
+  --emerald-600: #189a70;
+  --emerald-800: #0f5c44;
+  --emerald-900: #0a3d2d;
+  --emerald-950: #061f17;
+
+  --red-200: #ffd6dc;
+  --red-300: #ffb3bf;
+  --red-500: #e83a53;
+  --red-600: #d12744;
+  --red-800: #6b1524;
+  --red-900: #4a0f1a;
+  --red-950: #2c0910;
+
+  --amber-300: #ffd98f;
+  --amber-500: #e0a02a;
+  --amber-600: #c2841c;
+  --amber-800: #5c4110;
+  --amber-900: #3d2b0b;
+  --amber-950: #241a07;
+
+  --blue-300: #a8d4ff;
+  --blue-400: #5fa8f5;
+  --blue-500: #3b82c9;
+  --blue-600: #2864a3;
+  --blue-900: #12314f;
+
+  --green-300: #a6e8b4;
+  --green-400: #6ad17e;
+  --green-500: #4bb862;
+  --green-600: #359a4a;
+  --green-900: #163d21;
+  --green-950: #0c2213;
+
+  --purple-300: #d4b8f7;
+  --purple-400: #b98ff5;
+  --purple-600: #7c4fc9;
+  --purple-900: #2e1a4f;
+
+  --orange-400: #f5a35f;
+  --orange-500: #e08530;
+  --orange-600: #c26b1c;
+
+  --teal-500: #22a89e;
+  --teal-600: #1a8f8a;
+
+  --pink-500: #dd6398;
+  --pink-600: #c9457f;
+
+  --yellow-400: #f0d55f;
+  --yellow-500: #d4b82a;
+  --yellow-600: #b89a1c;
+  --yellow-900: #3d3308;
+
+  /* Cross-cutting surface utilities — the "glass on the ground it sits
+     on" family: hover lift for otherwise-transparent icon/nav buttons,
+     and the instrument card's inner top-edge gleam. */
+  --overlay-hover: rgba(255, 255, 255, 0.05);
+  --instrument-highlight: rgba(255, 255, 255, 0.03);
 }
 
-/* ─── Base typography (dark mode) ─── */
+/* ─── Daylight instrument panel — same parts, same semantics, inverted
+   ambient light. Ground goes from cockpit-glass void to drafting paper;
+   ink goes from near-white to near-black; every status/accent stop keeps
+   its hue family but is retuned for contrast against a bright ground. ─── */
+[data-theme="light"] {
+  color-scheme: light;
+
+  --panel-950: #eef1f5;
+  --panel-900: #f7f9fb;
+  --panel-850: #ffffff;
+  --panel-800: #e2e7ed;
+  --panel-750: #dbe1e8;
+  --panel-700: #cdd6e0;
+  --panel-border: #d7dee6;
+  --panel-border-lit: #8fa8bf;
+
+  --ink-100: #16202b;
+  --ink-200: #29343f;
+  --ink-300: #3d4b5a;
+  --ink-400: #526274;
+  --ink-500: #5b6b7d;
+  --ink-700: #8291a3;
+
+  --accent-400: #0e7490;
+  --accent-500: #155e75;
+  --accent-glow: rgba(14, 116, 144, 0.14);
+
+  --status-ok: #047857;
+  --status-ok-dim: rgba(4, 120, 87, 0.1);
+  --status-warn: #a15c07;
+  --status-warn-dim: rgba(161, 92, 7, 0.1);
+  --status-crit: #c21f3d;
+  --status-crit-dim: rgba(194, 31, 61, 0.1);
+
+  --indigo-300: #0c5a76;
+  --indigo-500: #1a90bd;
+  --indigo-600: #0d6d92;
+  --indigo-700: #0a5675;
+  --indigo-900: #ddeef5;
+
+  --emerald-300: #0a7a53;
+  --emerald-500: #22b384;
+  --emerald-600: #189a70;
+  --emerald-800: #d3f2e6;
+  --emerald-900: #e3f6ee;
+  --emerald-950: #eefaf5;
+
+  --red-200: #7a0e21;
+  --red-300: #9c1530;
+  --red-500: #e83a53;
+  --red-600: #d12744;
+  --red-800: #fbdde2;
+  --red-900: #fde3e7;
+  --red-950: #fef2f4;
+
+  --amber-300: #7a4c07;
+  --amber-500: #e0a02a;
+  --amber-600: #c2841c;
+  --amber-800: #faecd2;
+  --amber-900: #fdf3e0;
+  --amber-950: #fef8ec;
+
+  --blue-300: #0c4a7a;
+  --blue-400: #1f5f9e;
+  --blue-500: #3b82c9;
+  --blue-600: #2864a3;
+  --blue-900: #dfebf8;
+
+  --green-300: #0e6b28;
+  --green-400: #17842f;
+  --green-500: #4bb862;
+  --green-600: #359a4a;
+  --green-900: #ddf3e2;
+  --green-950: #eefaf1;
+
+  --purple-300: #4a2680;
+  --purple-400: #6234a8;
+  --purple-600: #7c4fc9;
+  --purple-900: #ece1fa;
+
+  --orange-400: #9a4c14;
+  --orange-500: #e08530;
+  --orange-600: #c26b1c;
+
+  --teal-500: #22a89e;
+  --teal-600: #1a8f8a;
+
+  --pink-500: #dd6398;
+  --pink-600: #c9457f;
+
+  --yellow-400: #7a6108;
+  --yellow-500: #d4b82a;
+  --yellow-600: #b89a1c;
+  --yellow-900: #fbf3d4;
+
+  --overlay-hover: rgba(15, 23, 32, 0.05);
+  --instrument-highlight: rgba(16, 32, 44, 0.05);
+}
+
+/* ─── Base typography ─── */
 body {
-  /* Cockpit glass dome: pure luminosity falloff from the same void color,
+  /* Instrument dome: pure luminosity falloff from the same ground color,
      zero hue shift — depth, not decoration. Fixed so it reads as the
-     dome itself, not a scrolling backdrop. */
+     dome itself, not a scrolling backdrop. Dark = cockpit glass void;
+     light = drafting-paper vignette. */
   background: radial-gradient(ellipse 120% 70% at 50% -10%, var(--panel-900) 0%, var(--panel-950) 60%) fixed;
   color: var(--ink-100);
   -webkit-font-smoothing: antialiased;
@@ -170,7 +348,7 @@ h1, h2, h3, h4, h5, h6 {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 1px 0 var(--instrument-highlight);
   pointer-events: none;
 }
 .instrument-lit {
@@ -187,6 +365,16 @@ h1, h2, h3, h4, h5, h6 {
 .instrument-hover:hover {
   border-color: var(--panel-border-lit);
   box-shadow: 0 0 0 1px var(--panel-border-lit), 0 0 16px -4px var(--accent-glow);
+}
+
+/* Subtle lift for otherwise-transparent icon/nav buttons sitting directly
+   on a panel ground — the "ghost hover" idiom, tinted with the ground's
+   own opposite (white wash on dark glass, ink wash on daylight paper). */
+.hover-surface {
+  transition: background-color 150ms ease-out;
+}
+.hover-surface:hover {
+  background-color: var(--overlay-hover);
 }
 
 /* ─── Motion ─── */

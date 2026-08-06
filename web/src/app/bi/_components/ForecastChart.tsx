@@ -1,8 +1,11 @@
+"use client";
+
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   ReferenceLine, Area, ComposedChart
 } from "recharts";
 import type { ForecastDataPoint } from "../types";
+import { useTheme, chartAxisColors } from "@/lib/theme-context";
 
 interface ForecastChartProps {
   data: ForecastDataPoint[];
@@ -27,23 +30,27 @@ function CustomTooltip({ active, payload, label }: { active?: boolean; payload?:
 }
 
 export default function ForecastChart({ data, height = 280 }: ForecastChartProps) {
+  const { theme } = useTheme();
+  const { grid: gridColor, axis: axisColor } = chartAxisColors(theme);
+  const forecastColor = theme === "dark" ? "#818cf8" : "#4338ca";
+  const historicoColor = theme === "dark" ? "#22c55e" : "#15803d";
   const divPoint = data.findIndex(d => d.previsao !== undefined && d.historico === 0);
 
   return (
     <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-4">
       <ResponsiveContainer width="100%" height={height}>
         <ComposedChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+          <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
           <XAxis
             dataKey="periodo"
-            tick={{ fill: "#71717a", fontSize: 10 }}
+            tick={{ fill: axisColor, fontSize: 10 }}
             axisLine={false}
             tickLine={false}
             interval={Math.floor(data.length / 10)}
           />
           <YAxis
             tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`}
-            tick={{ fill: "#71717a", fontSize: 10 }}
+            tick={{ fill: axisColor, fontSize: 10 }}
             axisLine={false}
             tickLine={false}
             width={48}
@@ -51,16 +58,16 @@ export default function ForecastChart({ data, height = 280 }: ForecastChartProps
           <Tooltip content={<CustomTooltip />} />
           <ReferenceLine
             x={data[divPoint]?.periodo}
-            stroke="#71717a"
+            stroke={axisColor}
             strokeDasharray="5 5"
-            label={{ value: "Hoje", position: "top", fill: "#71717a", fontSize: 10 }}
+            label={{ value: "Hoje", position: "top", fill: axisColor, fontSize: 10 }}
           />
           {/* Confidence band */}
           <Area
             type="monotone"
             dataKey="limiteSuperior"
             stroke="none"
-            fill="#818cf8"
+            fill={forecastColor}
             fillOpacity={0.08}
             name="Limite Superior"
           />
@@ -68,7 +75,7 @@ export default function ForecastChart({ data, height = 280 }: ForecastChartProps
             type="monotone"
             dataKey="limiteInferior"
             stroke="none"
-            fill="#818cf8"
+            fill={forecastColor}
             fillOpacity={0.08}
             name="Limite Inferior"
           />
@@ -76,7 +83,7 @@ export default function ForecastChart({ data, height = 280 }: ForecastChartProps
           <Line
             type="monotone"
             dataKey="historico"
-            stroke="#22c55e"
+            stroke={historicoColor}
             strokeWidth={2}
             dot={false}
             name="Histórico"
@@ -86,7 +93,7 @@ export default function ForecastChart({ data, height = 280 }: ForecastChartProps
           <Line
             type="monotone"
             dataKey="previsao"
-            stroke="#818cf8"
+            stroke={forecastColor}
             strokeWidth={2}
             strokeDasharray="4 4"
             dot={false}

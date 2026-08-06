@@ -1,6 +1,7 @@
 "use client";
 
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { useTheme, chartAxisColors } from "@/lib/theme-context";
 
 interface Props {
   produto: Record<string, unknown>;
@@ -13,6 +14,12 @@ function fmtDiaMes(iso: string): string {
 }
 
 export default function VisaoGeralTab({ produto, formatarMoeda }: Props) {
+  const { theme } = useTheme();
+  const { grid: gridColor, axis: axisColor } = chartAxisColors(theme);
+  const tooltipBg = theme === "dark" ? "#18181b" : "#ffffff";
+  const tooltipBorder = theme === "dark" ? "#3f3f46" : "#e2e8f0";
+  const tooltipLabel = theme === "dark" ? "#a1a1aa" : "#5b6b7d";
+  const lineColor = theme === "dark" ? "#818cf8" : "#4338ca";
   const custo = Number(produto.preco_custo || 0);
   const valor = Number(produto.valor || 0);
   const margemReal = custo && valor ? (((valor - custo) / valor) * 100).toFixed(1) : null;
@@ -86,11 +93,11 @@ export default function VisaoGeralTab({ produto, formatarMoeda }: Props) {
           ) : (
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={vendasPorDia}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-              <XAxis dataKey="dia" tick={{ fill: "#71717a", fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: "#71717a", fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
-              <Tooltip contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: "8px", fontSize: 12 }} labelStyle={{ color: "#a1a1aa" }} />
-              <Line type="monotone" dataKey="vendas" stroke="#818cf8" strokeWidth={2} dot={{ fill: "#818cf8", r: 3 }} />
+              <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+              <XAxis dataKey="dia" tick={{ fill: axisColor, fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: axisColor, fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
+              <Tooltip contentStyle={{ background: tooltipBg, border: `1px solid ${tooltipBorder}`, borderRadius: "8px", fontSize: 12 }} labelStyle={{ color: tooltipLabel }} />
+              <Line type="monotone" dataKey="vendas" stroke={lineColor} strokeWidth={2} dot={{ fill: lineColor, r: 3 }} />
             </LineChart>
           </ResponsiveContainer>
           )}

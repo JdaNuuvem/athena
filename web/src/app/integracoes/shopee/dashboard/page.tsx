@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { api } from "@/lib/api";
+import { useTheme, chartAxisColors } from "@/lib/theme-context";
 import type {
   ShopeeDashboardLoja, ShopeeSerieDiariaPonto, ShopeeTopProdutoHoje, ShopeeEstoqueRisco,
   ShopeeShopPerformance, ShopeeFunilFulfillment, ShopeeAdsPerformanceRow, ShopeeAdsInsight, ShopeeSyncLogEntry,
@@ -121,6 +122,8 @@ function StatCard({ label, value, tone = "neutral", tooltip }: { label: string; 
 }
 
 export default function ShopeeDashboardPage() {
+  const { theme } = useTheme();
+  const { grid: gridColor, axis: axisColor } = chartAxisColors(theme);
   const [lojas, setLojas] = useState<ShopeeDashboardLoja[]>([]);
   const [serieDiaria, setSerieDiaria] = useState<ShopeeSerieDiariaPonto[]>([]);
   const [topProdutosHoje, setTopProdutosHoje] = useState<ShopeeTopProdutoHoje[]>([]);
@@ -399,11 +402,11 @@ export default function ShopeeDashboardPage() {
             {chartData.length > 0 ? (
               <ResponsiveContainer width="100%" height={200}>
                 <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#262626" />
-                  <XAxis dataKey="diaLabel" stroke="#737373" tick={{ fontSize: 10, fill: "#737373" }} />
-                  <YAxis stroke="#737373" tick={{ fontSize: 10, fill: "#737373" }} tickFormatter={(v) => "R$ " + v} width={70} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                  <XAxis dataKey="diaLabel" stroke={axisColor} tick={{ fontSize: 10, fill: axisColor }} />
+                  <YAxis stroke={axisColor} tick={{ fontSize: 10, fill: axisColor }} tickFormatter={(v) => "R$ " + v} width={70} />
                   <Tooltip content={<ChartTooltip />} />
-                  <Line type="monotone" dataKey="receita" name="receita" stroke="#34d399" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="receita" name="receita" stroke={theme === "dark" ? "#34d399" : "#059669"} strokeWidth={2} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
             ) : (

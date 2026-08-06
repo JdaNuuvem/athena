@@ -175,7 +175,7 @@ export default function DashboardPage() {
           <h2 className="text-[10px] uppercase tracking-[0.12em] mb-3" style={{ color: "var(--ink-500)" }}>Agentes</h2>
           <div className="space-y-0.5">
             {agents.slice(0, 8).map((a) => (
-              <div key={a.id} className="flex items-center justify-between px-2 py-1.5 rounded transition-colors hover:bg-white/[0.03]">
+              <div key={a.id} className="flex items-center justify-between px-2 py-1.5 rounded transition-colors hover-surface">
                 <span className="text-xs" style={{ color: "var(--ink-300)" }}>{a.name}</span>
                 <span
                   aria-hidden

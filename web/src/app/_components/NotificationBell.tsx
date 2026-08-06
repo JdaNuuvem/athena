@@ -41,7 +41,7 @@ export default function NotificationBell() {
       <button
         onClick={() => setAberto(v => !v)}
         aria-label="Notificações"
-        className="relative p-1.5 rounded shrink-0 transition-colors hover:bg-white/5"
+        className="relative p-1.5 rounded shrink-0 transition-colors hover-surface"
         style={{ color: "var(--ink-700)" }}
       >
         <Icon name="bell" size={14} />

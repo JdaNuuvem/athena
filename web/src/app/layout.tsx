@@ -9,7 +9,12 @@ import Icon from "./_components/Icon";
 import NotificationBell from "./_components/NotificationBell";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { StoreProvider, useStore, type LojaInfo } from "@/lib/store-context";
+import { ThemeProvider, useTheme } from "@/lib/theme-context";
 import "./globals.css";
+
+// Roda antes da hidratacao (bloqueante no <head>) pra decidir o tema sem
+// flash: le localStorage e ja carimba data-theme no <html> antes da 1a pintura.
+const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem("theme");document.documentElement.setAttribute("data-theme",t==="light"?"light":"dark");}catch(e){}})();`;
 
 const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", weight: ["400", "500", "600"] });
 
@@ -173,6 +178,7 @@ function filtrarNavPorTipoLoja(groups: NavGroup[], tipo: "fisica" | "virtual" | 
 function Sidebar({ sidebarOpen, setSidebarOpen }: { sidebarOpen: boolean; setSidebarOpen: (v: boolean) => void }) {
   const { user, logout } = useAuth();
   const { lojaId, lojas, setLojaId, tipoLojaSelecionada } = useStore();
+  const { theme, toggleTheme } = useTheme();
   const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
   const pathname = usePathname();
   const navGroups = filtrarNavPorTipoLoja(NAV_GROUPS, tipoLojaSelecionada);
@@ -194,15 +200,28 @@ function Sidebar({ sidebarOpen, setSidebarOpen }: { sidebarOpen: boolean; setSid
             <span className="font-semibold text-[13px] tracking-[0.14em]" style={{ color: "var(--ink-100)" }}>ATHENA</span>
           </span>
         )}
-        <button
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-          aria-label={sidebarOpen ? "Recolher menu" : "Expandir menu"}
-          aria-expanded={sidebarOpen}
-          className="p-1.5 rounded transition-colors hover:bg-white/5"
-          style={{ color: "var(--ink-500)" }}
-        >
-          <Icon name={sidebarOpen ? "chevronLeft" : "chevronRight"} size={15} />
-        </button>
+        <div className="flex items-center gap-0.5">
+          {sidebarOpen && (
+            <button
+              onClick={toggleTheme}
+              aria-label={theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"}
+              title={theme === "dark" ? "Tema claro" : "Tema escuro"}
+              className="p-1.5 rounded transition-colors hover-surface"
+              style={{ color: "var(--ink-500)" }}
+            >
+              <Icon name={theme === "dark" ? "sun" : "moon"} size={15} />
+            </button>
+          )}
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            aria-label={sidebarOpen ? "Recolher menu" : "Expandir menu"}
+            aria-expanded={sidebarOpen}
+            className="p-1.5 rounded transition-colors hover-surface"
+            style={{ color: "var(--ink-500)" }}
+          >
+            <Icon name={sidebarOpen ? "chevronLeft" : "chevronRight"} size={15} />
+          </button>
+        </div>
       </div>
 
       {sidebarOpen ? (
@@ -322,7 +341,7 @@ function Sidebar({ sidebarOpen, setSidebarOpen }: { sidebarOpen: boolean; setSid
                 <button
                   onClick={logout}
                   aria-label="Sair"
-                  className="p-1.5 rounded shrink-0 transition-colors hover:bg-white/5"
+                  className="p-1.5 rounded shrink-0 transition-colors hover-surface"
                   style={{ color: "var(--ink-700)" }}
                 >
                   <Icon name="power" size={14} />
@@ -333,7 +352,7 @@ function Sidebar({ sidebarOpen, setSidebarOpen }: { sidebarOpen: boolean; setSid
             <button
               onClick={logout}
               aria-label="Sair"
-              className="w-full flex justify-center p-1.5 rounded transition-colors hover:bg-white/5"
+              className="w-full flex justify-center p-1.5 rounded transition-colors hover-surface"
               style={{ color: "var(--ink-700)" }}
             >
               <Icon name="power" size={14} />
@@ -359,13 +378,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const isLogin = pathname === "/login";
 
   return (
-    <html lang="pt-BR" className={mono.variable}>
+    <html lang="pt-BR" className={mono.variable} suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Athena</title>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body className={`min-h-screen ${!isLogin ? "flex" : ""}`}>
+        <ThemeProvider>
         {isLogin ? (
           children
         ) : (
@@ -425,6 +446,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </StoreProvider>
           </AuthProvider>
         )}
+        </ThemeProvider>
       </body>
     </html>
   );
