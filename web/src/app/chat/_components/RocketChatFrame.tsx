@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-const ROCKETCHAT_URL = process.env.NEXT_PUBLIC_ROCKETCHAT_URL;
+const ROCKETCHAT_URL_RAW = process.env.NEXT_PUBLIC_ROCKETCHAT_URL;
+const ROCKETCHAT_URL = ROCKETCHAT_URL_RAW ? ROCKETCHAT_URL_RAW.replace(/\/$/, "") : ROCKETCHAT_URL_RAW;
 const TIMEOUT_MS = 5000;
 
 type Status = "nao_configurado" | "carregando" | "indisponivel" | "pronto";
@@ -30,6 +31,7 @@ async function estaDisponivel(url: string): Promise<boolean> {
 
 export default function RocketChatFrame() {
   const [status, setStatus] = useState<Status>(ROCKETCHAT_URL ? "carregando" : "nao_configurado");
+  const geracaoRef = useRef(0);
 
   const verificar = useCallback(() => {
     if (!ROCKETCHAT_URL) {
@@ -37,16 +39,28 @@ export default function RocketChatFrame() {
       return;
     }
     setStatus("carregando");
-    estaDisponivel(ROCKETCHAT_URL).then((ok) => setStatus(ok ? "pronto" : "indisponivel"));
+    const geracaoAtual = ++geracaoRef.current;
+    estaDisponivel(ROCKETCHAT_URL).then((ok) => {
+      if (geracaoRef.current === geracaoAtual) {
+        setStatus(ok ? "pronto" : "indisponivel");
+      }
+    });
   }, []);
 
   useEffect(() => {
     verificar();
+    return () => {
+      geracaoRef.current++;
+    };
   }, [verificar]);
 
   if (status === "nao_configurado") {
     return (
-      <div className="h-screen w-full flex items-center justify-center text-neutral-500 text-sm">
+      <div
+        role="status"
+        aria-live="polite"
+        className="h-dvh w-full flex items-center justify-center text-neutral-500 text-sm"
+      >
         Chat não configurado (NEXT_PUBLIC_ROCKETCHAT_URL ausente).
       </div>
     );
@@ -54,7 +68,11 @@ export default function RocketChatFrame() {
 
   if (status === "carregando") {
     return (
-      <div className="h-screen w-full flex items-center justify-center text-neutral-500 text-sm">
+      <div
+        role="status"
+        aria-live="polite"
+        className="h-dvh w-full flex items-center justify-center text-neutral-500 text-sm"
+      >
         Carregando chat...
       </div>
     );
@@ -62,7 +80,11 @@ export default function RocketChatFrame() {
 
   if (status === "indisponivel") {
     return (
-      <div className="h-screen w-full flex flex-col items-center justify-center gap-3 text-neutral-500 text-sm">
+      <div
+        role="status"
+        aria-live="polite"
+        className="h-dvh w-full flex flex-col items-center justify-center gap-3 text-neutral-500 text-sm"
+      >
         <span>Chat indisponível no momento.</span>
         <button
           onClick={verificar}
@@ -78,7 +100,7 @@ export default function RocketChatFrame() {
     <iframe
       src={`${ROCKETCHAT_URL}?layout=embedded`}
       title="Chat"
-      className="h-screen w-full border-0"
+      className="h-dvh w-full border-0"
       allow="camera; microphone; display-capture; clipboard-write"
     />
   );
