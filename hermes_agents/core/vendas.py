@@ -394,7 +394,9 @@ def sincronizar_pedidos_shopee(dias: int = 30, loja_id: int = None) -> dict:
     local em vez de rebuscar na API elimina o limite artificial e a chamada
     duplicada."""
     from core.lojas import obter_credenciais_shopee
+    from shopee_sync import _init_tables
     async def _go():
+        await _init_tables()  # garante a coluna frete (e as demais) antes do SELECT p.*
         db = await get_db()
         where = ["p.create_time >= NOW() - (INTERVAL '1 day' * $1)"]
         params = [dias]
