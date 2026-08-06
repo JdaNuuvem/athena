@@ -99,13 +99,20 @@ def atualizar_celula_estoque_rapido(sku: str, loja_id: int, quantidade: float, u
     if resultado_local.get("erro"):
         return {"ok": False, "erro_local": resultado_local["erro"]}
 
-    resultado_shopee = sincronizar_estoque_shopee(sku, int(quantidade), loja_id=loja_id)
-    grid = listar_grid_estoque_rapido(skus=[sku])
-    linha = grid["produtos"][0] if grid["produtos"] else None
-
-    return {
-        "ok": "error" not in resultado_shopee,
-        "salvo_local": True,
-        "erro_shopee": resultado_shopee.get("error"),
-        "linha": linha,
-    }
+    try:
+        resultado_shopee = sincronizar_estoque_shopee(sku, int(quantidade), loja_id=loja_id)
+        grid = listar_grid_estoque_rapido(skus=[sku])
+        linha = grid["produtos"][0] if grid["produtos"] else None
+        return {
+            "ok": "error" not in resultado_shopee,
+            "salvo_local": True,
+            "erro_shopee": resultado_shopee.get("error"),
+            "linha": linha,
+        }
+    except Exception as e:
+        return {
+            "ok": False,
+            "salvo_local": True,
+            "erro_shopee": str(e),
+            "linha": None,
+        }

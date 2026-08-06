@@ -154,6 +154,22 @@ class TestAtualizarCelulaEstoqueRapido(unittest.TestCase):
         self.assertEqual(r["salvo_local"], True)
         self.assertEqual(r["erro_shopee"], "token expirado")
 
+    @patch("shopee.estoque_rapido.sincronizar_estoque_shopee")
+    @patch("shopee.estoque_rapido.ajustar_absoluto")
+    @patch("shopee.estoque_rapido.obter")
+    def test_sucesso_local_sincronizar_lanca_excecao(self, mock_obter, mock_ajustar, mock_sync):
+        mock_obter.return_value = {"id": 1, "nome": "Loja A"}
+        mock_ajustar.return_value = {"ok": True}
+        mock_sync.side_effect = Exception("malformed anuncio_id: bad_format")
+
+        r = estoque_rapido.atualizar_celula_estoque_rapido(
+            "SKU1", 1, 10, {"user_id": 9, "nome": "Ana"})
+
+        self.assertEqual(r["ok"], False)
+        self.assertEqual(r["salvo_local"], True)
+        self.assertEqual(r["erro_shopee"], "malformed anuncio_id: bad_format")
+        self.assertIsNone(r["linha"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
