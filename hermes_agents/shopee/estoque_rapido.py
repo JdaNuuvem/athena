@@ -83,3 +83,29 @@ def listar_grid_estoque_rapido(busca: str = "", pagina: int = 1, por_pagina: int
 
         return {"lojas": lojas_out, "produtos": produtos, "total": total}
     return run_async(_go())
+
+
+def atualizar_celula_estoque_rapido(sku: str, loja_id: int, quantidade: float, usuario: dict,
+                                     ip: str = None, dispositivo: str = None) -> dict:
+    """Salva 1 celula do grid: grava saldo local e sincroniza com a Shopee de
+    forma SINCRONA (nao dispara thread solta) — o usuario precisa ver na hora
+    se a Shopee aceitou. Falha ao gravar local nunca chama a Shopee."""
+    loja = obter(loja_id)
+    if not loja:
+        return {"ok": False, "erro_local": f"Loja {loja_id} nao encontrada"}
+
+    resultado_local = ajustar_absoluto(sku, loja["nome"], quantidade, "estoque_rapido",
+                                        usuario.get("user_id"), usuario.get("nome", ""), ip, dispositivo)
+    if resultado_local.get("erro"):
+        return {"ok": False, "erro_local": resultado_local["erro"]}
+
+    resultado_shopee = sincronizar_estoque_shopee(sku, int(quantidade), loja_id=loja_id)
+    grid = listar_grid_estoque_rapido(skus=[sku])
+    linha = grid["produtos"][0] if grid["produtos"] else None
+
+    return {
+        "ok": "error" not in resultado_shopee,
+        "salvo_local": True,
+        "erro_shopee": resultado_shopee.get("error"),
+        "linha": linha,
+    }

@@ -90,5 +90,70 @@ class TestListarGridEstoqueRapido(unittest.TestCase):
         fake_db.fetchval.assert_called_once()
 
 
+class TestAtualizarCelulaEstoqueRapido(unittest.TestCase):
+
+    @patch("shopee.estoque_rapido.listar_grid_estoque_rapido")
+    @patch("shopee.estoque_rapido.sincronizar_estoque_shopee")
+    @patch("shopee.estoque_rapido.ajustar_absoluto")
+    @patch("shopee.estoque_rapido.obter")
+    def test_sucesso_local_e_shopee(self, mock_obter, mock_ajustar, mock_sync, mock_grid):
+        mock_obter.return_value = {"id": 1, "nome": "Loja A"}
+        mock_ajustar.return_value = {"ok": True, "sku": "SKU1", "loja": "Loja A", "quantidade": 10, "anterior": 5, "atual": 10}
+        mock_sync.return_value = {"success": True}
+        mock_grid.return_value = {"produtos": [{"sku": "SKU1", "nome": "Produto 1", "estoque": {1: 10.0}}], "lojas": [], "total": 1}
+
+        r = estoque_rapido.atualizar_celula_estoque_rapido(
+            "SKU1", 1, 10, {"user_id": 9, "nome": "Ana"}, "127.0.0.1", "pytest")
+
+        mock_ajustar.assert_called_once_with("SKU1", "Loja A", 10, "estoque_rapido", 9, "Ana", "127.0.0.1", "pytest")
+        mock_sync.assert_called_once_with("SKU1", 10, loja_id=1)
+        mock_grid.assert_called_once_with(skus=["SKU1"])
+        self.assertEqual(r, {
+            "ok": True, "salvo_local": True, "erro_shopee": None,
+            "linha": {"sku": "SKU1", "nome": "Produto 1", "estoque": {1: 10.0}},
+        })
+
+    @patch("shopee.estoque_rapido.ajustar_absoluto")
+    @patch("shopee.estoque_rapido.obter")
+    def test_loja_nao_encontrada_nao_chama_ajustar(self, mock_obter, mock_ajustar):
+        mock_obter.return_value = None
+
+        r = estoque_rapido.atualizar_celula_estoque_rapido(
+            "SKU1", 999, 10, {"user_id": 9, "nome": "Ana"})
+
+        self.assertEqual(r, {"ok": False, "erro_local": "Loja 999 nao encontrada"})
+        mock_ajustar.assert_not_called()
+
+    @patch("shopee.estoque_rapido.sincronizar_estoque_shopee")
+    @patch("shopee.estoque_rapido.ajustar_absoluto")
+    @patch("shopee.estoque_rapido.obter")
+    def test_falha_local_nao_chama_shopee(self, mock_obter, mock_ajustar, mock_sync):
+        mock_obter.return_value = {"id": 1, "nome": "Loja A"}
+        mock_ajustar.return_value = {"erro": "saldo negativo nao permitido"}
+
+        r = estoque_rapido.atualizar_celula_estoque_rapido(
+            "SKU1", 1, -5, {"user_id": 9, "nome": "Ana"})
+
+        self.assertEqual(r, {"ok": False, "erro_local": "saldo negativo nao permitido"})
+        mock_sync.assert_not_called()
+
+    @patch("shopee.estoque_rapido.listar_grid_estoque_rapido")
+    @patch("shopee.estoque_rapido.sincronizar_estoque_shopee")
+    @patch("shopee.estoque_rapido.ajustar_absoluto")
+    @patch("shopee.estoque_rapido.obter")
+    def test_sucesso_local_falha_shopee(self, mock_obter, mock_ajustar, mock_sync, mock_grid):
+        mock_obter.return_value = {"id": 1, "nome": "Loja A"}
+        mock_ajustar.return_value = {"ok": True}
+        mock_sync.return_value = {"error": "token expirado"}
+        mock_grid.return_value = {"produtos": [{"sku": "SKU1", "nome": "Produto 1", "estoque": {1: 10.0}}]}
+
+        r = estoque_rapido.atualizar_celula_estoque_rapido(
+            "SKU1", 1, 10, {"user_id": 9, "nome": "Ana"})
+
+        self.assertEqual(r["ok"], False)
+        self.assertEqual(r["salvo_local"], True)
+        self.assertEqual(r["erro_shopee"], "token expirado")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
