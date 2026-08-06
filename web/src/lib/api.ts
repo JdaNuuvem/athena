@@ -296,7 +296,7 @@ export const api = {
     request<{
       lojas: ShopeeDashboardLoja[]; dias: number; serie_diaria: ShopeeSerieDiariaPonto[]; top_produtos_hoje: ShopeeTopProdutoHoje[];
       estoque_risco: ShopeeEstoqueRisco[]; funil_fulfillment: ShopeeFunilFulfillment; lucro_periodo: number;
-      periodo_anterior: ShopeePeriodoAnterior; cancelamentos: ShopeeCancelamentos; projecao_mes: number;
+      periodo_anterior: ShopeePeriodoAnterior; vendido_ontem: ShopeeVendidoOntem; cancelamentos: ShopeeCancelamentos; projecao_mes: number;
       ranking_periodo: ShopeeRankingPeriodoItem[]; produtos_parados: ShopeeProdutoParado[]; error?: string;
     }>(`/api/shopee/dashboard${dias ? `?dias=${dias}` : ""}`),
   shopeePedidosSincronizados: (lojaId: number, opts?: { status?: string; busca?: string; pagina?: number }) => {
@@ -1049,6 +1049,12 @@ export interface ShopeeFunilFulfillment {
 export interface ShopeePeriodoAnterior {
   receita: number;
   unidades: number;
+}
+
+export interface ShopeeVendidoOntem {
+  receita: number;
+  unidades: number;
+  pedidos: number;
 }
 
 export interface ShopeeCancelamentos {

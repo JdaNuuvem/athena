@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 import type {
   ShopeeDashboardLoja, ShopeeSerieDiariaPonto, ShopeeTopProdutoHoje, ShopeeEstoqueRisco,
   ShopeeShopPerformance, ShopeeFunilFulfillment, ShopeeAdsPerformanceRow, ShopeeAdsInsight, ShopeeSyncLogEntry,
-  ShopeePeriodoAnterior, ShopeeCancelamentos, ShopeeRankingPeriodoItem, ShopeeProdutoParado,
+  ShopeePeriodoAnterior, ShopeeVendidoOntem, ShopeeCancelamentos, ShopeeRankingPeriodoItem, ShopeeProdutoParado,
 } from "@/lib/api";
 import Icon from "@/app/_components/Icon";
 import RankingProdutosModal from "@/app/_components/RankingProdutosModal";
@@ -51,6 +51,27 @@ const SEVERITY_META: Record<string, { label: string; className: string }> = {
   baixa: { label: "Baixa", className: "bg-neutral-800 text-neutral-400" },
   low: { label: "Baixa", className: "bg-neutral-800 text-neutral-400" },
 };
+
+function metricaForaMeta(m: { current_period: number; target?: { value: number; comparator: string } }): boolean {
+  if (!m.target) return false;
+  const { value, comparator } = m.target;
+  if (comparator === "<=") return m.current_period > value;
+  if (comparator === "<") return m.current_period >= value;
+  if (comparator === ">=") return m.current_period < value;
+  if (comparator === ">") return m.current_period <= value;
+  return false;
+}
+
+function QuickActionCard({ label, value, tone, href, tooltip }: { label: string; value: number; tone: "red" | "amber"; href?: string; tooltip?: string }) {
+  const cls = tone === "red" ? "bg-red-950/40 border-red-900/50 text-red-400" : "bg-amber-950/40 border-amber-900/50 text-amber-400";
+  const content = (
+    <div className={`instrument-hover border rounded-lg p-3 ${cls}`} title={tooltip}>
+      <p className="text-2xl numeric font-semibold">{value}</p>
+      <p className="text-xs uppercase tracking-wider mt-0.5">{label}</p>
+    </div>
+  );
+  return href ? <Link href={href} className="block">{content}</Link> : content;
+}
 
 function diasAte(iso: string | null): number | null {
   if (!iso) return null;
@@ -107,6 +128,7 @@ export default function ShopeeDashboardPage() {
   const [funil, setFunil] = useState<ShopeeFunilFulfillment>({ total: 0, sem_bling: 0, sem_nota: 0, nao_despachado: 0 });
   const [lucroPeriodo, setLucroPeriodo] = useState(0);
   const [periodoAnterior, setPeriodoAnterior] = useState<ShopeePeriodoAnterior>({ receita: 0, unidades: 0 });
+  const [vendidoOntem, setVendidoOntem] = useState<ShopeeVendidoOntem>({ receita: 0, unidades: 0, pedidos: 0 });
   const [cancelamentos, setCancelamentos] = useState<ShopeeCancelamentos>({ total: 0, cancelados: 0, devolucao: 0, taxa_cancelamento_pct: 0, taxa_devolucao_pct: 0 });
   const [projecaoMes, setProjecaoMes] = useState(0);
   const [rankingPeriodo, setRankingPeriodo] = useState<ShopeeRankingPeriodoItem[]>([]);
@@ -135,6 +157,7 @@ export default function ShopeeDashboardPage() {
       setFunil(r.funil_fulfillment || { total: 0, sem_bling: 0, sem_nota: 0, nao_despachado: 0 });
       setLucroPeriodo(r.lucro_periodo || 0);
       setPeriodoAnterior(r.periodo_anterior || { receita: 0, unidades: 0 });
+      setVendidoOntem(r.vendido_ontem || { receita: 0, unidades: 0, pedidos: 0 });
       setCancelamentos(r.cancelamentos || { total: 0, cancelados: 0, devolucao: 0, taxa_cancelamento_pct: 0, taxa_devolucao_pct: 0 });
       setProjecaoMes(r.projecao_mes || 0);
       setRankingPeriodo(r.ranking_periodo || []);
@@ -227,6 +250,7 @@ export default function ShopeeDashboardPage() {
   const totalAnunciosComProblema = saudeValores.reduce((s, v) => s + Number(v.anunciosComProblema || 0), 0);
   const totalDescontosAtivos = saudeValores.reduce((s, v) => s + Number(v.descontosAtivos || 0), 0);
   const totalVouchersAtivos = saudeValores.reduce((s, v) => s + Number(v.vouchersAtivos || 0), 0);
+  const metricasForaMeta = saudeValores.flatMap((v) => (v.performance?.metric_list || []).filter(metricaForaMeta));
 
   const adsCost = adsPerf.reduce((s, p) => s + Number(p.cost || 0), 0);
   const adsRevenue = adsPerf.reduce((s, p) => s + Number(p.revenue || 0), 0);
@@ -270,10 +294,41 @@ export default function ShopeeDashboardPage() {
         </div>
       )}
 
+      {lojas.length > 0 && (totalPedidosAtrasados > 0 || cancelamentos.cancelados > 0 || cancelamentos.devolucao > 0 || totalAnunciosBanidos > 0 || metricasForaMeta.length > 0) && (
+        <div>
+          <p className="text-xs text-neutral-500 uppercase tracking-wider mb-2">Ação rápida</p>
+          <div className="instrument-enter grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {totalPedidosAtrasados > 0 && (
+              <QuickActionCard label={`Pedido${totalPedidosAtrasados === 1 ? "" : "s"} atrasado${totalPedidosAtrasados === 1 ? "" : "s"}`} value={totalPedidosAtrasados} tone="red" href="/integracoes/shopee/pedidos" />
+            )}
+            {(cancelamentos.cancelados > 0 || cancelamentos.devolucao > 0) && (
+              <QuickActionCard label="Cancel. + devoluções" value={cancelamentos.cancelados + cancelamentos.devolucao} tone="amber" tooltip={`${cancelamentos.cancelados} cancelados, ${cancelamentos.devolucao} devoluções no período`} />
+            )}
+            {totalAnunciosBanidos > 0 && (
+              <QuickActionCard label={`Anúncio${totalAnunciosBanidos === 1 ? "" : "s"} banido${totalAnunciosBanidos === 1 ? "" : "s"}`} value={totalAnunciosBanidos} tone="red" />
+            )}
+            {metricasForaMeta.length > 0 && (
+              <QuickActionCard
+                label="Métricas fora da meta"
+                value={metricasForaMeta.length}
+                tone="amber"
+                tooltip={metricasForaMeta.map((m) => m.metric_name).join(", ")}
+              />
+            )}
+          </div>
+        </div>
+      )}
+
       {lojas.length > 0 && (
         <div className="instrument-enter bg-gradient-to-br from-emerald-950/50 to-neutral-900 border border-emerald-900/40 rounded-xl p-5">
           <p className="text-xs text-emerald-400/80 uppercase tracking-wider mb-1">Vendido hoje</p>
-          <p className="text-4xl font-semibold text-emerald-400 numeric">{fmtBRL(receitaHoje)}</p>
+          <p className="text-4xl font-semibold text-emerald-400 numeric flex items-baseline flex-wrap">
+            {fmtBRL(receitaHoje)}
+            <Variacao atual={receitaHoje} anterior={vendidoOntem.receita} />
+          </p>
+          {vendidoOntem.receita > 0 && (
+            <p className="text-xs text-neutral-500 mt-1">Ontem: {fmtBRL(vendidoOntem.receita)} ({vendidoOntem.pedidos} pedido{vendidoOntem.pedidos === 1 ? "" : "s"})</p>
+          )}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-emerald-900/30">
             <div>
               <p className="text-xs text-neutral-500 uppercase tracking-wider">Pedidos</p>

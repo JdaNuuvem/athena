@@ -431,6 +431,18 @@ def shopee_dashboard_consolidado():
         anterior_row = cur.fetchone() or {}
         periodo_anterior = {"receita": float(anterior_row.get("receita") or 0), "unidades": int(anterior_row.get("unidades") or 0)}
 
+        cur.execute("""
+            SELECT COALESCE(SUM(receita_bruta),0) AS receita, COALESCE(SUM(quantidade),0) AS unidades,
+                   COUNT(DISTINCT COALESCE(shopee_order_sn, id::text)) AS pedidos
+            FROM vendas WHERE marketplace = 'shopee' AND data = CURRENT_DATE - 1
+        """)
+        ontem_row = cur.fetchone() or {}
+        vendido_ontem = {
+            "receita": float(ontem_row.get("receita") or 0),
+            "unidades": int(ontem_row.get("unidades") or 0),
+            "pedidos": int(ontem_row.get("pedidos") or 0),
+        }
+
         cancelamentos = {"total": 0, "cancelados": 0, "devolucao": 0, "taxa_cancelamento_pct": 0.0, "taxa_devolucao_pct": 0.0}
         if shop_ids:
             cur.execute("""
@@ -491,6 +503,7 @@ def shopee_dashboard_consolidado():
             "estoque_risco": estoque_risco,
             "lucro_periodo": lucro_periodo,
             "periodo_anterior": periodo_anterior,
+            "vendido_ontem": vendido_ontem,
             "cancelamentos": cancelamentos,
             "projecao_mes": projecao_mes,
             "ranking_periodo": ranking_periodo,
@@ -501,6 +514,7 @@ def shopee_dashboard_consolidado():
         return jsonify({"error": str(e), "lojas": [], "serie_diaria": [], "top_produtos_hoje": [], "estoque_risco": [],
                          "funil_fulfillment": {"total": 0, "sem_bling": 0, "sem_nota": 0, "nao_despachado": 0},
                          "lucro_periodo": 0.0, "periodo_anterior": {"receita": 0.0, "unidades": 0},
+                         "vendido_ontem": {"receita": 0.0, "unidades": 0, "pedidos": 0},
                          "cancelamentos": {"total": 0, "cancelados": 0, "devolucao": 0, "taxa_cancelamento_pct": 0.0, "taxa_devolucao_pct": 0.0},
                          "projecao_mes": 0.0, "ranking_periodo": [], "produtos_parados": []})
 
