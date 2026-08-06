@@ -107,18 +107,57 @@ class TestSincronizarPedidosBling(unittest.TestCase):
         self.assertTrue(any("555" in e for e in r["erros"]))
 
 
-class TestSincronizarPedidosShopee(unittest.TestCase):
-    """DRE por Loja soma frete de vendas_pedidos — sem gravar o frete real da
-    Shopee aqui, todo pedido Shopee entrava com frete=0 (default da coluna),
-    subestimando custo/superestimando lucro pra lojas virtuais."""
+class _FakeDBPedidosShopee:
+    """Fake DB pra sincronizar_pedidos_shopee — le' de shopee_pedidos_sincronizados
+    (ja baixado localmente pelo sync da aba Pedidos) em vez de rechamar a API Shopee,
+    o que deixava vendas_pedidos incompleto (achado real: so' 182 de 788 pedidos
+    ja sincronizados chegavam la', por causa do limite de 200/chamada + rebusca
+    redundante). DRE por Loja soma frete de vendas_pedidos — sem gravar o frete
+    real da Shopee aqui, todo pedido Shopee entrava com frete=0, subestimando
+    custo/superestimando lucro pra lojas virtuais."""
+    def __init__(self, pedidos, itens_por_pedido=None, existing_id=None):
+        self.pedidos = pedidos
+        self.itens_por_pedido = itens_por_pedido or {}
+        self.existing_id = existing_id
+        self.executed = []
 
-    @patch("shopee.listar_pedidos_shopee_detalhado")
-    def test_grava_frete_do_pedido_shopee(self, mock_listar):
-        mock_listar.return_value = {"pedidos": [{
-            "order_sn": "SN1", "status": "COMPLETED", "create_time": 1700000000,
-            "total_amount": 150.0, "frete": 18.5, "recipient_nome": "Cliente Y", "itens": [],
-        }]}
-        db = _FakeDBPedidos(existing_id=None)
+    async def fetch(self, q, *a):
+        if "FROM shopee_pedidos_sincronizados" in q:
+            return self.pedidos
+        if "FROM shopee_pedidos_itens" in q:
+            return self.itens_por_pedido.get(a[0], [])
+        return []
+
+    async def fetchval(self, q, *a):
+        self.executed.append((q, a))
+        if "SELECT id FROM vendas_pedidos" in q:
+            return self.existing_id
+        if "INSERT INTO vendas_pedidos" in q:
+            return 88
+        return None
+
+    async def fetchrow(self, q, *a):
+        return None
+
+    async def execute(self, q, *a):
+        self.executed.append((q, a))
+
+
+from datetime import datetime as _datetime
+
+_PEDIDO_SHOPEE_MOCK = {
+    "id": 1, "order_sn": "SN1", "status": "COMPLETED",
+    "create_time": _datetime(2026, 7, 20),
+    "total_amount": 150.0, "frete": 18.5,
+    "recipient_nome": "Cliente Y", "buyer_username": "cliente_y",
+    "loja_id_resolvida": 7,
+}
+
+
+class TestSincronizarPedidosShopee(unittest.TestCase):
+    @patch("core.lojas.obter_credenciais_shopee", return_value={"shopee_shop_id": "999"})
+    def test_grava_frete_do_pedido_shopee(self, mcred):
+        db = _FakeDBPedidosShopee(pedidos=[_PEDIDO_SHOPEE_MOCK], existing_id=None)
         async def fake_get_db(): return db
         with patch.object(vendas, "get_db", fake_get_db):
             r = vendas.sincronizar_pedidos_shopee(dias=7, loja_id=7)
@@ -126,13 +165,9 @@ class TestSincronizarPedidosShopee(unittest.TestCase):
         insert = next(e for e in db.executed if "INSERT INTO vendas_pedidos" in e[0])
         self.assertIn(18.5, insert[1])
 
-    @patch("shopee.listar_pedidos_shopee_detalhado")
-    def test_atualiza_pedido_existente_tambem_grava_frete(self, mock_listar):
-        mock_listar.return_value = {"pedidos": [{
-            "order_sn": "SN1", "status": "COMPLETED", "create_time": 1700000000,
-            "total_amount": 150.0, "frete": 18.5, "recipient_nome": "Cliente Y", "itens": [],
-        }]}
-        db = _FakeDBPedidos(existing_id=33)
+    @patch("core.lojas.obter_credenciais_shopee", return_value={"shopee_shop_id": "999"})
+    def test_atualiza_pedido_existente_tambem_grava_frete(self, mcred):
+        db = _FakeDBPedidosShopee(pedidos=[_PEDIDO_SHOPEE_MOCK], existing_id=33)
         async def fake_get_db(): return db
         with patch.object(vendas, "get_db", fake_get_db):
             r = vendas.sincronizar_pedidos_shopee(dias=7, loja_id=7)

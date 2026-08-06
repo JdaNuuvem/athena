@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { vendasDashboard, vendasList, vendasSyncBling, vendasDetalhePedido, vendasAtualizarStatus, vendasCriarPedido } from "@/lib/api";
+import { vendasDashboard, vendasList, vendasSyncBling, vendasSyncShopee, vendasDetalhePedido, vendasAtualizarStatus, vendasCriarPedido } from "@/lib/api";
 import DateFilter, { type DateFilterValue } from "@/app/_components/DateFilter";
 import { fmtBRL } from "@/lib/format";
 import PageHeader from "@/app/_components/PageHeader";
@@ -58,6 +58,7 @@ export default function VendasPage() {
   const [pedidos, setPedidos] = useState<PedidoRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [syncingShopee, setSyncingShopee] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [dateFilter, setDateFilter] = useState<DateFilterValue>({});
   const [statusTab, setStatusTab] = useState("");
@@ -104,6 +105,20 @@ export default function VendasPage() {
       setErro(e instanceof Error ? e.message : "Erro ao sincronizar");
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const syncShopee = async () => {
+    setSyncingShopee(true);
+    try {
+      const r = await vendasSyncShopee();
+      if (r.error) setErro(r.error);
+      carregarPedidos();
+      carregarDashboard();
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro ao sincronizar Shopee");
+    } finally {
+      setSyncingShopee(false);
     }
   };
 
@@ -158,6 +173,13 @@ export default function VendasPage() {
             className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs rounded whitespace-nowrap"
           >
             {syncing ? "Sincronizando..." : "Sync Bling"}
+          </button>
+          <button
+            onClick={syncShopee}
+            disabled={syncingShopee}
+            className="px-3 py-1.5 bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white text-xs rounded whitespace-nowrap"
+          >
+            {syncingShopee ? "Sincronizando..." : "Sync Shopee"}
           </button>
           </Can>
         </div>

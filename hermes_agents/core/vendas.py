@@ -384,42 +384,54 @@ MAPA_STATUS_SHOPEE = {
 }
 
 def sincronizar_pedidos_shopee(dias: int = 30, loja_id: int = None) -> dict:
-    """Sync de pedidos Shopee para vendas_pedidos/vendas_itens — a mesma tabela usada
-    pelo Bling. Sem isso, vendas da Shopee nunca apareciam na tela de Vendas nem no
-    DRE por Loja (que le exclusivamente vendas_pedidos), so' no Dashboard/KPI geral
-    (que le da tabela legada 'vendas', alimentada por um sync separado)."""
-    from shopee import listar_pedidos_shopee_detalhado
-    r = listar_pedidos_shopee_detalhado(dias=dias, loja_id=loja_id, max_pedidos=200)
-    if r.get("error"):
-        return r
-    pedidos = r.get("pedidos", [])
-    if not pedidos:
-        return {"sync": 0, "message": "sem dados"}
-
+    """Sync de shopee_pedidos_sincronizados (ja' baixados da API Shopee por
+    shopee_sync.sync_pedidos_shopee, e usados pela pagina Pedidos) para
+    vendas_pedidos/vendas_itens — a mesma tabela usada pelo Bling e lida por
+    Vendas/DRE por Loja. Antes esta funcao rechamava a API Shopee direto
+    (listar_pedidos_shopee_detalhado) com limite de 200 pedidos por chamada,
+    o que deixava vendas_pedidos incompleto frente ao que ja estava
+    sincronizado localmente (achado real: 182 de 788 pedidos). Ler da tabela
+    local em vez de rebuscar na API elimina o limite artificial e a chamada
+    duplicada."""
+    from core.lojas import obter_credenciais_shopee
     async def _go():
         db = await get_db()
+        where = ["p.create_time >= NOW() - (INTERVAL '1 day' * $1)"]
+        params = [dias]
+        if loja_id:
+            shop_id = obter_credenciais_shopee(loja_id).get("shopee_shop_id") or ""
+            if not shop_id:
+                return {"sync": 0, "message": "loja sem shop_id configurado"}
+            params.append(shop_id)
+            where.append(f"p.shop_id = ${len(params)}")
+        where_sql = " AND ".join(where)
+        pedidos = await db.fetch(f"""
+            SELECT p.*, l.id AS loja_id_resolvida
+            FROM shopee_pedidos_sincronizados p
+            LEFT JOIN lojas l ON l.shopee_shop_id = p.shop_id
+            WHERE {where_sql}
+        """, *params)
+        if not pedidos:
+            return {"sync": 0, "message": "sem dados"}
+
         total = 0
         erros = []
         for ped in pedidos:
-            order_sn = ped.get("order_sn")
-            if not order_sn:
-                continue
+            order_sn = ped["order_sn"]
             try:
+                pedido_loja_id = loja_id or ped["loja_id_resolvida"]
                 existing = await db.fetchval("SELECT id FROM vendas_pedidos WHERE shopee_order_sn = $1", order_sn)
-                cliente = ped.get("recipient_nome") or ped.get("buyer_username") or ""
-                status = MAPA_STATUS_SHOPEE.get(ped.get("status", ""), "aberto")
-                total_val = float(ped.get("total_amount", 0) or 0)
-                frete_val = float(ped.get("frete", 0) or 0)
-                data_pedido = None
-                if ped.get("create_time"):
-                    from datetime import datetime
-                    data_pedido = datetime.fromtimestamp(int(ped["create_time"])).date()
+                cliente = ped["recipient_nome"] or ped["buyer_username"] or ""
+                status = MAPA_STATUS_SHOPEE.get(ped["status"] or "", "aberto")
+                total_val = float(ped["total_amount"] or 0)
+                frete_val = float(ped["frete"] or 0)
+                data_pedido = ped["create_time"].date() if ped["create_time"] else None
                 if existing:
                     await db.execute("""UPDATE vendas_pedidos SET
                         cliente=$1, total=$2, status=$3, data=$4::date, frete=$5,
                         marketplace='shopee', loja_id=$6, updated_at=NOW()
                         WHERE shopee_order_sn=$7""",
-                        cliente, total_val, status, data_pedido, frete_val, loja_id, order_sn)
+                        cliente, total_val, status, data_pedido, frete_val, pedido_loja_id, order_sn)
                     pid = existing
                     await db.execute("DELETE FROM vendas_itens WHERE pedido_id = $1", pid)
                 else:
@@ -427,15 +439,16 @@ def sincronizar_pedidos_shopee(dias: int = 30, loja_id: int = None) -> dict:
                         (cliente, total, frete, status, data, marketplace, origem, shopee_order_sn, loja_id)
                         VALUES ($1,$2,$3,$4,$5::date,'shopee','shopee',$6,$7)
                         RETURNING id""",
-                        cliente, total_val, frete_val, status, data_pedido, order_sn, loja_id)
+                        cliente, total_val, frete_val, status, data_pedido, order_sn, pedido_loja_id)
 
-                for idx, item in enumerate(ped.get("itens", []) or [], 1):
-                    qtd = float(item.get("quantidade", 0) or 0)
-                    vu = float(item.get("preco", 0) or 0)
+                itens = await db.fetch("SELECT * FROM shopee_pedidos_itens WHERE pedido_id = $1", ped["id"])
+                for idx, item in enumerate(itens, 1):
+                    qtd = float(item["quantidade"] or 0)
+                    vu = float(item["preco"] or 0)
                     await db.execute("""INSERT INTO vendas_itens
                         (pedido_id, numero_item, sku, descricao, quantidade, valor_unitario, valor_total)
                         VALUES ($1,$2,$3,$4,$5,$6,$7)""",
-                        pid, idx, item.get("sku", ""), item.get("nome", ""), qtd, vu, qtd * vu)
+                        pid, idx, item["sku"] or "", item["nome"] or "", qtd, vu, qtd * vu)
                 total += 1
             except Exception as e:
                 erros.append(f"pedido {order_sn}: {e}")

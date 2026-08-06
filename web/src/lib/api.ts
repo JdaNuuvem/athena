@@ -1725,6 +1725,15 @@ export async function vendasSyncBling(pagina?: number, limite?: number): Promise
   return res.json();
 }
 
+export async function vendasSyncShopee(dias?: number): Promise<{ sync: number; erros?: string[]; error?: string; message?: string }> {
+  const res = await fetch("/api/vendas/sync/shopee", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dias: dias || 90 }),
+  });
+  return res.json();
+}
+
 // ── Integracoes / SSOT ──
 
 export async function catalogoListar(): Promise<{ data: unknown[] }> {

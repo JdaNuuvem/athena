@@ -98,6 +98,11 @@ async def _init_tables():
     await db.execute("ALTER TABLE shopee_pedidos_sincronizados ADD COLUMN IF NOT EXISTS bling_nota_fiscal_id INT")
     await db.execute("ALTER TABLE shopee_pedidos_sincronizados ADD COLUMN IF NOT EXISTS package_number VARCHAR(50)")
     await db.execute("ALTER TABLE shopee_pedidos_sincronizados ADD COLUMN IF NOT EXISTS despachado_em TIMESTAMP")
+    # estimated_shipping_fee do get_order_detail — usado pelo sync pra
+    # vendas_pedidos (core/vendas.py::sincronizar_pedidos_shopee), que precisa
+    # do frete real pro DRE por Loja (sem isso, todo pedido Shopee entrava com
+    # frete=0, subestimando custo/superestimando lucro).
+    await db.execute("ALTER TABLE shopee_pedidos_sincronizados ADD COLUMN IF NOT EXISTS frete NUMERIC(12,2) DEFAULT 0")
 
 async def _upsert_anuncio(db, shop_id: str, sku: str, anuncio_id: str, titulo: str,
                            preco: float, estoque: int, status: str, agora: datetime,
@@ -286,13 +291,13 @@ async def _upsert_pedido(db, shop_id: str, det: dict) -> None:
             order_sn, shop_id, status, create_time, update_time, total_amount,
             buyer_username, recipient_nome, recipient_telefone, recipient_endereco,
             recipient_cidade, recipient_estado, recipient_cep, forma_pagamento,
-            observacao, prazo_envio, ultima_sincronizacao
-        ) VALUES ($1,$2,$3,to_timestamp($4::bigint),to_timestamp($5::bigint),$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,to_timestamp($16::bigint),NOW())
+            observacao, prazo_envio, frete, ultima_sincronizacao
+        ) VALUES ($1,$2,$3,to_timestamp($4::bigint),to_timestamp($5::bigint),$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,to_timestamp($16::bigint),$17,NOW())
         ON CONFLICT (order_sn, shop_id) DO UPDATE SET
             status=$3, update_time=to_timestamp($5::bigint), total_amount=$6, buyer_username=$7,
             recipient_nome=$8, recipient_telefone=$9, recipient_endereco=$10,
             recipient_cidade=$11, recipient_estado=$12, recipient_cep=$13,
-            forma_pagamento=$14, observacao=$15, prazo_envio=to_timestamp($16::bigint),
+            forma_pagamento=$14, observacao=$15, prazo_envio=to_timestamp($16::bigint), frete=$17,
             ultima_sincronizacao=NOW()
         RETURNING id
     """, order_sn, shop_id, det.get("order_status", ""), det.get("create_time") or None,
@@ -300,7 +305,7 @@ async def _upsert_pedido(db, shop_id: str, det: dict) -> None:
         det.get("buyer_username", ""), endereco.get("name", ""), endereco.get("phone", ""),
         endereco.get("full_address", ""), endereco.get("city", ""), endereco.get("state", ""),
         endereco.get("zipcode", ""), det.get("payment_method", ""), det.get("note", ""),
-        det.get("ship_by_date") or None)
+        det.get("ship_by_date") or None, float(det.get("estimated_shipping_fee", 0) or 0))
     pedido_id = row["id"]
     await db.execute("DELETE FROM shopee_pedidos_itens WHERE pedido_id = $1", pedido_id)
     for item in det.get("item_list", []):
