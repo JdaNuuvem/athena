@@ -86,11 +86,14 @@ interface SaudeState {
   [lojaId: number]: SaudeLojaState;
 }
 
-function StatCard({ label, value, tone = "neutral" }: { label: string; value: string | number; tone?: "emerald" | "amber" | "red" | "neutral" }) {
+function StatCard({ label, value, tone = "neutral", tooltip }: { label: string; value: string | number; tone?: "emerald" | "amber" | "red" | "neutral"; tooltip?: string }) {
   const cor = tone === "emerald" ? "text-emerald-400" : tone === "amber" ? "text-amber-400" : tone === "red" ? "text-red-400" : "text-neutral-200";
   return (
-    <div className="instrument-hover bg-neutral-900 border border-neutral-800 rounded-lg p-3">
-      <p className="text-xs text-neutral-500 uppercase tracking-wider">{label}</p>
+    <div className="instrument-hover bg-neutral-900 border border-neutral-800 rounded-lg p-3" title={tooltip}>
+      <p className="text-xs text-neutral-500 uppercase tracking-wider inline-flex items-center gap-1">
+        {label}
+        {tooltip && <span aria-hidden className="text-neutral-600">ⓘ</span>}
+      </p>
       <p className={`text-lg numeric font-medium ${cor}`}>{value}</p>
     </div>
   );
@@ -372,7 +375,7 @@ export default function ShopeeDashboardPage() {
           {rankingPeriodo.length > 0 && (
             <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4">
               <p className="text-xs text-neutral-500 uppercase tracking-wider mb-1">Ranking de produtos — {dias} dias</p>
-              <p className="text-xs text-neutral-600 mb-3">Receita e lucro estimado (após comissão Shopee e custo do produto).</p>
+              <p className="text-xs text-neutral-600 mb-3" title="Custo só é descontado se o produto tiver preço de custo cadastrado no catálogo.">Receita e lucro estimado (após comissão Shopee; custo do produto só entra se cadastrado).</p>
               <div className="space-y-1.5">
                 {rankingPeriodo.map((p, i) => (
                   <div key={p.sku} className="flex items-center gap-3 text-sm">
@@ -397,10 +400,20 @@ export default function ShopeeDashboardPage() {
                   <Variacao atual={totalReceita} anterior={periodoAnterior.receita} />
                 </p>
               </div>
-              <StatCard label="Lucro Estimado" value={fmtBRL(lucroPeriodo)} tone={lucroPeriodo >= 0 ? "emerald" : "red"} />
+              <StatCard
+                label="Lucro Estimado"
+                value={fmtBRL(lucroPeriodo)}
+                tone={lucroPeriodo >= 0 ? "emerald" : "red"}
+                tooltip="Receita menos comissão Shopee (12%) menos custo do produto. O custo só é descontado se o SKU tiver preço de custo cadastrado no catálogo — hoje nenhum produto vendido nesse período tem esse campo preenchido, então na prática este valor é só receita líquida de comissão."
+              />
               <StatCard label="Unidades Vendidas" value={totalUnidades} />
               <StatCard label="Anúncios Ativos" value={totalAnunciosAtivos} />
-              <StatCard label="Estoque Baixo" value={totalEstoqueBaixo} tone={totalEstoqueBaixo > 0 ? "amber" : "neutral"} />
+              <StatCard
+                label="Estoque Baixo"
+                value={totalEstoqueBaixo}
+                tone={totalEstoqueBaixo > 0 ? "amber" : "neutral"}
+                tooltip="Produtos com estoque igual ou abaixo do mínimo cadastrado no catálogo. Depende de dois campos que hoje não estão preenchidos no sistema: estoque físico por loja e estoque mínimo por produto — enquanto isso, este número fica sempre zero."
+              />
             </div>
           </div>
 
@@ -487,10 +500,10 @@ export default function ShopeeDashboardPage() {
             )}
           </div>
 
-          {estoqueRisco.length > 0 && (
-            <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4">
-              <p className="text-xs text-neutral-500 uppercase tracking-wider mb-1">Estoque baixo × vendas</p>
-              <p className="text-xs text-neutral-600 mb-3">Produtos vendendo bem no período mas com estoque no limite.</p>
+          <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4">
+            <p className="text-xs text-neutral-500 uppercase tracking-wider mb-1">Estoque baixo × vendas</p>
+            <p className="text-xs text-neutral-600 mb-3">Produtos vendendo bem no período mas com estoque no limite.</p>
+            {estoqueRisco.length > 0 ? (
               <div className="space-y-1.5">
                 {estoqueRisco.map((p) => (
                   <div key={p.sku} className="flex items-center gap-3 text-sm">
@@ -505,8 +518,12 @@ export default function ShopeeDashboardPage() {
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            ) : (
+              <p className="text-sm text-center py-4 text-neutral-500">
+                Nenhum produto com estoque mínimo cadastrado ainda — sem isso não há como calcular risco de ruptura.
+              </p>
+            )}
+          </div>
 
           {produtosParados.length > 0 && (
             <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4">
