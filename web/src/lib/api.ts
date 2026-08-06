@@ -1660,8 +1660,11 @@ export async function fiscalNFImpostos(notaId: number): Promise<{ data: unknown[
 
 // ── Vendas ──
 
-export async function vendasDashboard(dias?: number): Promise<Record<string, unknown>> {
-  const res = await fetch(`/api/vendas/dashboard${dias ? "?dias=" + dias : ""}`);
+export async function vendasDashboard(dias?: number, lojaId?: string): Promise<Record<string, unknown>> {
+  const q = new URLSearchParams();
+  if (dias) q.set("dias", String(dias));
+  if (lojaId && lojaId !== "todas") q.set("loja_id", lojaId);
+  const res = await fetch(`/api/vendas/dashboard${q.toString() ? "?" + q : ""}`);
   return res.json();
 }
 

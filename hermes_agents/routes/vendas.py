@@ -8,7 +8,12 @@ vendas_bp = Blueprint("vendas", __name__, url_prefix="/api/vendas")
 def vendas_dashboard():
     from core.vendas import dashboard
     dias = request.args.get("dias", 30, type=int)
-    return jsonify(dashboard(dias))
+    loja_id = request.args.get("loja_id", type=int)
+
+    @requer_acesso_loja
+    def _go():
+        return jsonify(dashboard(dias, loja_id))
+    return _go()
 
 
 @vendas_bp.route("/<tabela>", methods=["GET"])
@@ -20,16 +25,21 @@ def vendas_list(tabela):
     data_fim = request.args.get("data_fim", "")
     dias = request.args.get("dias", 0, type=int)
     status = request.args.get("status", "")
-    if data_inicio or data_fim or dias or status:
-        return jsonify(listar_filtrado(tabela, data_inicio, data_fim, dias, status))
-    if tabela == "pedidos":
-        # Fase 4 (RBAC por loja, piloto vendas) — modo suave: sem vinculo em
-        # loja_responsaveis, ve tudo (comportamento de sempre).
-        from core.rbac_lojas import lojas_permitidas
-        permitidas = lojas_permitidas(usuario_atual_da_request().get("user_id"))
-        if permitidas is not None:
-            return jsonify({"data": listar_pedidos_por_loja(permitidas)})
-    return jsonify({"data": vl(tabela)})
+    loja_id = request.args.get("loja_id", type=int)
+
+    @requer_acesso_loja
+    def _go():
+        if data_inicio or data_fim or dias or status or loja_id:
+            return jsonify(listar_filtrado(tabela, data_inicio, data_fim, dias, status, loja_id))
+        if tabela == "pedidos":
+            # Fase 4 (RBAC por loja, piloto vendas) — modo suave: sem vinculo em
+            # loja_responsaveis, ve tudo (comportamento de sempre).
+            from core.rbac_lojas import lojas_permitidas
+            permitidas = lojas_permitidas(usuario_atual_da_request().get("user_id"))
+            if permitidas is not None:
+                return jsonify({"data": listar_pedidos_por_loja(permitidas)})
+        return jsonify({"data": vl(tabela)})
+    return _go()
 
 
 @vendas_bp.route("/<tabela>", methods=["POST"])

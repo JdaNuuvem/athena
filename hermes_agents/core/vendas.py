@@ -119,7 +119,7 @@ def delete(t: str, i: int): return _delete(f"vendas_{t}", i)
 
 DATE_FIELDS = {"pedidos": "data", "itens": "created_at", "pagamentos": "data"}
 
-def _list_filtered(t: str, date_field: str, data_inicio: str = "", data_fim: str = "", dias: int = 0, status: str = "", order: str = "id DESC", limit: int = 500) -> list:
+def _list_filtered(t: str, date_field: str, data_inicio: str = "", data_fim: str = "", dias: int = 0, status: str = "", loja_id: int = None, order: str = "id DESC", limit: int = 500) -> list:
     async def _go():
         db = await get_db()
         where = []
@@ -133,16 +133,19 @@ def _list_filtered(t: str, date_field: str, data_inicio: str = "", data_fim: str
             where.append(f"{date_field} >= CURRENT_DATE - ${p}::int"); params.append(dias); p += 1
         if status:
             where.append(f"status = ${p}"); params.append(status); p += 1
+        # loja_id so' existe na coluna de vendas_pedidos — itens/pagamentos nao tem.
+        if loja_id and t == "vendas_pedidos":
+            where.append(f"loja_id = ${p}"); params.append(loja_id); p += 1
         clause = ("WHERE " + " AND ".join(where)) if where else ""
         rows = await db.fetch(f"SELECT * FROM {t} {clause} ORDER BY {order} LIMIT {limit}", *params)
         return [dict(r) for r in rows]
     try: return run_async(_go())
     except Exception as e: log(AGENT, f"list_filtered {t}: {e}"); return []
 
-def listar_filtrado(tabela: str, data_inicio: str = "", data_fim: str = "", dias: int = 0, status: str = "") -> dict:
+def listar_filtrado(tabela: str, data_inicio: str = "", data_fim: str = "", dias: int = 0, status: str = "", loja_id: int = None) -> dict:
     t = f"vendas_{tabela}"
     field = DATE_FIELDS.get(tabela, "created_at")
-    return {"data": _list_filtered(t, field, data_inicio, data_fim, dias, status)}
+    return {"data": _list_filtered(t, field, data_inicio, data_fim, dias, status, loja_id)}
 
 
 def listar_pedidos_por_loja(loja_ids: list = None, limit: int = 500) -> list:
@@ -219,27 +222,31 @@ def atualizar_status(id: int, novo_status: str, usuario: str = "") -> dict:
 
 # ── Dashboard ──
 
-def dashboard(dias: int = 30) -> dict:
+def dashboard(dias: int = 30, loja_id: int = None) -> dict:
     """ponytail: CURRENT_DATE - $1 sem cast e' ambigua pro asyncpg (nao sabe se
     $1 e' integer ou interval antes de preparar o statement) — sempre lancava
     UndefinedFunctionError('operator does not exist: date >= integer'), caido
     no except abaixo e retornando zero pra tudo silenciosamente. Card de
     totais da pagina Vendas nunca mostrou dado real ate' este fix; a lista de
-    pedidos (endpoint separado) nao usa essa query, por isso continuava ok."""
+    pedidos (endpoint separado) nao usa essa query, por isso continuava ok.
+
+    loja_id opcional: quando None, mesmo cast explicito ($N::int IS NULL OR
+    loja_id = $N) evita reescrever a clausula por query — a mesma prudencia
+    de cast do paragrafo acima se aplica aqui tambem."""
     async def _go():
         db = await get_db()
-        total = await db.fetchval("SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND status != 'cancelado'", dias)
-        qtd = await db.fetchval("SELECT COUNT(*) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int", dias)
-        abertos = await db.fetchval("SELECT COUNT(*) FROM vendas_pedidos WHERE status = 'aberto'")
-        faturados = await db.fetchval("SELECT COUNT(*) FROM vendas_pedidos WHERE status IN ('faturado','concluido') AND data >= CURRENT_DATE - $1::int", dias)
-        cancelados = await db.fetchval("SELECT COUNT(*) FROM vendas_pedidos WHERE status = 'cancelado' AND data >= CURRENT_DATE - $1::int", dias)
+        total = await db.fetchval("SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND status != 'cancelado' AND ($2::int IS NULL OR loja_id = $2)", dias, loja_id)
+        qtd = await db.fetchval("SELECT COUNT(*) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND ($2::int IS NULL OR loja_id = $2)", dias, loja_id)
+        abertos = await db.fetchval("SELECT COUNT(*) FROM vendas_pedidos WHERE status = 'aberto' AND ($1::int IS NULL OR loja_id = $1)", loja_id)
+        faturados = await db.fetchval("SELECT COUNT(*) FROM vendas_pedidos WHERE status IN ('faturado','concluido') AND data >= CURRENT_DATE - $1::int AND ($2::int IS NULL OR loja_id = $2)", dias, loja_id)
+        cancelados = await db.fetchval("SELECT COUNT(*) FROM vendas_pedidos WHERE status = 'cancelado' AND data >= CURRENT_DATE - $1::int AND ($2::int IS NULL OR loja_id = $2)", dias, loja_id)
         ticket_medio = round(float(total or 0) / max(qtd or 1, 1), 2)
         # vendas diarias
-        diarias = await db.fetch("SELECT DATE(data) as dia, COUNT(*) as qtd, COALESCE(SUM(total),0) as valor FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND status != 'cancelado' GROUP BY DATE(data) ORDER BY dia", dias)
+        diarias = await db.fetch("SELECT DATE(data) as dia, COUNT(*) as qtd, COALESCE(SUM(total),0) as valor FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND status != 'cancelado' AND ($2::int IS NULL OR loja_id = $2) GROUP BY DATE(data) ORDER BY dia", dias, loja_id)
         # por marketplace
-        por_canal = await db.fetch("SELECT COALESCE(marketplace,'manual') as canal, COUNT(*) as qtd, COALESCE(SUM(total),0) as valor FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND status != 'cancelado' GROUP BY marketplace ORDER BY valor DESC", dias)
+        por_canal = await db.fetch("SELECT COALESCE(marketplace,'manual') as canal, COUNT(*) as qtd, COALESCE(SUM(total),0) as valor FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND status != 'cancelado' AND ($2::int IS NULL OR loja_id = $2) GROUP BY marketplace ORDER BY valor DESC", dias, loja_id)
         # ultimos pedidos
-        recentes = await db.fetch("SELECT id, numero, cliente, total, status, data, marketplace FROM vendas_pedidos ORDER BY id DESC LIMIT 5")
+        recentes = await db.fetch("SELECT id, numero, cliente, total, status, data, marketplace FROM vendas_pedidos WHERE ($1::int IS NULL OR loja_id = $1) ORDER BY id DESC LIMIT 5", loja_id)
         return {
             "total_vendas": float(total or 0), "quantidade": qtd or 0,
             "ticket_medio": ticket_medio, "pedidos_abertos": abertos or 0,
