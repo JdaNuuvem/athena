@@ -130,7 +130,7 @@ def _list_filtered(t: str, date_field: str, data_inicio: str = "", data_fim: str
         if data_fim:
             where.append(f"{date_field} <= ${p}::date"); params.append(data_fim); p += 1
         if dias > 0 and not (data_inicio or data_fim):
-            where.append(f"{date_field} >= CURRENT_DATE - ${p}"); params.append(dias); p += 1
+            where.append(f"{date_field} >= CURRENT_DATE - ${p}::int"); params.append(dias); p += 1
         if status:
             where.append(f"status = ${p}"); params.append(status); p += 1
         clause = ("WHERE " + " AND ".join(where)) if where else ""
@@ -220,18 +220,24 @@ def atualizar_status(id: int, novo_status: str, usuario: str = "") -> dict:
 # ── Dashboard ──
 
 def dashboard(dias: int = 30) -> dict:
+    """ponytail: CURRENT_DATE - $1 sem cast e' ambigua pro asyncpg (nao sabe se
+    $1 e' integer ou interval antes de preparar o statement) — sempre lancava
+    UndefinedFunctionError('operator does not exist: date >= integer'), caido
+    no except abaixo e retornando zero pra tudo silenciosamente. Card de
+    totais da pagina Vendas nunca mostrou dado real ate' este fix; a lista de
+    pedidos (endpoint separado) nao usa essa query, por isso continuava ok."""
     async def _go():
         db = await get_db()
-        total = await db.fetchval("SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1 AND status != 'cancelado'", dias)
-        qtd = await db.fetchval("SELECT COUNT(*) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1", dias)
+        total = await db.fetchval("SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND status != 'cancelado'", dias)
+        qtd = await db.fetchval("SELECT COUNT(*) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int", dias)
         abertos = await db.fetchval("SELECT COUNT(*) FROM vendas_pedidos WHERE status = 'aberto'")
-        faturados = await db.fetchval("SELECT COUNT(*) FROM vendas_pedidos WHERE status IN ('faturado','concluido') AND data >= CURRENT_DATE - $1", dias)
-        cancelados = await db.fetchval("SELECT COUNT(*) FROM vendas_pedidos WHERE status = 'cancelado' AND data >= CURRENT_DATE - $1", dias)
+        faturados = await db.fetchval("SELECT COUNT(*) FROM vendas_pedidos WHERE status IN ('faturado','concluido') AND data >= CURRENT_DATE - $1::int", dias)
+        cancelados = await db.fetchval("SELECT COUNT(*) FROM vendas_pedidos WHERE status = 'cancelado' AND data >= CURRENT_DATE - $1::int", dias)
         ticket_medio = round(float(total or 0) / max(qtd or 1, 1), 2)
         # vendas diarias
-        diarias = await db.fetch("SELECT DATE(data) as dia, COUNT(*) as qtd, COALESCE(SUM(total),0) as valor FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1 AND status != 'cancelado' GROUP BY DATE(data) ORDER BY dia", dias)
+        diarias = await db.fetch("SELECT DATE(data) as dia, COUNT(*) as qtd, COALESCE(SUM(total),0) as valor FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND status != 'cancelado' GROUP BY DATE(data) ORDER BY dia", dias)
         # por marketplace
-        por_canal = await db.fetch("SELECT COALESCE(marketplace,'manual') as canal, COUNT(*) as qtd, COALESCE(SUM(total),0) as valor FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1 AND status != 'cancelado' GROUP BY marketplace ORDER BY valor DESC", dias)
+        por_canal = await db.fetch("SELECT COALESCE(marketplace,'manual') as canal, COUNT(*) as qtd, COALESCE(SUM(total),0) as valor FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND status != 'cancelado' GROUP BY marketplace ORDER BY valor DESC", dias)
         # ultimos pedidos
         recentes = await db.fetch("SELECT id, numero, cliente, total, status, data, marketplace FROM vendas_pedidos ORDER BY id DESC LIMIT 5")
         return {
@@ -244,7 +250,9 @@ def dashboard(dias: int = 30) -> dict:
             "recentes": [dict(r) for r in (recentes or [])],
         }
     try: return run_async(_go())
-    except Exception as e: return {"total_vendas":0,"quantidade":0,"ticket_medio":0,"pedidos_abertos":0,"faturados":0,"cancelados":0,"periodo_dias":dias,"diarias":[],"por_canal":[],"recentes":[]}
+    except Exception as e:
+        log(AGENT, f"Erro dashboard: {e}")
+        return {"total_vendas":0,"quantidade":0,"ticket_medio":0,"pedidos_abertos":0,"faturados":0,"cancelados":0,"periodo_dias":dias,"diarias":[],"por_canal":[],"recentes":[]}
 
 # ── Bling Sync ──
 

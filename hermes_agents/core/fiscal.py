@@ -183,7 +183,7 @@ def _list_filtered(t: str, date_field: str, data_inicio: str = "", data_fim: str
         if data_fim:
             where.append(f"{date_field} <= ${p}::date"); params.append(data_fim); p += 1
         if dias > 0 and not (data_inicio or data_fim):
-            where.append(f"{date_field} >= CURRENT_DATE - ${p}"); params.append(dias); p += 1
+            where.append(f"{date_field} >= CURRENT_DATE - ${p}::int"); params.append(dias); p += 1
         clause = ("WHERE " + " AND ".join(where)) if where else ""
         rows = await db.fetch(f"SELECT * FROM {t} {clause} ORDER BY {order} LIMIT {limit}", *params)
         return [dict(r) for r in rows]
