@@ -33,6 +33,7 @@ from .stock import (
     sincronizar_estoque_shopee, sincronizar_estoque_todas_lojas,
     sincronizar_estoque_todas_lojas_automatico,
 )
+from .estoque_rapido import listar_grid_estoque_rapido, atualizar_celula_estoque_rapido
 from .stores import listar_todas_lojas_shopee
 from .kits import sugerir_kits
 from .concorrencia import analisar_consistencia_precos
