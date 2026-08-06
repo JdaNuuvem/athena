@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { vendasDashboard, vendasList, vendasSyncBling, vendasSyncShopee, vendasDetalhePedido, vendasAtualizarStatus, vendasCriarPedido } from "@/lib/api";
+import { useStore } from "@/lib/store-context";
 import DateFilter, { type DateFilterValue } from "@/app/_components/DateFilter";
 import { fmtBRL } from "@/lib/format";
 import PageHeader from "@/app/_components/PageHeader";
@@ -69,12 +70,14 @@ export default function VendasPage() {
   const [novoItens, setNovoItens] = useState([{ sku: "", qtd: 1, preco: 0 }]);
   const [novoFormaPg, setNovoFormaPg] = useState("pix");
 
+  const { lojaId } = useStore();
+
   const carregarDashboard = useCallback(() => {
     const dias = dateFilter.dias || (dateFilter.data_inicio ? 0 : 30);
-    vendasDashboard(dias || undefined)
+    vendasDashboard(dias || undefined, lojaId)
       .then(d => setDash(d as unknown as DashboardData))
       .catch(() => {});
-  }, [dateFilter]);
+  }, [dateFilter, lojaId]);
 
   const carregarPedidos = useCallback(() => {
     const params: Record<string, string> = {};
@@ -82,10 +85,11 @@ export default function VendasPage() {
     if (dateFilter.data_fim) params.data_fim = dateFilter.data_fim;
     if (dateFilter.dias) params.dias = String(dateFilter.dias);
     if (statusTab) params.status = statusTab;
+    if (lojaId && lojaId !== "todas") params.loja_id = lojaId;
     vendasList("pedidos", params)
       .then(r => setPedidos((r.data || []) as PedidoRow[]))
       .catch(e => setErro(e instanceof Error ? e.message : "Erro ao carregar"));
-  }, [dateFilter, statusTab]);
+  }, [dateFilter, statusTab, lojaId]);
 
   useEffect(() => {
     setLoading(true);

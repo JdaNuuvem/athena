@@ -176,5 +176,78 @@ class TestSincronizarPedidosShopee(unittest.TestCase):
         self.assertIn(18.5, update[1])
 
 
+class _FakeDBQuery:
+    """Fake DB minimo que so' grava as queries+args executadas, pra inspecionar
+    SQL/params — usado pra testar o filtro de loja_id em dashboard()/_list_filtered()."""
+    def __init__(self, fetchval=0, fetch=None):
+        self.executed = []
+        self._fetchval = fetchval
+        self._fetch = fetch if fetch is not None else []
+
+    async def fetchval(self, q, *a):
+        self.executed.append((q, a))
+        return self._fetchval
+
+    async def fetch(self, q, *a):
+        self.executed.append((q, a))
+        return self._fetch
+
+    async def fetchrow(self, q, *a):
+        return None
+
+    async def execute(self, q, *a):
+        self.executed.append((q, a))
+        return "OK"
+
+
+class TestDashboardFiltroLoja(unittest.TestCase):
+    """dashboard() ignorava loja_id inteiramente — todas as 8 queries somavam
+    vendas de TODAS as lojas, mesmo com uma loja selecionada no frontend."""
+
+    def test_sem_loja_id_nao_filtra_nenhuma_query(self):
+        db = _FakeDBQuery()
+        async def fake_get_db(): return db
+        with patch.object(vendas, "get_db", fake_get_db):
+            vendas.dashboard(dias=30)
+        self.assertEqual(len(db.executed), 8)
+        for q, a in db.executed:
+            self.assertIn(None, a, f"query deveria receber loja_id=None: {q}")
+
+    def test_com_loja_id_filtra_todas_as_8_queries(self):
+        db = _FakeDBQuery()
+        async def fake_get_db(): return db
+        with patch.object(vendas, "get_db", fake_get_db):
+            vendas.dashboard(dias=30, loja_id=7)
+        self.assertEqual(len(db.executed), 8)
+        for q, a in db.executed:
+            self.assertIn("loja_id", q, f"query nao tem clausula de loja_id: {q}")
+            self.assertIn(7, a, f"query nao recebeu loja_id=7: {q}")
+
+
+class TestListarFiltradoLoja(unittest.TestCase):
+    """_list_filtered()/listar_filtrado() ignoravam loja_id — o parametro nem
+    existia. Filtro so' se aplica a vendas_pedidos (unica tabela com a coluna)."""
+
+    def test_filtra_por_loja_em_pedidos(self):
+        db = _FakeDBQuery(fetch=[])
+        async def fake_get_db(): return db
+        with patch.object(vendas, "get_db", fake_get_db):
+            vendas.listar_filtrado("pedidos", status="aberto", loja_id=7)
+        q, a = db.executed[0]
+        self.assertIn("loja_id = $2", q)
+        self.assertEqual(a, ("aberto", 7))
+
+    def test_nao_filtra_itens_por_loja_mesmo_se_passado(self):
+        """vendas_itens nao tem coluna loja_id — passar loja_id nao deve
+        gerar SQL invalido, so' deve ser ignorado silenciosamente."""
+        db = _FakeDBQuery(fetch=[])
+        async def fake_get_db(): return db
+        with patch.object(vendas, "get_db", fake_get_db):
+            vendas.listar_filtrado("itens", loja_id=7)
+        q, a = db.executed[0]
+        self.assertNotIn("loja_id", q)
+        self.assertEqual(a, ())
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
