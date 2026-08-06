@@ -214,6 +214,49 @@ export default function ShopeeDashboardPage() {
         <p className="text-xs text-neutral-500 mt-0.5">Visão geral das lojas Shopee conectadas.</p>
       </div>
 
+      {!loading && lojas.length === 0 && !erro && (
+        <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-6 text-center text-neutral-500 text-sm">
+          Nenhuma loja Shopee conectada ainda.
+        </div>
+      )}
+
+      {lojas.length > 0 && (
+        <div className="instrument-enter bg-gradient-to-br from-emerald-950/50 to-neutral-900 border border-emerald-900/40 rounded-xl p-5">
+          <p className="text-xs text-emerald-400/80 uppercase tracking-wider mb-1">Vendido hoje</p>
+          <p className="text-4xl font-semibold text-emerald-400 numeric">{fmtBRL(receitaHoje)}</p>
+          <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-emerald-900/30">
+            <div>
+              <p className="text-xs text-neutral-500 uppercase tracking-wider">Pedidos</p>
+              <p className="text-xl text-neutral-200 numeric font-medium">{pedidosHoje}</p>
+            </div>
+            <div>
+              <p className="text-xs text-neutral-500 uppercase tracking-wider">Unidades</p>
+              <p className="text-xl text-neutral-200 numeric font-medium">{unidadesHoje}</p>
+            </div>
+            <div>
+              <p className="text-xs text-neutral-500 uppercase tracking-wider">Ticket médio</p>
+              <p className="text-xl text-neutral-200 numeric font-medium">{fmtBRL(ticketMedioHoje)}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {erro && (
+        <div className="text-xs px-3 py-2 rounded-lg border bg-red-950/40 border-red-900/50 text-red-400">{erro}</div>
+      )}
+
+      {lojas.length > 0 && alertas.length > 0 && (
+        <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-3 space-y-1.5">
+          <p className="text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Alertas</p>
+          {alertas.map((a, i) => (
+            <div key={i} className={`flex items-center gap-2 text-xs ${a.tone === "red" ? "text-red-400" : "text-amber-400"}`}>
+              <span aria-hidden className={`w-1.5 h-1.5 rounded-full shrink-0 ${a.tone === "red" ? "bg-red-500" : "bg-amber-500"}`} />
+              {a.texto}
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="flex items-center gap-2">
         <select
           value={dias}
@@ -239,40 +282,8 @@ export default function ShopeeDashboardPage() {
         </button>
       </div>
 
-      {erro && (
-        <div className="text-xs px-3 py-2 rounded-lg border bg-red-950/40 border-red-900/50 text-red-400">{erro}</div>
-      )}
-
-      {!loading && lojas.length === 0 && !erro && (
-        <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-6 text-center text-neutral-500 text-sm">
-          Nenhuma loja Shopee conectada ainda.
-        </div>
-      )}
-
       {lojas.length > 0 && (
         <>
-          {alertas.length > 0 && (
-            <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-3 space-y-1.5">
-              <p className="text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Alertas</p>
-              {alertas.map((a, i) => (
-                <div key={i} className={`flex items-center gap-2 text-xs ${a.tone === "red" ? "text-red-400" : "text-amber-400"}`}>
-                  <span aria-hidden className={`w-1.5 h-1.5 rounded-full shrink-0 ${a.tone === "red" ? "bg-red-500" : "bg-amber-500"}`} />
-                  {a.texto}
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div>
-            <p className="text-xs text-neutral-500 uppercase tracking-wider mb-2">Hoje</p>
-            <div className="instrument-enter grid grid-cols-2 md:grid-cols-4 gap-3">
-              <StatCard label="Vendido Hoje" value={fmtBRL(receitaHoje)} tone="emerald" />
-              <StatCard label="Pedidos Hoje" value={pedidosHoje} />
-              <StatCard label="Unidades Hoje" value={unidadesHoje} />
-              <StatCard label="Ticket Médio Hoje" value={fmtBRL(ticketMedioHoje)} />
-            </div>
-          </div>
-
           <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4">
             <p className="text-xs text-neutral-500 uppercase tracking-wider mb-3">Vendas — últimos {dias} dias</p>
             {chartData.length > 0 ? (
