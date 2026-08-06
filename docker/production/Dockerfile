@@ -11,6 +11,7 @@ WORKDIR /app/web
 RUN npm ci
 COPY web/ ./
 ENV NEXT_STATIC_EXPORT=true
+ENV NEXT_PUBLIC_ROCKETCHAT_URL=https://chat.athena.zoikom.site
 RUN npm run build
 WORKDIR /app/hermes_agents
 RUN mkdir -p dashboard && cp -r /app/web/out/* dashboard/
