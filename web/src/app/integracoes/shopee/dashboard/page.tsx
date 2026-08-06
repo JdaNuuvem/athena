@@ -7,11 +7,33 @@ import { api } from "@/lib/api";
 import type {
   ShopeeDashboardLoja, ShopeeSerieDiariaPonto, ShopeeTopProdutoHoje, ShopeeEstoqueRisco,
   ShopeeShopPerformance, ShopeeFunilFulfillment, ShopeeAdsPerformanceRow, ShopeeAdsInsight, ShopeeSyncLogEntry,
+  ShopeePeriodoAnterior, ShopeeCancelamentos, ShopeeRankingPeriodoItem, ShopeeProdutoParado,
 } from "@/lib/api";
 import Icon from "@/app/_components/Icon";
 import RankingProdutosModal from "@/app/_components/RankingProdutosModal";
 
 const fmtBRL = (v: number) => "R$ " + Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function fmtTempoAtras(data: Date | null): string {
+  if (!data) return "";
+  const segundos = Math.floor((Date.now() - data.getTime()) / 1000);
+  if (segundos < 60) return "agora";
+  const minutos = Math.floor(segundos / 60);
+  if (minutos < 60) return `há ${minutos}min`;
+  const horas = Math.floor(minutos / 60);
+  return `há ${horas}h`;
+}
+
+function Variacao({ atual, anterior }: { atual: number; anterior: number }) {
+  if (anterior <= 0) return null;
+  const pct = ((atual - anterior) / anterior) * 100;
+  const positivo = pct >= 0;
+  return (
+    <span className={`text-xs numeric ml-1.5 ${positivo ? "text-emerald-400" : "text-red-400"}`}>
+      {positivo ? "↑" : "↓"} {Math.abs(pct).toFixed(1)}%
+    </span>
+  );
+}
 
 const RATING_META: Record<number, { label: string; className: string }> = {
   1: { label: "Ruim", className: "bg-red-950/40 border-red-900/50 text-red-400" },
@@ -80,6 +102,12 @@ export default function ShopeeDashboardPage() {
   const [topProdutosHoje, setTopProdutosHoje] = useState<ShopeeTopProdutoHoje[]>([]);
   const [estoqueRisco, setEstoqueRisco] = useState<ShopeeEstoqueRisco[]>([]);
   const [funil, setFunil] = useState<ShopeeFunilFulfillment>({ total: 0, sem_bling: 0, sem_nota: 0, nao_despachado: 0 });
+  const [lucroPeriodo, setLucroPeriodo] = useState(0);
+  const [periodoAnterior, setPeriodoAnterior] = useState<ShopeePeriodoAnterior>({ receita: 0, unidades: 0 });
+  const [cancelamentos, setCancelamentos] = useState<ShopeeCancelamentos>({ total: 0, cancelados: 0, devolucao: 0, taxa_cancelamento_pct: 0, taxa_devolucao_pct: 0 });
+  const [projecaoMes, setProjecaoMes] = useState(0);
+  const [rankingPeriodo, setRankingPeriodo] = useState<ShopeeRankingPeriodoItem[]>([]);
+  const [produtosParados, setProdutosParados] = useState<ShopeeProdutoParado[]>([]);
   const [dias, setDias] = useState(30);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
@@ -88,6 +116,8 @@ export default function ShopeeDashboardPage() {
   const [syncLog, setSyncLog] = useState<ShopeeSyncLogEntry[]>([]);
   const [adsPerf, setAdsPerf] = useState<ShopeeAdsPerformanceRow[]>([]);
   const [adsInsights, setAdsInsights] = useState<ShopeeAdsInsight[]>([]);
+  const [atualizadoEm, setAtualizadoEm] = useState<Date | null>(null);
+  const [, setTick] = useState(0);
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -100,6 +130,13 @@ export default function ShopeeDashboardPage() {
       setTopProdutosHoje(r.top_produtos_hoje || []);
       setEstoqueRisco(r.estoque_risco || []);
       setFunil(r.funil_fulfillment || { total: 0, sem_bling: 0, sem_nota: 0, nao_despachado: 0 });
+      setLucroPeriodo(r.lucro_periodo || 0);
+      setPeriodoAnterior(r.periodo_anterior || { receita: 0, unidades: 0 });
+      setCancelamentos(r.cancelamentos || { total: 0, cancelados: 0, devolucao: 0, taxa_cancelamento_pct: 0, taxa_devolucao_pct: 0 });
+      setProjecaoMes(r.projecao_mes || 0);
+      setRankingPeriodo(r.ranking_periodo || []);
+      setProdutosParados(r.produtos_parados || []);
+      setAtualizadoEm(new Date());
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao carregar painel");
     } finally {
@@ -108,6 +145,16 @@ export default function ShopeeDashboardPage() {
   }, [dias]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  useEffect(() => {
+    const intervalo = setInterval(() => carregar(), 5 * 60 * 1000);
+    return () => clearInterval(intervalo);
+  }, [carregar]);
+
+  useEffect(() => {
+    const intervalo = setInterval(() => setTick((t) => t + 1), 30 * 1000);
+    return () => clearInterval(intervalo);
+  }, []);
 
   useEffect(() => {
     api.shopeeSyncLog().then((r) => setSyncLog(r.log || [])).catch(() => {});
@@ -224,7 +271,7 @@ export default function ShopeeDashboardPage() {
         <div className="instrument-enter bg-gradient-to-br from-emerald-950/50 to-neutral-900 border border-emerald-900/40 rounded-xl p-5">
           <p className="text-xs text-emerald-400/80 uppercase tracking-wider mb-1">Vendido hoje</p>
           <p className="text-4xl font-semibold text-emerald-400 numeric">{fmtBRL(receitaHoje)}</p>
-          <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-emerald-900/30">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-emerald-900/30">
             <div>
               <p className="text-xs text-neutral-500 uppercase tracking-wider">Pedidos</p>
               <p className="text-xl text-neutral-200 numeric font-medium">{pedidosHoje}</p>
@@ -236,6 +283,10 @@ export default function ShopeeDashboardPage() {
             <div>
               <p className="text-xs text-neutral-500 uppercase tracking-wider">Ticket médio</p>
               <p className="text-xl text-neutral-200 numeric font-medium">{fmtBRL(ticketMedioHoje)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-neutral-500 uppercase tracking-wider" title="Receita do mês até hoje, projetada linearmente para os dias restantes">Projeção do mês</p>
+              <p className="text-xl text-neutral-200 numeric font-medium">{fmtBRL(projecaoMes)}</p>
             </div>
           </div>
         </div>
@@ -274,6 +325,7 @@ export default function ShopeeDashboardPage() {
         >
           {loading ? "Carregando..." : "Atualizar"}
         </button>
+        {atualizadoEm && <span className="text-xs text-neutral-600">Atualizado {fmtTempoAtras(atualizadoEm)}</span>}
         <button
           onClick={() => setShowRanking(true)}
           className="bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm px-4 py-2 rounded-lg transition-colors ml-auto"
@@ -317,15 +369,47 @@ export default function ShopeeDashboardPage() {
             </div>
           )}
 
+          {rankingPeriodo.length > 0 && (
+            <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4">
+              <p className="text-xs text-neutral-500 uppercase tracking-wider mb-1">Ranking de produtos — {dias} dias</p>
+              <p className="text-xs text-neutral-600 mb-3">Receita e lucro estimado (após comissão Shopee e custo do produto).</p>
+              <div className="space-y-1.5">
+                {rankingPeriodo.map((p, i) => (
+                  <div key={p.sku} className="flex items-center gap-3 text-sm">
+                    <span className="text-xs text-neutral-600 w-4 shrink-0">{i + 1}</span>
+                    <span className="flex-1 min-w-0 truncate text-neutral-300" title={p.descricao}>{p.descricao}</span>
+                    <span className="text-xs text-neutral-500 numeric shrink-0">{p.quantidade} un</span>
+                    <span className="text-emerald-400 numeric shrink-0 w-24 text-right">{fmtBRL(p.receita)}</span>
+                    <span className={`numeric shrink-0 w-24 text-right ${p.lucro >= 0 ? "text-neutral-400" : "text-red-400"}`}>{fmtBRL(p.lucro)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div>
             <p className="text-xs text-neutral-500 uppercase tracking-wider mb-2">Período selecionado ({dias} dias)</p>
-            <div className="instrument-enter grid grid-cols-2 md:grid-cols-4 gap-3">
-              <StatCard label="Receita Total" value={fmtBRL(totalReceita)} tone="emerald" />
+            <div className="instrument-enter grid grid-cols-2 lg:grid-cols-5 gap-3">
+              <div className="instrument-hover bg-neutral-900 border border-neutral-800 rounded-lg p-3">
+                <p className="text-xs text-neutral-500 uppercase tracking-wider">Receita Total</p>
+                <p className="text-lg numeric font-medium text-emerald-400 flex items-baseline flex-wrap">
+                  {fmtBRL(totalReceita)}
+                  <Variacao atual={totalReceita} anterior={periodoAnterior.receita} />
+                </p>
+              </div>
+              <StatCard label="Lucro Estimado" value={fmtBRL(lucroPeriodo)} tone={lucroPeriodo >= 0 ? "emerald" : "red"} />
               <StatCard label="Unidades Vendidas" value={totalUnidades} />
               <StatCard label="Anúncios Ativos" value={totalAnunciosAtivos} />
               <StatCard label="Estoque Baixo" value={totalEstoqueBaixo} tone={totalEstoqueBaixo > 0 ? "amber" : "neutral"} />
             </div>
           </div>
+
+          {cancelamentos.total > 0 && (
+            <div className="instrument-enter grid grid-cols-2 gap-3">
+              <StatCard label="Taxa de cancelamento" value={`${cancelamentos.taxa_cancelamento_pct}% (${cancelamentos.cancelados})`} tone={cancelamentos.taxa_cancelamento_pct > 5 ? "red" : "neutral"} />
+              <StatCard label="Taxa de devolução" value={`${cancelamentos.taxa_devolucao_pct}% (${cancelamentos.devolucao})`} tone={cancelamentos.taxa_devolucao_pct > 5 ? "amber" : "neutral"} />
+            </div>
+          )}
 
           {(totalAnunciosPausados > 0 || totalAnunciosBanidos > 0) && (
             <div className="instrument-enter grid grid-cols-2 gap-3">
@@ -412,9 +496,28 @@ export default function ShopeeDashboardPage() {
                   <div key={p.sku} className="flex items-center gap-3 text-sm">
                     <span className="flex-1 min-w-0 truncate text-neutral-300" title={p.descricao}>{p.descricao}</span>
                     <span className="text-xs text-neutral-500 numeric shrink-0">{p.vendidos} vendidos</span>
+                    {p.dias_ate_ruptura !== null && (
+                      <span className="text-xs text-red-400 numeric shrink-0" title="Estimativa: estoque atual dividido pela velocidade média de venda do período">~{p.dias_ate_ruptura}d p/ zerar</span>
+                    )}
                     <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium numeric shrink-0 ${p.estoque_atual <= 0 ? "bg-red-950/40 text-red-400" : "bg-amber-950/40 text-amber-400"}`}>
                       {p.estoque_atual} / mín. {p.estoque_minimo}
                     </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {produtosParados.length > 0 && (
+            <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4">
+              <p className="text-xs text-neutral-500 uppercase tracking-wider mb-1">Produtos parados</p>
+              <p className="text-xs text-neutral-600 mb-3">Anunciados e com estoque, mas sem nenhuma venda em {dias} dias — candidatos a promoção ou revisão de preço.</p>
+              <div className="space-y-1.5">
+                {produtosParados.map((p) => (
+                  <div key={p.sku} className="flex items-center gap-3 text-sm">
+                    <span className="flex-1 min-w-0 truncate text-neutral-300" title={p.titulo}>{p.titulo}</span>
+                    <span className="text-xs text-neutral-500 numeric shrink-0">{fmtBRL(p.preco)}</span>
+                    <span className="text-xs px-1.5 py-0.5 rounded-full font-medium numeric shrink-0 bg-neutral-800 text-neutral-400">{p.estoque} em estoque</span>
                   </div>
                 ))}
               </div>

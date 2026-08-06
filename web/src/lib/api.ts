@@ -293,7 +293,12 @@ export const api = {
     return request<{ pedidos: ShopeePedido[]; error?: string }>(`/api/shopee/pedidos?${q}`);
   },
   shopeeDashboard: (dias?: number) =>
-    request<{ lojas: ShopeeDashboardLoja[]; dias: number; serie_diaria: ShopeeSerieDiariaPonto[]; top_produtos_hoje: ShopeeTopProdutoHoje[]; estoque_risco: ShopeeEstoqueRisco[]; funil_fulfillment: ShopeeFunilFulfillment; error?: string }>(`/api/shopee/dashboard${dias ? `?dias=${dias}` : ""}`),
+    request<{
+      lojas: ShopeeDashboardLoja[]; dias: number; serie_diaria: ShopeeSerieDiariaPonto[]; top_produtos_hoje: ShopeeTopProdutoHoje[];
+      estoque_risco: ShopeeEstoqueRisco[]; funil_fulfillment: ShopeeFunilFulfillment; lucro_periodo: number;
+      periodo_anterior: ShopeePeriodoAnterior; cancelamentos: ShopeeCancelamentos; projecao_mes: number;
+      ranking_periodo: ShopeeRankingPeriodoItem[]; produtos_parados: ShopeeProdutoParado[]; error?: string;
+    }>(`/api/shopee/dashboard${dias ? `?dias=${dias}` : ""}`),
   shopeePedidosSincronizados: (lojaId: number, opts?: { status?: string; busca?: string; pagina?: number }) => {
     const q = new URLSearchParams({ loja_id: String(lojaId) });
     if (opts?.status) q.set("status", opts.status);
@@ -1031,6 +1036,7 @@ export interface ShopeeEstoqueRisco {
   vendidos: number;
   estoque_atual: number;
   estoque_minimo: number;
+  dias_ate_ruptura: number | null;
 }
 
 export interface ShopeeFunilFulfillment {
@@ -1038,6 +1044,34 @@ export interface ShopeeFunilFulfillment {
   sem_bling: number;
   sem_nota: number;
   nao_despachado: number;
+}
+
+export interface ShopeePeriodoAnterior {
+  receita: number;
+  unidades: number;
+}
+
+export interface ShopeeCancelamentos {
+  total: number;
+  cancelados: number;
+  devolucao: number;
+  taxa_cancelamento_pct: number;
+  taxa_devolucao_pct: number;
+}
+
+export interface ShopeeRankingPeriodoItem {
+  sku: string;
+  descricao: string;
+  quantidade: number;
+  receita: number;
+  lucro: number;
+}
+
+export interface ShopeeProdutoParado {
+  sku: string;
+  titulo: string;
+  preco: number;
+  estoque: number;
 }
 
 export interface ShopeeAdsPerformanceRow {

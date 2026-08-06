@@ -1,6 +1,8 @@
 import psycopg2
 import psycopg2.extras
 import time
+import calendar
+from datetime import date
 
 from flask import Blueprint, request, jsonify, redirect
 from core import run_async, get_db, FactoryConfig, hoje
@@ -374,7 +376,17 @@ def shopee_dashboard_consolidado():
             HAVING COALESCE(e.estoque_total, 0) <= c.estoque_minimo
             ORDER BY SUM(v.quantidade) DESC LIMIT 10
         """, (dias,))
-        estoque_risco = [{"sku": r["sku"], "descricao": r["descricao"], "vendidos": int(r["vendidos"] or 0), "estoque_atual": int(r["estoque_atual"] or 0), "estoque_minimo": int(r["estoque_minimo"] or 0)} for r in (cur.fetchall() or [])]
+        def _dias_ate_ruptura(vendidos, estoque_atual, dias):
+            if vendidos <= 0:
+                return None
+            velocidade_diaria = vendidos / dias
+            return round(estoque_atual / velocidade_diaria, 1) if velocidade_diaria > 0 else None
+
+        estoque_risco = [{
+            "sku": r["sku"], "descricao": r["descricao"], "vendidos": int(r["vendidos"] or 0),
+            "estoque_atual": int(r["estoque_atual"] or 0), "estoque_minimo": int(r["estoque_minimo"] or 0),
+            "dias_ate_ruptura": _dias_ate_ruptura(int(r["vendidos"] or 0), int(r["estoque_atual"] or 0), dias),
+        } for r in (cur.fetchall() or [])]
 
         shop_ids = [l.get("shopee_shop_id") for l in lojas if l.get("shopee_shop_id")]
         funil_fulfillment = {"total": 0, "sem_bling": 0, "sem_nota": 0, "nao_despachado": 0}
@@ -395,17 +407,102 @@ def shopee_dashboard_consolidado():
                 "nao_despachado": int(funil_row.get("nao_despachado") or 0),
             }
 
+        # Mesma taxa/logica de comissao usada em core/relatorios.py::ranking_produtos
+        # (SHOPEE_COMISSAO_PCT) — duplicada aqui pra nao acoplar routes/shopee.py a
+        # core/relatorios.py so' por uma constante.
+        SHOPEE_COMISSAO_PCT = 12
+
+        cur.execute("""
+            SELECT COALESCE(SUM(v.receita_bruta),0) AS receita,
+                   COALESCE(SUM(v.quantidade * COALESCE(c.preco_custo,0)),0) AS custo
+            FROM vendas v LEFT JOIN catalogo_produtos c ON c.sku = v.sku
+            WHERE v.marketplace = 'shopee' AND v.data >= CURRENT_DATE - %s
+        """, (dias,))
+        lucro_row = cur.fetchone() or {}
+        receita_periodo = float(lucro_row.get("receita") or 0)
+        custo_periodo = float(lucro_row.get("custo") or 0)
+        lucro_periodo = round(receita_periodo - (receita_periodo * SHOPEE_COMISSAO_PCT / 100.0) - custo_periodo, 2)
+
+        cur.execute("""
+            SELECT COALESCE(SUM(receita_bruta),0) AS receita, COALESCE(SUM(quantidade),0) AS unidades
+            FROM vendas
+            WHERE marketplace = 'shopee' AND data >= CURRENT_DATE - (%s * 2) AND data < CURRENT_DATE - %s
+        """, (dias, dias))
+        anterior_row = cur.fetchone() or {}
+        periodo_anterior = {"receita": float(anterior_row.get("receita") or 0), "unidades": int(anterior_row.get("unidades") or 0)}
+
+        cancelamentos = {"total": 0, "cancelados": 0, "devolucao": 0, "taxa_cancelamento_pct": 0.0, "taxa_devolucao_pct": 0.0}
+        if shop_ids:
+            cur.execute("""
+                SELECT COUNT(*) AS total,
+                       COUNT(*) FILTER (WHERE status IN ('CANCELLED','IN_CANCEL')) AS cancelados,
+                       COUNT(*) FILTER (WHERE status = 'TO_RETURN') AS devolucao
+                FROM shopee_pedidos_sincronizados
+                WHERE shop_id = ANY(%s) AND create_time >= NOW() - (INTERVAL '1 day' * %s)
+            """, (shop_ids, dias))
+            canc_row = cur.fetchone() or {}
+            total_canc = int(canc_row.get("total") or 0)
+            cancelados = int(canc_row.get("cancelados") or 0)
+            devolucao = int(canc_row.get("devolucao") or 0)
+            cancelamentos = {
+                "total": total_canc, "cancelados": cancelados, "devolucao": devolucao,
+                "taxa_cancelamento_pct": round(cancelados / total_canc * 100, 1) if total_canc else 0.0,
+                "taxa_devolucao_pct": round(devolucao / total_canc * 100, 1) if total_canc else 0.0,
+            }
+
+        hoje = date.today()
+        dias_no_mes = calendar.monthrange(hoje.year, hoje.month)[1]
+        cur.execute("""
+            SELECT COALESCE(SUM(receita_bruta),0) AS receita
+            FROM vendas WHERE marketplace = 'shopee' AND data >= DATE_TRUNC('month', CURRENT_DATE)::date
+        """)
+        receita_mes = float((cur.fetchone() or {}).get("receita") or 0)
+        projecao_mes = round(receita_mes / hoje.day * dias_no_mes, 2) if hoje.day > 0 else 0.0
+
+        cur.execute("""
+            SELECT v.sku, COALESCE(c.descricao, v.sku) AS descricao, SUM(v.quantidade) AS quantidade,
+                   SUM(v.receita_bruta) AS receita,
+                   SUM(v.receita_bruta) - SUM(v.receita_bruta * %s / 100.0) - SUM(v.quantidade * COALESCE(c.preco_custo,0)) AS lucro
+            FROM vendas v LEFT JOIN catalogo_produtos c ON c.sku = v.sku
+            WHERE v.marketplace = 'shopee' AND v.data >= CURRENT_DATE - %s
+            GROUP BY v.sku, c.descricao ORDER BY receita DESC LIMIT 15
+        """, (SHOPEE_COMISSAO_PCT, dias))
+        ranking_periodo = [{
+            "sku": r["sku"], "descricao": r["descricao"], "quantidade": int(r["quantidade"] or 0),
+            "receita": float(r["receita"] or 0), "lucro": round(float(r["lucro"] or 0), 2),
+        } for r in (cur.fetchall() or [])]
+
+        cur.execute("""
+            SELECT a.sku, a.titulo, a.preco, a.estoque
+            FROM anuncios a
+            WHERE a.marketplace = 'shopee' AND a.status = 'normal' AND a.estoque > 0
+              AND NOT EXISTS (
+                SELECT 1 FROM vendas v WHERE v.sku = a.sku AND v.marketplace = 'shopee' AND v.data >= CURRENT_DATE - %s
+              )
+            ORDER BY a.estoque DESC LIMIT 15
+        """, (dias,))
+        produtos_parados = [{"sku": r["sku"], "titulo": r["titulo"], "preco": float(r["preco"] or 0), "estoque": int(r["estoque"] or 0)} for r in (cur.fetchall() or [])]
+
         cur.close(); conn.close()
         return jsonify({
             "lojas": resultado, "dias": dias,
             "serie_diaria": serie_diaria,
             "top_produtos_hoje": top_produtos_hoje,
             "estoque_risco": estoque_risco,
+            "lucro_periodo": lucro_periodo,
+            "periodo_anterior": periodo_anterior,
+            "cancelamentos": cancelamentos,
+            "projecao_mes": projecao_mes,
+            "ranking_periodo": ranking_periodo,
+            "produtos_parados": produtos_parados,
             "funil_fulfillment": funil_fulfillment,
         })
     except Exception as e:
         return jsonify({"error": str(e), "lojas": [], "serie_diaria": [], "top_produtos_hoje": [], "estoque_risco": [],
-                         "funil_fulfillment": {"total": 0, "sem_bling": 0, "sem_nota": 0, "nao_despachado": 0}})
+                         "funil_fulfillment": {"total": 0, "sem_bling": 0, "sem_nota": 0, "nao_despachado": 0},
+                         "lucro_periodo": 0.0, "periodo_anterior": {"receita": 0.0, "unidades": 0},
+                         "cancelamentos": {"total": 0, "cancelados": 0, "devolucao": 0, "taxa_cancelamento_pct": 0.0, "taxa_devolucao_pct": 0.0},
+                         "projecao_mes": 0.0, "ranking_periodo": [], "produtos_parados": []})
 
 @shopee_bp.route('/lojas/<int:destino_id>/replicar-de/<int:origem_id>', methods=['POST'])
 def shopee_replicar_produtos(destino_id, origem_id):
