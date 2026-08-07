@@ -332,7 +332,7 @@ export default function Page() {
                     </div>
                   </td>
                   <td className="p-3 text-neutral-300">{fmtDataBR(item.ultima_compra)}</td>
-                  <td className="p-3 text-right text-neutral-300">{fmtBRL(item.total_gasto)}</td>
+                  <td className="p-3 text-right text-neutral-300">{fmtBRL(Number(item.total_gasto ?? 0))}</td>
                   <td className="p-3">
                     <span className={"px-2 py-0.5 rounded text-[10px] font-medium " + (item.status === "ativo" ? "bg-emerald-500/20 text-emerald-400" : "bg-neutral-500/20 text-neutral-400")}>
                       {item.status === "ativo" ? "Ativo" : "Inativo"}

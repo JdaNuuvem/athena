@@ -2,7 +2,7 @@
 Contatos (paginacao real + filtros + dados de remarketing), sem tocar em
 list_paginado/_list_pagina/_count, que continuam servindo as outras 5
 tabelas de Cadastros."""
-import sys, os, unittest
+import sys, os, unittest, datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from unittest.mock import patch, AsyncMock
 
@@ -146,6 +146,16 @@ class TestListarClientesFiltradoOrdenacao(unittest.TestCase):
         query, _ = fake.fetch_calls[-1]
         self.assertIn("ORDER BY c.id DESC", query)
 
+    def test_order_by_tem_desempate_estavel_por_id(self):
+        # Clientes sem compra empatam em total_gasto=0/ultima_compra=NULL —
+        # sem desempate por c.id, a ordem entre linhas empatadas pode variar
+        # de uma pagina pra outra da mesma consulta.
+        fake = _FakeDB(total=0, rows=[])
+        with patch("core.cadastros.get_db", AsyncMock(return_value=fake)):
+            cadastros.listar_clientes_filtrado(sort="total_gasto", order="desc")
+        query, _ = fake.fetch_calls[-1]
+        self.assertIn("ORDER BY compras.total_gasto DESC NULLS LAST, c.id DESC", query)
+
 
 class TestListarClientesFiltradoRespostaEBusca(unittest.TestCase):
     def test_resposta_inclui_campos_de_remarketing(self):
@@ -169,6 +179,27 @@ class TestListarClientesFiltradoRespostaEBusca(unittest.TestCase):
         self.assertIn("%joao%", params)
 
 
+class TestListarClientesFiltradoCountLateral(unittest.TestCase):
+    """COUNT(*) so' precisa do LATERAL de compras quando algum filtro
+    referencia compras.* na WHERE (hoje, so' sem_comprar_dias) — nos demais
+    casos ele forcava uma agregacao por cliente contra vendas_pedidos sem
+    necessidade em toda paginacao/filtro."""
+
+    def test_count_sem_sem_comprar_dias_nao_inclui_lateral(self):
+        fake = _FakeDB(total=0, rows=[])
+        with patch("core.cadastros.get_db", AsyncMock(return_value=fake)):
+            cadastros.listar_clientes_filtrado(status="ativo", tag="VIP", whatsapp=True)
+        count_query, _ = fake.fetchval_calls[-1]
+        self.assertNotIn("LATERAL", count_query)
+
+    def test_count_com_sem_comprar_dias_inclui_lateral(self):
+        fake = _FakeDB(total=0, rows=[])
+        with patch("core.cadastros.get_db", AsyncMock(return_value=fake)):
+            cadastros.listar_clientes_filtrado(sem_comprar_dias=30)
+        count_query, _ = fake.fetchval_calls[-1]
+        self.assertIn("LATERAL", count_query)
+
+
 class TestTagsDisponiveis(unittest.TestCase):
     def test_retorna_lista_de_tags(self):
         async def _fetch(query, *params):
@@ -187,6 +218,45 @@ class TestTagsDisponiveis(unittest.TestCase):
         with patch("core.cadastros.get_db", AsyncMock(return_value=fake_db)):
             resultado = cadastros.tags_disponiveis()
         self.assertEqual(resultado, [])
+
+
+class TestCoercaoDataNascimentoClientes(unittest.TestCase):
+    """asyncpg nao converte string ISO pra DATE automaticamente — exige
+    datetime.date de verdade, senao estoura erro em runtime. A tela de
+    Contatos manda data_nascimento como string "YYYY-MM-DD" (<input
+    type="date">) tanto ao criar quanto ao editar (o modal sempre reenvia o
+    campo). Mesmo problema ja resolvido em core.crm._coerce_datas; aqui
+    escopado so' pra clientes.data_nascimento."""
+
+    def test_create_converte_data_nascimento_string_para_date(self):
+        with patch("core.cadastros._create", return_value={"id": 1}) as mock_create:
+            cadastros.create("clientes", {"nome": "Cliente X", "data_nascimento": "1990-05-12"})
+        dados_enviados = mock_create.call_args.args[1]
+        self.assertIsInstance(dados_enviados["data_nascimento"], datetime.date)
+        self.assertEqual(dados_enviados["data_nascimento"], datetime.date(1990, 5, 12))
+
+    def test_update_converte_data_nascimento_string_para_date(self):
+        # Regressao central do achado: editar um contato que ja tem
+        # data_nascimento preenchida reenvia o campo mesmo sem o usuario
+        # mexer nele — precisa continuar virando datetime.date, senao toda
+        # edicao de um contato com data de nascimento quebra.
+        with patch("core.cadastros._update", return_value={"id": 1}) as mock_update:
+            cadastros.update("clientes", 1, {"nome": "Cliente X", "data_nascimento": "1990-05-12"})
+        dados_enviados = mock_update.call_args.args[2]
+        self.assertIsInstance(dados_enviados["data_nascimento"], datetime.date)
+        self.assertEqual(dados_enviados["data_nascimento"], datetime.date(1990, 5, 12))
+
+    def test_update_data_nascimento_vazia_vira_none(self):
+        with patch("core.cadastros._update", return_value={"id": 1}) as mock_update:
+            cadastros.update("clientes", 1, {"data_nascimento": ""})
+        dados_enviados = mock_update.call_args.args[2]
+        self.assertIsNone(dados_enviados["data_nascimento"])
+
+    def test_outra_tabela_nao_e_afetada_pela_coercao(self):
+        with patch("core.cadastros._create", return_value={"id": 1}) as mock_create:
+            cadastros.create("fornecedores", {"nome": "Fornecedor X", "data_nascimento": "1990-05-12"})
+        dados_enviados = mock_create.call_args.args[1]
+        self.assertEqual(dados_enviados["data_nascimento"], "1990-05-12")
 
 
 if __name__ == "__main__":

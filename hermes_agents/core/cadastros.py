@@ -1,4 +1,5 @@
 """Cadastros Core — Empresas, Usuários, Clientes, Fornecedores, Transportadoras, Vendedores"""
+import datetime
 from core import get_db, run_async, log, hoje
 
 AGENT = "Cadastros Core"
@@ -407,10 +408,17 @@ def listar_clientes_filtrado(pagina: int = 1, por_pagina: int = 50, busca: str =
 
     where_sql = f"WHERE {' AND '.join(where)}" if where else ""
 
+    # o LATERAL de compras so' e' necessario no COUNT quando algum filtro
+    # referencia compras.* na WHERE (hoje, so' sem_comprar_dias) — nos demais
+    # casos ele forcaria uma agregacao contra vendas_pedidos por cliente em
+    # toda paginacao/filtro sem nenhum motivo, ja que COUNT(*) nem seleciona
+    # colunas do lateral.
+    count_lateral = _COMPRAS_LATERAL if sem_comprar_dias is not None else ""
+
     async def _go():
         db = await get_db()
         total_result = await db.fetchval(
-            f"SELECT COUNT(*) FROM cad_clientes c {_COMPRAS_LATERAL} {where_sql}",
+            f"SELECT COUNT(*) FROM cad_clientes c {count_lateral} {where_sql}",
             *params)
         rows = await db.fetch(
             f"""SELECT c.*, compras.ultima_compra, compras.total_gasto, compras.qtd_pedidos,
@@ -419,7 +427,7 @@ def listar_clientes_filtrado(pagina: int = 1, por_pagina: int = 50, busca: str =
                 {_COMPRAS_LATERAL}
                 {_TAGS_LATERAL}
                 {where_sql}
-                ORDER BY {sort_col} {order_sql} NULLS LAST
+                ORDER BY {sort_col} {order_sql} NULLS LAST, c.id DESC
                 LIMIT {por_pagina} OFFSET {offset}""",
             *params)
         return [dict(r) for r in rows], (total_result or 0)
@@ -445,9 +453,34 @@ def tags_disponiveis() -> list:
     try: return run_async(_go())
     except Exception as e: log(AGENT, f"Erro tags_disponiveis: {e}"); return []
 
+# campos DATE por tabela logica que chegam do frontend como string ISO
+# "YYYY-MM-DD" (<input type="date">) — asyncpg, ao contrario de outros
+# drivers, nao converte string pra DATE automaticamente, exige
+# datetime.date de verdade, senao estoura erro em runtime no INSERT/UPDATE.
+# Mesmo problema ja resolvido em core/crm.py (_coerce_datas de la'), aqui
+# escopado so' pra clientes.data_nascimento — nenhuma outra tabela de
+# Cadastros tem coluna DATE vinda do frontend hoje.
+_CAMPOS_DATA = {"clientes": {"data_nascimento"}}
+
+def _coerce_datas(tabela: str, dados: dict) -> dict:
+    campos = _CAMPOS_DATA.get(tabela)
+    if not campos:
+        return dados
+    novo = dict(dados)
+    for campo in campos:
+        v = novo.get(campo)
+        if isinstance(v, str) and v:
+            try:
+                novo[campo] = datetime.date.fromisoformat(v[:10])
+            except ValueError:
+                pass
+        elif v == "":
+            novo[campo] = None
+    return novo
+
 def get(tabela: str, id: int): return _sem_campos_sensiveis(tabela, _get(_resolve(tabela), id))
-def create(tabela: str, data: dict): return _sem_campos_sensiveis(tabela, _create(_resolve(tabela), data))
-def update(tabela: str, id: int, data: dict): return _sem_campos_sensiveis(tabela, _update(_resolve(tabela), id, data))
+def create(tabela: str, data: dict): return _sem_campos_sensiveis(tabela, _create(_resolve(tabela), _coerce_datas(tabela, data)))
+def update(tabela: str, id: int, data: dict): return _sem_campos_sensiveis(tabela, _update(_resolve(tabela), id, _coerce_datas(tabela, data)))
 def delete(tabela: str, id: int): return _delete(_resolve(tabela), id)
 
 # ── Queries especiais ──
