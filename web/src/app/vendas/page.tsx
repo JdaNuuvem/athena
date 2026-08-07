@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { vendasDashboard, vendasList, vendasSyncBling, vendasSyncShopee, vendasDetalhePedido, vendasAtualizarStatus, vendasCriarPedido } from "@/lib/api";
 import { useStore } from "@/lib/store-context";
 import DateFilter, { type DateFilterValue } from "@/app/_components/DateFilter";
-import { fmtBRL } from "@/lib/format";
+import { fmtBRL, fmtDataBR } from "@/lib/format";
 import PageHeader from "@/app/_components/PageHeader";
 import KpiCard from "@/app/_components/KpiCard";
 import StatusBadge from "@/app/_components/StatusBadge";
@@ -284,7 +284,7 @@ export default function VendasPage() {
                         <StatusBadge label={p.status} variant={STATUS_VARIANT[p.status] || "neutral"} />
                       </td>
                       <td className="p-2 text-right text-emerald-400">{fmtBRL(p.total)}</td>
-                      <td className="p-2 text-center text-neutral-400">{String(p.data || "—").slice(0, 10)}</td>
+                      <td className="p-2 text-center text-neutral-400">{fmtDataBR(p.data)}</td>
                       <td className="p-2 text-center text-neutral-500">{p.marketplace || "manual"}</td>
                       <td className="p-2 text-center text-neutral-500">{p.vendedor || "—"}</td>
                     </tr>

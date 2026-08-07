@@ -13,6 +13,7 @@ import ErrorAlert from "@/app/_components/ErrorAlert";
 import LoadingState from "@/app/_components/LoadingState";
 import Icon from "@/app/_components/Icon";
 import { Can } from "@/lib/auth";
+import { fmtDataBR } from "@/lib/format";
 import type { Column, StatusBadgeVariant } from "@/lib/types/ui";
 
 const STATUS_VARIANT: Record<string, StatusBadgeVariant> = {
@@ -92,7 +93,7 @@ export default function TicketsPage() {
     { key: "prioridade", label: "Prioridade", align: "center", render: (v) => <StatusBadge label={String(v)} variant={PRIORIDADE_VARIANT[String(v)] || "neutral"} /> },
     { key: "status", label: "Status", align: "center", render: (v) => <StatusBadge label={String(v)} variant={STATUS_VARIANT[String(v)] || "neutral"} /> },
     { key: "sla_vencimento", label: "SLA", align: "center", render: (_v, row) => <StatusBadge label={slaLabel(row)} variant={slaVariant(row)} /> },
-    { key: "data_abertura", label: "Aberto em", align: "center", render: (v) => String(v ?? "—").slice(0, 10) },
+    { key: "data_abertura", label: "Aberto em", align: "center", render: (v) => v ? fmtDataBR(v) : "—" },
   ];
 
   return (

@@ -42,7 +42,7 @@ export default function MoldesPage() {
         </div>
         <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-4">
           <p className="text-xs text-neutral-500">Ciclos Totais</p>
-          <p className="text-xl font-bold text-blue-400">{totalCiclos.toLocaleString()}</p>
+          <p className="text-xl font-bold text-blue-400">{totalCiclos.toLocaleString("pt-BR")}</p>
         </div>
         <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-4">
           <p className="text-xs text-neutral-500">Vida Util</p>

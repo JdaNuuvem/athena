@@ -13,6 +13,7 @@ import ErrorAlert from "@/app/_components/ErrorAlert";
 import { Can } from "@/lib/auth";
 import StatusBadge from "@/app/_components/StatusBadge";
 import NotaDetalhesModal from "./_components/NotaDetalhesModal";
+import { fmtDataBR } from "@/lib/format";
 
 interface NotaRow {
   id: number;
@@ -102,7 +103,7 @@ export default function NotasFiscaisPage() {
     { key: "numero", label: "Nº" },
     { key: "modelo", label: "Tipo", render: (_, row) => <span className="text-[10px]">{labelModelo(row.modelo)}</span> },
     { key: "contato_nome", label: "Cliente" },
-    { key: "data_emissao", label: "Emissão", render: (_, row) => String(row.data_emissao ?? "—").slice(0, 10) },
+    { key: "data_emissao", label: "Emissão", render: (_, row) => row.data_emissao ? fmtDataBR(row.data_emissao) : "—" },
     { key: "valor_nf", label: "Valor (R$)", align: "right", render: (_, row) => (
       <span className="text-emerald-400">{formatCurrency(row.valor_nf)}</span>
     )},

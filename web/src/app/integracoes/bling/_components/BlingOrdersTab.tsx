@@ -8,6 +8,7 @@ import EmptyState from "./shared/EmptyState";
 import { listarBlingPedidos, sincronizarBlingPedidos } from "@/lib/api";
 import type { Pedido } from "@/lib/types/domain";
 import { PEDIDO_SITUACOES, PEDIDO_SIT_COLORS } from "@/lib/types/domain";
+import { fmtDataBR } from "@/lib/format";
 
 export default function BlingOrdersTab() {
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
@@ -135,8 +136,8 @@ export default function BlingOrdersTab() {
                         {p.contato?.numeroDocumento && <div className="text-[10px] text-neutral-500">{p.contato.numeroDocumento}</div>}
                       </td>
                       <td className="p-3 text-neutral-400">
-                        <div>{String(p.data ?? "—").slice(0, 10)}</div>
-                        {p.dataSaida && <div className="flex items-center gap-1 text-[10px] text-neutral-500"><Icon name="truck" size={11} /> {String(p.dataSaida).slice(0, 10)}</div>}
+                        <div>{p.data ? fmtDataBR(p.data) : "—"}</div>
+                        {p.dataSaida && <div className="flex items-center gap-1 text-[10px] text-neutral-500"><Icon name="truck" size={11} /> {fmtDataBR(p.dataSaida)}</div>}
                       </td>
                       <td className="p-3 text-right">
                         <div className="text-emerald-400 font-medium">R$ {(p.total ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</div>
@@ -169,8 +170,8 @@ export default function BlingOrdersTab() {
                             </div>
                             <div>
                               <h4 className="text-neutral-400 font-medium mb-2">Datas</h4>
-                              <p className="text-neutral-200">Emissão: {String(p.data ?? "—").slice(0, 10)}</p>
-                              {p.dataSaida && <p className="text-neutral-200">Saída: {String(p.dataSaida).slice(0, 10)}</p>}
+                              <p className="text-neutral-200">Emissão: {p.data ? fmtDataBR(p.data) : "—"}</p>
+                              {p.dataSaida && <p className="text-neutral-200">Saída: {fmtDataBR(p.dataSaida)}</p>}
                             </div>
                             <div>
                               <h4 className="text-neutral-400 font-medium mb-2">Valores</h4>

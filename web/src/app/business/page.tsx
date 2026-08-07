@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import Icon from "@/app/_components/Icon";
+import { fmtDataBR } from "@/lib/format";
 
 export default function BusinessPage() {
   const [alerts, setAlerts] = useState<Record<string, unknown>[]>([]);
@@ -162,7 +163,7 @@ export default function BusinessPage() {
                         {e.status as string}
                       </span>
                     </td>
-                    <td className="p-3 text-right text-neutral-500 text-xs numeric">{e.fim_execucao ? String(e.fim_execucao).slice(0, 10) : "—"}</td>
+                    <td className="p-3 text-right text-neutral-500 text-xs numeric">{e.fim_execucao ? fmtDataBR(e.fim_execucao) : "—"}</td>
                   </tr>
                 ))}
               </tbody>

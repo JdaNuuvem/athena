@@ -8,6 +8,7 @@ import EmptyState from "./shared/EmptyState";
 import { listarContasReceber, listarNotasFiscais, baixarNFeXML, abrirNFeDANFE } from "@/lib/api";
 import type { NotaFiscal, ContaReceber } from "@/lib/types/domain";
 import { NF_SITUACOES, NF_TIPOS } from "@/lib/types/domain";
+import { fmtDataBR } from "@/lib/format";
 
 export default function BlingFinancialTab() {
   const [contas, setContas] = useState<ContaReceber[]>([]);
@@ -74,7 +75,7 @@ export default function BlingFinancialTab() {
                   <tr key={c.id} className={`border-b border-neutral-700/50 ${i % 2 === 0 ? "bg-neutral-800" : "bg-neutral-800/50"}`}>
                     <td className="p-3 text-neutral-200 font-mono">{c.numero}</td>
                     <td className="p-3 text-neutral-200">{c.contato?.nome || "—"}</td>
-                    <td className="p-3 text-neutral-400">{String(c.vencimento ?? "—").slice(0, 10)}</td>
+                    <td className="p-3 text-neutral-400">{c.vencimento ? fmtDataBR(c.vencimento) : "—"}</td>
                     <td className="p-3 text-right text-emerald-400">R$ {(c.valor ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
                     <td className="p-3 text-center">
                       <span className="px-2 py-0.5 rounded text-[10px] bg-neutral-700 text-neutral-400">{String(c.situacao)}</span>
@@ -116,7 +117,7 @@ export default function BlingFinancialTab() {
                           <div className="font-medium">{n.contato?.nome || "—"}</div>
                           {n.contato?.numeroDocumento && <div className="text-[10px] text-neutral-500">{n.contato.numeroDocumento}</div>}
                         </td>
-                        <td className="p-3 text-neutral-400">{String(n.dataEmissao ?? "—").slice(0, 10)}</td>
+                        <td className="p-3 text-neutral-400">{n.dataEmissao ? fmtDataBR(n.dataEmissao) : "—"}</td>
                         <td className="p-3 text-center">
                           <span className="text-[10px] text-neutral-300">{NF_TIPOS[n.tipo] || `#${n.tipo}`}</span>
                         </td>

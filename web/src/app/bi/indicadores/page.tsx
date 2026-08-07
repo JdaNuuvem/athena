@@ -36,7 +36,7 @@ export default function IndicadoresPage() {
             </div>
             <div className="flex items-baseline gap-2">
               <span className={`text-2xl font-bold ${STATUS_COR[ind.status]}`}>
-                {ind.unidade === "x" ? ind.valor.toFixed(2) : ind.valor.toFixed(1)}
+                {ind.valor.toLocaleString("pt-BR", { minimumFractionDigits: ind.unidade === "x" ? 2 : 1, maximumFractionDigits: ind.unidade === "x" ? 2 : 1 })}
                 <span className="text-sm font-normal ml-1">{ind.unidade}</span>
               </span>
               <TrendIndicator tendencia={ind.tendencia} valor={ind.tendenciaValor} />

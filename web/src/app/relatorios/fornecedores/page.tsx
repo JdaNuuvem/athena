@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { fmtDataBR } from "@/lib/format";
 
 export default function Page() {
   const [data, setData] = useState<Record<string,any>|null>(null);
@@ -40,7 +41,7 @@ export default function Page() {
           {data.diarias && (
             <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-4">
               <h3 className="text-sm font-semibold text-neutral-300 mb-3">Vendas Diarias</h3>
-              <div className="overflow-hidden"><table className="w-full text-xs"><thead><tr className="border-b border-neutral-700 text-neutral-400"><th className="text-left p-2">Data</th><th className="text-right p-2">Qtd</th><th className="text-right p-2">Valor</th></tr></thead><tbody>{data.diarias.map((d:any,i:number)=>(<tr key={i} className="border-b border-neutral-700/50"><td className="p-2 text-neutral-300">{d.dia?.slice(0,10)}</td><td className="p-2 text-right text-neutral-400">{d.qtd}</td><td className="p-2 text-right text-emerald-400">{brl(d.valor)}</td></tr>))}</tbody></table></div>
+              <div className="overflow-hidden"><table className="w-full text-xs"><thead><tr className="border-b border-neutral-700 text-neutral-400"><th className="text-left p-2">Data</th><th className="text-right p-2">Qtd</th><th className="text-right p-2">Valor</th></tr></thead><tbody>{data.diarias.map((d:any,i:number)=>(<tr key={i} className="border-b border-neutral-700/50"><td className="p-2 text-neutral-300">{fmtDataBR(d.dia)}</td><td className="p-2 text-right text-neutral-400">{d.qtd}</td><td className="p-2 text-right text-emerald-400">{brl(d.valor)}</td></tr>))}</tbody></table></div>
             </div>
           )}
           {data.top && (

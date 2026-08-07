@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { fmtBRL } from "@/lib/format";
 
 interface RegraPreco {
   id: number; nome: string; tipo: string;
@@ -154,8 +155,8 @@ export default function RegrasPrecoPage() {
                       <tr key={i} className="border-b border-neutral-800/50">
                         <td className="p-2 text-neutral-300 font-mono">{d.sku}</td>
                         <td className="p-2 text-neutral-400">{d.loja}</td>
-                        <td className="p-2 text-right text-neutral-400 numeric">R$ {d.preco_atual.toFixed(2)}</td>
-                        <td className="p-2 text-right text-emerald-400 numeric">R$ {d.preco_novo.toFixed(2)}</td>
+                        <td className="p-2 text-right text-neutral-400 numeric">{fmtBRL(d.preco_atual)}</td>
+                        <td className="p-2 text-right text-emerald-400 numeric">{fmtBRL(d.preco_novo)}</td>
                         <td className="p-2 text-neutral-500">{d.regras_aplicadas.join(", ")}</td>
                       </tr>
                     ))}
