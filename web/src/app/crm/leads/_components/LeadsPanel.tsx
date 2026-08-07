@@ -90,18 +90,33 @@ export default function LeadsPanel() {
     q: buscaDebounced || undefined,
   }), [page, pageSize, sort, order, status, funilEtapa, origemDebounced, empresaId, comTelefone, buscaDebounced]);
 
-  const fetchData = useCallback(async () => {
+  // isStale() reflete se esta chamada foi superada por uma requisicao mais nova
+  // (filtro/pagina/ordenacao mudou antes desta resolver) — evita que uma resposta
+  // atrasada sobrescreva dados/paginacao ja mais atuais no estado.
+  const fetchData = useCallback(async (isStale: () => boolean) => {
     setLoading(true);
     setError("");
     try {
       const res = await api.crmLeadsListar(filtro);
+      if (isStale()) return;
       setData(res.data || []);
       setMeta(res.meta || { total: 0, page: 1, page_size: pageSize, pages: 1 });
-    } catch (e) { setError(String(e)); }
-    finally { setLoading(false); }
+    } catch (e) { if (!isStale()) setError(String(e)); }
+    finally { if (!isStale()) setLoading(false); }
   }, [filtro, pageSize]);
 
-  useEffect(() => { fetchData(); }, [fetchData, reloadKey]);
+  useEffect(() => {
+    let cancelled = false;
+    fetchData(() => cancelled);
+    return () => { cancelled = true; };
+  }, [fetchData, reloadKey]);
+
+  // Se a pagina atual ficou acima do total de paginas retornado (ex.: excluiu o
+  // ultimo lead de uma pagina), reancora pra ultima pagina valida — dispara um
+  // novo fetch automaticamente via mudanca de `page` (entra no `filtro`).
+  useEffect(() => {
+    if (meta.pages > 0 && meta.page > meta.pages) setPage(meta.pages);
+  }, [meta]);
 
   const empresaOptions = useMemo(() => empresas.map(e => ({ label: e.nome, value: String(e.id) })), [empresas]);
   const empresaNomePorId = useMemo(() => Object.fromEntries(empresas.map(e => [String(e.id), e.nome])), [empresas]);
