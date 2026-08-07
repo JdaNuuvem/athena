@@ -15,8 +15,8 @@ const vendCols: Column[] = [
 ];
 
 const vendFields: FieldDef[] = [
-  { key: "nome", label: "Nome" },
-  { key: "email", label: "Email" },
+  { key: "nome", label: "Nome", required: true },
+  { key: "email", label: "Email", validate: "email" },
   { key: "regiao", label: "Região" },
   { key: "comissao_pct", label: "Comissão (%)", type: "number", step: "0.1" },
 ];

@@ -11,20 +11,20 @@ const usuariosCols: Column[] = [
   { key: "email", label: "Email" },
   { key: "perfil", label: "Perfil" },
   { key: "mfa_ativo", label: "MFA", render: (v) => v ? <span className="text-emerald-400">Sim</span> : <span className="text-neutral-500">Não</span> },
-  { key: "status", label: "Status", render: (v) => {
+  { key: "status", label: "Status", filterOptions: [{ label: "Ativo", value: "ativo" }, { label: "Inativo", value: "inativo" }], render: (v) => {
     const s = String(v ?? "—");
     return <span className={`px-2 py-0.5 rounded text-[10px] ${s === "ativo" ? "bg-emerald-500/20 text-emerald-400" : "bg-red-500/20 text-red-400"}`}>{s}</span>;
   }},
 ];
 
 const usuariosFields: FieldDef[] = [
-  { key: "nome", label: "Nome" },
-  { key: "email", label: "Email" },
+  { key: "nome", label: "Nome", required: true },
+  { key: "email", label: "Email", required: true, validate: "email" },
   { key: "perfil", label: "Perfil", type: "select", options: [
     { label: "Administrador", value: "Administrador" }, { label: "Gestor", value: "Gestor" },
     { label: "Vendedor", value: "Vendedor" }, { label: "RH", value: "RH" }, { label: "Usuário", value: "usuario" },
   ]},
-  { key: "grupo_id", label: "Grupo ID", type: "number" },
+  { key: "grupo_id", label: "Grupo", type: "fk", fkTabela: "grupos", wide: true },
   { key: "mfa_ativo", label: "MFA Ativo", type: "select", options: [{ label: "Sim", value: "true" }, { label: "Não", value: "false" }] },
   { key: "status", label: "Status", type: "select", options: [{ label: "Ativo", value: "ativo" }, { label: "Inativo", value: "inativo" }] },
 ];
@@ -61,7 +61,7 @@ const gruposCols: Column[] = [
 ];
 
 const gruposFields: FieldDef[] = [
-  { key: "nome", label: "Nome" },
+  { key: "nome", label: "Nome", required: true },
   { key: "perfil_padrao", label: "Perfil Padrão", type: "select", options: [
     { label: "Administrador", value: "Administrador" }, { label: "Gestor", value: "Gestor" },
     { label: "Vendedor", value: "Vendedor" }, { label: "RH", value: "RH" }, { label: "Usuário", value: "usuario" },

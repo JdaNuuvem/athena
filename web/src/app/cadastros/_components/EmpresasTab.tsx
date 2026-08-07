@@ -10,23 +10,23 @@ const empresasCols: Column[] = [
   { key: "tipo", label: "Tipo" },
   { key: "regime_tributario", label: "Regime" },
   { key: "porte", label: "Porte" },
-  { key: "status", label: "Status", render: (v) => {
+  { key: "status", label: "Status", filterOptions: [{ label: "Ativa", value: "ativa" }, { label: "Inativa", value: "inativa" }], render: (v) => {
     const s = String(v ?? "—");
     return <span className={`px-2 py-0.5 rounded text-[10px] ${s === "ativa" ? "bg-emerald-500/20 text-emerald-400" : "bg-neutral-500/20 text-neutral-400"}`}>{s}</span>;
   }},
 ];
 
 const empresasFields: FieldDef[] = [
-  { key: "razao_social", label: "Razão Social" },
-  { key: "cnpj", label: "CNPJ" },
+  { key: "razao_social", label: "Razão Social", required: true },
+  { key: "cnpj", label: "CNPJ", validate: "documento", lookup: "cnpj" },
   { key: "ie", label: "IE" },
   { key: "im", label: "IM" },
   { key: "regime_tributario", label: "Regime Tributário" },
   { key: "porte", label: "Porte" },
   { key: "tipo", label: "Tipo", type: "select", options: [{ label: "Matriz", value: "matriz" }, { label: "Filial", value: "filial" }] },
-  { key: "endereco", label: "Endereço" },
+  { key: "endereco", label: "Endereço", wide: true },
   { key: "telefone", label: "Telefone" },
-  { key: "email", label: "Email" },
+  { key: "email", label: "Email", validate: "email" },
   { key: "status", label: "Status", type: "select", options: [{ label: "Ativa", value: "ativa" }, { label: "Inativa", value: "inativa" }] },
 ];
 
@@ -37,7 +37,7 @@ const multiempresaCols: Column[] = [
 ];
 
 const multiempresaFields: FieldDef[] = [
-  { key: "empresa_id", label: "Empresa ID", type: "number" },
+  { key: "empresa_id", label: "Empresa", type: "fk", fkTabela: "empresas", fkLabelField: "razao_social", wide: true },
   { key: "tipo_vinculo", label: "Tipo Vínculo" },
 ];
 

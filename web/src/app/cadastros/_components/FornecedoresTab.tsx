@@ -13,16 +13,16 @@ const fornCols: Column[] = [
   { key: "documento", label: "Documento" },
   { key: "limite_credito", label: "Limite", render: (v) => fmtBRL(Number(v) || 0) },
   { key: "score", label: "Score" },
-  { key: "status", label: "Status", render: (v) => {
+  { key: "status", label: "Status", filterOptions: [{ label: "Ativo", value: "ativo" }, { label: "Inativo", value: "inativo" }], render: (v) => {
     const s = String(v ?? "—");
     return <span className={`px-2 py-0.5 rounded text-[10px] ${s === "ativo" ? "bg-emerald-500/20 text-emerald-400" : "bg-neutral-500/20 text-neutral-400"}`}>{s}</span>;
   }},
 ];
 
 const fornFields: FieldDef[] = [
-  { key: "nome", label: "Nome" },
+  { key: "nome", label: "Nome", required: true },
   { key: "tipo", label: "Tipo", type: "select", options: [{ label: "PJ", value: "PJ" }, { label: "PF", value: "PF" }] },
-  { key: "documento", label: "Documento (CPF/CNPJ)" },
+  { key: "documento", label: "Documento (CPF/CNPJ)", validate: "documento", lookup: "cnpj" },
   { key: "ie", label: "IE" },
   { key: "im", label: "IM" },
   { key: "limite_credito", label: "Limite de Crédito", type: "number", step: "0.01" },
@@ -39,14 +39,14 @@ const enderecoCols: Column[] = [
 ];
 
 const enderecoFields: FieldDef[] = [
-  { key: "fornecedor_id", label: "Fornecedor ID", type: "number" },
+  { key: "fornecedor_id", label: "Fornecedor", type: "fk", fkTabela: "fornecedores", wide: true },
   { key: "logradouro", label: "Logradouro" },
   { key: "numero", label: "Número" },
   { key: "complemento", label: "Complemento" },
   { key: "bairro", label: "Bairro" },
   { key: "cidade", label: "Cidade" },
   { key: "uf", label: "UF" },
-  { key: "cep", label: "CEP" },
+  { key: "cep", label: "CEP", lookup: "cep" },
 ];
 
 const contatoCols: Column[] = [
@@ -58,7 +58,7 @@ const contatoCols: Column[] = [
 ];
 
 const contatoFields: FieldDef[] = [
-  { key: "fornecedor_id", label: "Fornecedor ID", type: "number" },
+  { key: "fornecedor_id", label: "Fornecedor", type: "fk", fkTabela: "fornecedores", wide: true },
   { key: "tipo", label: "Tipo", type: "select", options: [{ label: "Telefone", value: "telefone" }, { label: "Email", value: "email" }, { label: "Celular", value: "celular" }] },
   { key: "valor", label: "Valor" },
   { key: "whatsapp", label: "WhatsApp", type: "select", options: [{ label: "Sim", value: "true" }, { label: "Não", value: "false" }] },
@@ -79,7 +79,7 @@ const tagCols: Column[] = [
 ];
 
 const tagFields: FieldDef[] = [
-  { key: "fornecedor_id", label: "Fornecedor ID", type: "number" },
+  { key: "fornecedor_id", label: "Fornecedor", type: "fk", fkTabela: "fornecedores", wide: true },
   { key: "tag", label: "Tag" },
 ];
 
