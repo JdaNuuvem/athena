@@ -102,12 +102,17 @@ class TestListarLeadsFiltradoQuery(unittest.TestCase):
         self.assertEqual(args[1], 7)
 
     def test_com_telefone_true(self):
+        # Bling mascara telefone de contato sem permissao de dado sensivel
+        # (ex.: "1199***-**32") quando o app nao tem escopo LGPD liberado —
+        # o valor chega assim ja na importacao (core.crm.importar_contatos_bling)
+        # e fica gravado em crm_leads.telefone tal como veio. "Com telefone"
+        # tem que significar "telefone utilizavel", entao exclui mascarado.
         db_mock = _mock_db()
         async def _fake_get_db(): return db_mock
         with patch("core.crm.get_db", _fake_get_db):
             crm.listar_leads_filtrado(com_telefone=True)
         query = db_mock.fetch.call_args.args[0]
-        self.assertIn("telefone IS NOT NULL AND telefone <> ''", query)
+        self.assertIn("telefone IS NOT NULL AND telefone <> '' AND telefone NOT LIKE '%*%'", query)
 
     def test_com_telefone_false(self):
         db_mock = _mock_db()
@@ -115,7 +120,19 @@ class TestListarLeadsFiltradoQuery(unittest.TestCase):
         with patch("core.crm.get_db", _fake_get_db):
             crm.listar_leads_filtrado(com_telefone=False)
         query = db_mock.fetch.call_args.args[0]
-        self.assertIn("telefone IS NULL OR telefone = ''", query)
+        self.assertIn("telefone IS NULL OR telefone = '' OR telefone LIKE '%*%'", query)
+
+    def test_com_telefone_true_exclui_telefone_mascarado_do_bling(self):
+        db_mock = _mock_db(rows=[{"id": 1, "telefone": "1199***-**32"}])
+        async def _fake_get_db(): return db_mock
+        with patch("core.crm.get_db", _fake_get_db):
+            resultado = crm.listar_leads_filtrado(com_telefone=True)
+        query = db_mock.fetch.call_args.args[0]
+        self.assertIn("NOT LIKE '%*%'", query)
+        # A query real (nao mockada) e' quem de fato filtra em producao — este
+        # teste garante que a clausula SQL correta foi montada; o mock aqui so'
+        # confirma que a funcao nao quebra e devolve o shape normal.
+        self.assertIn("data", resultado)
 
     def test_busca_q_cobre_quatro_colunas_com_or(self):
         db_mock = _mock_db()

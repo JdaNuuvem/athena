@@ -288,9 +288,13 @@ def listar_leads_filtrado(page=1, page_size=25, sort="id", order="desc",
         vals.append(empresa_id)
         conds.append(f"empresa_id = ${len(vals)}")
     if com_telefone is True:
-        conds.append("telefone IS NOT NULL AND telefone <> ''")
+        # Bling mascara telefone ("1199***-**32") quando o app nao tem escopo
+        # LGPD liberado pra dado sensivel do contato — o valor mascarado
+        # chega assim na importacao (importar_contatos_bling) e fica gravado
+        # tal como veio. "Com telefone" so' conta como telefone utilizavel.
+        conds.append("telefone IS NOT NULL AND telefone <> '' AND telefone NOT LIKE '%*%'")
     elif com_telefone is False:
-        conds.append("(telefone IS NULL OR telefone = '')")
+        conds.append("(telefone IS NULL OR telefone = '' OR telefone LIKE '%*%')")
     if q:
         vals.append(f"%{q}%")
         p = len(vals)
