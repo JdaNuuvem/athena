@@ -247,6 +247,78 @@ CRM_COLUNAS = {
 def list(tabela: str): return _list(f"crm_{_tabela_real(tabela)}")
 def get(tabela: str, id: int): return _get(f"crm_{_tabela_real(tabela)}", id)
 
+# ── Leads — listagem paginada com filtro/ordenacao server-side ──
+# Endpoint generico list(tabela) acima nao pagina/filtra — serve as outras
+# 7 tabelas do CRM sem mudanca. Isso aqui e' especifico de leads, chamado
+# pela rota so' quando a querystring tem parametros de filtro/paginacao
+# (ver routes/crm.py::crm_list) — sem eles, o comportamento antigo se
+# mantem intacto pras 11 outras telas que usam o CrudPanel generico.
+_LEADS_SORT_WHITELIST = {
+    "id": "id",
+    "valor_potencial": "valor_potencial",
+    "status": "status",
+    "funil_etapa": "funil_etapa",
+}
+_LEADS_PAGE_SIZES = (25, 50, 100)
+
+def listar_leads_filtrado(page=1, page_size=25, sort="id", order="desc",
+                           status=None, funil_etapa=None, origem=None,
+                           empresa_id=None, com_telefone=None, q=None,
+                           export=False) -> dict:
+    sort_col = _LEADS_SORT_WHITELIST.get(sort, "id")
+    order_dir = "ASC" if str(order).lower() == "asc" else "DESC"
+    page = max(int(page or 1), 1)
+    page_size = page_size if page_size in _LEADS_PAGE_SIZES else 25
+
+    conds = []
+    vals = []
+    if status:
+        vals.append(status)
+        conds.append(f"status = ${len(vals)}")
+    if funil_etapa:
+        vals.append(funil_etapa)
+        conds.append(f"funil_etapa = ${len(vals)}")
+    if origem:
+        vals.append(f"%{origem}%")
+        conds.append(f"origem ILIKE ${len(vals)}")
+    if empresa_id:
+        vals.append(empresa_id)
+        conds.append(f"empresa_id = ${len(vals)}")
+    if com_telefone is True:
+        conds.append("telefone IS NOT NULL AND telefone <> ''")
+    elif com_telefone is False:
+        conds.append("(telefone IS NULL OR telefone = '')")
+    if q:
+        vals.append(f"%{q}%")
+        p = len(vals)
+        conds.append(f"(nome ILIKE ${p} OR email ILIKE ${p} OR telefone ILIKE ${p} OR origem ILIKE ${p})")
+
+    where_sql = f"WHERE {' AND '.join(conds)}" if conds else ""
+
+    async def _go():
+        db = await get_db()
+        total = await db.fetchval(f"SELECT COUNT(*) FROM crm_leads {where_sql}", *vals) or 0
+        if export:
+            rows = await db.fetch(
+                f"SELECT * FROM crm_leads {where_sql} ORDER BY {sort_col} {order_dir} LIMIT 5000",
+                *vals)
+            return {"data": [dict(r) for r in rows], "meta": {"total": total}}
+        offset = (page - 1) * page_size
+        rows = await db.fetch(
+            f"SELECT * FROM crm_leads {where_sql} ORDER BY {sort_col} {order_dir} "
+            f"LIMIT ${len(vals)+1} OFFSET ${len(vals)+2}",
+            *vals, page_size, offset)
+        pages = max(1, (total + page_size - 1) // page_size)
+        return {
+            "data": [dict(r) for r in rows],
+            "meta": {"total": total, "page": page, "page_size": page_size, "pages": pages},
+        }
+    try:
+        return run_async(_go())
+    except Exception as e:
+        log(AGENT, f"Erro listar_leads_filtrado: {e}")
+        return {"data": [], "meta": {"total": 0, "page": page, "page_size": page_size, "pages": 0}}
+
 # Ciclo de vida de uma proposta — rascunho (em edicao) -> enviada (mandada pro
 # cliente) -> aceita/rejeitada (resposta do cliente) ou vencida (passou
 # data_validade sem resposta). funil() ja conta "enviada" como o status
