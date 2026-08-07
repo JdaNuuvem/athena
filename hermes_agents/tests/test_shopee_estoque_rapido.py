@@ -105,13 +105,34 @@ class TestAtualizarCelulaEstoqueRapido(unittest.TestCase):
         r = estoque_rapido.atualizar_celula_estoque_rapido(
             "SKU1", 1, 10, {"user_id": 9, "nome": "Ana"}, "127.0.0.1", "pytest")
 
-        mock_ajustar.assert_called_once_with("SKU1", "Loja A", 10, "estoque_rapido", 9, "Ana", "127.0.0.1", "pytest")
+        mock_ajustar.assert_called_once_with("SKU1", "Loja A", 10, "ajuste_inventario", 9, "Ana", "127.0.0.1", "pytest")
         mock_sync.assert_called_once_with("SKU1", 10, loja_id=1)
         mock_grid.assert_called_once_with(skus=["SKU1"])
         self.assertEqual(r, {
             "ok": True, "salvo_local": True, "erro_shopee": None,
             "linha": {"sku": "SKU1", "nome": "Produto 1", "estoque": {1: 10.0}},
         })
+
+    @patch("shopee.estoque_rapido.listar_grid_estoque_rapido")
+    @patch("shopee.estoque_rapido.sincronizar_estoque_shopee")
+    @patch("shopee.estoque_rapido.ajustar_absoluto")
+    @patch("shopee.estoque_rapido.obter")
+    def test_sucesso_com_envelope_real_da_shopee_open_platform(self, mock_obter, mock_ajustar, mock_sync, mock_grid):
+        """A Shopee Open Platform v2 SEMPRE devolve a chave "error" — vazia em
+        sucesso, com codigo em falha. Este teste usa o envelope real (nao a
+        forma ficticia {"success": True}) pra fixar o contrato: checar so' a
+        PRESENCA da chave "error" marcaria isso como falha (bug ja corrigido)."""
+        mock_obter.return_value = {"id": 1, "nome": "Loja A"}
+        mock_ajustar.return_value = {"ok": True, "sku": "SKU1", "loja": "Loja A", "quantidade": 10, "anterior": 5, "atual": 10}
+        mock_sync.return_value = {"error": "", "message": "", "response": {"item_id": 123, "stock_list": []}}
+        mock_grid.return_value = {"produtos": [{"sku": "SKU1", "nome": "Produto 1", "estoque": {1: 10.0}}], "lojas": [], "total": 1}
+
+        r = estoque_rapido.atualizar_celula_estoque_rapido(
+            "SKU1", 1, 10, {"user_id": 9, "nome": "Ana"}, "127.0.0.1", "pytest")
+
+        self.assertIs(r["ok"], True)
+        self.assertIsNone(r["erro_shopee"])
+        self.assertEqual(r["salvo_local"], True)
 
     @patch("shopee.estoque_rapido.ajustar_absoluto")
     @patch("shopee.estoque_rapido.obter")

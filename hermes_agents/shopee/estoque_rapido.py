@@ -94,7 +94,7 @@ def atualizar_celula_estoque_rapido(sku: str, loja_id: int, quantidade: float, u
     if not loja:
         return {"ok": False, "erro_local": f"Loja {loja_id} nao encontrada"}
 
-    resultado_local = ajustar_absoluto(sku, loja["nome"], quantidade, "estoque_rapido",
+    resultado_local = ajustar_absoluto(sku, loja["nome"], quantidade, "ajuste_inventario",
                                         usuario.get("user_id"), usuario.get("nome", ""), ip, dispositivo)
     if resultado_local.get("erro"):
         return {"ok": False, "erro_local": resultado_local["erro"]}
@@ -103,10 +103,14 @@ def atualizar_celula_estoque_rapido(sku: str, loja_id: int, quantidade: float, u
         resultado_shopee = sincronizar_estoque_shopee(sku, int(quantidade), loja_id=loja_id)
         grid = listar_grid_estoque_rapido(skus=[sku])
         linha = grid["produtos"][0] if grid["produtos"] else None
+        # A Shopee Open Platform v2 sempre devolve a chave "error" — vazia
+        # ("") em sucesso, com um codigo em falha. Checar so' a presenca da
+        # chave (como era antes) marca TODO sucesso como falha.
+        erro = resultado_shopee.get("error") or None
         return {
-            "ok": "error" not in resultado_shopee,
+            "ok": not erro,
             "salvo_local": True,
-            "erro_shopee": resultado_shopee.get("error"),
+            "erro_shopee": erro,
             "linha": linha,
         }
     except Exception as e:
