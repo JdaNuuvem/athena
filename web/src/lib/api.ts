@@ -1434,6 +1434,19 @@ export async function listarBlingDepositos(
   return res.json().catch(() => ({ data: [] }));
 }
 
+export interface DepositoKpi {
+  deposito_id: number;
+  skus: number;
+  valor: number;
+  baixo_estoque: number;
+}
+
+export async function estoqueDepositosKpis(): Promise<{ data: DepositoKpi[] }> {
+  const res = await fetch("/api/estoque/depositos/kpis");
+  if (!res.ok) return { data: [] };
+  return res.json().catch(() => ({ data: [] }));
+}
+
 export async function obterSaldoDeposito(
   idDeposito: number,
   idsProdutos?: number[]
