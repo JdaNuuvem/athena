@@ -101,6 +101,7 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/estoque", label: "Estoque", icon: "estoque",
         children: [
           { href: "/estoque", label: "Visão Geral" },
+          { href: "/estoque/rapido", label: "Estoque Rápido", store: "virtual" },
           { href: "/estoque/entrada", label: "Entrada (Scanner)", store: "fisica" },
           { href: "/estoque/saida", label: "Saída", store: "fisica" },
           { href: "/estoque/transferencias", label: "Transferências", store: "fisica" },
