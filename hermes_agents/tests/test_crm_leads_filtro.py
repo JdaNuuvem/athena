@@ -220,6 +220,16 @@ class TestListarLeadsFiltradoErro(unittest.TestCase):
             resultado = crm.listar_leads_filtrado(page=3, page_size=50)
         self.assertEqual(resultado, {"data": [], "meta": {"total": 0, "page": 3, "page_size": 50, "pages": 0}})
 
+    def test_page_nao_numerico_nao_quebra_degrada_graciosamente(self):
+        db_mock = _mock_db()
+        async def _fake_get_db(): return db_mock
+        with patch("core.crm.get_db", _fake_get_db):
+            resultado = crm.listar_leads_filtrado(page="abc", page_size=25)
+        # Deve retornar fallback seguro sem levantar exceção
+        self.assertEqual(resultado["data"], [])
+        self.assertEqual(resultado["meta"]["total"], 0)
+        self.assertEqual(resultado["meta"]["page_size"], 25)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

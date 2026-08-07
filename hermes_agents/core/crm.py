@@ -267,7 +267,10 @@ def listar_leads_filtrado(page=1, page_size=25, sort="id", order="desc",
                            export=False) -> dict:
     sort_col = _LEADS_SORT_WHITELIST.get(sort, "id")
     order_dir = "ASC" if str(order).lower() == "asc" else "DESC"
-    page = max(int(page or 1), 1)
+    try:
+        page = max(int(page or 1), 1)
+    except (ValueError, TypeError):
+        page = 1
     page_size = page_size if page_size in _LEADS_PAGE_SIZES else 25
 
     conds = []
