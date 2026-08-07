@@ -163,10 +163,10 @@ def fluxo_caixa(dias=30, loja_id=None):
         db = await get_db()
         entradas_bl = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND status IN ('faturado','concluido'){loja_bl}", dias)
         entradas_pdv = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM pdv_vendas venda WHERE DATE(data) >= CURRENT_DATE - $1::int{loja_pdv}", dias)
-        cr_recebido = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_contas_receber WHERE data_recebimento >= CURRENT_DATE - $1::int AND status='pago'", dias)
+        cr_recebido = await db.fetchval(f"SELECT COALESCE(SUM(valor),0) FROM fin_contas_receber WHERE data_recebimento >= CURRENT_DATE - $1::int AND status='pago'{loja_bl}", dias)
         entradas = float((entradas_bl or 0) + (entradas_pdv or 0) + (cr_recebido or 0))
-        saidas_cp = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_contas_pagar WHERE data_pagamento >= CURRENT_DATE - $1::int AND status='pago'", dias)
-        saidas_comp = await db.fetchval("SELECT COALESCE(SUM(valor_total),0) FROM compras_pedidos WHERE data_emissao >= CURRENT_DATE - $1::int", dias)
+        saidas_cp = await db.fetchval(f"SELECT COALESCE(SUM(valor),0) FROM fin_contas_pagar WHERE data_pagamento >= CURRENT_DATE - $1::int AND status='pago'{loja_bl}", dias)
+        saidas_comp = await db.fetchval(f"SELECT COALESCE(SUM(valor_total),0) FROM compras_pedidos WHERE data_emissao >= CURRENT_DATE - $1::int{loja_bl}", dias)
         saidas = float((saidas_cp or 0) + (saidas_comp or 0))
         return {"entradas": entradas, "saidas": saidas, "saldo": round(entradas - saidas, 2), "periodo_dias": dias}
     try: return run_async(_go())

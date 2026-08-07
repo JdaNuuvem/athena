@@ -34,6 +34,18 @@ def _ensure_tables():
             data_emissao DATE, data_entrega_prevista DATE, aprovado_por VARCHAR(100),
             observacoes TEXT, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW()
         )""")
+        # ponytail: compra e' centralizada (sem selecao de loja na UI/fluxo hoje)
+        # — loja_id default = loja principal, so' pra permitir filtro por loja
+        # no fluxo de caixa sem inventar um conceito de "compra por loja" que
+        # o produto nao tem ainda.
+        try: await db.execute("ALTER TABLE compras_pedidos ADD COLUMN IF NOT EXISTS loja_id INT")
+        except Exception: pass
+        try:
+            from core.lojas import LOJA_PRINCIPAL_ID
+            if LOJA_PRINCIPAL_ID:
+                await db.execute("UPDATE compras_pedidos SET loja_id = $1 WHERE loja_id IS NULL", LOJA_PRINCIPAL_ID)
+        except Exception as e:
+            log(AGENT, f"Erro backfill loja_id compras_pedidos: {e}")
         await db.execute("""CREATE TABLE IF NOT EXISTS compras_itens (
             id SERIAL PRIMARY KEY, pedido_id INT REFERENCES compras_pedidos(id),
             solicitacao_id INT REFERENCES compras_solicitacoes(id),
@@ -113,7 +125,11 @@ def _delete(tabela: str, id: int) -> dict:
 TABLES = ["fornecedores","solicitacoes","cotacoes","pedidos","itens","recebimentos","notas_entrada"]
 def list(t: str): return _list(f"compras_{t}")
 def get(t: str, i: int): return _get(f"compras_{t}", i)
-def create(t: str, d: dict): return _create(f"compras_{t}", d)
+def create(t: str, d: dict):
+    if t == "pedidos" and "loja_id" not in d:
+        from core.lojas import LOJA_PRINCIPAL_ID
+        d = {**d, "loja_id": LOJA_PRINCIPAL_ID}
+    return _create(f"compras_{t}", d)
 def update(t: str, i: int, d: dict): return _update(f"compras_{t}", i, d)
 def delete(t: str, i: int): return _delete(f"compras_{t}", i)
 

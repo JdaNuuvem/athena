@@ -210,11 +210,12 @@ def migrar_contas_fiscal_para_financeiro() -> dict:
             r = dict(r)
             existing = await db.fetchval("SELECT id FROM fin_contas_pagar WHERE bling_id = $1", r["bling_id"]) if r.get("bling_id") else None
             if not existing:
-                await db.execute("""INSERT INTO fin_contas_pagar (fornecedor, descricao, valor, vencimento, data_pagamento, status, forma_pagamento, bling_id, origem)
-                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'bling')""",
+                from core.lojas import LOJA_PRINCIPAL_ID
+                await db.execute("""INSERT INTO fin_contas_pagar (fornecedor, descricao, valor, vencimento, data_pagamento, status, forma_pagamento, bling_id, origem, loja_id)
+                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'bling',$9)""",
                     r.get("fornecedor_nome",""), r.get("descricao",""), float(r.get("valor",0) or 0),
                     r.get("vencimento"), r.get("data_pagamento"),
-                    r.get("situacao","pendente"), r.get("forma_pagamento",""), r.get("bling_id"))
+                    r.get("situacao","pendente"), r.get("forma_pagamento",""), r.get("bling_id"), LOJA_PRINCIPAL_ID or None)
                 migrated_cp += 1
         return {"contas_receber_migradas": migrated_cr, "contas_pagar_migradas": migrated_cp, "origem_receber": cr, "origem_pagar": cp}
     try: return run_async(_go())
@@ -278,8 +279,8 @@ def ao_faturar_pedido(pedido_id: int) -> dict:
                     for p in range(parcelas):
                         venc = (datetime.date.today() + datetime.timedelta(days=30*(p+1))).isoformat()
                         await db.execute(
-                            "INSERT INTO fin_contas_receber (cliente, descricao, valor, vencimento, status, forma_pagamento, origem) VALUES ($1,$2,$3,$4,'pendente',$5,'venda')",
-                            pedido["cliente"], f"Pedido #{pedido_id} parcela {p+1}/{parcelas}", valor_parcela, venc, forma)
+                            "INSERT INTO fin_contas_receber (cliente, descricao, valor, vencimento, status, forma_pagamento, origem, loja_id) VALUES ($1,$2,$3,$4,'pendente',$5,'venda',$6)",
+                            pedido["cliente"], f"Pedido #{pedido_id} parcela {p+1}/{parcelas}", valor_parcela, venc, forma, pedido["loja_id"])
             resultados["financeiro"] = "contas geradas"
         except Exception as e: resultados["financeiro"] = f"erro: {e}"
         # 9) Vincular cliente por documento
@@ -344,8 +345,8 @@ def ao_receber_compra(recebimento_id: int) -> dict:
                     forn = await db.fetchrow("SELECT nome FROM cad_fornecedores WHERE id = $1", pedido["fornecedor_id"])
                     fornecedor_nome = forn["nome"] if forn else ""
                 await db.execute(
-                    "INSERT INTO fin_contas_pagar (fornecedor, descricao, valor, vencimento, status, forma_pagamento, origem) VALUES ($1,$2,$3,CURRENT_DATE+30,'pendente','boleto','compra')",
-                    fornecedor_nome, f"NF {nf.get('numero_nf','')} Compra #{pid}", float(nf.get("valor",0) or 0))
+                    "INSERT INTO fin_contas_pagar (fornecedor, descricao, valor, vencimento, status, forma_pagamento, origem, loja_id) VALUES ($1,$2,$3,CURRENT_DATE+30,'pendente','boleto','compra',$4)",
+                    fornecedor_nome, f"NF {nf.get('numero_nf','')} Compra #{pid}", float(nf.get("valor",0) or 0), pedido["loja_id"] if pedido else None)
                 resultados["financeiro"] = "contas geradas"
         except Exception as e: resultados["financeiro"] = f"erro: {e}"
         return resultados

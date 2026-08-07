@@ -50,6 +50,31 @@ def _ensure_tables():
             bling_id BIGINT, origem VARCHAR(30) DEFAULT 'manual',
             created_at TIMESTAMP DEFAULT NOW()
         )""")
+        # ponytail: loja_id pra filtro por loja no fluxo de caixa.
+        # contas_pagar/compras sao centralizadas hoje (sem selecao de loja na
+        # UI) — default = loja principal. contas_receber vem de venda (essa
+        # sim tem loja de verdade) — backfill via "Pedido #N" na descricao
+        # ligado a vendas_pedidos.loja_id; sem match fica NULL (nao adivinha).
+        try: await db.execute("ALTER TABLE fin_contas_receber ADD COLUMN IF NOT EXISTS loja_id INT")
+        except Exception: pass
+        try: await db.execute("ALTER TABLE fin_contas_pagar ADD COLUMN IF NOT EXISTS loja_id INT")
+        except Exception: pass
+        try:
+            from core.lojas import LOJA_PRINCIPAL_ID
+            if LOJA_PRINCIPAL_ID:
+                await db.execute("UPDATE fin_contas_pagar SET loja_id = $1 WHERE loja_id IS NULL", LOJA_PRINCIPAL_ID)
+        except Exception as e:
+            log(AGENT, f"Erro backfill loja_id fin_contas_pagar: {e}")
+        try:
+            await db.execute("""
+                UPDATE fin_contas_receber fcr SET loja_id = vp.loja_id
+                FROM vendas_pedidos vp
+                WHERE fcr.loja_id IS NULL AND vp.loja_id IS NOT NULL
+                  AND fcr.descricao ~ 'Pedido #\\d+'
+                  AND vp.id = substring(fcr.descricao from 'Pedido #(\\d+)')::int
+            """)
+        except Exception as e:
+            log(AGENT, f"Erro backfill loja_id fin_contas_receber: {e}")
         await db.execute("""CREATE TABLE IF NOT EXISTS fin_boletos (
             id SERIAL PRIMARY KEY, beneficiario VARCHAR(200), valor DECIMAL(12,2) DEFAULT 0,
             vencimento DATE, nosso_numero VARCHAR(30), codigo_barras VARCHAR(60),

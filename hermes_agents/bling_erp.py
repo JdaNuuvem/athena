@@ -867,11 +867,12 @@ def processar_evento_webhook(evento: str, payload: dict) -> dict:
                         data_pagamento=$4::date, status=$5, origem='bling' WHERE bling_id=$6""",
                         fornecedor.get("nome",""), valor, vencimento, data_pgto, str(cp.get("situacao","pendente")), bling_id)
                 else:
+                    from core.lojas import LOJA_PRINCIPAL_ID
                     await db.execute("""INSERT INTO fin_contas_pagar (fornecedor, descricao, valor, vencimento,
-                        data_pagamento, status, forma_pagamento, bling_id, origem)
-                        VALUES ($1,$2,$3,$4::date,$5::date,$6,$7,$8,'bling')""",
+                        data_pagamento, status, forma_pagamento, bling_id, origem, loja_id)
+                        VALUES ($1,$2,$3,$4::date,$5::date,$6,$7,$8,'bling',$9)""",
                         fornecedor.get("nome",""), cp.get("descricao",""), valor, vencimento, data_pgto,
-                        str(cp.get("situacao","pendente")), cp.get("formaPagamento",""), bling_id)
+                        str(cp.get("situacao","pendente")), cp.get("formaPagamento",""), bling_id, LOJA_PRINCIPAL_ID or None)
 
         elif resource in ("nota-fiscal", "nota_fiscal", "nfe"):
             nf = payload.get("notaFiscal", payload.get("nfe", payload))

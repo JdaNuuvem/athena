@@ -605,14 +605,28 @@ def _primeira_loja() -> str:
     try: return run_async(_go())
     except Exception as e: _log_erro("_primeira_loja", e); return "Loja Centro"
 
+def _primeira_loja_id() -> int:
+    """Id da primeira loja ativa — companion de _primeira_loja(), usado onde
+    o registro precisa de loja_id (FK) em vez do nome (compras, contas a
+    pagar: hoje centralizadas numa unica loja, sem selecao de loja na UI)."""
+    _ensure_table()
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow("SELECT id FROM lojas WHERE ativa = TRUE ORDER BY id LIMIT 1")
+        return row["id"] if row else 0
+    try: return run_async(_go())
+    except Exception as e: _log_erro("_primeira_loja_id", e); return 0
+
 LOJA_PRINCIPAL: str = ""
+LOJA_PRINCIPAL_ID: int = 0
 LOJA_PRODUCAO: str = ""
 
 def _init_loja_names():
-    global LOJA_PRINCIPAL, LOJA_PRODUCAO
+    global LOJA_PRINCIPAL, LOJA_PRINCIPAL_ID, LOJA_PRODUCAO
     if LOJA_PRINCIPAL:
         return
     LOJA_PRINCIPAL = _primeira_loja()
+    LOJA_PRINCIPAL_ID = _primeira_loja_id()
     LOJA_PRODUCAO = "Produção"
 
 _init_loja_names()

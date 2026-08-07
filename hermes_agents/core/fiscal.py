@@ -683,12 +683,13 @@ def sincronizar_contas_pagar_bling(pagina: int = 1, limite: int = 100) -> dict:
                         float(cp.get("valor",0) or 0), vencimento, data_pagamento,
                         str(cp.get("situacao","pendente")), cp.get("formaPagamento",""), bling_id)
                 else:
+                    from core.lojas import LOJA_PRINCIPAL_ID
                     await db.execute("""INSERT INTO fin_contas_pagar
-                        (fornecedor, descricao, valor, vencimento, data_pagamento, status, forma_pagamento, bling_id, origem)
-                        VALUES ($1,$2,$3,$4::date,$5::date,$6,$7,$8,'bling')""",
+                        (fornecedor, descricao, valor, vencimento, data_pagamento, status, forma_pagamento, bling_id, origem, loja_id)
+                        VALUES ($1,$2,$3,$4::date,$5::date,$6,$7,$8,'bling',$9)""",
                         fornecedor.get("nome",""), cp.get("descricao",""),
                         float(cp.get("valor",0) or 0), vencimento, data_pagamento,
-                        str(cp.get("situacao","pendente")), cp.get("formaPagamento",""), bling_id)
+                        str(cp.get("situacao","pendente")), cp.get("formaPagamento",""), bling_id, LOJA_PRINCIPAL_ID or None)
                 total += 1
             except Exception as e:
                 log(AGENT, f"Erro sync CP: {e}")
