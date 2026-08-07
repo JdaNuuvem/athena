@@ -22,6 +22,8 @@ interface PedidoRow {
   data: string;
   marketplace: string;
   vendedor: string;
+  item_principal: string | null;
+  total_itens: number;
 }
 
 interface DashboardData {
@@ -258,6 +260,7 @@ export default function VendasPage() {
                 <tr className="border-b border-neutral-700 text-neutral-400">
                   <th className="text-left p-2">#</th>
                   <th className="text-left p-2">Cliente</th>
+                  <th className="text-left p-2">Item</th>
                   <th className="text-center p-2">Status</th>
                   <th className="text-right p-2">Total</th>
                   <th className="text-center p-2">Data</th>
@@ -267,12 +270,16 @@ export default function VendasPage() {
               </thead>
               <tbody>
                 {pedidos.length === 0 ? (
-                  <tr><td colSpan={7} className="p-4 text-center text-neutral-500">Nenhum pedido encontrado</td></tr>
+                  <tr><td colSpan={8} className="p-4 text-center text-neutral-500">Nenhum pedido encontrado</td></tr>
                 ) : (
                   pedidos.map(p => (
                     <tr key={p.id} className={`border-b border-neutral-700/50 hover:bg-neutral-700/30 cursor-pointer ${expandedId === p.id ? "bg-neutral-700/50" : ""}`} onClick={() => toggleDetalhe(p.id)}>
                       <td className="p-2 text-neutral-300">{p.id}</td>
                       <td className="p-2 text-neutral-200">{p.cliente}</td>
+                      <td className="p-2 text-neutral-300">
+                        {p.item_principal || "—"}
+                        {p.total_itens > 1 && <span className="text-neutral-500"> (+{p.total_itens - 1})</span>}
+                      </td>
                       <td className="p-2 text-center">
                         <StatusBadge label={p.status} variant={STATUS_VARIANT[p.status] || "neutral"} />
                       </td>

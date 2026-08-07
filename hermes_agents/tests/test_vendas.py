@@ -249,5 +249,60 @@ class TestListarFiltradoLoja(unittest.TestCase):
         self.assertEqual(a, ())
 
 
+class TestEnriquecerItemPrincipal(unittest.TestCase):
+    """enriquecer_item_principal() acrescenta item_principal (descricao do
+    item de maior valor_total) e total_itens (contagem) a cada pedido, sem
+    tocar em vendas_pedidos — so' consulta vendas_itens."""
+
+    def test_sem_pedidos_retorna_lista_vazia(self):
+        self.assertEqual(vendas.enriquecer_item_principal([]), [])
+
+    def test_adiciona_item_principal_e_total_itens(self):
+        class _FakeDBItens:
+            async def fetch(self, q, *a):
+                if "DISTINCT ON" in q:
+                    return [
+                        {"pedido_id": 1, "descricao": "Produto Caro"},
+                        {"pedido_id": 2, "descricao": "Produto Unico"},
+                    ]
+                if "COUNT(*)" in q:
+                    return [{"pedido_id": 1, "qtd": 3}, {"pedido_id": 2, "qtd": 1}]
+                return []
+        db = _FakeDBItens()
+        async def fake_get_db(): return db
+        pedidos = [{"id": 1, "cliente": "A"}, {"id": 2, "cliente": "B"}]
+        with patch.object(vendas, "get_db", fake_get_db):
+            resultado = vendas.enriquecer_item_principal(pedidos)
+        self.assertEqual(resultado[0]["item_principal"], "Produto Caro")
+        self.assertEqual(resultado[0]["total_itens"], 3)
+        self.assertEqual(resultado[1]["item_principal"], "Produto Unico")
+        self.assertEqual(resultado[1]["total_itens"], 1)
+
+    def test_pedido_sem_item_correspondente_fica_com_none_e_zero(self):
+        """Nao deveria acontecer na pratica (todo pedido tem >=1 item), mas
+        a funcao nao pode quebrar se a busca por id nao achar nada."""
+        class _FakeDBVazio:
+            async def fetch(self, q, *a):
+                return []
+        db = _FakeDBVazio()
+        async def fake_get_db(): return db
+        pedidos = [{"id": 99, "cliente": "Sem Itens"}]
+        with patch.object(vendas, "get_db", fake_get_db):
+            resultado = vendas.enriquecer_item_principal(pedidos)
+        self.assertIsNone(resultado[0]["item_principal"])
+        self.assertEqual(resultado[0]["total_itens"], 0)
+
+    def test_erro_de_query_devolve_pedidos_sem_os_campos_novos(self):
+        class _FakeDBErro:
+            async def fetch(self, q, *a):
+                raise Exception("boom")
+        db = _FakeDBErro()
+        async def fake_get_db(): return db
+        pedidos = [{"id": 1, "cliente": "A"}]
+        with patch.object(vendas, "get_db", fake_get_db):
+            resultado = vendas.enriquecer_item_principal(pedidos)
+        self.assertEqual(resultado, [{"id": 1, "cliente": "A"}])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

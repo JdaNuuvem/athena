@@ -101,5 +101,44 @@ class TestVendasListFiltroLoja(unittest.TestCase):
         mock_por_loja.assert_called_once_with([3])
 
 
+class TestVendasListEnriquecidoComItemPrincipal(unittest.TestCase):
+    """/api/vendas/pedidos passa a enriquecer cada pedido com item_principal/
+    total_itens — confirma que a funcao e' chamada nos 3 caminhos possiveis
+    de listagem de pedidos, nao so' que ela funciona isolada (ja coberto em
+    test_vendas.py::TestEnriquecerItemPrincipal). Tabelas itens/pagamentos
+    nao devem passar por esse enriquecimento (so' faz sentido pra pedidos)."""
+
+    def setUp(self):
+        self.client = _app()
+        self.master = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+
+    @patch("core.rbac.verificar_token_sessao", return_value={"user_id": None, "email": "", "role": ""})
+    @patch("core.vendas.listar_filtrado", return_value={"data": [{"id": 1}]})
+    @patch("core.vendas.enriquecer_item_principal")
+    def test_via_listar_filtrado_enriquece_pedidos(self, mock_enriq, mock_filtrado, mock_verif):
+        mock_enriq.return_value = [{"id": 1, "item_principal": "Camiseta", "total_itens": 1}]
+        r = self.client.get("/api/vendas/pedidos?dias=7", headers=self.master)
+        self.assertEqual(r.status_code, 200)
+        mock_enriq.assert_called_once_with([{"id": 1}])
+        self.assertEqual(r.get_json()["data"][0]["item_principal"], "Camiseta")
+
+    @patch("core.rbac.verificar_token_sessao", return_value={"user_id": None, "email": "", "role": ""})
+    @patch("core.vendas.list", return_value=[{"id": 2}])
+    @patch("core.vendas.enriquecer_item_principal")
+    def test_via_fallback_sem_filtro_enriquece_pedidos(self, mock_enriq, mock_list, mock_verif):
+        mock_enriq.return_value = [{"id": 2, "item_principal": "Caneca", "total_itens": 2}]
+        r = self.client.get("/api/vendas/pedidos", headers=self.master)
+        self.assertEqual(r.status_code, 200)
+        mock_enriq.assert_called_once_with([{"id": 2}])
+
+    @patch("core.rbac.verificar_token_sessao", return_value={"user_id": None, "email": "", "role": ""})
+    @patch("core.vendas.listar_filtrado", return_value={"data": [{"id": 1}]})
+    @patch("core.vendas.enriquecer_item_principal")
+    def test_itens_nao_passa_por_enriquecimento(self, mock_enriq, mock_filtrado, mock_verif):
+        r = self.client.get("/api/vendas/itens?dias=7", headers=self.master)
+        self.assertEqual(r.status_code, 200)
+        mock_enriq.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
