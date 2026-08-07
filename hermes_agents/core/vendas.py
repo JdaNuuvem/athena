@@ -42,6 +42,8 @@ def _ensure_tables():
             valor_unitario DECIMAL(12,4) DEFAULT 0, valor_total DECIMAL(12,2) DEFAULT 0,
             desconto DECIMAL(12,2) DEFAULT 0, created_at TIMESTAMP DEFAULT NOW()
         )""")
+        try: await db.execute("CREATE INDEX IF NOT EXISTS idx_vendas_itens_pedido_id ON vendas_itens (pedido_id)")
+        except Exception as e: pass
         await db.execute("""CREATE TABLE IF NOT EXISTS vendas_pagamentos (
             id SERIAL PRIMARY KEY, pedido_id INT REFERENCES vendas_pedidos(id),
             forma VARCHAR(30) NOT NULL, valor DECIMAL(12,2) DEFAULT 0,
@@ -164,6 +166,37 @@ def listar_pedidos_por_loja(loja_ids: list = None, limit: int = 500) -> list:
         return [dict(r) for r in rows]
     try: return run_async(_go())
     except Exception as e: return []
+
+
+def enriquecer_item_principal(pedidos: list) -> list:
+    """Acrescenta 'item_principal' (descricao do item de maior valor_total) e
+    'total_itens' (contagem) a cada pedido — usado so' na listagem, pra
+    mostrar o produto vendido sem precisar expandir a linha. Sem pedidos,
+    ou em erro de query, devolve a lista original sem os campos novos."""
+    if not pedidos:
+        return pedidos
+    ids = [p["id"] for p in pedidos]
+    async def _go():
+        db = await get_db()
+        principais = await db.fetch(
+            "SELECT DISTINCT ON (pedido_id) pedido_id, descricao FROM vendas_itens "
+            "WHERE pedido_id = ANY($1) ORDER BY pedido_id, valor_total DESC", ids)
+        contagens = await db.fetch(
+            "SELECT pedido_id, COUNT(*) as qtd FROM vendas_itens "
+            "WHERE pedido_id = ANY($1) GROUP BY pedido_id", ids)
+        return (
+            {r["pedido_id"]: r["descricao"] for r in principais},
+            {r["pedido_id"]: r["qtd"] for r in contagens},
+        )
+    try:
+        principal_por_pedido, qtd_por_pedido = run_async(_go())
+    except Exception as e:
+        log(AGENT, f"enriquecer_item_principal: {e}")
+        return pedidos
+    for p in pedidos:
+        p["item_principal"] = principal_por_pedido.get(p["id"])
+        p["total_itens"] = qtd_por_pedido.get(p["id"], 0)
+    return pedidos
 
 # ── Operacoes ──
 
