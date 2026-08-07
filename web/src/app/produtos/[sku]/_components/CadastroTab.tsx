@@ -20,6 +20,7 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
   const [form, setForm] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
+  const [msgErro, setMsgErro] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState("");
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
@@ -60,7 +61,7 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
   };
 
   const handleSave = async () => {
-    setSaving(true); setMsg("");
+    setSaving(true); setMsg(""); setMsgErro(false);
     try {
       // fornecedor_id, marca_id, fabricante_id, categoria_id_norm sao BIGINT/INT no banco —
       // string vazia quebraria o UPDATE, so' envia se selecionado
@@ -77,7 +78,7 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
         method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
       });
       const d = await r.json();
-      if (d.error) { setMsg(d.error); setSaving(false); return; }
+      if (d.error) { setMsg(d.error); setMsgErro(true); setSaving(false); return; }
 
       // 2. Push to Bling (two-way sync)
       if (idBling) {
@@ -86,14 +87,14 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
             method: "PUT", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ descricao: form.descricao, preco: form.preco }),
           });
-        } catch (e) { setMsg("Salvo localmente. Erro ao sincronizar com Bling."); setSaving(false); return; }
+        } catch (e) { setMsg("Salvo localmente. Erro ao sincronizar com Bling."); setMsgErro(true); setSaving(false); return; }
       }
 
       setMsg(idBling ? "Salvo e sincronizado com Bling!" : "Salvo localmente.");
       setEditando(false);
       onUpdate?.();
       setTimeout(() => setMsg(""), 3000);
-    } catch (e) { setMsg("Erro ao salvar"); }
+    } catch (e) { setMsg("Erro ao salvar"); setMsgErro(true); }
     finally { setSaving(false); }
   };
 
@@ -132,13 +133,13 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
 
   const field = (k: string) => {
     const val = editando ? form[k] || "" : String(p?.[k] || "");
-    if (editando) return <input type="text" value={val || ""} onChange={e => setForm({...form, [k]: e.target.value})} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-indigo-500" />;
+    if (editando) return <input type="text" value={val || ""} disabled={saving} onChange={e => setForm({...form, [k]: e.target.value})} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-indigo-500 disabled:opacity-50" />;
     return <div className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200">{val || "—"}</div>;
   };
 
   const textareaField = (k: string, rows = 3) => {
     const val = editando ? form[k] || "" : String(p?.[k] || "");
-    if (editando) return <textarea rows={rows} value={val || ""} onChange={e => setForm({...form, [k]: e.target.value})} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-indigo-500" />;
+    if (editando) return <textarea rows={rows} value={val || ""} disabled={saving} onChange={e => setForm({...form, [k]: e.target.value})} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-indigo-500 disabled:opacity-50" />;
     return <div className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 whitespace-pre-wrap min-h-[2.5rem]">{val || "—"}</div>;
   };
 
@@ -161,7 +162,7 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-medium text-neutral-400">Dados do Produto</h2>
         <div className="flex gap-2 items-center">
-          {msg && <span className="text-xs text-emerald-400">{msg}</span>}
+          {msg && <span className={`text-xs ${msgErro ? "text-red-400" : "text-emerald-400"}`}>{msg}</span>}
           {uploadMsg && <span className="text-xs text-blue-400">{uploadMsg}</span>}
           {editando ? (
             <>
@@ -211,7 +212,7 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
         </div>
       </Section>
 
-      <Section title="Identificacao">
+      <Section title="Identificação">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
           <InputGroup label="SKU"><div className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-indigo-400 font-mono">{sku}</div></InputGroup>
           <InputGroup label="Nome"><div>{field("descricao")}</div></InputGroup>
@@ -230,8 +231,9 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
             {editando ? (
               <select
                 value={form.classificacao || "simples"}
+                disabled={saving}
                 onChange={e => setForm({ ...form, classificacao: e.target.value })}
-                className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-indigo-500"
+                className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-indigo-500 disabled:opacity-50"
               >
                 <option value="simples">Simples</option>
                 <option value="variavel">Variável</option>
@@ -257,6 +259,7 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
               label="Marca"
               value={form.marca_id || ""}
               options={marcas}
+              disabled={saving}
               onChange={id => setForm({ ...form, marca_id: id })}
               onCriar={api.criarMarca}
               onCriado={nova => setMarcas(prev => [...prev, nova])}
@@ -273,6 +276,7 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
               label="Fabricante"
               value={form.fabricante_id || ""}
               options={fabricantes}
+              disabled={saving}
               onChange={id => setForm({ ...form, fabricante_id: id })}
               onCriar={api.criarFabricante}
               onCriado={novo => setFabricantes(prev => [...prev, novo])}
@@ -289,6 +293,7 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
               label="Categoria (normalizada)"
               value={form.categoria_id_norm || ""}
               options={categorias}
+              disabled={saving}
               onChange={id => setForm({ ...form, categoria_id_norm: id })}
               onCriar={api.criarCategoriaProduto}
               onCriado={nova => setCategorias(prev => [...prev, nova])}
@@ -332,8 +337,9 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
             {editando ? (
               <select
                 value={form.fornecedor_id || ""}
+                disabled={saving}
                 onChange={e => setForm({ ...form, fornecedor_id: e.target.value })}
-                className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-indigo-500"
+                className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-indigo-500 disabled:opacity-50"
               >
                 <option value="">— Nenhum —</option>
                 {fornecedores.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}

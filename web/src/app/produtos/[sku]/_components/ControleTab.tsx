@@ -48,6 +48,8 @@ export default function ControleTab({ produto }: Props) {
   const [lojasShopee, setLojasShopee] = useState<LojaShopee[]>([]);
   const [enviando, setEnviando] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
+  const [msgErro, setMsgErro] = useState(false);
+  const mostrarMsg = (texto: string, erro = false) => { setMsg(texto); setMsgErro(erro); };
 
   const anunciosShopee: AnuncioShopee[] = Array.isArray(p?.estoque_lojas)
     ? p.estoque_lojas.filter((a: AnuncioShopee) => a.marketplace === "shopee" && a.anuncio_id)
@@ -72,13 +74,13 @@ export default function ControleTab({ produto }: Props) {
     const itemId = Number(anuncio.anuncio_id);
     const lojaId = lojaIdPorShopId(anuncio.shop_id);
     const novoPreco = Number(precos[anuncio.anuncio_id || ""]);
-    if (!itemId || !lojaId || !novoPreco) { setMsg("Preço inválido ou loja não vinculada"); return; }
+    if (!itemId || !lojaId || !novoPreco) { mostrarMsg("Preço inválido ou loja não vinculada", true); return; }
     setAtualizandoPreco(anuncio.anuncio_id || null); setMsg("");
     try {
       const r = await api.shopeeAtualizarPreco(itemId, lojaId, novoPreco);
-      setMsg(r.error ? `Erro: ${r.error}` : "Preço atualizado na Shopee");
+      if (r.error) mostrarMsg(`Erro: ${r.error}`, true); else mostrarMsg("Preço atualizado na Shopee");
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Erro ao atualizar preço");
+      mostrarMsg(e instanceof Error ? e.message : "Erro ao atualizar preço", true);
     } finally {
       setAtualizandoPreco(null);
       setTimeout(() => setMsg(""), 4000);
@@ -88,14 +90,14 @@ export default function ControleTab({ produto }: Props) {
   const alternarPausa = async (anuncio: AnuncioShopee) => {
     const itemId = Number(anuncio.anuncio_id);
     const lojaId = lojaIdPorShopId(anuncio.shop_id);
-    if (!itemId || !lojaId) { setMsg("Loja não vinculada"); return; }
+    if (!itemId || !lojaId) { mostrarMsg("Loja não vinculada", true); return; }
     const pausar = anuncio.status !== "unlist" && anuncio.status !== "pausado";
     setPausando(anuncio.anuncio_id || null); setMsg("");
     try {
       const r = await api.shopeeUnlistProduto(itemId, lojaId, pausar);
-      setMsg(r.error ? `Erro: ${r.error}` : pausar ? "Anúncio pausado na Shopee" : "Anúncio reativado na Shopee");
+      if (r.error) mostrarMsg(`Erro: ${r.error}`, true); else mostrarMsg(pausar ? "Anúncio pausado na Shopee" : "Anúncio reativado na Shopee");
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Erro ao alterar status do anúncio");
+      mostrarMsg(e instanceof Error ? e.message : "Erro ao alterar status do anúncio", true);
     } finally {
       setPausando(null);
       setTimeout(() => setMsg(""), 4000);
@@ -105,19 +107,19 @@ export default function ControleTab({ produto }: Props) {
   const excluirDaShopee = async (anuncio: AnuncioShopee) => {
     const itemId = Number(anuncio.anuncio_id);
     const lojaId = lojaIdPorShopId(anuncio.shop_id);
-    if (!itemId || !lojaId) { setMsg("Loja não vinculada"); return; }
+    if (!itemId || !lojaId) { mostrarMsg("Loja não vinculada", true); return; }
     if (!window.confirm(`Excluir definitivamente o anúncio item_id ${itemId} da Shopee? Esta ação não pode ser desfeita.`)) return;
     setExcluindo(anuncio.anuncio_id || null); setMsg("");
     try {
       const r = await api.shopeeDeletarProdutoShopee(itemId, lojaId);
       if (r.error) {
-        setMsg(`Erro: ${r.error}`);
+        mostrarMsg(`Erro: ${r.error}`, true);
       } else {
-        setMsg("Anúncio excluído da Shopee");
+        mostrarMsg("Anúncio excluído da Shopee");
         setExcluidos(prev => new Set(prev).add(anuncio.anuncio_id || ""));
       }
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Erro ao excluir anúncio");
+      mostrarMsg(e instanceof Error ? e.message : "Erro ao excluir anúncio", true);
     } finally {
       setExcluindo(null);
       setTimeout(() => setMsg(""), 4000);
@@ -135,7 +137,7 @@ export default function ControleTab({ produto }: Props) {
       setVariacoes((r.response?.model as Variacao[]) || []);
       setVariacoesAbertas(anuncio.anuncio_id || null);
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Erro ao buscar variações");
+      mostrarMsg(e instanceof Error ? e.message : "Erro ao buscar variações", true);
     } finally {
       setCarregandoVariacoes(null);
     }
@@ -147,9 +149,9 @@ export default function ControleTab({ produto }: Props) {
     setEnviando(loja); setMsg("");
     try {
       const r = await api.shopeeAtualizarEstoqueProduto(sku, alvo.id, quantidade);
-      setMsg(r.error ? `Erro: ${r.error}` : `${loja}: estoque enviado à Shopee (${quantidade} un)`);
+      if (r.error) mostrarMsg(`Erro: ${r.error}`, true); else mostrarMsg(`${loja}: estoque enviado à Shopee (${quantidade} un)`);
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Erro ao enviar para Shopee");
+      mostrarMsg(e instanceof Error ? e.message : "Erro ao enviar para Shopee", true);
     } finally {
       setEnviando(null);
       setTimeout(() => setMsg(""), 4000);
@@ -161,9 +163,9 @@ export default function ControleTab({ produto }: Props) {
     setEnviando("__todas__"); setMsg("");
     try {
       const r = await api.shopeeEstoqueTodasLojas(sku, quantidade);
-      setMsg(r.erro ? `Erro: ${r.erro}` : `Enviado para ${r.sucesso}/${r.total} lojas Shopee (${quantidade} un)`);
+      if (r.erro) mostrarMsg(`Erro: ${r.erro}`, true); else mostrarMsg(`Enviado para ${r.sucesso}/${r.total} lojas Shopee (${quantidade} un)`);
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Erro ao enviar para todas as lojas");
+      mostrarMsg(e instanceof Error ? e.message : "Erro ao enviar para todas as lojas", true);
     } finally {
       setEnviando(null);
       setTimeout(() => setMsg(""), 4000);
@@ -229,7 +231,7 @@ export default function ControleTab({ produto }: Props) {
       {porLoja.length > 0 && (
         <div className="bg-neutral-900 border border-neutral-800 rounded-lg overflow-x-auto">
           <div className="flex items-center justify-between px-3 pt-3">
-            {msg ? <span className="text-xs text-emerald-400">{msg}</span> : <span />}
+            {msg ? <span className={`text-xs ${msgErro ? "text-red-400" : "text-emerald-400"}`}>{msg}</span> : <span />}
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setEditandoLojas(true)}

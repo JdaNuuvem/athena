@@ -7,10 +7,6 @@ interface Variacao {
   atributo?: string;
 }
 
-function Badge({ label, color }: { label: string; color: string }) {
-  return <span className={"text-xs px-2 py-0.5 rounded-full font-medium " + color}>{label}</span>;
-}
-
 export default function VariacoesTab({ variacoes = [] }: { variacoes?: Variacao[] }) {
   // Parse atributo "Nome:Valor" to group distinct attributes
   const attrMap: Record<string, Set<string>> = {};
@@ -28,8 +24,8 @@ export default function VariacoesTab({ variacoes = [] }: { variacoes?: Variacao[
 
   if (variacoes.length === 0) {
     return (
-      <div className="py-8 text-center">
-        <p className="text-sm text-neutral-500">Este produto nao tem variacoes cadastradas no Bling.</p>
+      <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-8 text-center">
+        <p className="text-sm text-neutral-500">Este produto não tem variações cadastradas no Bling.</p>
       </div>
     );
   }
@@ -38,7 +34,7 @@ export default function VariacoesTab({ variacoes = [] }: { variacoes?: Variacao[
     <div className="space-y-6">
       {attrKeys.length > 0 && (
         <div>
-          <h2 className="text-sm font-medium text-neutral-400 mb-3">Atributos Variaveis</h2>
+          <h2 className="text-sm font-medium text-neutral-400 mb-3">Atributos Variáveis</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {attrKeys.map(nome => (
               <div key={nome} className="bg-neutral-900 border border-neutral-800 rounded-lg p-3">
@@ -55,7 +51,7 @@ export default function VariacoesTab({ variacoes = [] }: { variacoes?: Variacao[
       )}
 
       <div>
-        <h2 className="text-sm font-medium text-neutral-400 mb-3">Variacoes ({variacoes.length})</h2>
+        <h2 className="text-sm font-medium text-neutral-400 mb-3">Variações ({variacoes.length})</h2>
         <div className="bg-neutral-900 border border-neutral-800 rounded-lg overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
