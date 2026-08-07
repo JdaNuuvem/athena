@@ -438,6 +438,17 @@ def estoque_analise_cobertura():
     return jsonify({"data": cobertura(loja)})
 
 
+@estoque_bp.route('/depositos/kpis', methods=['GET'])
+def estoque_depositos_kpis():
+    from core.estoque_analise import kpis_por_deposito
+    from core.rbac import requer_permissao
+
+    @requer_permissao("estoque.ver")
+    def _go():
+        return jsonify({"data": kpis_por_deposito()})
+    return _go()
+
+
 @estoque_bp.route('/sugestao-rotacao', methods=['GET'])
 def estoque_sugestao_rotacao():
     """Sugere transferencias de estoque entre lojas com desbalanceamento (recalcula na hora)."""
