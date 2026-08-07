@@ -79,6 +79,35 @@ import type { Ticket, MensagemTicket, MensagemTicketRaw, Atendente, Notificacao 
 
 export type TipoLoja = "fisica" | "virtual" | "hibrida" | "marketplace";
 
+export interface LeadFiltro {
+  page?: number;
+  pageSize?: 25 | 50 | 100;
+  sort?: "id" | "valor_potencial" | "status" | "funil_etapa";
+  order?: "asc" | "desc";
+  status?: string;
+  funilEtapa?: string;
+  origem?: string;
+  empresaId?: number;
+  comTelefone?: boolean;
+  q?: string;
+}
+
+function leadsQueryString(f: LeadFiltro, opts?: { export?: boolean }): string {
+  const q = new URLSearchParams();
+  if (f.page) q.set("page", String(f.page));
+  if (f.pageSize) q.set("page_size", String(f.pageSize));
+  if (f.sort) q.set("sort", f.sort);
+  if (f.order) q.set("order", f.order);
+  if (f.status) q.set("status", f.status);
+  if (f.funilEtapa) q.set("funil_etapa", f.funilEtapa);
+  if (f.origem) q.set("origem", f.origem);
+  if (f.empresaId) q.set("empresa_id", String(f.empresaId));
+  if (f.comTelefone !== undefined) q.set("com_telefone", String(f.comTelefone));
+  if (f.q) q.set("q", f.q);
+  if (opts?.export) q.set("export", "true");
+  return q.toString();
+}
+
 export const api = {
   // Auth
   login: (email: string, password: string) =>
@@ -843,38 +872,7 @@ export const api = {
   cadVendedorComissao: () => request<{ vendedores: unknown[]; total_comissoes: number }>("/api/cadastros/vendedores/comissao"),
   cadVendedorMetas: (mes?: string) => request<{ data: unknown[] }>(`/api/cadastros/vendedores/metas${mes ? "/" + mes : ""}`),
   cadFornecedorResumo: () => request<{ data: unknown[] }>("/api/cadastros/fornecedores/resumo"),
-};
 
-export interface LeadFiltro {
-  page?: number;
-  pageSize?: 25 | 50 | 100;
-  sort?: "id" | "valor_potencial" | "status" | "funil_etapa";
-  order?: "asc" | "desc";
-  status?: string;
-  funilEtapa?: string;
-  origem?: string;
-  empresaId?: number;
-  comTelefone?: boolean;
-  q?: string;
-}
-
-function leadsQueryString(f: LeadFiltro, opts?: { export?: boolean }): string {
-  const q = new URLSearchParams();
-  if (f.page) q.set("page", String(f.page));
-  if (f.pageSize) q.set("page_size", String(f.pageSize));
-  if (f.sort) q.set("sort", f.sort);
-  if (f.order) q.set("order", f.order);
-  if (f.status) q.set("status", f.status);
-  if (f.funilEtapa) q.set("funil_etapa", f.funilEtapa);
-  if (f.origem) q.set("origem", f.origem);
-  if (f.empresaId) q.set("empresa_id", String(f.empresaId));
-  if (f.comTelefone !== undefined) q.set("com_telefone", String(f.comTelefone));
-  if (f.q) q.set("q", f.q);
-  if (opts?.export) q.set("export", "true");
-  return q.toString();
-}
-
-export const api = {
   // CRM
   crmList: (tabela: string) => request<{ data: unknown[] }>(`/api/crm/${tabela}`),
   crmGet: (tabela: string, id: number) => request<Record<string, unknown>>(`/api/crm/${tabela}/${id}`),
