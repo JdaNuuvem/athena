@@ -134,7 +134,7 @@ export default function DashboardPage() {
 
       {/* Primary instruments — the panel's biggest readouts */}
       <div className="flex flex-wrap gap-3">
-        <PrimaryInstrument label="Vendas hoje" value={fmtBRL(dash.vendasDia)} status="ok" trend={`${dash.vendasQtd} pedido${dash.vendasQtd === 1 ? "" : "s"}`} hero />
+        <PrimaryInstrument label="Vendas hoje" value={fmtBRL(dash.vendasDia)} trend={`${dash.vendasQtd} pedido${dash.vendasQtd === 1 ? "" : "s"}`} hero />
         <PrimaryInstrument label="Vendas do mês" value={fmtBRL(dash.vendasMes)} />
         <PrimaryInstrument
           label="Fluxo de caixa (30d)"

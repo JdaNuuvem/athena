@@ -131,12 +131,20 @@
   --ink-700: #4c5866;
 
   /* Signature accent — instrument-glass green (Fase 1 da renovacao de UX,
-     2026-08-07 — era cyan #5fd4ff/#2fb8f0). Deliberadamente distinto de
-     --status-ok (#34d399) mesmo os dois na familia verde: accent e'
-     identidade/navegacao, status e' semantica de sucesso. */
-  --accent-400: #22c088;
-  --accent-500: #159467;
-  --accent-glow: rgba(34, 192, 136, 0.18);
+     2026-08-07 — era cyan #5fd4ff/#2fb8f0; ajustado de #22c088/#159467
+     nesta mesma fase pra um verde mais amarelado, porque a primeira escolha
+     colidia visualmente com --emerald-500/600 (#22b384/#189a70), usado nos
+     botoes de confirmacao). Deliberadamente distinto de --status-ok
+     (#34d399) e de --emerald-500/600 mesmo as tres familias sendo verde:
+     accent e' identidade/navegacao, emerald/status e' semantica de sucesso. */
+  --accent-400: #4ade80;
+  --accent-500: #22c55e;
+  --accent-glow: rgba(74, 222, 128, 0.18);
+  /* Tons dedicados, mais escuros que accent-400/500, so' pro hero-gradient
+     (texto branco em cima precisa de mais contraste do que o accent normal,
+     que e' feito pra brilhar/chamar atencao, nao pra hospedar texto). */
+  --accent-600: #16a34a;
+  --accent-700: #15803d;
   --card-shadow: none;
 
   /* Status — strictly semantic, the only place saturated color is spent. */
@@ -150,11 +158,11 @@
   /* Hue stops behind the @theme aliases above — 300/400 read as bright
      text/icon/line on the dark ground; 800/900/950 read as near-black
      translucent chip/badge fills (e.g. bg-red-950/40 border-red-900/50). */
-  --indigo-300: #8fe3ff;
-  --indigo-500: #1a90bd;
-  --indigo-600: #0d6d92;
-  --indigo-700: #0a5675;
-  --indigo-900: #0a2a38;
+  --indigo-300: #86efac;
+  --indigo-500: #16a34a;
+  --indigo-600: #15803d;
+  --indigo-700: #14532d;
+  --indigo-900: #052e16;
 
   --emerald-300: #7ee8c3;
   --emerald-500: #22b384;
@@ -241,9 +249,11 @@
   --ink-500: #5b6b7d;
   --ink-700: #8291a3;
 
-  --accent-400: #0f8a5f;
-  --accent-500: #0b6b49;
-  --accent-glow: rgba(15, 138, 95, 0.14);
+  --accent-400: #16a34a;
+  --accent-500: #15803d;
+  --accent-glow: rgba(22, 163, 74, 0.14);
+  --accent-600: #15803d;
+  --accent-700: #14532d;
   --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 
   --status-ok: #047857;
@@ -253,11 +263,11 @@
   --status-crit: #c21f3d;
   --status-crit-dim: rgba(194, 31, 61, 0.1);
 
-  --indigo-300: #0c5a76;
-  --indigo-500: #1a90bd;
-  --indigo-600: #0d6d92;
-  --indigo-700: #0a5675;
-  --indigo-900: #ddeef5;
+  --indigo-300: #15803d;
+  --indigo-500: #16a34a;
+  --indigo-600: #15803d;
+  --indigo-700: #14532d;
+  --indigo-900: #dcfce7;
 
   --emerald-300: #0a7a53;
   --emerald-500: #22b384;
@@ -382,8 +392,9 @@ h1, h2, h3, h4, h5, h6 {
    dashboard/page.tsx). Nao e' um padrao geral de card, e' a abertura
    visual do painel. Fase 1 da renovacao de UX, 2026-08-07. */
 .hero-gradient {
-  background: linear-gradient(135deg, var(--accent-400), var(--accent-500));
+  background: linear-gradient(135deg, var(--accent-600), var(--accent-700));
   border: none;
+  border-radius: var(--radius-hero);
   color: #ffffff;
 }
 
