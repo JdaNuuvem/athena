@@ -636,6 +636,46 @@ def shopee_estoque_todas_lojas():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@shopee_bp.route('/estoque-rapido', methods=['GET'])
+def shopee_estoque_rapido_listar():
+    from shopee import listar_grid_estoque_rapido
+    busca = request.args.get("busca", "")
+    pagina = request.args.get("pagina", 1, type=int)
+    por_pagina = request.args.get("por_pagina", 50, type=int)
+    # pagina<=0 vira OFFSET negativo (Postgres rejeita); por_pagina sem teto
+    # deixa puxar o catalogo inteiro numa unica chamada.
+    pagina = max(1, pagina)
+    por_pagina = min(200, max(1, por_pagina))
+    try:
+        return jsonify(listar_grid_estoque_rapido(busca=busca, pagina=pagina, por_pagina=por_pagina))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@shopee_bp.route('/estoque-rapido/celula', methods=['PUT'])
+def shopee_estoque_rapido_atualizar_celula():
+    from core.rbac import requer_permissao, requer_acesso_loja, usuario_atual_da_request
+
+    @requer_acesso_loja
+    @requer_permissao("produtos.editar")
+    def _handler():
+        from shopee import atualizar_celula_estoque_rapido
+        data = request.json or {}
+        sku = data.get("sku")
+        loja_id = data.get("loja_id")
+        quantidade = data.get("quantidade")
+        if not sku or loja_id is None or quantidade is None:
+            return jsonify({"error": "sku, loja_id e quantidade sao obrigatorios"}), 400
+        usuario = usuario_atual_da_request()
+        ip = request.remote_addr
+        dispositivo = request.headers.get("User-Agent", "")[:300]
+        try:
+            return jsonify(atualizar_celula_estoque_rapido(sku, int(loja_id), float(quantidade), usuario, ip, dispositivo))
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    return _handler()
+
 @shopee_bp.route('/categorias', methods=['GET'])
 def shopee_categorias():
     from shopee import listar_categorias_cache
