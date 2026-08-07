@@ -43,6 +43,13 @@ def _ensure_tables():
                     log(AGENT, f"FK adicionada: {tabela}.{col_nome}")
             except Exception as e:
                 log(AGENT, f"FK skip {tabela}.{col_nome}: {e}")
+
+        # Indice pro join de remarketing de Contatos (core/cadastros.py::listar_clientes_filtrado)
+        # — nao existia, sustenta o LEFT JOIN LATERAL em vendas_pedidos por cliente_id.
+        try:
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_vendas_pedidos_cliente_id ON vendas_pedidos (cliente_id)")
+        except Exception as e:
+            log(AGENT, f"Indice skip vendas_pedidos.cliente_id: {e}")
     try: run_async(_go())
     except Exception as e: log(AGENT, f"Erro entidades: {e}")
 

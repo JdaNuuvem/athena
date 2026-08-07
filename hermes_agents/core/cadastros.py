@@ -58,6 +58,8 @@ def _ensure_tables():
         # causando "column email does not exist" em todo sync de contato do Bling.
         await db.execute("ALTER TABLE cad_clientes ADD COLUMN IF NOT EXISTS email VARCHAR(200)")
         await db.execute("ALTER TABLE cad_clientes ADD COLUMN IF NOT EXISTS telefone VARCHAR(30)")
+        await db.execute("ALTER TABLE cad_clientes ADD COLUMN IF NOT EXISTS whatsapp BOOLEAN DEFAULT FALSE")
+        await db.execute("ALTER TABLE cad_clientes ADD COLUMN IF NOT EXISTS data_nascimento DATE")
         await db.execute("""CREATE UNIQUE INDEX IF NOT EXISTS idx_cad_clientes_documento_unico
             ON cad_clientes (documento) WHERE documento IS NOT NULL AND documento != ''""")
         await db.execute("""CREATE TABLE IF NOT EXISTS cad_cliente_enderecos (
@@ -79,6 +81,7 @@ def _ensure_tables():
             id SERIAL PRIMARY KEY, cliente_id INT REFERENCES cad_clientes(id),
             tag VARCHAR(50), created_at TIMESTAMP DEFAULT NOW()
         )""")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_cad_cliente_tags_cliente_id ON cad_cliente_tags (cliente_id)")
 
         # ── Fornecedores ──
         await db.execute("""CREATE TABLE IF NOT EXISTS cad_fornecedores (
@@ -349,6 +352,98 @@ def list_paginado(tabela: str, pagina: int = 1, por_pagina: int = 50, busca: str
         "por_pagina": por_pagina,
         "total_paginas": total_paginas,
     }
+
+# ── Contatos: listagem filtrada com dados de remarketing ──
+# Fica ao lado de list_paginado/_list_pagina/_count, sem alterá-las — as
+# outras 5 tabelas de Cadastros continuam chamando list_paginado como hoje.
+
+CLIENTES_SORT_MAP = {
+    "id": "c.id",
+    "nome": "c.nome",
+    "ultima_compra": "compras.ultima_compra",
+    "total_gasto": "compras.total_gasto",
+}
+
+_COMPRAS_LATERAL = """LEFT JOIN LATERAL (
+        SELECT MAX(vp.data) AS ultima_compra, COALESCE(SUM(vp.total), 0) AS total_gasto, COUNT(*) AS qtd_pedidos
+        FROM vendas_pedidos vp
+        WHERE vp.cliente_id = c.id AND vp.status != 'cancelado'
+    ) compras ON TRUE"""
+
+_TAGS_LATERAL = """LEFT JOIN LATERAL (
+        SELECT array_agg(t.tag ORDER BY t.tag) AS tags
+        FROM cad_cliente_tags t
+        WHERE t.cliente_id = c.id
+    ) tags_agg ON TRUE"""
+
+def listar_clientes_filtrado(pagina: int = 1, por_pagina: int = 50, busca: str = None,
+                              sort: str = "id", order: str = "desc", status: str = None,
+                              tag: str = None, whatsapp: bool = None, sem_comprar_dias: int = None) -> dict:
+    pagina = max(1, pagina or 1)
+    por_pagina = max(1, min(por_pagina or 50, 200))
+    offset = (pagina - 1) * por_pagina
+    sort_col = CLIENTES_SORT_MAP.get(sort, CLIENTES_SORT_MAP["id"])
+    order_sql = "ASC" if str(order).lower() == "asc" else "DESC"
+    busca = (busca or "").strip() or None
+
+    where = []
+    params = []
+
+    def _param(v):
+        params.append(v)
+        return f"${len(params)}"
+
+    if busca:
+        p = _param(f"%{busca}%")
+        where.append(f"(c.nome ILIKE {p} OR c.documento ILIKE {p} OR c.email ILIKE {p} OR c.telefone ILIKE {p})")
+    if status:
+        where.append(f"c.status = {_param(status)}")
+    if whatsapp is not None:
+        where.append(f"c.whatsapp = {_param(whatsapp)}")
+    if tag:
+        where.append(f"EXISTS (SELECT 1 FROM cad_cliente_tags t2 WHERE t2.cliente_id = c.id AND t2.tag = {_param(tag)})")
+    if sem_comprar_dias is not None:
+        where.append(f"(compras.ultima_compra IS NULL OR compras.ultima_compra < CURRENT_DATE - {_param(int(sem_comprar_dias))}::int)")
+
+    where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+
+    async def _go():
+        db = await get_db()
+        total_result = await db.fetchval(
+            f"SELECT COUNT(*) FROM cad_clientes c {_COMPRAS_LATERAL} {where_sql}",
+            *params)
+        rows = await db.fetch(
+            f"""SELECT c.*, compras.ultima_compra, compras.total_gasto, compras.qtd_pedidos,
+                       COALESCE(tags_agg.tags, ARRAY[]::varchar[]) AS tags
+                FROM cad_clientes c
+                {_COMPRAS_LATERAL}
+                {_TAGS_LATERAL}
+                {where_sql}
+                ORDER BY {sort_col} {order_sql} NULLS LAST
+                LIMIT {por_pagina} OFFSET {offset}""",
+            *params)
+        return [dict(r) for r in rows], (total_result or 0)
+    try:
+        dados, total = run_async(_go())
+    except Exception as e:
+        log(AGENT, f"Erro listar_clientes_filtrado: {e}")
+        dados, total = [], 0
+    total_paginas = max(1, -(-total // por_pagina)) if total else 1
+    return {
+        "data": [_sem_campos_sensiveis("clientes", r) for r in dados],
+        "total": total,
+        "pagina": pagina,
+        "por_pagina": por_pagina,
+        "total_paginas": total_paginas,
+    }
+
+def tags_disponiveis() -> list:
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch("SELECT DISTINCT tag FROM cad_cliente_tags WHERE tag IS NOT NULL ORDER BY tag")
+        return [r["tag"] for r in rows]
+    try: return run_async(_go())
+    except Exception as e: log(AGENT, f"Erro tags_disponiveis: {e}"); return []
 
 def get(tabela: str, id: int): return _sem_campos_sensiveis(tabela, _get(_resolve(tabela), id))
 def create(tabela: str, data: dict): return _sem_campos_sensiveis(tabela, _create(_resolve(tabela), data))

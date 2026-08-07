@@ -6,7 +6,7 @@ cadastros_bp = Blueprint("cadastros", __name__, url_prefix="/api/cadastros")
 
 @cadastros_bp.route("/<tabela>", methods=["GET"])
 def cad_list(tabela):
-    from core.cadastros import list as cad_list_fn, list_paginado, ALL_TABLES
+    from core.cadastros import list as cad_list_fn, list_paginado, listar_clientes_filtrado, ALL_TABLES
     if tabela not in ALL_TABLES:
         return jsonify({"error": "Tabela invalida"}), 404
 
@@ -23,6 +23,16 @@ def cad_list(tabela):
         if pagina is not None:
             por_pagina = request.args.get("por_pagina", default=50, type=int)
             busca = request.args.get("busca", default=None, type=str)
+            if tabela == "clientes":
+                sort = request.args.get("sort", default="id", type=str)
+                order = request.args.get("order", default="desc", type=str)
+                status = request.args.get("status", default=None, type=str)
+                tag = request.args.get("tag", default=None, type=str)
+                whatsapp_raw = request.args.get("whatsapp", default=None, type=str)
+                whatsapp = {"true": True, "false": False}.get((whatsapp_raw or "").lower())
+                sem_comprar_dias = request.args.get("sem_comprar_dias", default=None, type=int)
+                return jsonify(listar_clientes_filtrado(
+                    pagina, por_pagina, busca, sort, order, status, tag, whatsapp, sem_comprar_dias))
             return jsonify(list_paginado(tabela, pagina, por_pagina, busca))
         return jsonify({"data": cad_list_fn(tabela)})
     return _go()
@@ -123,4 +133,14 @@ def cad_fornecedor_resumo():
     @requer_permissao("cadastros.ver")
     def _go():
         return jsonify({"data": fornecedor_resumo()})
+    return _go()
+
+
+@cadastros_bp.route("/clientes/tags-disponiveis", methods=["GET"])
+def cad_clientes_tags_disponiveis():
+    from core.cadastros import tags_disponiveis
+
+    @requer_permissao("cadastros.ver")
+    def _go():
+        return jsonify({"data": tags_disponiveis()})
     return _go()
