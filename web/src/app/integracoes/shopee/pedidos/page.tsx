@@ -177,7 +177,7 @@ export default function ShopeePedidosPage() {
   const totalPaginas = Math.max(1, Math.ceil(total / POR_PAGINA));
 
   return (
-    <div className="p-6 space-y-4 max-w-5xl">
+    <div className="p-6 space-y-4">
       <div>
         <Link href="/integracoes/shopee" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors inline-flex items-center gap-1"><Icon name="chevronLeft" size={14} /> Shopee</Link>
         <h1 className="text-lg font-light text-neutral-300 mt-1">Pedidos Shopee</h1>

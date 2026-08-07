@@ -39,7 +39,7 @@ export default function IntegracoesPage() {
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl">
+    <div className="p-6 space-y-6">
       <h1 className="text-lg font-light text-neutral-300">Integrações</h1>
 
       {Object.entries(grouped).map(([cat, items]) => (

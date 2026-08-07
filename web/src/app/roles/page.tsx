@@ -72,7 +72,7 @@ export default function RolesPage() {
   if (loading) return <div className="p-6"><LoadingState /></div>;
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-4">
+    <div className="p-6 space-y-4">
       <PageHeader title="Cargos e Usuários" subtitle="Defina os papéis do sistema, o que cada um pode fazer, e quem está em cada papel." />
       {error && <ErrorAlert message={error} />}
 
