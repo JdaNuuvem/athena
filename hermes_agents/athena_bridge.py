@@ -1986,25 +1986,25 @@ def kpi_overview():
         periodo = request.args.get("periodo", 30, type=int)
         def f(v,d=0): return float(v) if v is not None else d
         try:
-            cur.execute("SELECT COALESCE(SUM(receita_bruta),0) FROM vendas WHERE data>=CURRENT_DATE-%s", (periodo,))
-            total_receita = f(cur.fetchone()[0])
-            cur.execute("SELECT COALESCE(SUM(quantidade),0) FROM vendas WHERE data>=CURRENT_DATE-%s", (periodo,))
-            total_pedidos = cur.fetchone()[0] or 0
+            cur.execute("SELECT COALESCE(SUM(receita_bruta),0) AS v FROM vendas WHERE data>=CURRENT_DATE-%s", (periodo,))
+            total_receita = f(cur.fetchone()["v"])
+            cur.execute("SELECT COALESCE(SUM(quantidade),0) AS v FROM vendas WHERE data>=CURRENT_DATE-%s", (periodo,))
+            total_pedidos = cur.fetchone()["v"] or 0
         except Exception:
             total_receita,total_pedidos=0,0
         try:
-            cur.execute("SELECT COUNT(*) FROM fichas_tecnicas"); total_produtos=cur.fetchone()[0] or 0
+            cur.execute("SELECT COUNT(*) AS v FROM fichas_tecnicas"); total_produtos=cur.fetchone()["v"] or 0
         except Exception:
             total_produtos=0
         try:
-            cur.execute("SELECT COUNT(*) FROM anuncios WHERE status='ativo'"); total_anuncios=cur.fetchone()[0] or 0
+            cur.execute("SELECT COUNT(*) AS v FROM anuncios WHERE status='ativo'"); total_anuncios=cur.fetchone()["v"] or 0
         except Exception:
             total_anuncios=0
         try:
-            cur.execute("SELECT COALESCE(SUM(receita_bruta),0) FROM vendas WHERE marketplace='shopee' AND data>=CURRENT_DATE-%s", (periodo,))
-            receita_shopee=f(cur.fetchone()[0])
-            cur.execute("SELECT COALESCE(SUM(receita_bruta),0) FROM vendas WHERE marketplace='mercado_livre' AND data>=CURRENT_DATE-%s", (periodo,))
-            receita_ml=f(cur.fetchone()[0])
+            cur.execute("SELECT COALESCE(SUM(receita_bruta),0) AS v FROM vendas WHERE marketplace='shopee' AND data>=CURRENT_DATE-%s", (periodo,))
+            receita_shopee=f(cur.fetchone()["v"])
+            cur.execute("SELECT COALESCE(SUM(receita_bruta),0) AS v FROM vendas WHERE marketplace='mercado_livre' AND data>=CURRENT_DATE-%s", (periodo,))
+            receita_ml=f(cur.fetchone()["v"])
         except Exception:
             receita_shopee,receita_ml=0,0
         try:
