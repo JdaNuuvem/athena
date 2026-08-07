@@ -231,5 +231,80 @@ class TestListarLeadsFiltradoErro(unittest.TestCase):
         self.assertEqual(resultado["meta"]["page_size"], 25)
 
 
+class TestRotaLeadsComFiltro(unittest.TestCase):
+    def setUp(self):
+        self._env_patch = patch.dict(os.environ, {"ATHENA_TOKEN": _TEST_TOKEN})
+        self._env_patch.start()
+        self.client = _app()
+
+    def tearDown(self):
+        self._env_patch.stop()
+
+    def _headers(self):
+        return {"Authorization": f"Bearer {_TEST_TOKEN}"}
+
+    def test_sem_querystring_usa_list_antigo(self):
+        with patch("core.crm.list", return_value=[{"id": 1}]) as mock_list, \
+             patch("core.crm.listar_leads_filtrado") as mock_filtrado:
+            r = self.client.get("/api/crm/leads", headers=self._headers())
+        self.assertEqual(r.status_code, 200)
+        mock_list.assert_called_once_with("leads")
+        mock_filtrado.assert_not_called()
+        self.assertEqual(r.get_json(), {"data": [{"id": 1}]})
+
+    def test_com_querystring_usa_listar_filtrado_com_kwargs_corretos(self):
+        with patch("core.crm.list") as mock_list, \
+             patch("core.crm.listar_leads_filtrado",
+                   return_value={"data": [], "meta": {"total": 0, "page": 1, "page_size": 25, "pages": 0}}) as mock_filtrado:
+            r = self.client.get(
+                "/api/crm/leads?page=1&page_size=25&sort=valor_potencial&order=asc&status=novo",
+                headers=self._headers())
+        self.assertEqual(r.status_code, 200)
+        mock_list.assert_not_called()
+        mock_filtrado.assert_called_once_with(
+            page=1, page_size=25, sort="valor_potencial", order="asc",
+            status="novo", funil_etapa=None, origem=None, empresa_id=None,
+            com_telefone=None, q=None, export=False,
+        )
+
+    def test_outra_tabela_ignora_branch_de_leads(self):
+        with patch("core.crm.list", return_value=[]) as mock_list, \
+             patch("core.crm.listar_leads_filtrado") as mock_filtrado:
+            r = self.client.get("/api/crm/empresas?page=1", headers=self._headers())
+        self.assertEqual(r.status_code, 200)
+        mock_list.assert_called_once_with("empresas")
+        mock_filtrado.assert_not_called()
+
+    def test_sem_permissao_nega_mesmo_com_filtro(self):
+        token = rbac.gerar_token_sessao(7, "op@x.com", "Sem Papel")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=[]), \
+             patch("core.crm.listar_leads_filtrado") as mock_filtrado:
+            r = self.client.get("/api/crm/leads?status=novo", headers=headers)
+        self.assertEqual(r.status_code, 403)
+        mock_filtrado.assert_not_called()
+
+    def test_com_telefone_true_vira_bool_true(self):
+        with patch("core.crm.listar_leads_filtrado", return_value={"data": [], "meta": {}}) as mock_filtrado:
+            self.client.get("/api/crm/leads?com_telefone=true", headers=self._headers())
+        self.assertTrue(mock_filtrado.call_args.kwargs["com_telefone"])
+
+    def test_com_telefone_false_vira_bool_false(self):
+        with patch("core.crm.listar_leads_filtrado", return_value={"data": [], "meta": {}}) as mock_filtrado:
+            self.client.get("/api/crm/leads?com_telefone=false", headers=self._headers())
+        self.assertFalse(mock_filtrado.call_args.kwargs["com_telefone"])
+
+    def test_empresa_id_invalido_vira_none_em_vez_de_quebrar(self):
+        with patch("core.crm.listar_leads_filtrado", return_value={"data": [], "meta": {}}) as mock_filtrado:
+            r = self.client.get("/api/crm/leads?empresa_id=abc", headers=self._headers())
+        self.assertEqual(r.status_code, 200)
+        self.assertIsNone(mock_filtrado.call_args.kwargs["empresa_id"])
+
+    def test_export_true_vira_bool(self):
+        with patch("core.crm.listar_leads_filtrado", return_value={"data": [], "meta": {}}) as mock_filtrado:
+            self.client.get("/api/crm/leads?export=true", headers=self._headers())
+        self.assertTrue(mock_filtrado.call_args.kwargs["export"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
