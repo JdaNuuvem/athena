@@ -14,8 +14,8 @@ colors:
   ink-300: "#b3c0cf"
   ink-500: "#7c8ba0"
   ink-700: "#4c5866"
-  accent-400: "#22c088"
-  accent-500: "#159467"
+  accent-400: "#4ade80"
+  accent-500: "#22c55e"
   status-ok: "#34d399"
   status-warn: "#f5b942"
   status-crit: "#f3556a"
@@ -82,7 +82,7 @@ Rejeitado explicitamente: o padrão SaaS genérico de indigo/roxo como accent, `
 Paleta fria e escura, com um único accent reservado para foco de navegação e um vocabulário de status estritamente semântico.
 
 ### Primary
-- **Instrument Green** (`#22c088` / dim `#159467`; tema claro: `#0f8a5f` / dim `#0b6b49`): accent único do sistema. Usado em item de navegação ativo, indicador de sistema operando, foco de link, e no tratamento hero-gradient (ver Overview). Deliberadamente distinto de `status-ok` (`#34d399` escuro / `#047857` claro) mesmo os dois na família verde — accent é identidade/navegação, status é semântica de sucesso. Nunca usado para decoração fora desses papéis — sua raridade é o ponto. (Revisado na Fase 1 da renovação de UX, 2026-08-07 — era cyan `#5fd4ff`/`#2fb8f0`.)
+- **Instrument Green** (`#4ade80` / dim `#22c55e`; tema claro: `#16a34a` / dim `#15803d`): accent único do sistema. Usado em item de navegação ativo, indicador de sistema operando, foco de link. O tratamento hero-gradient (ver Overview) usa tons mais escuros dedicados (`--accent-600`/`--accent-700`), não o accent-400/500 direto — texto branco em cima precisa de mais contraste do que o accent-400/500 garante (eles são claros de propósito, pra brilhar sobre fundo escuro). Deliberadamente distinto de `status-ok` (`#34d399` escuro / `#047857` claro) E de `emerald-500`/`emerald-600` (`#22b384`/`#189a70`, usado nos botões de confirmação) — accent é identidade/navegação, emerald/status é semântica de sucesso, mesmo as três famílias sendo verde. Nunca usado para decoração fora desses papéis — sua raridade é o ponto. (Revisado na Fase 1 da renovação de UX, 2026-08-07 — era cyan `#5fd4ff`/`#2fb8f0`; ajustado nesta mesma fase de um verde mais próximo do emerald para este tom, especificamente para evitar a colisão visual com os botões de confirmação.)
 
 ### Neutral
 - **Void** (`#05070a`): fundo base do `body`, a camada mais escura, o "vácuo" atrás dos instrumentos.
@@ -126,7 +126,7 @@ Escala compacta de 5 degraus, necessária pela densidade de informação de um p
 
 ## Layout
 
-Duas zonas fixas: sidebar de navegação (`<aside>`) e área de conteúdo (`<main>`). Em desktop (`sm:` e acima, ≥640px) a sidebar é `relative`, ocupando 240px expandida ou 56px recolhida, sempre visível. Em mobile, a sidebar é `fixed inset-y-0 left-0`, fora da tela por padrão (`-translate-x-full`) e desliza para dentro sobre um backdrop escurecido ao abrir pelo botão hamburger — nunca ocupa espaço no fluxo do documento nesse breakpoint. O conteúdo principal usa grid responsivo: instrumentos primários em 3 colunas no desktop, empilhados em 1 coluna no mobile; instrumentos secundários em grid de 2 colunas no mobile, 6 no desktop. `<main>` não tem `max-width` — o conteúdo ocupa a área total disponível; telas com `max-w-*` no wrapper raiz são drift, não uma decisão documentada (achado corrigido na Fase 1 da renovação de UX, 2026-08-07, em 9 telas do módulo Integrações/Shopee + `roles`).
+Duas zonas fixas: sidebar de navegação (`<aside>`) e área de conteúdo (`<main>`). Em desktop (`sm:` e acima, ≥640px) a sidebar é `relative`, ocupando 240px expandida ou 56px recolhida, sempre visível. Em mobile, a sidebar é `fixed inset-y-0 left-0`, fora da tela por padrão (`-translate-x-full`) e desliza para dentro sobre um backdrop escurecido ao abrir pelo botão hamburger — nunca ocupa espaço no fluxo do documento nesse breakpoint. O conteúdo principal usa grid responsivo: instrumentos primários em 3 colunas no desktop, empilhados em 1 coluna no mobile; instrumentos secundários em grid de 2 colunas no mobile, 6 no desktop. `<main>` não tem `max-width` — o conteúdo ocupa a área total disponível; telas com `max-w-*` no wrapper raiz são drift, não uma decisão documentada (achado corrigido na Fase 1 da renovação de UX, 2026-08-07, em 8 telas do módulo Integrações/Shopee + `roles`) — exceto telas de formulário/configuração, que mantêm largura de leitura por escolha, não por drift.
 
 A navegação é agrupada em seis zonas nomeadas e fixas — Operação, Vendas, Catálogo & Estoque, Financeiro & Fiscal, Inteligência, Administração — cada uma com um rótulo de seção em maiúsculas. A ordem e composição das zonas não muda entre telas; é o mapa mental fixo do cockpit.
 
@@ -137,7 +137,7 @@ Sistema é majoritariamente flat com leve profundidade tonal: instrumentos usam 
 ### Shadow Vocabulary
 - **Instrument inset** (`box-shadow: inset 0 1px 0 rgba(255,255,255,0.03)`): reflexo raso de vidro dentro de todo `.instrument`, sempre presente nos dois temas — não é sombra de elevação Material, é o brilho da própria vidraça.
 - **Instrument-lit halo** (`box-shadow: 0 0 0 1px var(--panel-border-lit), 0 8px 20px -12px rgba(0,0,0,0.6)`): halo externo reservado a `.instrument-lit`, usado só em estados de destaque/foco, sem mudança entre temas.
-- **Card shadow** (`box-shadow: var(--card-shadow)`, só tema claro): sombra suave e única em todo `.instrument` no tema claro. `none` no tema escuro.
+- **Card shadow** (`box-shadow: var(--card-shadow)`, só tema claro): sombra suave e única em todo `.instrument` no tema claro, exceto `.instrument-lit`, que mantém seu próprio halo nos dois temas e sobrescreve o `--card-shadow`. `none` no tema escuro.
 
 ### Named Rules
 **The No-Drop-Shadow Rule (revisada, Fase 1 da renovação de UX, 2026-08-07).** Tema escuro: profundidade só por camada tonal e borda, nunca `box-shadow` projetada, exceto o halo reservado a `.instrument-lit`. Tema claro: uma sombra suave e única (`--card-shadow`) é permitida em todo `.instrument` — não é uma exceção caso a caso, é a regra do tema claro.
@@ -183,4 +183,4 @@ Cantos discretos e consistentes: instrumentos e cards usam `border-radius: 12px`
 - **Don't** replicar o tratamento hero-gradient em mais de um instrumento por tela — ele existe pra marcar um único ponto de entrada visual, não um padrão de card geral; fora desse uso único, cada instrumento continua sendo um readout dedicado, não um cartão genérico.
 - **Don't** aplicar a classe `.instrument` a elementos que precisam de `position: fixed`/`absolute` fora do próprio readout — ela define `position: relative` incondicional e sobrescreve outras estratégias de posicionamento (bug já identificado e corrigido na sidebar mobile).
 - **Don't** formatar moeda manualmente com `.toFixed(2)` — sempre usar o helper `fmtBRL` (locale `pt-BR`, vírgula decimal).
-- **Don't** limitar a largura do conteúdo principal com `max-w-*` — use a área total disponível (padrão já seguido por Dashboard/Vendas/Estoque/PDV/Produtos).
+- **Don't** limitar a largura de telas de dado/lista/dashboard com `max-w-*` — use a área total disponível (padrão já seguido por Dashboard/Vendas/Estoque/PDV/Produtos). Exceção: telas de formulário/configuração (ex. `config/page.tsx`, `integracoes/shopee/page.tsx`, `produtos/novo/page.tsx`) podem manter uma largura de leitura confortável — a regra é sobre telas de dado denso, não sobre todo `<main>`.
