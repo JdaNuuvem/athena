@@ -208,6 +208,20 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ sku, quantidade }),
     }),
+  shopeeEstoqueRapidoListar: (params: { busca?: string; pagina?: number; por_pagina?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (params.busca) q.set("busca", params.busca);
+    if (params.pagina) q.set("pagina", String(params.pagina));
+    if (params.por_pagina) q.set("por_pagina", String(params.por_pagina));
+    return request<{ lojas: EstoqueRapidoLoja[]; produtos: EstoqueRapidoProduto[]; total: number }>(
+      `/api/shopee/estoque-rapido?${q}`);
+  },
+  shopeeEstoqueRapidoAtualizarCelula: (sku: string, lojaId: number, quantidade: number) =>
+    request<{ ok: boolean; salvo_local?: boolean; erro_shopee?: string | null; erro_local?: string; linha?: EstoqueRapidoProduto }>(
+      "/api/shopee/estoque-rapido/celula", {
+        method: "PUT",
+        body: JSON.stringify({ sku, loja_id: lojaId, quantidade }),
+      }),
   shopeeAtualizarPreco: (itemId: number, lojaId: number, price: number) =>
     request<{ error?: string }>(`/api/shopee/produtos/${itemId}/preco`, {
       method: "POST",
@@ -928,6 +942,18 @@ export interface ShopeeProdutoSincronizado {
   anuncio_id: string;
   imagem_url?: string | null;
   ultima_atualizacao: string | null;
+}
+
+export interface EstoqueRapidoLoja {
+  id: number;
+  nome: string;
+  shopee_shop_name: string;
+}
+
+export interface EstoqueRapidoProduto {
+  sku: string;
+  nome: string;
+  estoque: Record<number, number | null>;
 }
 
 export interface ShopeeSyncLogEntry {
