@@ -463,3 +463,69 @@ class TestCoberturaResolveVinculo(unittest.TestCase):
         onde, exc = mock_log_erro.call_args[0]
         self.assertIn("resolver_loja_efetiva", onde)
         self.assertIsInstance(exc, Exception)
+
+
+class TestKpisPorDeposito(unittest.TestCase):
+    def test_sem_linhas_retorna_lista_vazia(self):
+        async def fake_fetch(query, *params):
+            return []
+        with patch("core.estoque_analise.get_db") as mock_get_db:
+            db = AsyncMock()
+            db.fetch = AsyncMock(side_effect=fake_fetch)
+            mock_get_db.return_value = db
+            resultado = analise.kpis_por_deposito()
+        self.assertEqual(resultado, [])
+
+    def test_agrega_skus_e_valor_de_um_deposito(self):
+        async def fake_fetch(query, *params):
+            return [
+                {"deposito_id": 10, "sku": "A", "saldo": 5, "minimo": 0, "preco_custo": 20.0},
+                {"deposito_id": 10, "sku": "B", "saldo": 3, "minimo": 0, "preco_custo": 10.0},
+            ]
+        with patch("core.estoque_analise.get_db") as mock_get_db:
+            db = AsyncMock()
+            db.fetch = AsyncMock(side_effect=fake_fetch)
+            mock_get_db.return_value = db
+            resultado = analise.kpis_por_deposito()
+        self.assertEqual(resultado, [{"deposito_id": 10, "skus": 2, "valor": 130.0, "baixo_estoque": 0}])
+
+    def test_saldo_abaixo_do_minimo_conta_em_baixo_estoque(self):
+        async def fake_fetch(query, *params):
+            return [{"deposito_id": 10, "sku": "A", "saldo": 2, "minimo": 5, "preco_custo": 0.0}]
+        with patch("core.estoque_analise.get_db") as mock_get_db:
+            db = AsyncMock()
+            db.fetch = AsyncMock(side_effect=fake_fetch)
+            mock_get_db.return_value = db
+            resultado = analise.kpis_por_deposito()
+        self.assertEqual(resultado, [{"deposito_id": 10, "skus": 1, "valor": 0.0, "baixo_estoque": 1}])
+
+    def test_dois_depositos_agregados_separadamente(self):
+        async def fake_fetch(query, *params):
+            return [
+                {"deposito_id": 10, "sku": "A", "saldo": 5, "minimo": 0, "preco_custo": 1.0},
+                {"deposito_id": 20, "sku": "A", "saldo": 5, "minimo": 0, "preco_custo": 1.0},
+                {"deposito_id": 20, "sku": "B", "saldo": 5, "minimo": 0, "preco_custo": 1.0},
+            ]
+        with patch("core.estoque_analise.get_db") as mock_get_db:
+            db = AsyncMock()
+            db.fetch = AsyncMock(side_effect=fake_fetch)
+            mock_get_db.return_value = db
+            resultado = analise.kpis_por_deposito()
+        por_id = {r["deposito_id"]: r for r in resultado}
+        self.assertEqual(por_id[10]["skus"], 1)
+        self.assertEqual(por_id[20]["skus"], 2)
+
+    def test_preco_custo_ausente_nao_quebra_soma(self):
+        async def fake_fetch(query, *params):
+            return [{"deposito_id": 10, "sku": "A", "saldo": 5, "minimo": 0, "preco_custo": 0.0}]
+        with patch("core.estoque_analise.get_db") as mock_get_db:
+            db = AsyncMock()
+            db.fetch = AsyncMock(side_effect=fake_fetch)
+            mock_get_db.return_value = db
+            resultado = analise.kpis_por_deposito()
+        self.assertEqual(resultado[0]["valor"], 0.0)
+
+    def test_erro_de_banco_retorna_lista_vazia(self):
+        with patch("core.estoque_analise.get_db", side_effect=Exception("db down")):
+            resultado = analise.kpis_por_deposito()
+        self.assertEqual(resultado, [])
