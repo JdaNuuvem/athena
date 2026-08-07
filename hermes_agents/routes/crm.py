@@ -8,14 +8,17 @@ crm_bp = Blueprint("crm", __name__, url_prefix="/api/crm")
 _LEADS_QUERY_PARAMS = ("page", "page_size", "sort", "order", "status", "funil_etapa",
                         "origem", "empresa_id", "com_telefone", "q", "export")
 
+
 def _tem_filtro_leads(args) -> bool:
     return any(p in args for p in _LEADS_QUERY_PARAMS)
+
 
 def _int_ou(args, nome, default):
     try:
         return int(args.get(nome, default))
     except (TypeError, ValueError):
         return default
+
 
 def _int_ou_none(args, nome):
     bruto = args.get(nome)
@@ -25,6 +28,7 @@ def _int_ou_none(args, nome):
         return int(bruto)
     except ValueError:
         return None
+
 
 def _parse_filtro_leads(args) -> dict:
     com_telefone_bruto = args.get("com_telefone")

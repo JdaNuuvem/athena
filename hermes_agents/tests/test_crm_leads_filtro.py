@@ -292,7 +292,7 @@ class TestRotaLeadsComFiltro(unittest.TestCase):
     def test_com_telefone_false_vira_bool_false(self):
         with patch("core.crm.listar_leads_filtrado", return_value={"data": [], "meta": {}}) as mock_filtrado:
             self.client.get("/api/crm/leads?com_telefone=false", headers=self._headers())
-        self.assertFalse(mock_filtrado.call_args.kwargs["com_telefone"])
+        self.assertIs(mock_filtrado.call_args.kwargs["com_telefone"], False)
 
     def test_empresa_id_invalido_vira_none_em_vez_de_quebrar(self):
         with patch("core.crm.listar_leads_filtrado", return_value={"data": [], "meta": {}}) as mock_filtrado:
