@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import { fmtBRL as fmt } from "@/lib/format";
-import SidebarLayout from "../../cadastros/_components/SidebarLayout";
+import SidebarLayout from "../../_components/SidebarLayout";
 
 const SUB_ITEMS = [
   { key: "conta", label: "Conta" },

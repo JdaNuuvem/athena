@@ -3,19 +3,29 @@
 import { useState, useEffect, useRef } from "react";
 import { api } from "@/lib/api";
 
+export interface FkPickerService {
+  get: (tabela: string, id: number) => Promise<Record<string, unknown>>;
+  listPaginado: (tabela: string, pagina: number, porPagina?: number, busca?: string) => Promise<{ data?: unknown[] }>;
+}
+
+const defaultService: FkPickerService = { get: api.cadGet, listPaginado: api.cadListPaginado };
+
 interface FkPickerProps {
   tabela: string;
   labelField?: string;
   value: string;
   onChange: (id: string) => void;
   placeholder?: string;
+  // serviço HTTP alvo — default aponta pro modulo Cadastros (/api/cadastros/*);
+  // outros modulos (ex. Compras, /api/compras/*) passam o seu.
+  service?: FkPickerService;
 }
 
 // Autocomplete pra campos de chave estrangeira (ex.: cliente_id em
 // cad_cliente_enderecos) — antes eram inputs numericos crus, exigindo que o
 // usuario soubesse o ID de cor. Aqui ele busca por nome e o ID vai junto
 // por baixo dos panos.
-export default function FkPicker({ tabela, labelField = "nome", value, onChange, placeholder }: FkPickerProps) {
+export default function FkPicker({ tabela, labelField = "nome", value, onChange, placeholder, service = defaultService }: FkPickerProps) {
   const [query, setQuery] = useState("");
   const [options, setOptions] = useState<Record<string, unknown>[]>([]);
   const [open, setOpen] = useState(false);
@@ -26,7 +36,7 @@ export default function FkPicker({ tabela, labelField = "nome", value, onChange,
   useEffect(() => {
     let cancel = false;
     if (!value) { setResolvedLabel(null); return; }
-    api.cadGet(tabela, Number(value))
+    service.get(tabela, Number(value))
       .then(r => {
         if (cancel) return;
         const label = r && !("error" in r) ? String(r[labelField] ?? `#${value}`) : `#${value}`;
@@ -34,20 +44,20 @@ export default function FkPicker({ tabela, labelField = "nome", value, onChange,
       })
       .catch(() => { if (!cancel) setResolvedLabel(`#${value}`); });
     return () => { cancel = true; };
-  }, [tabela, value, labelField]);
+  }, [tabela, value, labelField, service]);
 
   useEffect(() => {
     if (!open) return;
     setLoading(true);
     const t = setTimeout(async () => {
       try {
-        const r = await api.cadListPaginado(tabela, 1, 8, query || undefined);
+        const r = await service.listPaginado(tabela, 1, 8, query || undefined);
         setOptions((r.data || []) as Record<string, unknown>[]);
       } catch { setOptions([]); }
       finally { setLoading(false); }
     }, 300);
     return () => clearTimeout(t);
-  }, [tabela, query, open]);
+  }, [tabela, query, open, service]);
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {

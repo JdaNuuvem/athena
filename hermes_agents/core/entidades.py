@@ -168,11 +168,16 @@ def migrar_fornecedores_compras() -> dict:
                     cf.get("nome",""), doc, cf.get("status","ativo"))
                 fid = row["id"] if row else 0
             if fid:
-                # Atualizar FKs em compras
-                await db.execute("UPDATE compras_pedidos SET fornecedor_id = $1 WHERE fornecedor_id IS NULL AND id IN (SELECT id FROM compras_pedidos WHERE fornecedor_id = $2)", fid, cf["id"])
-                # ponytail: atualiza cotacoes pelo id original do fornecedor
+                # ponytail: a condicao antiga aqui (`fornecedor_id IS NULL AND
+                # id IN (SELECT ... WHERE fornecedor_id = $2)`) e' contraditoria
+                # — nenhuma linha satisfaz as duas ao mesmo tempo, entao esse
+                # UPDATE nunca migrava nada. Corrigido pra um WHERE simples.
+                await db.execute("UPDATE compras_pedidos SET fornecedor_id = $1 WHERE fornecedor_id = $2", fid, cf["id"])
                 try:
                     await db.execute("UPDATE compras_cotacoes SET fornecedor_id = $1 WHERE fornecedor_id = $2", fid, cf["id"])
+                except Exception as e: pass
+                try:
+                    await db.execute("UPDATE compras_notas_entrada SET fornecedor_id = $1 WHERE fornecedor_id = $2", fid, cf["id"])
                 except Exception as e: pass
                 total += 1
         return {"migrados": total}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import SidebarLayout from "./SidebarLayout";
+import SidebarLayout from "../../_components/SidebarLayout";
 import CrudPanel, { type Column, type FieldDef } from "../../_components/CrudPanel";
 import { api } from "@/lib/api";
 import { fmtBRL } from "@/lib/format";

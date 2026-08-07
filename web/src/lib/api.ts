@@ -879,6 +879,22 @@ export const api = {
   cadVendedorMetas: (mes?: string) => request<{ data: unknown[] }>(`/api/cadastros/vendedores/metas${mes ? "/" + mes : ""}`),
   cadFornecedorResumo: () => request<{ data: unknown[] }>("/api/cadastros/fornecedores/resumo"),
 
+  // Compras
+  comprasList: (tabela: string) => request<{ data: unknown[] }>(`/api/compras/${tabela}`),
+  comprasListPaginado: (tabela: string, pagina: number, porPagina = 50, busca?: string, pedidoId?: number) => {
+    const q = new URLSearchParams({ pagina: String(pagina), por_pagina: String(porPagina) });
+    if (busca) q.set("busca", busca);
+    if (pedidoId) q.set("pedido_id", String(pedidoId));
+    return request<{ data: unknown[]; total: number; pagina: number; por_pagina: number; total_paginas: number }>(`/api/compras/${tabela}?${q}`);
+  },
+  comprasGet: (tabela: string, id: number) => request<Record<string, unknown>>(`/api/compras/${tabela}/${id}`),
+  comprasCreate: (tabela: string, data: Record<string, unknown>) => request<Record<string, unknown>>(`/api/compras/${tabela}`, { method: "POST", body: JSON.stringify(data) }),
+  comprasUpdate: (tabela: string, id: number, data: Record<string, unknown>) => request<Record<string, unknown>>(`/api/compras/${tabela}/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  comprasDelete: (tabela: string, id: number) => request<{ success: boolean }>(`/api/compras/${tabela}/${id}`, { method: "DELETE" }),
+  comprasDashboard: () => request<{ pendentes: number; pedidos_abertos: number; total_recebido: number }>("/api/compras/dashboard"),
+  comprasAprovarSolicitacao: (id: number) => request<Record<string, unknown>>(`/api/compras/solicitacoes/${id}/aprovar`, { method: "POST" }),
+  comprasConfirmarRecebimento: (id: number) => request<Record<string, unknown>>(`/api/compras/recebimentos/${id}/confirmar`, { method: "POST" }),
+
   // CRM
   crmList: (tabela: string) => request<{ data: unknown[] }>(`/api/crm/${tabela}`),
   crmGet: (tabela: string, id: number) => request<Record<string, unknown>>(`/api/crm/${tabela}/${id}`),

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Icon from "./Icon";
-import FkPicker from "./FkPicker";
+import FkPicker, { type FkPickerService } from "./FkPicker";
 import { emailValido, documentoValido } from "@/lib/validacao";
 import { buscarCNPJ, buscarCEP, aplicarCNPJ, aplicarCEP } from "@/lib/lookup";
 
@@ -20,6 +20,7 @@ export interface FieldDef {
   // usado como rotulo no picker (default "nome").
   fkTabela?: string;
   fkLabelField?: string;
+  fkService?: FkPickerService;
   // forca o campo a ocupar as 2 colunas do grid do modal.
   wide?: boolean;
   // bloqueia salvar se vazio.
@@ -113,7 +114,7 @@ export default function CrudFormModal({ mode, fields, formData, onChange, onSave
                     {f.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 ) : f.type === "fk" && f.fkTabela ? (
-                  <FkPicker tabela={f.fkTabela} labelField={f.fkLabelField} value={formData[f.key] ?? ""} onChange={v => onChange(f.key, v)} />
+                  <FkPicker tabela={f.fkTabela} labelField={f.fkLabelField} service={f.fkService} value={formData[f.key] ?? ""} onChange={v => onChange(f.key, v)} />
                 ) : f.lookup ? (
                   <div className="flex gap-1.5">
                     <input type="text" value={formData[f.key] ?? ""} onChange={e => onChange(f.key, e.target.value)}
