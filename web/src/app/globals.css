@@ -159,10 +159,10 @@
      text/icon/line on the dark ground; 800/900/950 read as near-black
      translucent chip/badge fills (e.g. bg-red-950/40 border-red-900/50). */
   --indigo-300: #86efac;
-  --indigo-500: #16a34a;
-  --indigo-600: #15803d;
-  --indigo-700: #14532d;
-  --indigo-900: #052e16;
+  --indigo-500: var(--green-500);
+  --indigo-600: var(--green-600);
+  --indigo-700: #245e30;
+  --indigo-900: var(--green-950);
 
   --emerald-300: #7ee8c3;
   --emerald-500: #22b384;
@@ -263,11 +263,11 @@
   --status-crit: #c21f3d;
   --status-crit-dim: rgba(194, 31, 61, 0.1);
 
-  --indigo-300: #15803d;
-  --indigo-500: #16a34a;
-  --indigo-600: #15803d;
-  --indigo-700: #14532d;
-  --indigo-900: #dcfce7;
+  --indigo-300: var(--green-300);
+  --indigo-500: var(--green-500);
+  --indigo-600: var(--green-600);
+  --indigo-700: #245e30;
+  --indigo-900: var(--green-900);
 
   --emerald-300: #0a7a53;
   --emerald-500: #22b384;
