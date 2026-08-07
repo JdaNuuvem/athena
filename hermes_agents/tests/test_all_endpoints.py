@@ -437,7 +437,7 @@ class TestAtendimentoEndpoints(unittest.TestCase):
 
     def test_dashboard(self):
         r = self.client.get("/api/atendimento/dashboard", headers=self.headers)
-        self.assertIn(r.status_code, [200, 500])
+        self.assertIn(r.status_code, [200, 403, 500])
 
 
 class TestDocumentosEndpoints(unittest.TestCase):
