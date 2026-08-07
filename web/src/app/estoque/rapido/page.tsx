@@ -57,6 +57,16 @@ export default function EstoqueRapidoPage() {
     const k = chave(sku, lojaId);
     const quantidade = Number(valores[k]);
     if (!Number.isFinite(quantidade) || quantidade < 0) return;
+
+    // Blur dispara mesmo quando o usuario so' passou pelo campo sem mudar
+    // nada (ex.: tab pra ler valores da linha). Sem esse no-op, cada blur
+    // idle vira uma escrita real na Shopee e um re-fetch da linha inteira.
+    const produtoAtual = produtos.find((p) => p.sku === sku);
+    const valorOriginal = produtoAtual?.estoque[lojaId];
+    if (valorOriginal !== null && valorOriginal !== undefined && Number(valorOriginal) === quantidade) {
+      return;
+    }
+
     setStatus((s) => ({ ...s, [k]: "salvando" }));
     try {
       const r = await api.shopeeEstoqueRapidoAtualizarCelula(sku, lojaId, quantidade);
@@ -66,6 +76,9 @@ export default function EstoqueRapidoPage() {
       } else {
         setStatus((s) => ({ ...s, [k]: "ok" }));
         setMensagemErro((m) => ({ ...m, [k]: "" }));
+        setTimeout(() => {
+          setStatus((s) => (s[k] === "ok" ? { ...s, [k]: "idle" } : s));
+        }, 4000);
       }
       if (r.linha) {
         setProdutos((prev) => prev.map((p) => (p.sku === r.linha!.sku ? r.linha! : p)));
