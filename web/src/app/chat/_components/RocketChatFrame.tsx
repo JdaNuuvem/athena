@@ -98,7 +98,12 @@ export default function RocketChatFrame() {
 
   return (
     <iframe
-      src={`${ROCKETCHAT_URL}?layout=embedded`}
+      // ponytail: layout=embedded esconde a sidebar do Rocket.Chat (modo
+      // widget unico, pensado pra um so componente embutido) — sem ela,
+      // canais so' sao alcancaveis via Diretorio em modo preview, e o
+      // composer nao destrava direito depois de "Entrar". Sem esse
+      // parametro a app completa (sidebar + navegacao) carrega normal.
+      src={ROCKETCHAT_URL}
       title="Chat"
       className="h-dvh w-full border-0"
       allow="camera; microphone; display-capture; clipboard-write"
