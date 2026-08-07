@@ -427,16 +427,16 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
 
       {modoEdicao && itemIdExistente && (
         <Section title="Produto já publicado nesta loja">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <p className="text-xs text-neutral-500">item_id: <span className="font-mono text-neutral-400">{itemIdExistente}</span></p>
-            <div className="flex items-center gap-3">
-              <button onClick={() => setModoEdicao(false)} className="text-xs text-indigo-400 hover:text-indigo-300">
+            <div className="flex flex-wrap items-center gap-3">
+              <button onClick={() => setModoEdicao(false)} className="text-xs text-indigo-400 hover:text-indigo-300 text-left">
                 Publicar como novo anúncio em vez disso
               </button>
               <button
                 onClick={excluirDaShopee}
                 disabled={excluindo}
-                className="text-[10px] bg-red-900/60 hover:bg-red-900 disabled:opacity-50 text-red-200 px-2.5 py-1.5 rounded-lg"
+                className="text-[10px] bg-red-900/60 hover:bg-red-900 disabled:opacity-50 text-red-200 px-2.5 py-1.5 rounded-lg shrink-0"
               >
                 {excluindo ? "Excluindo..." : "Excluir da Shopee"}
               </button>
@@ -484,34 +484,36 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
 
               {!ehVariacao && (
                 <>
-                  {marcas.length > 0 && (
-                    <InputGroup label={`Marca${marcaObrigatoria ? " (obrigatório)" : " (opcional)"}`}>
-                      <select value={marcaId} onChange={e => setMarcaId(Number(e.target.value))} className={inputCls}>
-                        <option value={0}>Sem marca</option>
-                        {marcas.map(m => <option key={m.brand_id} value={m.brand_id}>{m.original_brand_name}</option>)}
-                      </select>
-                    </InputGroup>
-                  )}
-                  {atributos.length > 0 && atributos.map(a => (
-                    <InputGroup key={a.attribute_id} label={`${a.original_attribute_name}${a.is_mandatory ? " *" : ""}`}>
-                      {a.attribute_value_list?.length ? (
-                        <select
-                          value={valoresAtributos[a.attribute_id] || ""}
-                          onChange={e => setValoresAtributos(v => ({ ...v, [a.attribute_id]: e.target.value }))}
-                          className={inputCls}
-                        >
-                          <option value="">Selecione...</option>
-                          {a.attribute_value_list.map(v => <option key={v.value_id} value={v.value_id}>{v.original_value_name}</option>)}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {marcas.length > 0 && (
+                      <InputGroup label={`Marca${marcaObrigatoria ? " (obrigatório)" : " (opcional)"}`}>
+                        <select value={marcaId} onChange={e => setMarcaId(Number(e.target.value))} className={inputCls}>
+                          <option value={0}>Sem marca</option>
+                          {marcas.map(m => <option key={m.brand_id} value={m.brand_id}>{m.original_brand_name}</option>)}
                         </select>
-                      ) : (
-                        <input
-                          value={valoresAtributos[a.attribute_id] || ""}
-                          onChange={e => setValoresAtributos(v => ({ ...v, [a.attribute_id]: e.target.value }))}
-                          className={inputCls}
-                        />
-                      )}
-                    </InputGroup>
-                  ))}
+                      </InputGroup>
+                    )}
+                    {atributos.length > 0 && atributos.map(a => (
+                      <InputGroup key={a.attribute_id} label={`${a.original_attribute_name}${a.is_mandatory ? " *" : ""}`}>
+                        {a.attribute_value_list?.length ? (
+                          <select
+                            value={valoresAtributos[a.attribute_id] || ""}
+                            onChange={e => setValoresAtributos(v => ({ ...v, [a.attribute_id]: e.target.value }))}
+                            className={inputCls}
+                          >
+                            <option value="">Selecione...</option>
+                            {a.attribute_value_list.map(v => <option key={v.value_id} value={v.value_id}>{v.original_value_name}</option>)}
+                          </select>
+                        ) : (
+                          <input
+                            value={valoresAtributos[a.attribute_id] || ""}
+                            onChange={e => setValoresAtributos(v => ({ ...v, [a.attribute_id]: e.target.value }))}
+                            className={inputCls}
+                          />
+                        )}
+                      </InputGroup>
+                    ))}
+                  </div>
                   <InputGroup label="Código de barras / GTIN">
                     <input value={gtinCode} onChange={e => setGtinCode(e.target.value)} className={inputCls} />
                   </InputGroup>
@@ -593,36 +595,39 @@ export default function PublicarShopeeTab({ produto, sku }: Props) {
       {categoriaSelecionada && (
         <>
           <Section title="3. Atributos e Marca">
-            {marcas.length > 0 && (
-              <InputGroup label={`Marca${marcaObrigatoria ? " (obrigatório)" : " (opcional)"}`}>
-                <select value={marcaId} onChange={e => setMarcaId(Number(e.target.value))} className={inputCls}>
-                  <option value={0}>Sem marca</option>
-                  {marcas.map(m => <option key={m.brand_id} value={m.brand_id}>{m.original_brand_name}</option>)}
-                </select>
-              </InputGroup>
-            )}
-            {atributos.length === 0 ? (
+            {atributos.length === 0 && marcas.length === 0 && (
               <p className="text-xs text-neutral-500">Esta categoria não exige atributos adicionais.</p>
-            ) : atributos.map(a => (
-              <InputGroup key={a.attribute_id} label={`${a.original_attribute_name}${a.is_mandatory ? " *" : ""}`}>
-                {a.attribute_value_list?.length ? (
-                  <select
-                    value={valoresAtributos[a.attribute_id] || ""}
-                    onChange={e => setValoresAtributos(v => ({ ...v, [a.attribute_id]: e.target.value }))}
-                    className={inputCls}
-                  >
-                    <option value="">Selecione...</option>
-                    {a.attribute_value_list.map(v => <option key={v.value_id} value={v.value_id}>{v.original_value_name}</option>)}
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {marcas.length > 0 && (
+                <InputGroup label={`Marca${marcaObrigatoria ? " (obrigatório)" : " (opcional)"}`}>
+                  <select value={marcaId} onChange={e => setMarcaId(Number(e.target.value))} className={inputCls}>
+                    <option value={0}>Sem marca</option>
+                    {marcas.map(m => <option key={m.brand_id} value={m.brand_id}>{m.original_brand_name}</option>)}
                   </select>
-                ) : (
-                  <input
-                    value={valoresAtributos[a.attribute_id] || ""}
-                    onChange={e => setValoresAtributos(v => ({ ...v, [a.attribute_id]: e.target.value }))}
-                    className={inputCls}
-                  />
-                )}
-              </InputGroup>
-            ))}
+                </InputGroup>
+              )}
+              {atributos.map(a => (
+                <InputGroup key={a.attribute_id} label={`${a.original_attribute_name}${a.is_mandatory ? " *" : ""}`}>
+                  {a.attribute_value_list?.length ? (
+                    <select
+                      value={valoresAtributos[a.attribute_id] || ""}
+                      onChange={e => setValoresAtributos(v => ({ ...v, [a.attribute_id]: e.target.value }))}
+                      className={inputCls}
+                    >
+                      <option value="">Selecione...</option>
+                      {a.attribute_value_list.map(v => <option key={v.value_id} value={v.value_id}>{v.original_value_name}</option>)}
+                    </select>
+                  ) : (
+                    <input
+                      value={valoresAtributos[a.attribute_id] || ""}
+                      onChange={e => setValoresAtributos(v => ({ ...v, [a.attribute_id]: e.target.value }))}
+                      className={inputCls}
+                    />
+                  )}
+                </InputGroup>
+              ))}
+            </div>
             <InputGroup label="Código de barras / GTIN (opcional)">
               <input value={gtinCode} onChange={e => setGtinCode(e.target.value)} className={inputCls} />
             </InputGroup>
