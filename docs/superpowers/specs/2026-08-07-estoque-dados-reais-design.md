@@ -2,6 +2,7 @@
 
 **Data:** 2026-08-07
 **Status:** Aprovado para planejamento
+**Relacionado:** [2026-07-29-estoque-analise-giro-ruptura-cobertura-design.md](2026-07-29-estoque-analise-giro-ruptura-cobertura-design.md) — spec anterior que já mapeou a lapidação do módulo em 4 frentes (Análise → Depósitos → Custos → Inventário) e implementou a primeira (Análise, com dado real em `core/estoque_analise.py`). Este documento é a frente "Depósitos" dessa mesma linhagem, redescoberta de forma independente durante o critique de 2026-08-07 — a ordem e o critério de fallback de `estoque_minimo` (`produtos_loja` com fallback pra `catalogo_produtos`, mesmo padrão de `ruptura()`) seguem o precedente já estabelecido.
 
 ## Contexto
 
