@@ -79,11 +79,17 @@ export default function DepositosPage() {
   });
 
   const rowsComDado = rows.filter(r => r.skus !== null);
+  // Sem nenhum deposito com KPI disponivel (ex.: falha/403 na chamada de
+  // estoqueDepositosKpis, que engole o erro e devolve data:[]) os cards
+  // agregados nao podem mostrar "0"/"R$ 0,00" — pareceria dado real quando
+  // e' ausencia de dado, o mesmo risco de confianca que esta reforma existe
+  // pra eliminar.
+  const temDadoDeKpi = rowsComDado.length > 0;
   const kpiCards: KpiMetric[] = [
     { label: "Depósitos Ativos", value: String(rows.filter(r => r.ativo).length), color: "text-emerald-400" },
-    { label: "Total SKUs", value: String(rowsComDado.reduce((s, r) => s + (r.skus ?? 0), 0)), color: "text-blue-400" },
-    { label: "Valor Total", value: formatCurrency(rowsComDado.reduce((s, r) => s + (r.valor ?? 0), 0)), color: "text-indigo-400" },
-    { label: "Itens Baixo Estoque", value: String(rowsComDado.reduce((s, r) => s + (r.baixoEstoque ?? 0), 0)), color: "text-amber-400" },
+    { label: "Total SKUs", value: temDadoDeKpi ? String(rowsComDado.reduce((s, r) => s + (r.skus ?? 0), 0)) : "—", color: "text-blue-400" },
+    { label: "Valor Total", value: temDadoDeKpi ? formatCurrency(rowsComDado.reduce((s, r) => s + (r.valor ?? 0), 0)) : "—", color: "text-indigo-400" },
+    { label: "Itens Baixo Estoque", value: temDadoDeKpi ? String(rowsComDado.reduce((s, r) => s + (r.baixoEstoque ?? 0), 0)) : "—", color: "text-amber-400" },
   ];
 
   return (

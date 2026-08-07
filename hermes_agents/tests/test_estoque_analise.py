@@ -529,3 +529,43 @@ class TestKpisPorDeposito(unittest.TestCase):
         with patch("core.estoque_analise.get_db", side_effect=Exception("db down")):
             resultado = analise.kpis_por_deposito()
         self.assertEqual(resultado, [])
+
+    def test_deposito_mapeado_sem_nenhum_estoque_retorna_zeros_reais(self):
+        """Loja mapeada (bling_id + ativa) mas SEM nenhuma linha em
+        estoque_lojas: o LEFT JOIN produz uma linha com sku IS NULL pra
+        esse deposito_id — resultado deve trazer o deposito com zeros
+        REAIS ({"skus": 0, "valor": 0.0, "baixo_estoque": 0}), nao ficar
+        ausente (ausente e' reservado pra "deposito sem loja mapeada")."""
+        async def fake_fetch(query, *params):
+            return [
+                {"deposito_id": 10, "sku": None, "saldo": None, "minimo": None, "preco_custo": None},
+                {"deposito_id": 20, "sku": "A", "saldo": 5, "minimo": 0, "preco_custo": 1.0},
+            ]
+        with patch("core.estoque_analise.get_db") as mock_get_db:
+            db = AsyncMock()
+            db.fetch = AsyncMock(side_effect=fake_fetch)
+            mock_get_db.return_value = db
+            resultado = analise.kpis_por_deposito()
+        por_id = {r["deposito_id"]: r for r in resultado}
+        self.assertIn(10, por_id)
+        self.assertEqual(por_id[10], {"deposito_id": 10, "skus": 0, "valor": 0.0, "baixo_estoque": 0})
+        self.assertEqual(por_id[20]["skus"], 1)
+
+    def test_deposito_sem_loja_mapeada_nao_aparece(self):
+        """A ausencia agora so' acontece quando a query nem retorna a
+        loja (bling_id IS NULL ou ativa = FALSE sao filtrados no WHERE) —
+        nao mais quando falta estoque (isso agora retorna zeros reais,
+        ver test_deposito_mapeado_sem_nenhum_estoque_retorna_zeros_reais)."""
+        async def fake_fetch(query, *params):
+            # Simula o WHERE l.bling_id IS NOT NULL AND l.ativa = TRUE
+            # ja' filtrando a loja nao-mapeada/inativa fora do resultado:
+            # so' o deposito 20 (mapeado) volta.
+            return [{"deposito_id": 20, "sku": "A", "saldo": 5, "minimo": 0, "preco_custo": 1.0}]
+        with patch("core.estoque_analise.get_db") as mock_get_db:
+            db = AsyncMock()
+            db.fetch = AsyncMock(side_effect=fake_fetch)
+            mock_get_db.return_value = db
+            resultado = analise.kpis_por_deposito()
+        por_id = {r["deposito_id"]: r for r in resultado}
+        self.assertNotIn(99, por_id)
+        self.assertIn(20, por_id)

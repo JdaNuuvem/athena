@@ -190,28 +190,43 @@ def kpis_por_deposito() -> list:
     """KPIs reais de estoque por deposito (SKUs, valor, itens em baixo
     estoque), agregados a partir de estoque_lojas + catalogo_produtos e
     atribuidos ao deposito Bling correspondente via lojas.bling_id — mesmo
-    mapeamento usado por GET /api/lojas/deposito-map. Depositos Bling sem
-    loja ativa mapeada (ex.: canais virtuais) nao aparecem no resultado;
-    quem chama trata a ausencia como "sem dado", nunca como zero."""
+    mapeamento usado por GET /api/lojas/deposito-map.
+
+    A query parte de `lojas` (nao de `estoque_lojas`) com LEFT JOIN, e
+    chaveia `estoque_lojas.loja = lojas.nome` — o texto, nao `loja_id`.
+    `loja_id` e' uma coluna aditiva preenchida por dual-write + reconciliacao
+    horaria (core/scheduler.py) que casa por nome EXATO; qualquer linha
+    ainda nao reconciliada ficaria com `loja_id` NULL e seria descartada por
+    um INNER JOIN nela. `loja` (texto) e' a fonte de verdade declarada em
+    core/catalogo.py — mesmo padrao ja usado por giro()/ruptura()/
+    cobertura() neste modulo.
+
+    Depositos Bling sem loja ativa mapeada (ex.: canais virtuais) nao
+    aparecem no resultado; quem chama trata a ausencia como "sem dado",
+    nunca como zero. Ja' um deposito COM loja mapeada mas sem nenhum SKU em
+    estoque (ex.: loja nova, ainda nao sincronizada) aparece no resultado
+    com `skus: 0, valor: 0.0, baixo_estoque: 0` — zero real, deposito existe
+    e esta' genuinamente vazio."""
     async def _go():
         db = await get_db()
         rows = await db.fetch("""
             SELECT l.bling_id AS deposito_id, e.sku,
-                   SUM(e.quantidade) AS saldo,
-                   COALESCE(MAX(pl.estoque_minimo), MAX(c.estoque_minimo), 0) AS minimo,
-                   COALESCE(MAX(c.preco_custo), 0) AS preco_custo
-            FROM estoque_lojas e
-            JOIN lojas l ON l.id = e.loja_id
-            JOIN catalogo_produtos c ON c.sku = e.sku
+                   e.quantidade AS saldo,
+                   COALESCE(pl.estoque_minimo, c.estoque_minimo, 0) AS minimo,
+                   COALESCE(c.preco_custo, 0) AS preco_custo
+            FROM lojas l
+            LEFT JOIN estoque_lojas e ON e.loja = l.nome
+            LEFT JOIN catalogo_produtos c ON c.sku = e.sku
             LEFT JOIN produtos_loja pl ON pl.sku = e.sku AND pl.loja = e.loja
             WHERE l.bling_id IS NOT NULL AND l.ativa = TRUE
-            GROUP BY l.bling_id, e.sku
         """)
         por_deposito: dict = {}
         for r in rows:
             dep = por_deposito.setdefault(r["deposito_id"], {
                 "deposito_id": r["deposito_id"], "skus": 0, "valor": 0.0, "baixo_estoque": 0,
             })
+            if r["sku"] is None:
+                continue
             dep["skus"] += 1
             dep["valor"] += float(r["saldo"]) * float(r["preco_custo"])
             if float(r["saldo"]) < float(r["minimo"]):
