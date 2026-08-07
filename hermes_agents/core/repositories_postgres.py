@@ -109,7 +109,7 @@ class PostgresVendasRepository(VendasRepository):
                 FROM vendas_itens a
                 JOIN vendas_itens b ON b.pedido_id = a.pedido_id AND b.sku != a.sku
                 JOIN vendas_pedidos v ON v.id = a.pedido_id
-                WHERE v.data >= CURRENT_DATE - $1 AND v.status != 'cancelado'
+                WHERE v.data >= CURRENT_DATE - $1::int AND v.status != 'cancelado'
                 GROUP BY a.sku, b.sku
                 HAVING COUNT(DISTINCT a.pedido_id) >= $2
                 ORDER BY juntos DESC LIMIT 50
@@ -187,15 +187,15 @@ class PostgresFinanceiroRepository(FinanceiroRepository):
             resultado = []
             for loja in lojas:
                 lid = loja["id"]
-                rec_online = await db.fetchval("SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE loja_id = $1 AND data >= CURRENT_DATE - $2 AND status != 'cancelado'", lid, dias)
+                rec_online = await db.fetchval("SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE loja_id = $1 AND data >= CURRENT_DATE - $2::int AND status != 'cancelado'", lid, dias)
                 # comissao de marketplace so' incide sobre receita Shopee de fato —
                 # vendas_pedidos tambem recebe pedidos Bling e i9Logic (loja fisica
                 # sincronizada como pedido online), que nao pagam comissao de Shopee.
-                rec_shopee = await db.fetchval("SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE loja_id = $1 AND marketplace = 'shopee' AND data >= CURRENT_DATE - $2 AND status != 'cancelado'", lid, dias)
-                rec_pdv = await db.fetchval("SELECT COALESCE(SUM(v.total),0) FROM pdv_vendas v JOIN pdv_caixas c ON c.id = v.caixa_id WHERE c.loja_id = $1 AND DATE(v.data) >= CURRENT_DATE - $2 AND v.status = 'finalizada'", lid, dias)
-                frete = await db.fetchval("SELECT COALESCE(SUM(frete),0) FROM vendas_pedidos WHERE loja_id = $1 AND data >= CURRENT_DATE - $2 AND status != 'cancelado'", lid, dias)
-                qtd = await db.fetchval("SELECT COUNT(*) FROM vendas_pedidos WHERE loja_id = $1 AND data >= CURRENT_DATE - $2 AND status != 'cancelado'", lid, dias)
-                qtd_pdv = await db.fetchval("SELECT COUNT(*) FROM pdv_vendas v JOIN pdv_caixas c ON c.id = v.caixa_id WHERE c.loja_id = $1 AND DATE(v.data) >= CURRENT_DATE - $2 AND v.status = 'finalizada'", lid, dias)
+                rec_shopee = await db.fetchval("SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE loja_id = $1 AND marketplace = 'shopee' AND data >= CURRENT_DATE - $2::int AND status != 'cancelado'", lid, dias)
+                rec_pdv = await db.fetchval("SELECT COALESCE(SUM(v.total),0) FROM pdv_vendas v JOIN pdv_caixas c ON c.id = v.caixa_id WHERE c.loja_id = $1 AND DATE(v.data) >= CURRENT_DATE - $2::int AND v.status = 'finalizada'", lid, dias)
+                frete = await db.fetchval("SELECT COALESCE(SUM(frete),0) FROM vendas_pedidos WHERE loja_id = $1 AND data >= CURRENT_DATE - $2::int AND status != 'cancelado'", lid, dias)
+                qtd = await db.fetchval("SELECT COUNT(*) FROM vendas_pedidos WHERE loja_id = $1 AND data >= CURRENT_DATE - $2::int AND status != 'cancelado'", lid, dias)
+                qtd_pdv = await db.fetchval("SELECT COUNT(*) FROM pdv_vendas v JOIN pdv_caixas c ON c.id = v.caixa_id WHERE c.loja_id = $1 AND DATE(v.data) >= CURRENT_DATE - $2::int AND v.status = 'finalizada'", lid, dias)
                 resultado.append(ReceitaLoja(
                     loja_id=lid, loja_nome=loja["nome"],
                     receita_online=float(rec_online or 0), receita_shopee=float(rec_shopee or 0),
@@ -212,7 +212,7 @@ class PostgresFinanceiroRepository(FinanceiroRepository):
             # receita total — nao e' rastreio real por loja (esse dado nao
             # existe), e' uma estimativa proporcional, mas pelo menos aparece
             # e nao quebra a feature inteira.
-            custos_total = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM producao_custos WHERE data >= CURRENT_DATE - $1", dias)
+            custos_total = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM producao_custos WHERE data >= CURRENT_DATE - $1::int", dias)
             custos_total = float(custos_total or 0)
             receita_total_geral = sum(r.receita_online + r.receita_pdv for r in resultado)
             if custos_total > 0 and receita_total_geral > 0:

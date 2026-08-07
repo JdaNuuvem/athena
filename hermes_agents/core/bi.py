@@ -95,7 +95,7 @@ def vendas_categorias(dias: int = 30, limite_produtos: int = 5) -> list:
             FROM vendas_itens i
             JOIN vendas_pedidos p ON p.id = i.pedido_id
             LEFT JOIN catalogo_produtos c ON c.sku = i.sku
-            WHERE p.data >= CURRENT_DATE - $1 AND p.status != 'cancelado'
+            WHERE p.data >= CURRENT_DATE - $1::int AND p.status != 'cancelado'
             GROUP BY 1, i.sku, nome
         """, dias)
         pdv = await db.fetch(f"""
@@ -106,7 +106,7 @@ def vendas_categorias(dias: int = 30, limite_produtos: int = 5) -> list:
             FROM pdv_itens i
             JOIN pdv_vendas v ON v.id = i.venda_id
             LEFT JOIN catalogo_produtos c ON c.sku = i.produto_codigo
-            WHERE DATE(v.data) >= CURRENT_DATE - $1
+            WHERE DATE(v.data) >= CURRENT_DATE - $1::int
             GROUP BY 1, i.produto_codigo, nome
         """, dias)
         return [dict(r) for r in bling] + [dict(r) for r in pdv]
@@ -398,7 +398,7 @@ def ml_recomendacoes(dias: int = 90, minimo_ocorrencias: int = 3) -> list:
             FROM vendas_itens a
             JOIN vendas_itens b ON b.pedido_id = a.pedido_id AND b.sku > a.sku
             JOIN vendas_pedidos p ON p.id = a.pedido_id
-            WHERE p.data >= CURRENT_DATE - $1 AND p.status != 'cancelado' AND a.sku IS NOT NULL AND b.sku IS NOT NULL
+            WHERE p.data >= CURRENT_DATE - $1::int AND p.status != 'cancelado' AND a.sku IS NOT NULL AND b.sku IS NOT NULL
             GROUP BY a.sku, b.sku
             HAVING COUNT(*) >= $2
             ORDER BY juntos DESC LIMIT 10
@@ -406,7 +406,7 @@ def ml_recomendacoes(dias: int = 90, minimo_ocorrencias: int = 3) -> list:
         totais_sku = await db.fetch(f"""
             SELECT sku, COUNT(DISTINCT pedido_id) AS pedidos FROM vendas_itens i
             JOIN vendas_pedidos p ON p.id = i.pedido_id
-            WHERE p.data >= CURRENT_DATE - $1 AND p.status != 'cancelado' AND sku IS NOT NULL
+            WHERE p.data >= CURRENT_DATE - $1::int AND p.status != 'cancelado' AND sku IS NOT NULL
             GROUP BY sku
         """, dias)
         nomes = await db.fetch("SELECT sku, descricao FROM catalogo_produtos")

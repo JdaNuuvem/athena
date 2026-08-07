@@ -321,8 +321,8 @@ def fluxo_caixa_resumo(dias=30) -> dict:
         row = await db.fetchrow("""
             SELECT COALESCE(SUM(CASE WHEN tipo='entrada' THEN valor ELSE 0 END),0) as total_entradas,
                    COALESCE(SUM(CASE WHEN tipo='saida' THEN valor ELSE 0 END),0) as total_saidas
-            FROM fin_fluxo_caixa WHERE data >= CURRENT_DATE - $1""", dias)
-        rows = await db.fetch("SELECT data, SUM(CASE WHEN tipo='entrada' THEN valor ELSE 0 END) as entradas, SUM(CASE WHEN tipo='saida' THEN valor ELSE 0 END) as saidas FROM fin_fluxo_caixa WHERE data >= CURRENT_DATE - $1 GROUP BY data ORDER BY data", dias)
+            FROM fin_fluxo_caixa WHERE data >= CURRENT_DATE - $1::int""", dias)
+        rows = await db.fetch("SELECT data, SUM(CASE WHEN tipo='entrada' THEN valor ELSE 0 END) as entradas, SUM(CASE WHEN tipo='saida' THEN valor ELSE 0 END) as saidas FROM fin_fluxo_caixa WHERE data >= CURRENT_DATE - $1::int GROUP BY data ORDER BY data", dias)
         return {"resumo": dict(row) if row else {}, "diario": [dict(r) for r in rows]}
     try: return run_async(_go())
     except Exception as e: return {"resumo": {}, "diario": []}

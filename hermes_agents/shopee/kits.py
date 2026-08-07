@@ -33,7 +33,7 @@ def sugerir_kits(dias: int = 90, min_ocorrencias: int = 3) -> list:
             FROM vendas a
             JOIN vendas b ON b.shopee_order_sn = a.shopee_order_sn AND b.sku > a.sku AND b.marketplace = 'shopee'
             WHERE a.marketplace = 'shopee' AND a.shopee_order_sn IS NOT NULL
-              AND a.data >= CURRENT_DATE - $1
+              AND a.data >= CURRENT_DATE - $1::int
             GROUP BY a.sku, b.sku
             HAVING COUNT(DISTINCT a.shopee_order_sn) >= $2
             ORDER BY juntos DESC
@@ -47,7 +47,7 @@ def sugerir_kits(dias: int = 90, min_ocorrencias: int = 3) -> list:
         totais_rows = await db.fetch("""
             SELECT sku, COUNT(DISTINCT shopee_order_sn) AS total
             FROM vendas WHERE marketplace = 'shopee' AND shopee_order_sn IS NOT NULL
-              AND sku = ANY($1::text[]) AND data >= CURRENT_DATE - $2
+              AND sku = ANY($1::text[]) AND data >= CURRENT_DATE - $2::int
             GROUP BY sku
         """, skus, dias)
         totais = {r["sku"]: r["total"] for r in totais_rows}

@@ -37,12 +37,12 @@ def _union_vendas(dias: int, loja_id=None):
     loja_pdv = _loja_where_pdv(loja_id)
     async def _go():
         db = await get_db()
-        total_bling = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1 AND status != 'cancelado'{loja_bl}", dias)
-        total_pdv = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM pdv_vendas venda WHERE DATE(data) >= CURRENT_DATE - $1{loja_pdv}", dias)
-        qtd_bling = await db.fetchval(f"SELECT COUNT(*) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1{loja_bl}", dias)
-        qtd_pdv = await db.fetchval(f"SELECT COUNT(*) FROM pdv_vendas venda WHERE DATE(data) >= CURRENT_DATE - $1{loja_pdv}", dias)
-        diarias_bling = await db.fetch(f"SELECT DATE(data) as dia, COUNT(*) as qtd, SUM(total) as valor FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1 AND status != 'cancelado'{loja_bl} GROUP BY DATE(data)", dias)
-        diarias_pdv = await db.fetch(f"SELECT DATE(data) as dia, COUNT(*) as qtd, SUM(total) as valor FROM pdv_vendas venda WHERE DATE(data) >= CURRENT_DATE - $1{loja_pdv} GROUP BY DATE(data)", dias)
+        total_bling = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND status != 'cancelado'{loja_bl}", dias)
+        total_pdv = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM pdv_vendas venda WHERE DATE(data) >= CURRENT_DATE - $1::int{loja_pdv}", dias)
+        qtd_bling = await db.fetchval(f"SELECT COUNT(*) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int{loja_bl}", dias)
+        qtd_pdv = await db.fetchval(f"SELECT COUNT(*) FROM pdv_vendas venda WHERE DATE(data) >= CURRENT_DATE - $1::int{loja_pdv}", dias)
+        diarias_bling = await db.fetch(f"SELECT DATE(data) as dia, COUNT(*) as qtd, SUM(total) as valor FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND status != 'cancelado'{loja_bl} GROUP BY DATE(data)", dias)
+        diarias_pdv = await db.fetch(f"SELECT DATE(data) as dia, COUNT(*) as qtd, SUM(total) as valor FROM pdv_vendas venda WHERE DATE(data) >= CURRENT_DATE - $1::int{loja_pdv} GROUP BY DATE(data)", dias)
         return {
             "total": float((total_bling or 0) + (total_pdv or 0)),
             "quantidade": (qtd_bling or 0) + (qtd_pdv or 0),
@@ -65,11 +65,11 @@ def lucro_margem(dias=30, loja_id=None):
     loja_pdv = _loja_where_pdv(loja_id)
     async def _go():
         db = await get_db()
-        receita = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1 AND status != 'cancelado'{loja_bl}", dias)
-        receita_pdv = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM pdv_vendas venda WHERE DATE(data) >= CURRENT_DATE - $1{loja_pdv}", dias)
+        receita = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND status != 'cancelado'{loja_bl}", dias)
+        receita_pdv = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM pdv_vendas venda WHERE DATE(data) >= CURRENT_DATE - $1::int{loja_pdv}", dias)
         receita_total = float((receita or 0) + (receita_pdv or 0))
-        custos_prod = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM producao_custos WHERE data >= CURRENT_DATE - $1", dias)
-        compras_val = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM compras_pedidos WHERE data_emissao >= CURRENT_DATE - $1 AND status != 'cancelado'", dias)
+        custos_prod = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM producao_custos WHERE data >= CURRENT_DATE - $1::int", dias)
+        compras_val = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM compras_pedidos WHERE data_emissao >= CURRENT_DATE - $1::int AND status != 'cancelado'", dias)
         cp_val = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_contas_pagar WHERE origem='bling' AND status='pendente'")
         custos = float((custos_prod or 0) + (compras_val or 0) + (cp_val or 0))
         lucro = receita_total - custos
@@ -98,7 +98,7 @@ def clientes(dias=90, loja_id=None):
     async def _go():
         db = await get_db()
         total = await db.fetchval("SELECT COUNT(*) FROM cad_clientes")
-        novos = await db.fetchval("SELECT COUNT(*) FROM cad_clientes WHERE created_at >= CURRENT_DATE - $1", dias)
+        novos = await db.fetchval("SELECT COUNT(*) FROM cad_clientes WHERE created_at >= CURRENT_DATE - $1::int", dias)
         top = await db.fetch("SELECT c.nome as cliente, COUNT(v.id) as compras, COALESCE(SUM(v.total),0) as valor FROM cad_clientes c LEFT JOIN vendas_pedidos v ON v.cliente_id = c.id AND v.status != 'cancelado' GROUP BY c.id, c.nome ORDER BY valor DESC LIMIT 10")
         return {"total": total or 0, "novos": novos or 0, "top": [dict(r) for r in (top or [])], "periodo_dias": dias}
     try: return run_async(_go())
@@ -130,13 +130,13 @@ def dre(dias=30, loja_id=None):
     loja_pdv = _loja_where_pdv(loja_id)
     async def _go():
         db = await get_db()
-        receita = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1 AND status != 'cancelado'{loja_bl}", dias)
-        receita_pdv = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM pdv_vendas venda WHERE DATE(data) >= CURRENT_DATE - $1{loja_pdv}", dias)
+        receita = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND status != 'cancelado'{loja_bl}", dias)
+        receita_pdv = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM pdv_vendas venda WHERE DATE(data) >= CURRENT_DATE - $1::int{loja_pdv}", dias)
         receita_total = float((receita or 0) + (receita_pdv or 0))
-        cmv = float(await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM producao_custos WHERE data >= CURRENT_DATE - $1", dias) or 0)
-        cp_val = float(await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_contas_pagar WHERE vencimento >= CURRENT_DATE - $1 AND status='pendente'", dias) or 0)
+        cmv = float(await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM producao_custos WHERE data >= CURRENT_DATE - $1::int", dias) or 0)
+        cp_val = float(await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_contas_pagar WHERE vencimento >= CURRENT_DATE - $1::int AND status='pendente'", dias) or 0)
         lb = receita_total - cmv - (cp_val * 0.7)
-        despesas = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_dre WHERE mes >= to_char(CURRENT_DATE - $1, 'YYYY-MM') AND tipo='despesa'", dias)
+        despesas = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_dre WHERE mes >= to_char(CURRENT_DATE - $1::int, 'YYYY-MM') AND tipo='despesa'", dias)
         return {"receita_bruta": receita_total, "cmv": cmv, "lucro_bruto": round(lb, 2), "despesas": float(despesas or 0), "margem_bruta_pct": round(lb/max(receita_total,1)*100,1), "periodo_dias": dias}
     try: return run_async(_go())
     except Exception as e: return {"receita_bruta":0,"cmv":0,"lucro_bruto":0,"despesas":0,"margem_bruta_pct":0,"periodo_dias":dias}
@@ -148,12 +148,12 @@ def fluxo_caixa(dias=30, loja_id=None):
     loja_pdv = _loja_where_pdv(loja_id)
     async def _go():
         db = await get_db()
-        entradas_bl = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1 AND status IN ('faturado','concluido'){loja_bl}", dias)
-        entradas_pdv = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM pdv_vendas venda WHERE DATE(data) >= CURRENT_DATE - $1{loja_pdv}", dias)
-        cr_recebido = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_contas_receber WHERE data_recebimento >= CURRENT_DATE - $1 AND status='pago'", dias)
+        entradas_bl = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND status IN ('faturado','concluido'){loja_bl}", dias)
+        entradas_pdv = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM pdv_vendas venda WHERE DATE(data) >= CURRENT_DATE - $1::int{loja_pdv}", dias)
+        cr_recebido = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_contas_receber WHERE data_recebimento >= CURRENT_DATE - $1::int AND status='pago'", dias)
         entradas = float((entradas_bl or 0) + (entradas_pdv or 0) + (cr_recebido or 0))
-        saidas_cp = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_contas_pagar WHERE data_pagamento >= CURRENT_DATE - $1 AND status='pago'", dias)
-        saidas_comp = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM compras_pedidos WHERE data_emissao >= CURRENT_DATE - $1", dias)
+        saidas_cp = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_contas_pagar WHERE data_pagamento >= CURRENT_DATE - $1::int AND status='pago'", dias)
+        saidas_comp = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM compras_pedidos WHERE data_emissao >= CURRENT_DATE - $1::int", dias)
         saidas = float((saidas_cp or 0) + (saidas_comp or 0))
         return {"entradas": entradas, "saidas": saidas, "saldo": round(entradas - saidas, 2), "periodo_dias": dias}
     try: return run_async(_go())
@@ -196,9 +196,9 @@ def previsao(dias=30, loja_id=None):
 def compras(dias=30):
     async def _go():
         db = await get_db()
-        pedidos = await db.fetchval("SELECT COUNT(*) FROM compras_pedidos WHERE data_emissao >= CURRENT_DATE - $1", dias)
-        total_val = await db.fetchval("SELECT COALESCE(SUM(valor_total),0) FROM compras_pedidos WHERE data_emissao >= CURRENT_DATE - $1", dias)
-        forn = await db.fetchval("SELECT COUNT(DISTINCT fornecedor_id) FROM compras_pedidos WHERE data_emissao >= CURRENT_DATE - $1", dias)
+        pedidos = await db.fetchval("SELECT COUNT(*) FROM compras_pedidos WHERE data_emissao >= CURRENT_DATE - $1::int", dias)
+        total_val = await db.fetchval("SELECT COALESCE(SUM(valor_total),0) FROM compras_pedidos WHERE data_emissao >= CURRENT_DATE - $1::int", dias)
+        forn = await db.fetchval("SELECT COUNT(DISTINCT fornecedor_id) FROM compras_pedidos WHERE data_emissao >= CURRENT_DATE - $1::int", dias)
         return {"pedidos": pedidos or 0, "valor_total": float(total_val or 0), "fornecedores_unicos": forn or 0, "periodo_dias": dias}
     try: return run_async(_go())
     except Exception as e: return {"pedidos":0,"valor_total":0,"fornecedores_unicos":0,"periodo_dias":dias}
@@ -208,8 +208,8 @@ def compras(dias=30):
 def impostos(dias=30):
     async def _go():
         db = await get_db()
-        nf_entrada = await db.fetchval("SELECT COALESCE(SUM(valor_icms + valor_ipi + valor_pis + valor_cofins),0) FROM fiscal_notas_fiscais WHERE tipo='entrada' AND data_emissao >= CURRENT_DATE - $1", dias)
-        nf_saida = await db.fetchval("SELECT COALESCE(SUM(valor_icms + valor_ipi + valor_pis + valor_cofins),0) FROM fiscal_notas_fiscais WHERE tipo='saida' AND data_emissao >= CURRENT_DATE - $1", dias)
+        nf_entrada = await db.fetchval("SELECT COALESCE(SUM(valor_icms + valor_ipi + valor_pis + valor_cofins),0) FROM fiscal_notas_fiscais WHERE tipo='entrada' AND data_emissao >= CURRENT_DATE - $1::int", dias)
+        nf_saida = await db.fetchval("SELECT COALESCE(SUM(valor_icms + valor_ipi + valor_pis + valor_cofins),0) FROM fiscal_notas_fiscais WHERE tipo='saida' AND data_emissao >= CURRENT_DATE - $1::int", dias)
         return {"impostos_entrada": float(nf_entrada or 0), "impostos_saida": float(nf_saida or 0), "total": float((nf_entrada or 0) + (nf_saida or 0)), "periodo_dias": dias}
     try: return run_async(_go())
     except Exception as e: return {"impostos_entrada":0,"impostos_saida":0,"total":0,"periodo_dias":dias}
@@ -220,7 +220,7 @@ def comissao(dias=30):
     async def _go():
         db = await get_db()
         rows = await db.fetch("""SELECT vendedor, COUNT(*) as vendas, COALESCE(SUM(total),0) as valor
-            FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1 AND status != 'cancelado' AND vendedor IS NOT NULL AND vendedor != ''
+            FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND status != 'cancelado' AND vendedor IS NOT NULL AND vendedor != ''
             GROUP BY vendedor ORDER BY valor DESC LIMIT 10""", dias)
         return [dict(r) for r in (rows or [])]
     try: return run_async(_go())
@@ -232,7 +232,7 @@ def marketplaces(dias=30):
     async def _go():
         db = await get_db()
         rows = await db.fetch("""SELECT COALESCE(marketplace,'manual') as canal, COUNT(*) as vendas, COALESCE(SUM(total),0) as valor
-            FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1 AND status != 'cancelado'
+            FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND status != 'cancelado'
             GROUP BY marketplace ORDER BY valor DESC""", dias)
         return [dict(r) for r in (rows or [])]
     try: return run_async(_go())
@@ -243,8 +243,8 @@ def marketplaces(dias=30):
 def devolucoes(dias=30):
     async def _go():
         db = await get_db()
-        total = await db.fetchval("SELECT COUNT(*) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1 AND status='cancelado'", dias)
-        taxa = await db.fetchval("SELECT ROUND(COUNT(*) FILTER(WHERE status='cancelado')::numeric / NULLIF(COUNT(*),0) * 100, 1) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1", dias)
+        total = await db.fetchval("SELECT COUNT(*) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND status='cancelado'", dias)
+        taxa = await db.fetchval("SELECT ROUND(COUNT(*) FILTER(WHERE status='cancelado')::numeric / NULLIF(COUNT(*),0) * 100, 1) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int", dias)
         return {"total_devolucoes": total or 0, "taxa_pct": float(taxa or 0), "periodo_dias": dias}
     try: return run_async(_go())
     except Exception as e: return {"total_devolucoes":0,"taxa_pct":0,"periodo_dias":dias}
@@ -267,7 +267,7 @@ def curvas(dias=90):
         db = await get_db()
         rows = await db.fetch("""SELECT vi.sku, vi.descricao, SUM(vi.valor_total) as valor_total, SUM(vi.quantidade) as qtd
             FROM vendas_itens vi JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
-            WHERE vp.data >= CURRENT_DATE - $1 AND vp.status != 'cancelado'
+            WHERE vp.data >= CURRENT_DATE - $1::int AND vp.status != 'cancelado'
             GROUP BY vi.sku, vi.descricao ORDER BY valor_total DESC LIMIT 30""", dias)
         items = [dict(r) for r in (rows or [])]
         total = sum(float(r.get("valor_total",0) or 0) for r in items) or 1
@@ -288,7 +288,7 @@ def produtos(dias=30):
         db = await get_db()
         rows = await db.fetch("""SELECT vi.sku, vi.descricao, SUM(vi.quantidade) as qtd, SUM(vi.valor_total) as valor
             FROM vendas_itens vi JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
-            WHERE vp.data >= CURRENT_DATE - $1 AND vp.status != 'cancelado'
+            WHERE vp.data >= CURRENT_DATE - $1::int AND vp.status != 'cancelado'
             GROUP BY vi.sku, vi.descricao ORDER BY valor DESC LIMIT 20""", dias)
         return [dict(r) for r in (rows or [])]
     try: return run_async(_go())
@@ -317,12 +317,12 @@ def ranking_produtos(dias=30):
                        COALESCE(vp.marketplace, 'bling') AS canal,
                        CASE WHEN vp.total > 0 THEN vi.valor_total / vp.total * COALESCE(vp.frete, 0) ELSE 0 END AS frete_alocado
                 FROM vendas_itens vi JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
-                WHERE vp.data >= CURRENT_DATE - $1 AND vp.status != 'cancelado'
+                WHERE vp.data >= CURRENT_DATE - $1::int AND vp.status != 'cancelado'
                 UNION ALL
                 SELECT pi.produto_codigo AS sku, pi.quantidade AS quantidade, pi.valor_total AS valor_total,
                        'pdv' AS canal, 0 AS frete_alocado
                 FROM pdv_itens pi JOIN pdv_vendas pv ON pv.id = pi.venda_id
-                WHERE pv.data >= CURRENT_DATE - $1 AND pv.status != 'cancelada'
+                WHERE pv.data >= CURRENT_DATE - $1::int AND pv.status != 'cancelada'
             ) unificado
             WHERE sku IS NOT NULL AND sku != ''
             GROUP BY sku
@@ -379,8 +379,8 @@ def financeiro(dias=30):
 def fiscal_resumo(dias=30):
     async def _go():
         db = await get_db()
-        nf_total = await db.fetchval("SELECT COUNT(*) FROM fiscal_notas_fiscais WHERE data_emissao >= CURRENT_DATE - $1", dias)
-        nf_valor = await db.fetchval("SELECT COALESCE(SUM(valor_nf),0) FROM fiscal_notas_fiscais WHERE data_emissao >= CURRENT_DATE - $1", dias)
+        nf_total = await db.fetchval("SELECT COUNT(*) FROM fiscal_notas_fiscais WHERE data_emissao >= CURRENT_DATE - $1::int", dias)
+        nf_valor = await db.fetchval("SELECT COALESCE(SUM(valor_nf),0) FROM fiscal_notas_fiscais WHERE data_emissao >= CURRENT_DATE - $1::int", dias)
         return {"nfs_periodo": nf_total or 0, "valor_periodo": float(nf_valor or 0), "periodo_dias": dias}
     try: return run_async(_go())
     except Exception as e: return {"nfs_periodo":0,"valor_periodo":0,"periodo_dias":dias}
