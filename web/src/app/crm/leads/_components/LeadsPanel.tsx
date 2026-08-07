@@ -189,8 +189,13 @@ export default function LeadsPanel() {
       const a = document.createElement("a");
       a.href = url;
       a.download = `leads_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      if (res.meta && res.meta.total > linhas.length) {
+        alert(`Export limitado a ${linhas.length} de ${res.meta.total} leads. Refine os filtros para exportar o restante.`);
+      }
     } catch (e) { alert(String(e)); }
     finally { setExportando(false); }
   };

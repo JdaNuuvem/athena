@@ -49,10 +49,21 @@ class TestListarLeadsFiltradoQuery(unittest.TestCase):
         with patch("core.crm.get_db", _fake_get_db):
             resultado = crm.listar_leads_filtrado()
         query = db_mock.fetch.call_args.args[0]
-        self.assertIn("ORDER BY id DESC", query)
+        self.assertIn("ORDER BY id DESC, id DESC", query)
         self.assertNotIn("WHERE", query)
         self.assertEqual(resultado["meta"], {"total": 2, "page": 1, "page_size": 25, "pages": 1})
         self.assertEqual(len(resultado["data"]), 2)
+
+    def test_paginacao_tem_desempate_por_id_para_ordenacao_estavel(self):
+        # status/funil_etapa/valor_potencial nao sao unicos — sem desempate por id,
+        # o Postgres nao garante ordem estavel entre duas queries LIMIT/OFFSET
+        # separadas quando ha empates (lead pode duplicar ou sumir entre paginas).
+        db_mock = _mock_db()
+        async def _fake_get_db(): return db_mock
+        with patch("core.crm.get_db", _fake_get_db):
+            crm.listar_leads_filtrado(sort="status", order="asc")
+        query = db_mock.fetch.call_args.args[0]
+        self.assertIn("ORDER BY status ASC, id DESC", query)
 
     def test_filtro_status_isolado(self):
         db_mock = _mock_db()
@@ -133,28 +144,28 @@ class TestListarLeadsFiltradoOrdenacao(unittest.TestCase):
         async def _fake_get_db(): return db_mock
         with patch("core.crm.get_db", _fake_get_db):
             crm.listar_leads_filtrado(sort="valor_potencial", order="asc")
-        self.assertIn("ORDER BY valor_potencial ASC", db_mock.fetch.call_args.args[0])
+        self.assertIn("ORDER BY valor_potencial ASC, id DESC", db_mock.fetch.call_args.args[0])
 
     def test_ordenacao_status_desc(self):
         db_mock = _mock_db()
         async def _fake_get_db(): return db_mock
         with patch("core.crm.get_db", _fake_get_db):
             crm.listar_leads_filtrado(sort="status", order="desc")
-        self.assertIn("ORDER BY status DESC", db_mock.fetch.call_args.args[0])
+        self.assertIn("ORDER BY status DESC, id DESC", db_mock.fetch.call_args.args[0])
 
     def test_ordenacao_funil_etapa_asc(self):
         db_mock = _mock_db()
         async def _fake_get_db(): return db_mock
         with patch("core.crm.get_db", _fake_get_db):
             crm.listar_leads_filtrado(sort="funil_etapa", order="asc")
-        self.assertIn("ORDER BY funil_etapa ASC", db_mock.fetch.call_args.args[0])
+        self.assertIn("ORDER BY funil_etapa ASC, id DESC", db_mock.fetch.call_args.args[0])
 
     def test_order_invalido_cai_em_desc(self):
         db_mock = _mock_db()
         async def _fake_get_db(): return db_mock
         with patch("core.crm.get_db", _fake_get_db):
             crm.listar_leads_filtrado(sort="status", order="xyz")
-        self.assertIn("ORDER BY status DESC", db_mock.fetch.call_args.args[0])
+        self.assertIn("ORDER BY status DESC, id DESC", db_mock.fetch.call_args.args[0])
 
     def test_sort_fora_da_whitelist_cai_no_default_id_sem_interpolar(self):
         db_mock = _mock_db()
@@ -162,7 +173,7 @@ class TestListarLeadsFiltradoOrdenacao(unittest.TestCase):
         with patch("core.crm.get_db", _fake_get_db):
             crm.listar_leads_filtrado(sort="id; DROP TABLE crm_leads;--")
         query = db_mock.fetch.call_args.args[0]
-        self.assertIn("ORDER BY id DESC", query)
+        self.assertIn("ORDER BY id DESC, id DESC", query)
         self.assertNotIn("DROP TABLE", query)
 
 
@@ -209,6 +220,17 @@ class TestListarLeadsFiltradoExport(unittest.TestCase):
         self.assertNotIn("OFFSET", query)
         self.assertEqual(resultado["meta"], {"total": 6000})
         self.assertEqual(len(resultado["data"]), 1)
+
+    def test_export_tem_desempate_por_id_para_ordenacao_estavel(self):
+        # Mesma garantia de ordem estavel do branch paginado tambem vale pro
+        # export: sem "id DESC" apos a coluna de ordenacao, o corte em 5000
+        # linhas pode variar entre chamadas quando ha empates.
+        db_mock = _mock_db(total=100, rows=[{"id": 1}])
+        async def _fake_get_db(): return db_mock
+        with patch("core.crm.get_db", _fake_get_db):
+            crm.listar_leads_filtrado(export=True, sort="funil_etapa", order="asc")
+        query = db_mock.fetch.call_args.args[0]
+        self.assertIn("ORDER BY funil_etapa ASC, id DESC", query)
 
 
 class TestListarLeadsFiltradoErro(unittest.TestCase):

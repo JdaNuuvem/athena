@@ -303,12 +303,12 @@ def listar_leads_filtrado(page=1, page_size=25, sort="id", order="desc",
         total = await db.fetchval(f"SELECT COUNT(*) FROM crm_leads {where_sql}", *vals) or 0
         if export:
             rows = await db.fetch(
-                f"SELECT * FROM crm_leads {where_sql} ORDER BY {sort_col} {order_dir} LIMIT 5000",
+                f"SELECT * FROM crm_leads {where_sql} ORDER BY {sort_col} {order_dir}, id DESC LIMIT 5000",
                 *vals)
             return {"data": [dict(r) for r in rows], "meta": {"total": total}}
         offset = (page - 1) * page_size
         rows = await db.fetch(
-            f"SELECT * FROM crm_leads {where_sql} ORDER BY {sort_col} {order_dir} "
+            f"SELECT * FROM crm_leads {where_sql} ORDER BY {sort_col} {order_dir}, id DESC "
             f"LIMIT ${len(vals)+1} OFFSET ${len(vals)+2}",
             *vals, page_size, offset)
         pages = max(1, (total + page_size - 1) // page_size)
