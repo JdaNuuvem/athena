@@ -84,7 +84,10 @@ def estoque(loja_id=None):
     loja_sql = _loja_where_estoque(loja_id)
     async def _go():
         db = await get_db()
-        total = await db.fetchval("SELECT COUNT(*) FROM catalogo_produtos")
+        if loja_id:
+            total = await db.fetchval(f"SELECT COUNT(DISTINCT e.sku) FROM estoque_lojas e WHERE e.quantidade > 0{loja_sql}")
+        else:
+            total = await db.fetchval("SELECT COUNT(*) FROM catalogo_produtos")
         baixo = await db.fetchval(f"SELECT COUNT(*) FROM estoque_lojas e JOIN catalogo_produtos c ON c.sku = e.sku WHERE e.quantidade < 10 AND e.quantidade > 0{loja_sql}")
         ruptura = await db.fetchval(f"SELECT COUNT(*) FROM estoque_lojas e WHERE e.quantidade <= 0{loja_sql}")
         return {"total_itens": total or 0, "baixo_estoque": baixo or 0, "ruptura": ruptura or 0}
@@ -94,12 +97,18 @@ def estoque(loja_id=None):
 # ── 4. Clientes ──
 
 def clientes(dias=90, loja_id=None):
-    # ponytail: top clientes via vendas_pedidos JOIN — loja filter on LEFT JOIN too fragile; skip until denormalized
+    # ponytail: cad_clientes nao tem loja_id — "cliente desta loja" so' existe via
+    # JOIN com vendas_pedidos.loja_id (cliente que comprou dessa loja).
     async def _go():
         db = await get_db()
-        total = await db.fetchval("SELECT COUNT(*) FROM cad_clientes")
-        novos = await db.fetchval("SELECT COUNT(*) FROM cad_clientes WHERE created_at >= CURRENT_DATE - $1::int", dias)
-        top = await db.fetch("SELECT c.nome as cliente, COUNT(v.id) as compras, COALESCE(SUM(v.total),0) as valor FROM cad_clientes c LEFT JOIN vendas_pedidos v ON v.cliente_id = c.id AND v.status != 'cancelado' GROUP BY c.id, c.nome ORDER BY valor DESC LIMIT 10")
+        if loja_id:
+            total = await db.fetchval("SELECT COUNT(DISTINCT v.cliente_id) FROM vendas_pedidos v WHERE v.loja_id = $1 AND v.cliente_id IS NOT NULL", loja_id)
+            novos = await db.fetchval("SELECT COUNT(DISTINCT c.id) FROM cad_clientes c JOIN vendas_pedidos v ON v.cliente_id = c.id WHERE v.loja_id = $1 AND c.created_at >= CURRENT_DATE - $2::int", loja_id, dias)
+            top = await db.fetch("SELECT c.nome as cliente, COUNT(v.id) as compras, COALESCE(SUM(v.total),0) as valor FROM cad_clientes c JOIN vendas_pedidos v ON v.cliente_id = c.id AND v.status != 'cancelado' AND v.loja_id = $1 GROUP BY c.id, c.nome ORDER BY valor DESC LIMIT 10", loja_id)
+        else:
+            total = await db.fetchval("SELECT COUNT(*) FROM cad_clientes")
+            novos = await db.fetchval("SELECT COUNT(*) FROM cad_clientes WHERE created_at >= CURRENT_DATE - $1::int", dias)
+            top = await db.fetch("SELECT c.nome as cliente, COUNT(v.id) as compras, COALESCE(SUM(v.total),0) as valor FROM cad_clientes c LEFT JOIN vendas_pedidos v ON v.cliente_id = c.id AND v.status != 'cancelado' GROUP BY c.id, c.nome ORDER BY valor DESC LIMIT 10")
         return {"total": total or 0, "novos": novos or 0, "top": [dict(r) for r in (top or [])], "periodo_dias": dias}
     try: return run_async(_go())
     except Exception as e: return {"total":0,"novos":0,"top":[],"periodo_dias":dias}

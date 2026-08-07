@@ -634,8 +634,13 @@ export const api = {
     request<{ success?: boolean; error?: string }>(`/api/lojas/manage/${id}/midia/${midiaId}`, { method: "DELETE" }),
 
   // KPI
-  kpiOverview: (periodo?: number) =>
-    request<Record<string, unknown>>(`/api/kpi/overview${periodo ? `?periodo=${periodo}` : ""}`),
+  kpiOverview: (periodo?: number, lojaId?: string) => {
+    const q = new URLSearchParams();
+    if (periodo) q.set("periodo", String(periodo));
+    if (lojaId && lojaId !== "todas") q.set("loja_id", lojaId);
+    const qs = q.toString();
+    return request<Record<string, unknown>>(`/api/kpi/overview${qs ? `?${qs}` : ""}`);
+  },
 
   // Relatorios
   relatorioVendas: (dias: number, lojaId?: string) =>

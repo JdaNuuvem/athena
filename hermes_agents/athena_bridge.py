@@ -1984,11 +1984,14 @@ def kpi_overview():
     try:
         conn = _db_sync(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         periodo = request.args.get("periodo", 30, type=int)
+        loja_id = request.args.get("loja_id", type=int)
+        loja_sql = " AND loja_id=%s" if loja_id else ""
+        loja_args = (loja_id,) if loja_id else ()
         def f(v,d=0): return float(v) if v is not None else d
         try:
-            cur.execute("SELECT COALESCE(SUM(receita_bruta),0) AS v FROM vendas WHERE data>=CURRENT_DATE-%s", (periodo,))
+            cur.execute(f"SELECT COALESCE(SUM(receita_bruta),0) AS v FROM vendas WHERE data>=CURRENT_DATE-%s{loja_sql}", (periodo,) + loja_args)
             total_receita = f(cur.fetchone()["v"])
-            cur.execute("SELECT COALESCE(SUM(quantidade),0) AS v FROM vendas WHERE data>=CURRENT_DATE-%s", (periodo,))
+            cur.execute(f"SELECT COALESCE(SUM(quantidade),0) AS v FROM vendas WHERE data>=CURRENT_DATE-%s{loja_sql}", (periodo,) + loja_args)
             total_pedidos = cur.fetchone()["v"] or 0
         except Exception:
             total_receita,total_pedidos=0,0
@@ -2001,14 +2004,14 @@ def kpi_overview():
         except Exception:
             total_anuncios=0
         try:
-            cur.execute("SELECT COALESCE(SUM(receita_bruta),0) AS v FROM vendas WHERE marketplace='shopee' AND data>=CURRENT_DATE-%s", (periodo,))
+            cur.execute(f"SELECT COALESCE(SUM(receita_bruta),0) AS v FROM vendas WHERE marketplace='shopee' AND data>=CURRENT_DATE-%s{loja_sql}", (periodo,) + loja_args)
             receita_shopee=f(cur.fetchone()["v"])
-            cur.execute("SELECT COALESCE(SUM(receita_bruta),0) AS v FROM vendas WHERE marketplace='mercado_livre' AND data>=CURRENT_DATE-%s", (periodo,))
+            cur.execute(f"SELECT COALESCE(SUM(receita_bruta),0) AS v FROM vendas WHERE marketplace='mercado_livre' AND data>=CURRENT_DATE-%s{loja_sql}", (periodo,) + loja_args)
             receita_ml=f(cur.fetchone()["v"])
         except Exception:
             receita_shopee,receita_ml=0,0
         try:
-            cur.execute("SELECT v.sku,f.descricao AS nome,SUM(v.quantidade) AS qtd,SUM(v.receita_bruta) AS receita,COALESCE(m.margem_pct,0) AS margem FROM vendas v JOIN fichas_tecnicas f ON f.sku=v.sku LEFT JOIN margens_diarias m ON m.sku=v.sku AND m.data=CURRENT_DATE WHERE v.data>=CURRENT_DATE-%s GROUP BY v.sku,f.descricao,m.margem_pct ORDER BY SUM(v.receita_bruta) DESC LIMIT 10", (periodo,))
+            cur.execute(f"SELECT v.sku,f.descricao AS nome,SUM(v.quantidade) AS qtd,SUM(v.receita_bruta) AS receita,COALESCE(m.margem_pct,0) AS margem FROM vendas v JOIN fichas_tecnicas f ON f.sku=v.sku LEFT JOIN margens_diarias m ON m.sku=v.sku AND m.data=CURRENT_DATE WHERE v.data>=CURRENT_DATE-%s{loja_sql.replace('loja_id', 'v.loja_id')} GROUP BY v.sku,f.descricao,m.margem_pct ORDER BY SUM(v.receita_bruta) DESC LIMIT 10", (periodo,) + loja_args)
             top_skus=[dict(r) for r in cur.fetchall()]
         except Exception:
             top_skus=[]

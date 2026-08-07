@@ -75,7 +75,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     Promise.all([
-      api.kpiOverview(),
+      api.kpiOverview(30, lojaId),
       api.agentsList(),
       api.relatorioVendas(1, lojaId),
       api.relatorioVendas(30, lojaId),
