@@ -30,16 +30,16 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
 }
 
 /** Primary instrument — the panel's largest readouts, one number owning the face. */
-function PrimaryInstrument({ label, value, status, trend }: { label: string; value: string; status?: Status; trend?: string }) {
-  const color = status ? STATUS_COLOR[status] : "var(--ink-100)";
+function PrimaryInstrument({ label, value, status, trend, hero }: { label: string; value: string; status?: Status; trend?: string; hero?: boolean }) {
+  const color = hero ? "#ffffff" : status ? STATUS_COLOR[status] : "var(--ink-100)";
   return (
-    <div className="instrument instrument-lit px-5 py-4 flex-1 min-w-[200px]">
+    <div className={hero ? "hero-gradient rounded-hero px-5 py-4 flex-1 min-w-[200px]" : "instrument instrument-lit px-5 py-4 flex-1 min-w-[200px]"}>
       <div className="flex items-center justify-between">
-        <div className="text-[10px] uppercase tracking-[0.12em]" style={{ color: "var(--ink-500)" }}>{label}</div>
-        {status && <span aria-hidden className="w-1.5 h-1.5 rounded-full" style={{ background: color, boxShadow: `0 0 6px ${color}` }} />}
+        <div className="text-[10px] uppercase tracking-[0.12em]" style={{ color: hero ? "rgba(255,255,255,0.85)" : "var(--ink-500)" }}>{label}</div>
+        {status && !hero && <span aria-hidden className="w-1.5 h-1.5 rounded-full" style={{ background: color, boxShadow: `0 0 6px ${color}` }} />}
       </div>
       <div className="numeric text-[28px] leading-tight font-medium mt-1.5" style={{ color }}>{value}</div>
-      {trend && <div className="text-[11px] mt-1" style={{ color: "var(--ink-700)" }}>{trend}</div>}
+      {trend && <div className="text-[11px] mt-1" style={{ color: hero ? "rgba(255,255,255,0.75)" : "var(--ink-700)" }}>{trend}</div>}
     </div>
   );
 }
@@ -134,7 +134,7 @@ export default function DashboardPage() {
 
       {/* Primary instruments — the panel's biggest readouts */}
       <div className="flex flex-wrap gap-3">
-        <PrimaryInstrument label="Vendas hoje" value={fmtBRL(dash.vendasDia)} status="ok" trend={`${dash.vendasQtd} pedido${dash.vendasQtd === 1 ? "" : "s"}`} />
+        <PrimaryInstrument label="Vendas hoje" value={fmtBRL(dash.vendasDia)} status="ok" trend={`${dash.vendasQtd} pedido${dash.vendasQtd === 1 ? "" : "s"}`} hero />
         <PrimaryInstrument label="Vendas do mês" value={fmtBRL(dash.vendasMes)} />
         <PrimaryInstrument
           label="Fluxo de caixa (30d)"
