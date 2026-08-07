@@ -69,7 +69,7 @@ def lucro_margem(dias=30, loja_id=None):
         receita_pdv = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM pdv_vendas venda WHERE DATE(data) >= CURRENT_DATE - $1::int{loja_pdv}", dias)
         receita_total = float((receita or 0) + (receita_pdv or 0))
         custos_prod = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM producao_custos WHERE data >= CURRENT_DATE - $1::int", dias)
-        compras_val = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM compras_pedidos WHERE data_emissao >= CURRENT_DATE - $1::int AND status != 'cancelado'", dias)
+        compras_val = await db.fetchval("SELECT COALESCE(SUM(valor_total),0) FROM compras_pedidos WHERE data_emissao >= CURRENT_DATE - $1::int AND status != 'cancelado'", dias)
         cp_val = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_contas_pagar WHERE origem='bling' AND status='pendente'")
         custos = float((custos_prod or 0) + (compras_val or 0) + (cp_val or 0))
         lucro = receita_total - custos
@@ -153,7 +153,7 @@ def fluxo_caixa(dias=30, loja_id=None):
         cr_recebido = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_contas_receber WHERE data_recebimento >= CURRENT_DATE - $1::int AND status='pago'", dias)
         entradas = float((entradas_bl or 0) + (entradas_pdv or 0) + (cr_recebido or 0))
         saidas_cp = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_contas_pagar WHERE data_pagamento >= CURRENT_DATE - $1::int AND status='pago'", dias)
-        saidas_comp = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM compras_pedidos WHERE data_emissao >= CURRENT_DATE - $1::int", dias)
+        saidas_comp = await db.fetchval("SELECT COALESCE(SUM(valor_total),0) FROM compras_pedidos WHERE data_emissao >= CURRENT_DATE - $1::int", dias)
         saidas = float((saidas_cp or 0) + (saidas_comp or 0))
         return {"entradas": entradas, "saidas": saidas, "saldo": round(entradas - saidas, 2), "periodo_dias": dias}
     try: return run_async(_go())
