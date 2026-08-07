@@ -62,6 +62,18 @@ class TestAtendimentoExigePermissao(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         mock_criar.assert_called_once()
 
+    def test_criar_ticket_repassa_email_telefone(self):
+        """I2 — modal 'Novo Ticket' manda email/telefone, mas criar_ticket()
+        nao os aceitava: campos ficavam sempre em branco pra qualquer ticket
+        criado pela UI nova."""
+        headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+        with patch("core.atendimento.criar_ticket", return_value={"id": 1}) as mock_criar:
+            r = self.client.post("/api/atendimento/tickets/criar", json={
+                "cliente": "X", "assunto": "Y", "email": "x@x.com", "telefone": "11999999999",
+            }, headers=headers)
+        self.assertEqual(r.status_code, 200)
+        mock_criar.assert_called_once_with("X", "Y", "whatsapp", "normal", "x@x.com", "11999999999")
+
     def test_fechar_ticket_sem_permissao_nega(self):
         token = rbac.gerar_token_sessao(7, "op@x.com", "Operador Loja")
         headers = {"Authorization": f"Bearer {token}"}
@@ -102,6 +114,23 @@ class TestAtendimentoExigePermissao(unittest.TestCase):
     # ── GET generico (/<tabela>, /<tabela>/<id>) nao exigia NENHUMA
     # permissao — nem autenticacao. Qualquer request anonima conseguia ler
     # atend_canais (que guarda o token de integracao do canal!). ──
+
+    def test_dashboard_sem_permissao_nega(self):
+        """I3 — /api/atendimento/dashboard era a unica rota do arquivo sem
+        @requer_permissao, expondo contagens/tempo medio/config de SLA pra
+        qualquer usuario autenticado."""
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=[]), \
+             patch("core.atendimento.dashboard") as mock_dash:
+            r = self.client.get("/api/atendimento/dashboard")
+        self.assertEqual(r.status_code, 403)
+        mock_dash.assert_not_called()
+
+    def test_dashboard_com_permissao_libera(self):
+        headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+        with patch("core.atendimento.dashboard", return_value={"tickets_abertos": 0}) as mock_dash:
+            r = self.client.get("/api/atendimento/dashboard", headers=headers)
+        self.assertEqual(r.status_code, 200)
+        mock_dash.assert_called_once()
 
     def test_listar_sla_sem_permissao_nega(self):
         with patch("core.rbac.get_permissoes_por_usuario", return_value=[]), \

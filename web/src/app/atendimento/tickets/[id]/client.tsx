@@ -46,9 +46,10 @@ export default function TicketDetalheClient() {
     if (!id) return;
     conversaIdRef.current = null;
     api.atendimento.listarMensagens(id).then(r => {
-      const dados = r.data || [];
-      setMensagens(dados);
-      if (dados.length > 0) conversaIdRef.current = dados[0].conversa_id;
+      setMensagens(r.data || []);
+      // conversa_id vem do topo da resposta (nao mais do primeiro item),
+      // pra funcionar mesmo com ticket recem-criado sem nenhuma mensagem.
+      conversaIdRef.current = r.conversa_id ?? null;
     }).catch(() => {});
   }, [id]);
 
@@ -60,8 +61,11 @@ export default function TicketDetalheClient() {
     return on((evento: EventoChatSocket) => {
       if (evento.evento === "nova_mensagem") {
         const m = evento.mensagem as MensagemTicket;
+        // conversaIdRef e' sempre resolvido a partir da resposta de
+        // listarMensagens (mesmo com zero mensagens) — nunca "adota" o
+        // conversa_id do primeiro evento recebido, que podia pertencer a
+        // outro ticket (todo atendente e' "participante" de todo ticket).
         if (conversaIdRef.current !== null && m.conversa_id !== conversaIdRef.current) return;
-        if (conversaIdRef.current === null) conversaIdRef.current = m.conversa_id;
         setMensagens(atual => (atual.some(x => x.id === m.id) ? atual : [...atual, m]));
       }
       if (evento.evento === "ticket_status_alterado" && evento.ticket_id === id) {

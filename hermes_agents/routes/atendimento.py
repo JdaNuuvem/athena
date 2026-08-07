@@ -7,8 +7,11 @@ atendimento_bp = Blueprint("atendimento", __name__, url_prefix="/api/atendimento
 
 @atendimento_bp.route("/dashboard", methods=["GET"])
 def atend_dashboard():
-    from core.atendimento import dashboard as ad
-    return jsonify(ad())
+    @requer_permissao("atendimento.ver")
+    def _go():
+        from core.atendimento import dashboard as ad
+        return jsonify(ad())
+    return _go()
 
 
 @atendimento_bp.route("/tickets/criar", methods=["POST"])
@@ -19,7 +22,8 @@ def atend_criar_ticket():
     def _go():
         from core.atendimento import criar_ticket
         return jsonify(criar_ticket(data.get("cliente", ""), data.get("assunto", ""),
-                                    data.get("canal", "whatsapp"), data.get("prioridade", "normal")))
+                                    data.get("canal", "whatsapp"), data.get("prioridade", "normal"),
+                                    data.get("email", ""), data.get("telefone", "")))
     return _go()
 
 
@@ -94,7 +98,15 @@ def atend_listar_mensagens(id):
         from core.chat import conversa_id_do_ticket
         conversa_id = conversa_id_do_ticket(id)
         mensagens = listar_mensagens_ticket(id)
-        return jsonify({"data": [_serializar_mensagem_ticket(m, conversa_id) for m in mensagens]})
+        # conversa_id tambem exposto no topo da resposta (nao so' por mensagem)
+        # pra frontend saber o conversa_id do ticket mesmo com zero mensagens —
+        # senao o filtro de WS do client fica sem referencia ate a primeira
+        # mensagem chegar, e pode "adotar" o conversa_id errado de um evento
+        # de outro ticket (todo atendente e' "participante" de todo ticket).
+        return jsonify({
+            "data": [_serializar_mensagem_ticket(m, conversa_id) for m in mensagens],
+            "conversa_id": conversa_id,
+        })
     return _go()
 
 

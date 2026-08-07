@@ -238,7 +238,7 @@ def votar_artigo_kb(id: int, util: bool) -> dict:
     try: return run_async(_go())
     except Exception as e: return {"error": str(e)}
 
-def criar_ticket(cliente: str, assunto: str, canal="whatsapp", prioridade="normal") -> dict:
+def criar_ticket(cliente: str, assunto: str, canal="whatsapp", prioridade="normal", email: str = "", telefone: str = "") -> dict:
     """Cria ticket com SLA aplicado — vencimento e tempo de resposta da regra da prioridade."""
     from datetime import datetime, timedelta
     async def _go():
@@ -254,8 +254,12 @@ def criar_ticket(cliente: str, assunto: str, canal="whatsapp", prioridade="norma
 
     numero = f"#{sla_data['numero_seq']:04d}" if sla_data.get("numero_seq") else None
     ticket = create("tickets", {
-        "cliente": cliente, "assunto": assunto, "canal": canal,
-        "prioridade": prioridade, "status": "aberto", "data_abertura": hoje(),
+        "cliente": cliente, "assunto": assunto, "canal": canal, "email": email, "telefone": telefone,
+        # ponytail: data_abertura e' TIMESTAMP — asyncpg exige datetime.datetime
+        # nativo pro bind, nao aceita string (hoje() retorna str). Mesmo
+        # precedente ja documentado em core/fiscal.py._data,
+        # core/i9logic_vendas.py._gravar_pedido e core/pdv.py.
+        "prioridade": prioridade, "status": "aberto", "data_abertura": datetime.now(),
         "sla_vencimento": sla_data["sla_vencimento"],
         "tempo_resposta_min": sla_data["tempo_resposta_min"],
         "numero": numero,
@@ -280,7 +284,11 @@ def _serializar_mensagem_ticket(m: dict, conversa_id: int) -> dict:
     }
 
 def adicionar_mensagem(ticket_id: int, remetente: str, conteudo: str, tipo="texto", anexo_url: str = None) -> dict:
-    campos = {"ticket_id": ticket_id, "remetente": remetente, "conteudo": conteudo, "tipo": tipo, "enviado_em": hoje()}
+    # ponytail: enviado_em e' TIMESTAMP — asyncpg exige datetime.datetime
+    # nativo pro bind, nao aceita string (hoje() retorna str). Mesmo
+    # precedente ja documentado em core/fiscal.py._data e core/pdv.py.
+    from datetime import datetime
+    campos = {"ticket_id": ticket_id, "remetente": remetente, "conteudo": conteudo, "tipo": tipo, "enviado_em": datetime.now()}
     if anexo_url:
         campos["anexo_url"] = anexo_url
     mensagem = create("mensagens", campos)
@@ -329,7 +337,12 @@ def mudar_status_ticket(ticket_id: int, novo_status: str) -> dict:
         return {"error": f"Transicao invalida: {atual} -> {novo_status}"}
     campos = {"status": novo_status}
     if novo_status == "fechado":
-        campos["data_fechamento"] = hoje()
+        # ponytail: data_fechamento e' TIMESTAMP — asyncpg exige
+        # datetime.datetime nativo pro bind, nao aceita string (hoje()
+        # retorna str). Mesmo precedente ja documentado em
+        # core/fiscal.py._data e core/pdv.py.
+        from datetime import datetime
+        campos["data_fechamento"] = datetime.now()
     elif atual == "fechado":
         campos["data_fechamento"] = None
     resultado = update("tickets", ticket_id, campos)
@@ -404,6 +417,20 @@ def dashboard() -> dict:
     try: return run_async(_go())
     except Exception as e: return {"tickets_abertos":0,"tickets_pendentes":0,"hoje":0,"tempo_medio_resposta":0,"canais":[],"slas":[]}
 
+def _parse_data_filtro(s):
+    """Converte string 'YYYY-MM-DD...' (query param de/ate) para date real —
+    asyncpg exige um objeto date/datetime nos parametros ligados a coluna
+    TIMESTAMP, nao aceita string mesmo com ::date (mesmo precedente ja
+    documentado em core/fiscal.py._data e core/i9logic_vendas.py._gravar_pedido).
+    Retorna None se vazio ou nao-parseavel — quem chama decide o que fazer."""
+    if not s:
+        return None
+    from datetime import datetime
+    try:
+        return datetime.strptime(str(s)[:10], "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return None
+
 def listar_tickets_filtrado(status=None, prioridade=None, canal=None, atendente_id=None, q=None, de=None, ate=None) -> list:
     where = []
     params = []
@@ -415,8 +442,14 @@ def listar_tickets_filtrado(status=None, prioridade=None, canal=None, atendente_
     if canal: _add("canal = ${n}", canal)
     if atendente_id: _add("atendente_id = ${n}", int(atendente_id))
     if q: _add("(cliente ILIKE ${n} OR assunto ILIKE ${n} OR numero ILIKE ${n})", f"%{q}%")
-    if de: _add("data_abertura >= ${n}", de)
-    if ate: _add("data_abertura <= ${n}", ate)
+    if de:
+        de_data = _parse_data_filtro(de)
+        if de_data: _add("data_abertura >= ${n}", de_data)
+        else: log(AGENT, f"listar_tickets_filtrado: filtro 'de' invalido ignorado ({de!r})")
+    if ate:
+        ate_data = _parse_data_filtro(ate)
+        if ate_data: _add("data_abertura <= ${n}", ate_data)
+        else: log(AGENT, f"listar_tickets_filtrado: filtro 'ate' invalido ignorado ({ate!r})")
     where_sql = f"WHERE {' AND '.join(where)}" if where else ""
     async def _go():
         db = await get_db()
