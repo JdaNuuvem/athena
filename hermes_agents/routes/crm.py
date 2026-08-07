@@ -5,6 +5,48 @@ from core.api_utils import status_for_resultado as _status_for
 crm_bp = Blueprint("crm", __name__, url_prefix="/api/crm")
 
 
+_LEADS_QUERY_PARAMS = ("page", "page_size", "sort", "order", "status", "funil_etapa",
+                        "origem", "empresa_id", "com_telefone", "q", "export")
+
+
+def _tem_filtro_leads(args) -> bool:
+    return any(p in args for p in _LEADS_QUERY_PARAMS)
+
+
+def _int_ou(args, nome, default):
+    try:
+        return int(args.get(nome, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _int_ou_none(args, nome):
+    bruto = args.get(nome)
+    if not bruto:
+        return None
+    try:
+        return int(bruto)
+    except ValueError:
+        return None
+
+
+def _parse_filtro_leads(args) -> dict:
+    com_telefone_bruto = args.get("com_telefone")
+    return {
+        "page": _int_ou(args, "page", 1),
+        "page_size": _int_ou(args, "page_size", 25),
+        "sort": args.get("sort", "id"),
+        "order": args.get("order", "desc"),
+        "status": args.get("status") or None,
+        "funil_etapa": args.get("funil_etapa") or None,
+        "origem": args.get("origem") or None,
+        "empresa_id": _int_ou_none(args, "empresa_id"),
+        "com_telefone": (com_telefone_bruto.lower() == "true") if com_telefone_bruto is not None else None,
+        "q": args.get("q") or None,
+        "export": args.get("export", "").lower() == "true",
+    }
+
+
 @crm_bp.route("/funil", methods=["GET"])
 def crm_funil():
     from core.crm import funil as crm_funil_fn
@@ -34,6 +76,9 @@ def crm_list(tabela):
 
     @requer_permissao("crm.ver")
     def _go():
+        if tabela == "leads" and _tem_filtro_leads(request.args):
+            from core.crm import listar_leads_filtrado
+            return jsonify(listar_leads_filtrado(**_parse_filtro_leads(request.args)))
         return jsonify({"data": crm_list_fn(tabela)})
     return _go()
 

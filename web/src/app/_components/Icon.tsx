@@ -42,6 +42,7 @@ const paths: Record<string, string> = {
   bell: "M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9",
   sun: "M12 3v2m0 14v2m9-9h-2M5 12H3m15.36-6.36l-1.42 1.42M7.05 16.95l-1.41 1.41m12.72 0l-1.41-1.41M7.05 7.05L5.64 5.64M16 12a4 4 0 11-8 0 4 4 0 018 0z",
   moon: "M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 1020.354 15.354z",
+  download: "M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3",
 };
 
 export default function Icon({ name, size = 20, className = "", style }: { name: string; size?: number; className?: string; style?: React.CSSProperties }) {
