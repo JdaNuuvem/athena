@@ -204,7 +204,7 @@ function ShopeeIntegrationContent() {
   const lojasSemShopee = lojasDisponiveis.filter(l => !lojasShopee.some(s => s.id === l.id));
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 max-w-3xl">
       <div>
         <Link href="/integracoes" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors inline-flex items-center gap-1"><Icon name="chevronLeft" size={14} /> Integrações</Link>
         <h1 className="text-lg font-light text-neutral-300 mt-1">Shopee</h1>

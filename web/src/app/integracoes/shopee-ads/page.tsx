@@ -29,7 +29,7 @@ export default function ShopeeAdsPage() {
             Nenhuma campanha encontrada. Sincronize os anúncios primeiro.
           </div>
         ) : (
-          <div className="grid gap-3">
+          <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
             {campaigns.map((c, i) => (
               <div key={i} className="bg-neutral-900 border border-neutral-800 rounded-lg p-4">
                 <div className="flex items-center justify-between">

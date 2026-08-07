@@ -45,7 +45,7 @@ export default function IntegracoesPage() {
       {Object.entries(grouped).map(([cat, items]) => (
         <section key={cat}>
           <h2 className="text-xs text-neutral-500 uppercase tracking-wider mb-3">{categoryLabels[cat] || cat}</h2>
-          <div className="grid gap-3">
+          <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
             {items.map((i) => {
               const link = INTEGRATION_LINKS[i.id];
               const content = (
