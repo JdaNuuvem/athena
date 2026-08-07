@@ -642,6 +642,10 @@ def shopee_estoque_rapido_listar():
     busca = request.args.get("busca", "")
     pagina = request.args.get("pagina", 1, type=int)
     por_pagina = request.args.get("por_pagina", 50, type=int)
+    # pagina<=0 vira OFFSET negativo (Postgres rejeita); por_pagina sem teto
+    # deixa puxar o catalogo inteiro numa unica chamada.
+    pagina = max(1, pagina)
+    por_pagina = min(200, max(1, por_pagina))
     try:
         return jsonify(listar_grid_estoque_rapido(busca=busca, pagina=pagina, por_pagina=por_pagina))
     except Exception as e:
@@ -650,8 +654,9 @@ def shopee_estoque_rapido_listar():
 
 @shopee_bp.route('/estoque-rapido/celula', methods=['PUT'])
 def shopee_estoque_rapido_atualizar_celula():
-    from core.rbac import requer_permissao, usuario_atual_da_request
+    from core.rbac import requer_permissao, requer_acesso_loja, usuario_atual_da_request
 
+    @requer_acesso_loja
     @requer_permissao("produtos.editar")
     def _handler():
         from shopee import atualizar_celula_estoque_rapido
