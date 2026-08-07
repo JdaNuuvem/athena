@@ -9,7 +9,6 @@ interface FunilData { categorias: string[]; series: {name:string;total:number;va
 
 const SUBMENU = [
   { href: "/crm/leads", label: "Leads", color: "bg-blue-600" },
-  { href: "/crm/contatos", label: "Contatos", color: "bg-emerald-600" },
   { href: "/crm/empresas", label: "Empresas", color: "bg-purple-600" },
   { href: "/crm/negociacoes", label: "Negociacoes", color: "bg-amber-600" },
   { href: "/crm/agenda", label: "Agenda", color: "bg-pink-600" },
