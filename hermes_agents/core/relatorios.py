@@ -7,9 +7,13 @@ AGENT = "Relatorios Core"
 
 # ── Helper: UNION vendas Bling + PDV ──
 
-def _loja_where_bling(loja_id, prefix="v"):
-    """WHERE clause suffix for vendas_pedidos filtered by loja_id."""
-    return f" AND {prefix}.loja_id = {int(loja_id)}" if loja_id else ""
+def _loja_where_bling(loja_id, prefix=""):
+    """WHERE clause suffix for vendas_pedidos filtered by loja_id. Sem alias por
+    padrao — nenhuma das queries que usam isso aliasa vendas_pedidos; um prefixo
+    default "v." gerava UndefinedTableError (mascarado pelo except generico,
+    devolvendo zero) toda vez que um loja_id era passado."""
+    p = f"{prefix}." if prefix else ""
+    return f" AND {p}loja_id = {int(loja_id)}" if loja_id else ""
 
 def _loja_where_pdv(loja_id):
     """WHERE clause suffix for pdv_vendas filtered by loja_id via pdv_caixas."""
