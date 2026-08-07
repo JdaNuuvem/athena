@@ -39,13 +39,13 @@ export default function IntegracoesPage() {
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl">
+    <div className="p-6 space-y-6">
       <h1 className="text-lg font-light text-neutral-300">Integrações</h1>
 
       {Object.entries(grouped).map(([cat, items]) => (
         <section key={cat}>
           <h2 className="text-xs text-neutral-500 uppercase tracking-wider mb-3">{categoryLabels[cat] || cat}</h2>
-          <div className="grid gap-3">
+          <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
             {items.map((i) => {
               const link = INTEGRATION_LINKS[i.id];
               const content = (

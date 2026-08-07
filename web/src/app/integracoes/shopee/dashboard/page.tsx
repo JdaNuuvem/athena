@@ -284,7 +284,7 @@ export default function ShopeeDashboardPage() {
   if (totalPontosPenalidade > 0) alertas.push({ texto: `${totalPontosPenalidade} ponto${totalPontosPenalidade === 1 ? "" : "s"} de penalidade no trimestre`, tone: "amber" });
 
   return (
-    <div className="p-6 space-y-4 max-w-5xl">
+    <div className="p-6 space-y-4">
       <div>
         <Link href="/integracoes/shopee" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors inline-flex items-center gap-1"><Icon name="chevronLeft" size={14} /> Shopee</Link>
         <h1 className="text-lg font-light text-neutral-300 mt-1">Painel Consolidado Shopee</h1>

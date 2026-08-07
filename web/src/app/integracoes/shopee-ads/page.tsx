@@ -16,7 +16,7 @@ export default function ShopeeAdsPage() {
   }, []);
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl">
+    <div className="p-6 space-y-6">
       <div>
         <Link href="/integracoes" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors inline-flex items-center gap-1"><Icon name="chevronLeft" size={14} /> Integrações</Link>
         <h1 className="text-lg font-light text-neutral-300 mt-1">Shopee Ads</h1>
@@ -29,7 +29,7 @@ export default function ShopeeAdsPage() {
             Nenhuma campanha encontrada. Sincronize os anúncios primeiro.
           </div>
         ) : (
-          <div className="grid gap-3">
+          <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
             {campaigns.map((c, i) => (
               <div key={i} className="bg-neutral-900 border border-neutral-800 rounded-lg p-4">
                 <div className="flex items-center justify-between">

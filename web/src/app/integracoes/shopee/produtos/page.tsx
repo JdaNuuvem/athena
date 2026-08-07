@@ -340,7 +340,7 @@ export default function ShopeeProdutosPage() {
   }
 
   return (
-    <div className="p-6 space-y-5 max-w-6xl">
+    <div className="p-6 space-y-5">
       <div className="flex items-start justify-between">
         <div>
           <Link href="/integracoes/shopee" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors inline-flex items-center gap-1"><Icon name="chevronLeft" size={14} /> Shopee</Link>
