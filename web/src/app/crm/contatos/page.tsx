@@ -5,8 +5,7 @@ import { api } from "@/lib/api";
 import { Can } from "@/lib/auth";
 import Icon from "@/app/_components/Icon";
 import PageHeader from "@/app/_components/PageHeader";
-
-const POR_PAGINA = 20;
+import { fmtBRL, fmtDataBR } from "@/lib/format";
 
 interface Cliente {
   id: number;
@@ -16,13 +15,30 @@ interface Cliente {
   email: string | null;
   telefone: string | null;
   status: string;
+  whatsapp: boolean;
+  data_nascimento: string | null;
+  ultima_compra: string | null;
+  total_gasto: number;
+  qtd_pedidos: number;
+  tags: string[];
 }
+
+type Sort = "id" | "nome" | "ultima_compra" | "total_gasto";
+type Order = "asc" | "desc";
 
 function extrairErro(res: unknown): string | null {
   if (res && typeof res === "object" && "error" in res && (res as { error?: unknown }).error) {
     return String((res as { error: unknown }).error);
   }
   return null;
+}
+
+function janelaPaginas(atual: number, total: number): number[] {
+  const inicio = Math.max(1, Math.min(atual - 2, total - 4));
+  const fim = Math.min(total, inicio + 4);
+  const janela: number[] = [];
+  for (let i = Math.max(1, inicio); i <= fim; i++) janela.push(i);
+  return janela;
 }
 
 export default function Page() {
@@ -32,8 +48,17 @@ export default function Page() {
   const [busca, setBusca] = useState("");
   const [buscaAtiva, setBuscaAtiva] = useState("");
   const [pagina, setPagina] = useState(1);
+  const [porPagina, setPorPagina] = useState(20);
   const [total, setTotal] = useState(0);
   const [totalPaginas, setTotalPaginas] = useState(1);
+
+  const [sort, setSort] = useState<Sort>("id");
+  const [order, setOrder] = useState<Order>("desc");
+  const [filtroStatus, setFiltroStatus] = useState("");
+  const [filtroTag, setFiltroTag] = useState("");
+  const [filtroWhatsapp, setFiltroWhatsapp] = useState("");
+  const [filtroSemComprarDias, setFiltroSemComprarDias] = useState("");
+  const [tagsDisponiveis, setTagsDisponiveis] = useState<string[]>([]);
 
   const [modal, setModal] = useState<{ open: boolean; mode: "create" | "edit"; row?: Cliente }>({ open: false, mode: "create" });
   const [form, setForm] = useState<Record<string, string>>({});
@@ -43,11 +68,22 @@ export default function Page() {
   const [statusAlvo, setStatusAlvo] = useState<Cliente | null>(null);
   const [togglingId, setTogglingId] = useState<number | null>(null);
 
+  useEffect(() => {
+    api.cadClientesTagsDisponiveis().then(r => setTagsDisponiveis(r.data || [])).catch(() => {});
+  }, []);
+
+  const filtrosAtivos = !!(filtroStatus || filtroTag || filtroWhatsapp || filtroSemComprarDias);
+
   const carregar = useCallback(async (paginaAlvo: number, buscaAlvo: string) => {
     setLoading(true);
     setError("");
     try {
-      const res = await api.cadListPaginado("clientes", paginaAlvo, POR_PAGINA, buscaAlvo || undefined);
+      const filtros: Record<string, string> = { sort, order };
+      if (filtroStatus) filtros.status = filtroStatus;
+      if (filtroTag) filtros.tag = filtroTag;
+      if (filtroWhatsapp) filtros.whatsapp = filtroWhatsapp;
+      if (filtroSemComprarDias) filtros.sem_comprar_dias = filtroSemComprarDias;
+      const res = await api.cadListPaginado("clientes", paginaAlvo, porPagina, buscaAlvo || undefined, filtros);
       setItems((res.data || []) as Cliente[]);
       setTotal(res.total ?? 0);
       setTotalPaginas(res.total_paginas ?? 1);
@@ -56,7 +92,7 @@ export default function Page() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sort, order, filtroStatus, filtroTag, filtroWhatsapp, filtroSemComprarDias, porPagina]);
 
   useEffect(() => { carregar(pagina, buscaAtiva); }, [carregar, pagina, buscaAtiva]);
 
@@ -72,6 +108,24 @@ export default function Page() {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [busca]);
 
+  const alternarSort = (coluna: Sort) => {
+    if (sort === coluna) {
+      setOrder(o => (o === "asc" ? "desc" : "asc"));
+    } else {
+      setSort(coluna);
+      setOrder("desc");
+    }
+    setPagina(1);
+  };
+
+  const limparFiltros = () => {
+    setFiltroStatus("");
+    setFiltroTag("");
+    setFiltroWhatsapp("");
+    setFiltroSemComprarDias("");
+    setPagina(1);
+  };
+
   const abrirNovo = () => {
     setForm({ tipo: "PF" });
     setSaveError("");
@@ -85,6 +139,8 @@ export default function Page() {
       documento: row.documento || "",
       email: row.email || "",
       telefone: row.telefone || "",
+      whatsapp: row.whatsapp ? "true" : "false",
+      data_nascimento: row.data_nascimento || "",
     });
     setSaveError("");
     setModal({ open: true, mode: "edit", row });
@@ -108,6 +164,8 @@ export default function Page() {
       documento: form.documento?.trim() || "",
       email: form.email?.trim() || "",
       telefone: form.telefone?.trim() || "",
+      whatsapp: form.whatsapp === "true",
+      data_nascimento: form.data_nascimento || null,
     };
     try {
       const res = modal.mode === "create"
@@ -141,6 +199,9 @@ export default function Page() {
     }
   };
 
+  const inicioItem = total === 0 ? 0 : (pagina - 1) * porPagina + 1;
+  const fimItem = Math.min(pagina * porPagina, total);
+
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
@@ -150,15 +211,52 @@ export default function Page() {
         </Can>
       </div>
 
-      <div className="relative w-full max-w-xs">
-        <Icon name="search" size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-500" />
-        <input
-          type="text"
-          placeholder="Buscar por nome, documento, email ou telefone..."
-          value={busca}
-          onChange={e => setBusca(e.target.value)}
-          className="w-full rounded-lg border border-neutral-700 bg-neutral-800 py-1.5 pl-8 pr-3 text-xs text-neutral-200 placeholder-neutral-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
-        />
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="relative w-full max-w-xs">
+          <Icon name="search" size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-500" />
+          <input
+            type="text"
+            placeholder="Buscar por nome, documento, email ou telefone..."
+            value={busca}
+            onChange={e => setBusca(e.target.value)}
+            className="w-full rounded-lg border border-neutral-700 bg-neutral-800 py-1.5 pl-8 pr-3 text-xs text-neutral-200 placeholder-neutral-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
+          />
+        </div>
+
+        <select value={filtroStatus} onChange={e => { setFiltroStatus(e.target.value); setPagina(1); }}
+          className="rounded-lg border border-neutral-700 bg-neutral-800 px-2.5 py-1.5 text-xs text-neutral-200 focus:border-indigo-500 focus:outline-none">
+          <option value="">Status: todos</option>
+          <option value="ativo">Ativo</option>
+          <option value="inativo">Inativo</option>
+        </select>
+
+        <select value={filtroTag} onChange={e => { setFiltroTag(e.target.value); setPagina(1); }}
+          className="rounded-lg border border-neutral-700 bg-neutral-800 px-2.5 py-1.5 text-xs text-neutral-200 focus:border-indigo-500 focus:outline-none">
+          <option value="">Tag: todas</option>
+          {tagsDisponiveis.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+
+        <select value={filtroWhatsapp} onChange={e => { setFiltroWhatsapp(e.target.value); setPagina(1); }}
+          className="rounded-lg border border-neutral-700 bg-neutral-800 px-2.5 py-1.5 text-xs text-neutral-200 focus:border-indigo-500 focus:outline-none">
+          <option value="">WhatsApp: qualquer</option>
+          <option value="true">Com WhatsApp</option>
+          <option value="false">Sem WhatsApp</option>
+        </select>
+
+        <select value={filtroSemComprarDias} onChange={e => { setFiltroSemComprarDias(e.target.value); setPagina(1); }}
+          className="rounded-lg border border-neutral-700 bg-neutral-800 px-2.5 py-1.5 text-xs text-neutral-200 focus:border-indigo-500 focus:outline-none">
+          <option value="">Última compra: qualquer</option>
+          <option value="30">Sem comprar há 30+ dias</option>
+          <option value="60">Sem comprar há 60+ dias</option>
+          <option value="90">Sem comprar há 90+ dias</option>
+          <option value="180">Sem comprar há 180+ dias</option>
+        </select>
+
+        {filtrosAtivos && (
+          <button onClick={limparFiltros} className="text-xs text-neutral-500 hover:text-neutral-300 px-2 py-1.5">
+            Limpar filtros
+          </button>
+        )}
       </div>
 
       {error && (
@@ -180,30 +278,61 @@ export default function Page() {
         </div>
       ) : items.length === 0 ? (
         <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-8 text-center">
-          <p className="text-neutral-400 text-sm">{buscaAtiva ? "Nenhum contato encontrado para essa busca." : "Nenhum contato cadastrado."}</p>
+          <p className="text-neutral-400 text-sm">{buscaAtiva || filtrosAtivos ? "Nenhum contato encontrado para esse filtro." : "Nenhum contato cadastrado."}</p>
         </div>
       ) : (
         <div className="bg-neutral-800 border border-neutral-700 rounded-lg overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-neutral-700 text-neutral-400 bg-neutral-850">
-                <th className="text-left p-3">Nome</th>
-                <th className="text-left p-3">Tipo</th>
-                <th className="text-left p-3">Documento</th>
-                <th className="text-left p-3">Email</th>
-                <th className="text-left p-3">Telefone</th>
+                <th className="text-left p-3 cursor-pointer select-none hover:text-neutral-200" onClick={() => alternarSort("nome")}>
+                  Nome
+                  {sort === "nome" && (
+                    <Icon name="chevronDown" size={11} className={"inline ml-0.5" + (order === "asc" ? " rotate-180" : "")} />
+                  )}
+                </th>
+                <th className="text-left p-3">Contato</th>
+                <th className="text-left p-3">Tags</th>
+                <th className="text-left p-3 cursor-pointer select-none hover:text-neutral-200" onClick={() => alternarSort("ultima_compra")}>
+                  Última compra
+                  {sort === "ultima_compra" && (
+                    <Icon name="chevronDown" size={11} className={"inline ml-0.5" + (order === "asc" ? " rotate-180" : "")} />
+                  )}
+                </th>
+                <th className="text-right p-3 cursor-pointer select-none hover:text-neutral-200" onClick={() => alternarSort("total_gasto")}>
+                  Total gasto
+                  {sort === "total_gasto" && (
+                    <Icon name="chevronDown" size={11} className={"inline ml-0.5" + (order === "asc" ? " rotate-180" : "")} />
+                  )}
+                </th>
                 <th className="text-left p-3">Status</th>
-                <th className="text-right p-3">Acoes</th>
+                <th className="text-right p-3">Ações</th>
               </tr>
             </thead>
             <tbody>
               {items.map((item, i) => (
                 <tr key={item.id} className={"border-b border-neutral-700/50 " + (i % 2 === 0 ? "bg-neutral-800" : "bg-neutral-800/50")}>
                   <td className="p-3 text-neutral-300">{item.nome}</td>
-                  <td className="p-3 text-neutral-300">{item.tipo === "PJ" ? "Pessoa Juridica" : "Pessoa Fisica"}</td>
-                  <td className="p-3 text-neutral-300">{item.documento || "—"}</td>
-                  <td className="p-3 text-neutral-300">{item.email || "—"}</td>
-                  <td className="p-3 text-neutral-300">{item.telefone || "—"}</td>
+                  <td className="p-3 text-neutral-300">
+                    <div>{item.email || "—"}</div>
+                    <div className="flex items-center gap-1.5 text-neutral-500">
+                      <span>{item.telefone || "—"}</span>
+                      {item.whatsapp && (
+                        <span className="px-1 py-0.5 rounded text-[9px] font-semibold bg-emerald-500/20 text-emerald-400">WA</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="p-3">
+                    <div className="flex flex-wrap gap-1">
+                      {item.tags.slice(0, 3).map(t => (
+                        <span key={t} className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-500/20 text-indigo-400">{t}</span>
+                      ))}
+                      {item.tags.length > 3 && <span className="text-[10px] text-neutral-500">+{item.tags.length - 3}</span>}
+                      {item.tags.length === 0 && <span className="text-neutral-600">—</span>}
+                    </div>
+                  </td>
+                  <td className="p-3 text-neutral-300">{fmtDataBR(item.ultima_compra)}</td>
+                  <td className="p-3 text-right text-neutral-300">{fmtBRL(item.total_gasto)}</td>
                   <td className="p-3">
                     <span className={"px-2 py-0.5 rounded text-[10px] font-medium " + (item.status === "ativo" ? "bg-emerald-500/20 text-emerald-400" : "bg-neutral-500/20 text-neutral-400")}>
                       {item.status === "ativo" ? "Ativo" : "Inativo"}
@@ -218,7 +347,7 @@ export default function Page() {
                       </Can>
                       <Can permission="cadastros.excluir">
                         <button
-                          onClick={() => item.status === "ativo" ? setStatusAlvo(item) : alternarStatus(item)}
+                          onClick={() => (item.status === "ativo" ? setStatusAlvo(item) : alternarStatus(item))}
                           disabled={togglingId === item.id}
                           title={item.status === "ativo" ? "Desativar" : "Reativar"}
                           className={"rounded-md p-1.5 disabled:opacity-50 " + (item.status === "ativo" ? "text-neutral-500 hover:bg-red-500/10 hover:text-red-400" : "text-neutral-500 hover:bg-emerald-500/10 hover:text-emerald-400")}
@@ -236,23 +365,39 @@ export default function Page() {
       )}
 
       {!loading && items.length > 0 && (
-        <div className="flex items-center justify-between text-xs text-neutral-500">
-          <span>{total} contato{total === 1 ? "" : "s"} — página {pagina} de {totalPaginas}</span>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setPagina(p => Math.max(1, p - 1))}
-              disabled={pagina <= 1}
-              className="rounded-lg border border-neutral-700 px-3 py-1 text-neutral-300 hover:bg-neutral-800 disabled:opacity-40 disabled:hover:bg-transparent"
-            >
-              Anterior
-            </button>
-            <button
-              onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))}
-              disabled={pagina >= totalPaginas}
-              className="rounded-lg border border-neutral-700 px-3 py-1 text-neutral-300 hover:bg-neutral-800 disabled:opacity-40 disabled:hover:bg-transparent"
-            >
-              Próxima
-            </button>
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-neutral-500">
+          <span>Mostrando {inicioItem}–{fimItem} de {total}</span>
+          <div className="flex items-center gap-2">
+            <select value={porPagina} onChange={e => { setPorPagina(Number(e.target.value)); setPagina(1); }}
+              className="rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-1 text-neutral-300 focus:border-indigo-500 focus:outline-none">
+              <option value={20}>20 / página</option>
+              <option value={50}>50 / página</option>
+              <option value={100}>100 / página</option>
+            </select>
+            <div className="flex gap-1">
+              <button onClick={() => setPagina(1)} disabled={pagina <= 1}
+                className="rounded-lg border border-neutral-700 px-2.5 py-1 text-neutral-300 hover:bg-neutral-800 disabled:opacity-40 disabled:hover:bg-transparent">
+                «
+              </button>
+              <button onClick={() => setPagina(p => Math.max(1, p - 1))} disabled={pagina <= 1}
+                className="rounded-lg border border-neutral-700 px-2.5 py-1 text-neutral-300 hover:bg-neutral-800 disabled:opacity-40 disabled:hover:bg-transparent">
+                ‹
+              </button>
+              {janelaPaginas(pagina, totalPaginas).map(n => (
+                <button key={n} onClick={() => setPagina(n)}
+                  className={"rounded-lg border px-2.5 py-1 " + (n === pagina ? "border-indigo-500 bg-indigo-500/20 text-indigo-400" : "border-neutral-700 text-neutral-300 hover:bg-neutral-800")}>
+                  {n}
+                </button>
+              ))}
+              <button onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))} disabled={pagina >= totalPaginas}
+                className="rounded-lg border border-neutral-700 px-2.5 py-1 text-neutral-300 hover:bg-neutral-800 disabled:opacity-40 disabled:hover:bg-transparent">
+                ›
+              </button>
+              <button onClick={() => setPagina(totalPaginas)} disabled={pagina >= totalPaginas}
+                className="rounded-lg border border-neutral-700 px-2.5 py-1 text-neutral-300 hover:bg-neutral-800 disabled:opacity-40 disabled:hover:bg-transparent">
+                »
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -293,6 +438,16 @@ export default function Page() {
               <div>
                 <label className="mb-1 block text-[11px] font-medium text-neutral-400">Telefone</label>
                 <input type="text" value={form.telefone || ""} onChange={e => setForm({ ...form, telefone: e.target.value })}
+                  className="w-full rounded-lg border border-neutral-600 bg-neutral-700 px-3 py-2 text-xs text-neutral-200 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/50" />
+              </div>
+              <div className="flex items-center gap-2 pt-5">
+                <input type="checkbox" id="whatsapp" checked={form.whatsapp === "true"} onChange={e => setForm({ ...form, whatsapp: e.target.checked ? "true" : "false" })}
+                  className="rounded border-neutral-600 bg-neutral-700 text-indigo-500 focus:ring-indigo-500/50" />
+                <label htmlFor="whatsapp" className="text-[11px] font-medium text-neutral-400">Telefone tem WhatsApp</label>
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-neutral-400">Data de nascimento</label>
+                <input type="date" value={form.data_nascimento || ""} onChange={e => setForm({ ...form, data_nascimento: e.target.value })}
                   className="w-full rounded-lg border border-neutral-600 bg-neutral-700 px-3 py-2 text-xs text-neutral-200 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/50" />
               </div>
               {saveError && (
