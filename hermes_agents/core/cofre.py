@@ -155,6 +155,22 @@ def saldo_total(loja_ids: list = None) -> float:
         return 0.0
 
 
+def get_loja_do_movimento(movimento_id: int) -> int:
+    """Resolve o loja_id dono de um movimento — usado na rota DELETE pra
+    checar requer_acesso_loja ANTES de excluir (a URL so' tem movimento_id,
+    sem loja_id, entao o decorator normal nao teria o que checar)."""
+    async def _go():
+        db = await get_db()
+        return await db.fetchval(
+            "SELECT cf.loja_id FROM fin_cofre_movimentos m JOIN fin_cofre cf ON cf.id = m.cofre_id WHERE m.id = $1",
+            movimento_id)
+    try:
+        return run_async(_go())
+    except Exception as e:
+        log(AGENT, f"Erro get_loja_do_movimento {movimento_id}: {e}")
+        return None
+
+
 def excluir_movimento(movimento_id: int) -> dict:
     """Exclusao reverte o delta aplicado no saldo — nao deixa o saldo
     dessincronizado do extrato."""

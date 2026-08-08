@@ -65,8 +65,22 @@ def cofre_criar_movimento():
 def cofre_excluir_movimento(movimento_id):
     @requer_permissao("financeiro.excluir")
     def _go():
-        from core.cofre import excluir_movimento
+        from core.cofre import get_loja_do_movimento, excluir_movimento
+        from core.rbac_lojas import lojas_permitidas
         from core.seguranca import auditar_exclusao
+        # a URL so' tem movimento_id (sem loja_id), entao requer_acesso_loja
+        # nao teria o que checar — resolve a loja dona do movimento primeiro
+        # e aplica a mesma regra manualmente (senao um usuario restrito a
+        # certas lojas conseguiria excluir movimento de cofre de qualquer
+        # outra loja so' adivinhando o id).
+        loja_id = get_loja_do_movimento(movimento_id)
+        if loja_id is None:
+            return jsonify({"error": "Movimento nao encontrado"}), 404
+        usuario = usuario_atual_da_request()
+        if not usuario["is_master"] and usuario["user_id"]:
+            permitidas = lojas_permitidas(usuario["user_id"])
+            if permitidas is not None and loja_id not in permitidas:
+                return jsonify({"error": "Sem acesso a esta loja", "loja_id": loja_id}), 403
         resultado = excluir_movimento(movimento_id)
         if not resultado.get("error"):
             auditar_exclusao("financeiro", "cofre_movimentos", movimento_id, None)
