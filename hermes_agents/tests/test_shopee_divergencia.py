@@ -139,6 +139,17 @@ class TestListarDivergencias(unittest.TestCase):
         self.assertEqual(resultado["data"], [])
         self.assertEqual(resultado["status"], "processando")
 
+    def test_item_revisado_no_banco_aparece_revisado_true(self):
+        # snapshot_mais_recente busca 'revisado' no SELECT (fix pos-review) — sem
+        # isso o campo sempre caia no default False mesmo apos marcar_revisado.
+        itens = [{"id": 1, "sku": "SKU-A", "item_id_shopee": "111", "qtd_shopee": 50, "revisado": True}]
+        with patch("shopee.divergencia.snapshot_mais_recente", return_value=(datetime.now(), itens)), \
+             patch("shopee.divergencia.disparar_coleta_se_necessario", return_value=False), \
+             patch("shopee.divergencia.obter_loja", return_value={"id": 1, "nome": "Loja Online"}), \
+             patch("core.estoque_saldos.saldo", return_value=50.0):
+            resultado = divergencia.listar_divergencias(1)
+        self.assertTrue(resultado["data"][0]["revisado"])
+
 
 class TestMarcarRevisado(unittest.TestCase):
     def test_marca_revisado_true(self):
@@ -187,6 +198,17 @@ class TestAplicarAjusteDivergencia(unittest.TestCase):
         with patch("shopee.divergencia._buscar_snapshot", return_value=None):
             resultado = divergencia.aplicar_ajuste_divergencia(999)
         self.assertIn("erro", resultado)
+
+    def test_erro_ao_verificar_frescor_bloqueia_ajuste_fail_closed(self):
+        # Guarda de frescor precisa ser fail-closed: se a query de "mais recente"
+        # falhar (erro de conexao/timeout), o ajuste NAO pode prosseguir sem
+        # checar frescor — bug encontrado na revisao (fail-open silencioso).
+        with patch("shopee.divergencia._buscar_snapshot", return_value={"sku": "SKU-A", "loja_id": 1, "qtd_shopee": 50}), \
+             patch("shopee.divergencia._snapshot_mais_recente_id", side_effect=Exception("erro de conexao com o banco")), \
+             patch("shopee.divergencia.ajustar_absoluto") as mock_ajustar:
+            resultado = divergencia.aplicar_ajuste_divergencia(1)
+        self.assertIn("erro", resultado)
+        mock_ajustar.assert_not_called()
 
 
 if __name__ == "__main__":

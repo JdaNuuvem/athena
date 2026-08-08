@@ -89,7 +89,7 @@ def snapshot_mais_recente(loja_id: int):
         if data_coleta is None:
             return None, []
         rows = await db.fetch(
-            "SELECT id, sku, item_id_shopee, qtd_shopee FROM shopee_estoque_snapshot "
+            "SELECT id, sku, item_id_shopee, qtd_shopee, revisado FROM shopee_estoque_snapshot "
             "WHERE loja_id=$1 AND data_coleta=$2", loja_id, data_coleta)
         return data_coleta, [dict(r) for r in rows]
     try:
@@ -192,15 +192,18 @@ def _buscar_snapshot(snapshot_id: int):
 
 
 def _snapshot_mais_recente_id(sku: str, loja_id: int):
+    """Nao engole excecao (ao contrario de _buscar_snapshot): quem chama
+    (aplicar_ajuste_divergencia) precisa distinguir 'nao ha snapshot mais
+    recente' (None valido, ja que ORDER BY ... LIMIT 1 sem match retorna
+    None do fetchval) de 'falha ao consultar' (excecao) — so' a segunda
+    deve bloquear o ajuste por seguranca (fail-closed), a guarda de frescor
+    nao pode virar fail-open so' porque o banco deu erro nessa query."""
     async def _go():
         db = await get_db()
         return await db.fetchval(
             "SELECT id FROM shopee_estoque_snapshot WHERE sku=$1 AND loja_id=$2 "
             "ORDER BY data_coleta DESC LIMIT 1", sku, loja_id)
-    try:
-        return run_async(_go())
-    except Exception:
-        return None
+    return run_async(_go())
 
 
 def aplicar_ajuste_divergencia(snapshot_id: int, usuario_id: int = None, usuario_nome: str = "") -> dict:
@@ -211,7 +214,13 @@ def aplicar_ajuste_divergencia(snapshot_id: int, usuario_id: int = None, usuario
     snap = _buscar_snapshot(snapshot_id)
     if not snap:
         return {"erro": "snapshot nao encontrado"}
-    id_mais_recente = _snapshot_mais_recente_id(snap["sku"], snap["loja_id"])
+    try:
+        id_mais_recente = _snapshot_mais_recente_id(snap["sku"], snap["loja_id"])
+    except Exception as e:
+        # Fail-closed (ver core/i9logic.py): erro na guarda de frescor bloqueia
+        # o ajuste, nunca deixa passar — o contrario abriria brecha pra ajustar
+        # com base num snapshot desatualizado sempre que o banco falhar.
+        return {"erro": f"falha ao verificar frescor do snapshot: {e}"}
     if id_mais_recente is not None and id_mais_recente != snapshot_id:
         return {"erro": f"este snapshot (id={snapshot_id}) nao e' o mais recente pra este sku/loja "
                          f"(o mais recente e' id={id_mais_recente}) - ajuste a partir do mais recente"}
