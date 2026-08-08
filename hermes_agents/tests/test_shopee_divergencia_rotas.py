@@ -62,10 +62,24 @@ class TestDivergenciasShopeeRota(unittest.TestCase):
         token = rbac.gerar_token_sessao(8, "ver@x.com", "Operador")
         headers = {"Authorization": f"Bearer {token}"}
         with patch("core.rbac.get_permissoes_por_usuario", return_value=["estoque.ver"]), \
+             patch("core.rbac_lojas.lojas_permitidas", return_value=None), \
              patch("shopee.divergencia.listar_divergencias", return_value={"ok": True, "data": []}) as mock_fn:
             r = self.client.get("/api/shopee/divergencias?loja_id=1", headers=headers)
         self.assertEqual(r.status_code, 200)
         mock_fn.assert_called_once_with(1)
+
+    def test_listar_de_loja_fora_do_escopo_do_usuario_nega(self):
+        """Escopo por loja (requer_acesso_loja): um usuario vinculado so' a loja 2
+        nao pode ler o estoque da loja 1 — mesma barreira que a rota irma
+        PUT /estoque-rapido/celula ja' respeitava."""
+        token = rbac.gerar_token_sessao(8, "ver@x.com", "Operador")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=["estoque.ver"]), \
+             patch("core.rbac_lojas.lojas_permitidas", return_value=[2]), \
+             patch("shopee.divergencia.listar_divergencias") as mock_fn:
+            r = self.client.get("/api/shopee/divergencias?loja_id=1", headers=headers)
+        self.assertEqual(r.status_code, 403)
+        mock_fn.assert_not_called()
 
     def test_resolver_sem_permissao_nega(self):
         token = rbac.gerar_token_sessao(7, "op@x.com", "Sem Papel")
@@ -88,10 +102,23 @@ class TestDivergenciasShopeeRota(unittest.TestCase):
         token = rbac.gerar_token_sessao(9, "editar@x.com", "Operador")
         headers = {"Authorization": f"Bearer {token}"}
         with patch("core.rbac.get_permissoes_por_usuario", return_value=["estoque.editar"]), \
+             patch("shopee.divergencia.loja_do_snapshot", return_value=1), \
+             patch("core.rbac_lojas.lojas_permitidas", return_value=None), \
              patch("shopee.divergencia.marcar_revisado", return_value={"ok": True}) as mock_fn:
             r = self.client.post("/api/shopee/divergencias/1/resolver", headers=headers)
         self.assertEqual(r.status_code, 200)
         mock_fn.assert_called_once_with(1)
+
+    def test_resolver_snapshot_de_loja_fora_do_escopo_nega(self):
+        token = rbac.gerar_token_sessao(9, "editar@x.com", "Operador")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=["estoque.editar"]), \
+             patch("shopee.divergencia.loja_do_snapshot", return_value=1), \
+             patch("core.rbac_lojas.lojas_permitidas", return_value=[2]), \
+             patch("shopee.divergencia.marcar_revisado") as mock_fn:
+            r = self.client.post("/api/shopee/divergencias/1/resolver", headers=headers)
+        self.assertEqual(r.status_code, 403)
+        mock_fn.assert_not_called()
 
     def test_resolver_com_erro_retorna_400(self):
         with patch("shopee.divergencia.marcar_revisado", return_value={"erro": "snapshot nao encontrado"}):
@@ -120,10 +147,27 @@ class TestDivergenciasShopeeRota(unittest.TestCase):
         token = rbac.gerar_token_sessao(9, "editar@x.com", "Operador")
         headers = {"Authorization": f"Bearer {token}"}
         with patch("core.rbac.get_permissoes_por_usuario", return_value=["estoque.editar"]), \
+             patch("shopee.divergencia.loja_do_snapshot", return_value=1), \
+             patch("core.rbac_lojas.lojas_permitidas", return_value=None), \
              patch("shopee.divergencia.aplicar_ajuste_divergencia", return_value={"ok": True}) as mock_fn:
             r = self.client.post("/api/shopee/divergencias/1/ajustar", headers=headers)
         self.assertEqual(r.status_code, 200)
         mock_fn.assert_called_once()
+
+    def test_ajustar_snapshot_de_loja_fora_do_escopo_nega(self):
+        """O loja_id desta rota so' existe DENTRO do snapshot, entao o decorator
+        requer_acesso_loja nao enxerga — sem a checagem manual, um usuario
+        escopado a uma loja gravava ajuste de inventario em qualquer outra so'
+        iterando snapshot_id."""
+        token = rbac.gerar_token_sessao(9, "editar@x.com", "Operador")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=["estoque.editar"]), \
+             patch("shopee.divergencia.loja_do_snapshot", return_value=1), \
+             patch("core.rbac_lojas.lojas_permitidas", return_value=[2]), \
+             patch("shopee.divergencia.aplicar_ajuste_divergencia") as mock_fn:
+            r = self.client.post("/api/shopee/divergencias/1/ajustar", headers=headers)
+        self.assertEqual(r.status_code, 403)
+        mock_fn.assert_not_called()
 
     def test_ajustar_com_erro_retorna_400(self):
         with patch("shopee.divergencia.aplicar_ajuste_divergencia", return_value={"erro": "snapshot nao encontrado"}):

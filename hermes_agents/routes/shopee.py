@@ -678,9 +678,35 @@ def shopee_estoque_rapido_atualizar_celula():
     return _handler()
 
 
+def _negar_se_loja_fora_do_escopo(snapshot_id):
+    """Mesma regra do decorator core.rbac.requer_acesso_loja, aplicada a mao.
+    O decorator resolve o loja_id a partir da request (path/query/body); nas
+    rotas de divergencia por snapshot_id o loja_id so' aparece DEPOIS de ler o
+    snapshot, entao a checagem tem que acontecer aqui dentro. Sem ela, um
+    usuario escopado a uma loja podia ajustar/resolver o estoque de qualquer
+    outra so' iterando snapshot_id — furando a barreira que a rota irma
+    PUT /estoque-rapido/celula respeita.
+
+    Devolve a resposta 403 pronta quando deve barrar, ou None pra seguir."""
+    from core.rbac import usuario_atual_da_request
+    from shopee.divergencia import loja_do_snapshot
+    usuario = usuario_atual_da_request()
+    if usuario["is_master"] or not usuario["user_id"]:
+        return None
+    loja_id = loja_do_snapshot(snapshot_id)
+    if loja_id is None:
+        return None  # snapshot inexistente: quem chama ja' devolve "nao encontrado"
+    from core.rbac_lojas import lojas_permitidas
+    permitidas = lojas_permitidas(usuario["user_id"])
+    if permitidas is not None and int(loja_id) not in permitidas:
+        return jsonify({"error": "Sem acesso a esta loja", "loja_id": loja_id}), 403
+    return None
+
+
 @shopee_bp.route('/divergencias', methods=['GET'])
 def shopee_divergencias_listar():
-    from core.rbac import requer_permissao
+    from core.rbac import requer_permissao, requer_acesso_loja
+    @requer_acesso_loja
     @requer_permissao("estoque.ver")
     def _handler():
         from shopee.divergencia import listar_divergencias
@@ -697,6 +723,9 @@ def shopee_divergencias_resolver(snapshot_id):
     @requer_permissao("estoque.editar")
     def _handler():
         from shopee.divergencia import marcar_revisado
+        negado = _negar_se_loja_fora_do_escopo(snapshot_id)
+        if negado:
+            return negado
         resultado = marcar_revisado(snapshot_id)
         if resultado.get("erro"):
             return jsonify(resultado), 400
@@ -710,6 +739,9 @@ def shopee_divergencias_ajustar(snapshot_id):
     @requer_permissao("estoque.editar")
     def _handler():
         from shopee.divergencia import aplicar_ajuste_divergencia
+        negado = _negar_se_loja_fora_do_escopo(snapshot_id)
+        if negado:
+            return negado
         usuario = usuario_atual_da_request()
         resultado = aplicar_ajuste_divergencia(
             snapshot_id, usuario_id=usuario.get("user_id"), usuario_nome=usuario.get("nome", ""))
