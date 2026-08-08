@@ -697,7 +697,10 @@ def shopee_divergencias_resolver(snapshot_id):
     @requer_permissao("estoque.editar")
     def _handler():
         from shopee.divergencia import marcar_revisado
-        return jsonify(marcar_revisado(snapshot_id))
+        resultado = marcar_revisado(snapshot_id)
+        if resultado.get("erro"):
+            return jsonify(resultado), 400
+        return jsonify(resultado)
     return _handler()
 
 

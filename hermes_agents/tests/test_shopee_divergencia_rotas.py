@@ -55,6 +55,18 @@ class TestDivergenciasShopeeRota(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         mock_fn.assert_called_once_with(1)
 
+    def test_listar_com_permissao_granular_estoque_ver_libera(self):
+        """Usa um token de sessao comum (nao master) com exatamente 'estoque.ver'
+        concedida — fecha o buraco onde inverter os decorators GET/POST passaria
+        despercebido (token master ignora RBAC granular e nao pegaria isso)."""
+        token = rbac.gerar_token_sessao(8, "ver@x.com", "Operador")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=["estoque.ver"]), \
+             patch("shopee.divergencia.listar_divergencias", return_value={"ok": True, "data": []}) as mock_fn:
+            r = self.client.get("/api/shopee/divergencias?loja_id=1", headers=headers)
+        self.assertEqual(r.status_code, 200)
+        mock_fn.assert_called_once_with(1)
+
     def test_resolver_sem_permissao_nega(self):
         token = rbac.gerar_token_sessao(7, "op@x.com", "Sem Papel")
         headers = {"Authorization": f"Bearer {token}"}
@@ -70,12 +82,48 @@ class TestDivergenciasShopeeRota(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         mock_fn.assert_called_once_with(1)
 
+    def test_resolver_com_permissao_granular_estoque_editar_libera(self):
+        """Mesma logica de test_listar_com_permissao_granular_estoque_ver_libera,
+        mas pra rota POST /resolver com 'estoque.editar'."""
+        token = rbac.gerar_token_sessao(9, "editar@x.com", "Operador")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=["estoque.editar"]), \
+             patch("shopee.divergencia.marcar_revisado", return_value={"ok": True}) as mock_fn:
+            r = self.client.post("/api/shopee/divergencias/1/resolver", headers=headers)
+        self.assertEqual(r.status_code, 200)
+        mock_fn.assert_called_once_with(1)
+
+    def test_resolver_com_erro_retorna_400(self):
+        with patch("shopee.divergencia.marcar_revisado", return_value={"erro": "snapshot nao encontrado"}):
+            r = self.client.post("/api/shopee/divergencias/999/resolver", headers=self._headers())
+        self.assertEqual(r.status_code, 400)
+
+    def test_ajustar_sem_permissao_nega(self):
+        token = rbac.gerar_token_sessao(7, "op@x.com", "Sem Papel")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=[]), \
+             patch("shopee.divergencia.aplicar_ajuste_divergencia") as mock_fn:
+            r = self.client.post("/api/shopee/divergencias/1/ajustar", headers=headers)
+        self.assertEqual(r.status_code, 403)
+        mock_fn.assert_not_called()
+
     def test_ajustar_com_permissao_libera(self):
         with patch("shopee.divergencia.aplicar_ajuste_divergencia", return_value={"ok": True}) as mock_fn:
             r = self.client.post("/api/shopee/divergencias/1/ajustar", headers=self._headers())
         self.assertEqual(r.status_code, 200)
         mock_fn.assert_called_once()
         self.assertEqual(mock_fn.call_args.args[0], 1)
+
+    def test_ajustar_com_permissao_granular_estoque_editar_libera(self):
+        """Mesma logica de test_resolver_com_permissao_granular_estoque_editar_libera,
+        mas pra rota POST /ajustar."""
+        token = rbac.gerar_token_sessao(9, "editar@x.com", "Operador")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=["estoque.editar"]), \
+             patch("shopee.divergencia.aplicar_ajuste_divergencia", return_value={"ok": True}) as mock_fn:
+            r = self.client.post("/api/shopee/divergencias/1/ajustar", headers=headers)
+        self.assertEqual(r.status_code, 200)
+        mock_fn.assert_called_once()
 
     def test_ajustar_com_erro_retorna_400(self):
         with patch("shopee.divergencia.aplicar_ajuste_divergencia", return_value={"erro": "snapshot nao encontrado"}):
