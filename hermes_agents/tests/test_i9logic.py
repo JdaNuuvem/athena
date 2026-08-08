@@ -727,7 +727,7 @@ class TestListarDivergenciasAthena(unittest.TestCase):
         with patch("core.i9logic.buscar_id_i9logic", return_value="63"), \
              patch("core.i9logic.snapshot_mais_recente", return_value=(datetime.now(), itens)), \
              patch("core.i9logic._disparar_coleta_se_necessario", return_value=False), \
-             patch("core.estoque_saldos.saldo", return_value=106.0):
+             patch("core.estoque_saldos.saldos_em_lote", return_value={"SKU-A": 106.0}):
             resultado = i9logic.listar_divergencias_athena("Loja Matriz")
         self.assertEqual(len(resultado["data"]), 1)
         item = resultado["data"][0]
@@ -737,6 +737,43 @@ class TestListarDivergenciasAthena(unittest.TestCase):
         self.assertEqual(item["divergencia"], 6.0)
         self.assertEqual(item["classificacao"], "alerta")
         self.assertEqual(resultado["status"], "pronto")
+
+    def test_le_saldos_numa_unica_query_em_lote(self):
+        """Regressao de performance: era um saldo() por sku (~9k round-trips
+        sequenciais numa filial grande). saldos_em_lote tem que ser chamada UMA
+        vez, com todos os skus de uma vez."""
+        itens = [
+            {"idproduto": 1, "sku_athena": "SKU-A", "qtd": 10, "descricao": "A"},
+            {"idproduto": 2, "sku_athena": "SKU-B", "qtd": 20, "descricao": "B"},
+            {"idproduto": 3, "sku_athena": None, "qtd": 30, "descricao": "sem de-para"},
+        ]
+        with patch("core.i9logic.buscar_id_i9logic", return_value="63"), \
+             patch("core.i9logic.snapshot_mais_recente", return_value=(datetime.now(), itens)), \
+             patch("core.i9logic._disparar_coleta_se_necessario", return_value=False), \
+             patch("core.estoque_saldos.saldos_em_lote",
+                   return_value={"SKU-A": 10.0, "SKU-B": 25.0}) as mock_lote:
+            resultado = i9logic.listar_divergencias_athena("Loja Matriz")
+        mock_lote.assert_called_once()
+        self.assertEqual(mock_lote.call_args.args[0], ["SKU-A", "SKU-B"])  # item sem sku fora
+        self.assertEqual(mock_lote.call_args.args[1], "Loja Matriz")
+        self.assertEqual(len(resultado["data"]), 2)
+        self.assertEqual(resultado["data"][0]["divergencia"], 0.0)
+        self.assertEqual(resultado["data"][1]["divergencia"], 5.0)
+
+    def test_falha_ao_ler_saldos_retorna_erro_em_vez_de_zeros(self):
+        """Antes o loop usava saldo(), que e' fail-open (0.0 em qualquer
+        excecao) — um erro transiente de banco virava uma lista inteira de
+        'alerta' fabricados com botao de Ajustar do lado. Agora a falha e'
+        visivel."""
+        itens = [{"idproduto": 1, "sku_athena": "SKU-A", "qtd": 100, "descricao": "A"}]
+        with patch("core.i9logic.buscar_id_i9logic", return_value="63"), \
+             patch("core.i9logic.snapshot_mais_recente", return_value=(datetime.now(), itens)), \
+             patch("core.i9logic._disparar_coleta_se_necessario", return_value=False), \
+             patch("core.estoque_saldos.saldos_em_lote", side_effect=Exception("conexao caiu")):
+            resultado = i9logic.listar_divergencias_athena("Loja Matriz")
+        self.assertIn("erro", resultado)
+        self.assertIn("conexao caiu", resultado["erro"])
+        self.assertNotIn("data", resultado)
 
 
 from flask import Flask

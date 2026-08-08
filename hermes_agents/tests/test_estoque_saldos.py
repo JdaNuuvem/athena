@@ -61,6 +61,12 @@ class FakeDBSaldos:
         q = " ".join(query.split())
         if "FROM lojas" in q:
             return [{"nome": n} for n in self.lojas]
+        # Leitura em lote (saldos_em_lote): so' devolve linha pros skus que
+        # existem, pra o caller poder distinguir "ausente" de "zero gravado".
+        if "SELECT sku, quantidade FROM estoque_saldos" in q:
+            loja, tipo, skus = params
+            return [{"sku": sku, "quantidade": self.saldos[(sku, loja, tipo)]}
+                    for sku in skus if (sku, loja, tipo) in self.saldos]
         return []
 
     def acquire(self):
@@ -649,6 +655,92 @@ class TestVinculoEstoqueLeituraSaldoAsync(unittest.IsolatedAsyncioTestCase):
         self.assertIn("resolver_loja_efetiva", onde)
         self.assertIsInstance(exc, Exception)
         self.assertIn(repr(valor_invalido), str(exc))
+
+
+class TestSaldosEmLote(unittest.TestCase):
+    """saldos_em_lote(): leitura de N skus numa unica query. Nasceu das telas de
+    Divergencia de Saldo, que faziam um saldo() por sku (~9k round-trips
+    sequenciais numa filial grande, segurando uma thread do Flask por dezenas
+    de segundos)."""
+
+    def setUp(self):
+        self.fake = FakeDBSaldos()
+        async def _get_db(_fake=self.fake):
+            return _fake
+        self.patch_db = patch("core.estoque_saldos.get_db", side_effect=_get_db)
+        self.patch_db.start()
+        import core.estoque_saldos as m
+        m._ok = True
+
+    def tearDown(self):
+        self.patch_db.stop()
+
+    def test_le_todos_os_skus_de_uma_vez(self):
+        from core.estoque_saldos import saldos_em_lote
+        self.fake.set_saldo("SKU-A", "Loja A", "disponivel", 10)
+        self.fake.set_saldo("SKU-B", "Loja A", "disponivel", 25)
+        with patch("core.estoque_saldos._loja_efetiva_async",
+                    AsyncMock(side_effect=lambda loja: loja)):
+            resultado = saldos_em_lote(["SKU-A", "SKU-B"], "Loja A")
+        self.assertEqual(resultado, {"SKU-A": 10.0, "SKU-B": 25.0})
+
+    def test_sku_sem_linha_sai_como_zero(self):
+        from core.estoque_saldos import saldos_em_lote
+        self.fake.set_saldo("SKU-A", "Loja A", "disponivel", 7)
+        with patch("core.estoque_saldos._loja_efetiva_async",
+                    AsyncMock(side_effect=lambda loja: loja)):
+            resultado = saldos_em_lote(["SKU-A", "SKU-INEXISTENTE"], "Loja A")
+        self.assertEqual(resultado["SKU-INEXISTENTE"], 0.0)
+
+    def test_resolve_loja_vinculada_uma_unica_vez_para_o_lote_inteiro(self):
+        """O ganho de performance depende disso: resolver o vinculo uma vez pro
+        lote, nao uma vez por sku (era o que o loop de saldo() fazia)."""
+        from core.estoque_saldos import saldos_em_lote
+        self.fake.set_saldo("SKU-A", "Loja Fisica Central", "disponivel", 42)
+        self.fake.set_saldo("SKU-B", "Loja Fisica Central", "disponivel", 8)
+        with patch("core.estoque_saldos._loja_efetiva_async",
+                    AsyncMock(return_value="Loja Fisica Central")) as mock_resolver:
+            resultado = saldos_em_lote(["SKU-A", "SKU-B"], "Loja Virtual A")
+        mock_resolver.assert_called_once_with("Loja Virtual A")
+        self.assertEqual(resultado, {"SKU-A": 42.0, "SKU-B": 8.0})
+
+    def test_lista_vazia_nao_bate_no_banco(self):
+        from core.estoque_saldos import saldos_em_lote
+        self.assertEqual(saldos_em_lote([], "Loja A"), {})
+
+    def test_deduplica_skus_repetidos(self):
+        from core.estoque_saldos import saldos_em_lote
+        self.fake.set_saldo("SKU-A", "Loja A", "disponivel", 5)
+        with patch("core.estoque_saldos._loja_efetiva_async",
+                    AsyncMock(side_effect=lambda loja: loja)):
+            resultado = saldos_em_lote(["SKU-A", "SKU-A"], "Loja A")
+        self.assertEqual(resultado, {"SKU-A": 5.0})
+
+    def test_falha_de_banco_propaga_em_vez_de_devolver_zeros(self):
+        """DIFERENCA DELIBERADA em relacao a saldo(), que e' fail-open: num loop
+        de milhares de chamadas o 0.0 de erro transiente virava uma linha
+        'alerta' fabricada com botao de Ajustar do lado. Aqui a falha sobe."""
+        from core.estoque_saldos import saldos_em_lote
+        async def fetch_que_falha(query, *params):
+            raise Exception("conexao caiu")
+        self.fake.fetch = fetch_que_falha
+        with patch("core.estoque_saldos._loja_efetiva_async",
+                    AsyncMock(side_effect=lambda loja: loja)):
+            with self.assertRaises(Exception):
+                saldos_em_lote(["SKU-A"], "Loja A")
+
+    def test_resolver_indisponivel_nao_derruba_a_leitura(self):
+        """Fail-open SO' na resolucao de loja vinculada (mesma escolha de
+        saldo()): sem vinculo resolvido, le sob o nome original."""
+        from core.estoque_saldos import saldos_em_lote
+        self.fake.set_saldo("SKU-A", "Loja A", "disponivel", 3)
+        with patch("core.estoque_saldos._loja_efetiva_async",
+                    AsyncMock(side_effect=Exception("resolver fora do ar"))), \
+             patch("core.estoque_saldos._log_erro") as mock_log_erro:
+            resultado = saldos_em_lote(["SKU-A"], "Loja A")
+        self.assertEqual(resultado, {"SKU-A": 3.0})
+        mock_log_erro.assert_called_once()
+        self.assertIn("resolver_loja_efetiva", mock_log_erro.call_args[0][0])
 
 
 if __name__ == "__main__":
