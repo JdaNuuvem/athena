@@ -1986,6 +1986,59 @@ export const i9logicEstoquePorLoja = (lojaId: number) =>
     `/api/integrations/i9logic/estoque/${lojaId}`
   );
 
+export interface DivergenciaItem {
+  id?: number;
+  sku: string;
+  descricao?: string;
+  disponivel_athena: number;
+  qtd_fisico_i9logic?: number;
+  qtd_shopee?: number;
+  divergencia: number;
+  classificacao: "sem_acao" | "registrado" | "alerta";
+  revisado?: boolean;
+}
+
+export interface DivergenciaResponse {
+  ok?: boolean;
+  status?: "processando" | "pronto";
+  data_coleta?: string | null;
+  data: DivergenciaItem[];
+  erro?: string;
+}
+
+export async function i9logicListarDivergenciasAthena(loja: string): Promise<DivergenciaResponse> {
+  const res = await fetch(`/api/integrations/i9logic/divergencias-athena?loja=${encodeURIComponent(loja)}`);
+  if (!res.ok) return { data: [], erro: `HTTP ${res.status}` };
+  return res.json().catch(() => ({ data: [], erro: "Resposta invalida" }));
+}
+
+export async function i9logicAjustarDivergenciaAthena(
+  sku: string, loja: string, quantidade: number
+): Promise<{ ok?: boolean; erro?: string }> {
+  const res = await fetch("/api/integrations/i9logic/divergencias-athena/ajustar", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sku, loja, quantidade }),
+  });
+  return res.json().catch(() => ({ erro: `HTTP ${res.status}` }));
+}
+
+export async function shopeeListarDivergencias(lojaId: number): Promise<DivergenciaResponse> {
+  const res = await fetch(`/api/shopee/divergencias?loja_id=${lojaId}`);
+  if (!res.ok) return { data: [], erro: `HTTP ${res.status}` };
+  return res.json().catch(() => ({ data: [], erro: "Resposta invalida" }));
+}
+
+export async function shopeeResolverDivergencia(id: number): Promise<{ ok?: boolean; erro?: string }> {
+  const res = await fetch(`/api/shopee/divergencias/${id}/resolver`, { method: "POST" });
+  return res.json().catch(() => ({ erro: `HTTP ${res.status}` }));
+}
+
+export async function shopeeAjustarDivergencia(id: number): Promise<{ ok?: boolean; erro?: string }> {
+  const res = await fetch(`/api/shopee/divergencias/${id}/ajustar`, { method: "POST" });
+  return res.json().catch(() => ({ erro: `HTTP ${res.status}` }));
+}
+
 // ── Produtos por Loja ──
 
 export interface ProdutoLojaRow {
