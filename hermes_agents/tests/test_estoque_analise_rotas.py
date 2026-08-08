@@ -46,3 +46,34 @@ class TestRotasAnalise(unittest.TestCase):
             r = self.client.get("/api/estoque/analise/cobertura")
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.get_json(), {"data": [{"sku": "B"}]})
+
+
+class TestRotaDepositosKpis(unittest.TestCase):
+    def setUp(self):
+        self._env_patch = patch.dict(os.environ, {"ATHENA_TOKEN": "test-master-token-32-bytes-long!!"})
+        self._env_patch.start()
+        from flask import Flask
+        from routes.estoque import estoque_bp
+        app = Flask(__name__)
+        app.register_blueprint(estoque_bp)
+        self.client = app.test_client()
+
+    def tearDown(self):
+        self._env_patch.stop()
+
+    def test_com_permissao_retorna_200_e_chave_data(self):
+        headers = {"Authorization": "Bearer test-master-token-32-bytes-long!!"}
+        with patch("core.estoque_analise.kpis_por_deposito", return_value=[{"deposito_id": 1, "skus": 2, "valor": 100.0, "baixo_estoque": 0}]):
+            r = self.client.get("/api/estoque/depositos/kpis", headers=headers)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.get_json(), {"data": [{"deposito_id": 1, "skus": 2, "valor": 100.0, "baixo_estoque": 0}]})
+
+    def test_sem_permissao_nega(self):
+        import core.rbac as rbac
+        token = rbac.gerar_token_sessao(7, "op@x.com", "Sem Papel")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=[]), \
+             patch("core.estoque_analise.kpis_por_deposito") as mock_kpis:
+            r = self.client.get("/api/estoque/depositos/kpis", headers=headers)
+        self.assertEqual(r.status_code, 403)
+        mock_kpis.assert_not_called()
