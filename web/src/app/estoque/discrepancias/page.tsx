@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { api, type EstoqueDiscrepanciaLoja, type EstoqueDiscrepanciaOperador } from "@/lib/api";
+import DivergenciaSaldo from "./_components/DivergenciaSaldo";
 
 export default function DiscrepanciasEstoquePage() {
   const [dias, setDias] = useState(30);
@@ -114,6 +115,10 @@ export default function DiscrepanciasEstoquePage() {
                 </table>
               </div>
             )}
+          </section>
+
+          <section>
+            <DivergenciaSaldo />
           </section>
         </>
       )}
