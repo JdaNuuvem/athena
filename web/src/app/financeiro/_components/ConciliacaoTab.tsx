@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
-import { fmtBRL as fmt } from "@/lib/format";
+import { fmtBRL as fmt, fmtDataBR } from "@/lib/format";
+import ExportButtons from "@/app/_components/ExportButtons";
 
 interface Conciliacao { id: number; banco_id: number; data: string; descricao: string; valor_extrato: number; valor_sistema: number; status: string; }
 interface Banco { id: number; nome: string; }
@@ -47,8 +48,13 @@ export default function ConciliacaoTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-3">
         <button onClick={abrirCriar} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1.5 rounded-lg transition-colors">+ Nova Conciliação</button>
+        <ExportButtons
+          columns={["Data", "Descrição", "Extrato", "Sistema", "Diferença", "Status"]}
+          rows={data.map(c => [c.data ? fmtDataBR(c.data) : "—", c.descricao, fmt(c.valor_extrato), fmt(c.valor_sistema), fmt(c.valor_extrato - c.valor_sistema), c.status])}
+          filename="conciliacao" title="Conciliação Bancária"
+        />
       </div>
       {loading ? <p className="text-xs text-neutral-500">Carregando...</p> : (
         <div className="bg-neutral-800 border border-neutral-700 rounded-lg overflow-hidden">

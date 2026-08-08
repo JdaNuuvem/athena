@@ -398,6 +398,99 @@ def fiscal_resumo(dias=30):
     try: return run_async(_go())
     except Exception as e: return {"nfs_periodo":0,"valor_periodo":0,"periodo_dias":dias}
 
+# ── 22. Vendas por Loja (grade dias x lojas) ──
+# Equivalente da planilha VENDAS MES LOJAS.xlsx — mesma base de dados de
+# vendas() (_union_vendas), so' que quebrada por loja e agregada num
+# intervalo de datas livre em vez de "ultimos N dias".
+
+def vendas_por_loja(de: str, ate: str) -> dict:
+    async def _go():
+        db = await get_db()
+        lojas_rows = await db.fetch("SELECT id, nome FROM lojas WHERE ativa ORDER BY nome")
+        lojas = [dict(r) for r in lojas_rows]
+        bling = await db.fetch("""
+            SELECT loja_id, DATE(data) AS dia, COALESCE(SUM(total),0) AS valor
+            FROM vendas_pedidos
+            WHERE data >= $1 AND data <= $2 AND status != 'cancelado' AND loja_id IS NOT NULL
+            GROUP BY loja_id, DATE(data)
+        """, de, ate)
+        pdv = await db.fetch("""
+            SELECT c.loja_id, DATE(v.data) AS dia, COALESCE(SUM(v.total),0) AS valor
+            FROM pdv_vendas v JOIN pdv_caixas c ON c.id = v.caixa_id
+            WHERE DATE(v.data) >= $1 AND DATE(v.data) <= $2 AND c.loja_id IS NOT NULL
+            GROUP BY c.loja_id, DATE(v.data)
+        """, de, ate)
+        por_dia_loja = {}
+        for r in list(bling) + list(pdv):
+            chave = (r["dia"], r["loja_id"])
+            por_dia_loja[chave] = por_dia_loja.get(chave, 0) + float(r["valor"] or 0)
+        dias_ordenados = sorted({dia for (dia, _lid) in por_dia_loja})
+        grade = []
+        totais_por_loja = {l["id"]: 0.0 for l in lojas}
+        for dia in dias_ordenados:
+            valores = {}
+            total_dia = 0.0
+            for l in lojas:
+                v = round(por_dia_loja.get((dia, l["id"]), 0.0), 2)
+                valores[l["id"]] = v
+                total_dia += v
+                totais_por_loja[l["id"]] = round(totais_por_loja[l["id"]] + v, 2)
+            grade.append({"data": dia.isoformat(), "valores_por_loja": valores, "total_dia": round(total_dia, 2)})
+        return {"lojas": lojas, "dias": grade, "totais_por_loja": totais_por_loja}
+    try: return run_async(_go())
+    except Exception as e:
+        log(AGENT, f"Erro vendas_por_loja: {e}")
+        return {"lojas": [], "dias": [], "totais_por_loja": {}}
+
+# ── 23. Movimento Diário por Loja (receita por forma x despesa por categoria) ──
+# Equivalente da planilha MOV LOJA LEON.xlsx. Despesa vem do Cofre
+# (fin_cofre_movimentos, tipo=saida_despesa) — decisao consciente de escopo,
+# nao ha' rastreio de despesa fora do cofre por loja hoje.
+
+def movimento_diario_por_loja(de: str, ate: str, loja_id: int) -> dict:
+    async def _go():
+        db = await get_db()
+        receita_rows = await db.fetch("""
+            SELECT DATE(v.data) AS dia, p.forma, COALESCE(SUM(p.valor),0) AS valor
+            FROM pdv_pagamentos p
+            JOIN pdv_vendas v ON v.id = p.venda_id
+            JOIN pdv_caixas c ON c.id = v.caixa_id
+            WHERE c.loja_id = $1 AND DATE(v.data) >= $2 AND DATE(v.data) <= $3 AND v.status = 'finalizada'
+            GROUP BY DATE(v.data), p.forma
+        """, loja_id, de, ate)
+        despesa_rows = await db.fetch("""
+            SELECT m.data AS dia, m.categoria, COALESCE(SUM(m.valor),0) AS valor
+            FROM fin_cofre_movimentos m
+            JOIN fin_cofre cf ON cf.id = m.cofre_id
+            WHERE cf.loja_id = $1 AND m.tipo = 'saida_despesa' AND m.data >= $2 AND m.data <= $3
+            GROUP BY m.data, m.categoria
+        """, loja_id, de, ate)
+        por_dia = {}
+        for r in receita_rows:
+            d = por_dia.setdefault(r["dia"], {"receita_por_forma": {}, "despesa_por_categoria": {}})
+            d["receita_por_forma"][r["forma"] or "outros"] = float(r["valor"] or 0)
+        for r in despesa_rows:
+            d = por_dia.setdefault(r["dia"], {"receita_por_forma": {}, "despesa_por_categoria": {}})
+            d["despesa_por_categoria"][r["categoria"] or "outros"] = float(abs(r["valor"] or 0))
+        resultado = []
+        for dia in sorted(por_dia.keys()):
+            v = por_dia[dia]
+            receita_total = round(sum(v["receita_por_forma"].values()), 2)
+            despesa_total = round(sum(v["despesa_por_categoria"].values()), 2)
+            resultado.append({
+                "data": dia.isoformat(),
+                "receita_por_forma": v["receita_por_forma"],
+                "despesa_por_categoria": v["despesa_por_categoria"],
+                "receita_total": receita_total,
+                "despesa_total": despesa_total,
+                "total_liquido": round(receita_total - despesa_total, 2),
+            })
+        return {"loja_id": loja_id, "dias": resultado}
+    try: return run_async(_go())
+    except Exception as e:
+        log(AGENT, f"Erro movimento_diario_por_loja loja {loja_id}: {e}")
+        return {"loja_id": loja_id, "dias": []}
+
 # ── 21. DRE por Loja (Lucro Real por Canal) ──
 
 def dre_por_loja(dias: int = 30) -> list:

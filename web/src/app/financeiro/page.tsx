@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import Icon from "../_components/Icon";
+import SidebarLayout from "../_components/SidebarLayout";
+import VisaoGeralTab from "./_components/VisaoGeralTab";
 import FluxoCaixaTab from "./_components/FluxoCaixaTab";
 import ReceberTab from "./_components/ReceberTab";
 import PagarTab from "./_components/PagarTab";
@@ -9,44 +11,61 @@ import PIXTab from "./_components/PIXTab";
 import ConciliacaoTab from "./_components/ConciliacaoTab";
 import BancoTab from "./_components/BancoTab";
 import DRETab from "./_components/DRETab";
-
-const TABS = [
-  { key: "fluxo_caixa", label: "Fluxo Caixa" },
-  { key: "receber", label: "Receber" },
-  { key: "pagar", label: "Pagar" },
-  { key: "boletos", label: "Boletos" },
-  { key: "pix", label: "PIX" },
-  { key: "conciliacao", label: "Conciliação" },
-  { key: "banco", label: "Banco" },
-  { key: "dre", label: "DRE" },
-] as const;
-
-type TabKey = (typeof TABS)[number]["key"];
+import CofreTab from "./_components/CofreTab";
+import VendasPorLojaTab from "./_components/VendasPorLojaTab";
+import MovimentoDiarioTab from "./_components/MovimentoDiarioTab";
 
 export default function FinanceiroPage() {
-  const [activeTab, setActiveTab] = useState<TabKey>("fluxo_caixa");
-
   return (
-    <div className="p-6 space-y-4">
-      <div>
-        <h1 className="text-lg font-bold text-neutral-100">Financeiro</h1>
-        <p className="text-xs text-neutral-500 mt-1">Fluxo de caixa, contas a pagar/receber e DRE</p>
+    <div className="max-w-[1400px] space-y-5 p-6">
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400">
+          <Icon name="financeiro" size={20} />
+        </div>
+        <div>
+          <h1 className="text-lg font-semibold text-neutral-100">Financeiro</h1>
+          <p className="text-xs text-neutral-500">Fluxo de caixa, cofre por loja, contas a pagar/receber, relatórios e DRE</p>
+        </div>
       </div>
-      <div className="flex flex-wrap gap-1 bg-neutral-800 rounded-lg p-1">
-        {TABS.map((tab) => (
-          <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-            className={`px-3 py-1.5 text-xs rounded-md transition-colors ${activeTab === tab.key ? "bg-indigo-600 text-white" : "text-neutral-400 hover:text-neutral-200"}`}>{tab.label}</button>
-        ))}</div>
-      <div>
-        {activeTab === "fluxo_caixa" && <FluxoCaixaTab />}
-        {activeTab === "receber" && <ReceberTab />}
-        {activeTab === "pagar" && <PagarTab />}
-        {activeTab === "boletos" && <BoletosTab />}
-        {activeTab === "pix" && <PIXTab />}
-        {activeTab === "conciliacao" && <ConciliacaoTab />}
-        {activeTab === "banco" && <BancoTab />}
-        {activeTab === "dre" && <DRETab />}
-      </div>
+
+      <SidebarLayout
+        subItems={[
+          { key: "visao_geral", label: "Visão Geral" },
+          { key: "fluxo_caixa", label: "Fluxo Caixa" },
+          { key: "cofre", label: "Cofre" },
+          {
+            key: "relatorios", label: "Relatórios",
+            children: [
+              { key: "vendas_por_loja", label: "Vendas por Loja" },
+              { key: "movimento_diario", label: "Movimento Diário" },
+            ],
+          },
+          { key: "receber", label: "Receber" },
+          { key: "pagar", label: "Pagar" },
+          { key: "boletos", label: "Boletos" },
+          { key: "pix", label: "PIX" },
+          { key: "conciliacao", label: "Conciliação" },
+          { key: "banco", label: "Banco" },
+          { key: "dre", label: "DRE" },
+        ]}
+        renderContent={(key) => {
+          switch (key) {
+            case "visao_geral": return <VisaoGeralTab />;
+            case "fluxo_caixa": return <FluxoCaixaTab />;
+            case "cofre": return <CofreTab />;
+            case "vendas_por_loja": return <VendasPorLojaTab />;
+            case "movimento_diario": return <MovimentoDiarioTab />;
+            case "receber": return <ReceberTab />;
+            case "pagar": return <PagarTab />;
+            case "boletos": return <BoletosTab />;
+            case "pix": return <PIXTab />;
+            case "conciliacao": return <ConciliacaoTab />;
+            case "banco": return <BancoTab />;
+            case "dre": return <DRETab />;
+            default: return null;
+          }
+        }}
+      />
     </div>
   );
 }

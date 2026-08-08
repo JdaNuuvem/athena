@@ -244,6 +244,8 @@ from routes.rh import rh_bp
 from routes.cadastros import cadastros_bp
 from routes.produtos import produtos_bp
 from routes.financeiro import financeiro_bp
+from routes.cofre import cofre_bp
+from routes.financeiro_relatorios import financeiro_relatorios_bp
 from routes.bi import bi_bp
 from routes.chat import chat_bp
 from routes.oauth_provider import oauth_provider_bp
@@ -280,6 +282,8 @@ app.register_blueprint(lojas_midia_bp)
 app.register_blueprint(rh_bp)
 app.register_blueprint(cadastros_bp)
 app.register_blueprint(produtos_bp)
+app.register_blueprint(cofre_bp)
+app.register_blueprint(financeiro_relatorios_bp)
 app.register_blueprint(financeiro_bp)
 app.register_blueprint(bi_bp)
 app.register_blueprint(chat_bp)

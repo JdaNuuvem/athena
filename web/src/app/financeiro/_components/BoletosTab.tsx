@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
-import { fmtBRL as fmt } from "@/lib/format";
+import { fmtBRL as fmt, fmtDataBR } from "@/lib/format";
+import ExportButtons from "@/app/_components/ExportButtons";
 
 interface Boleto { id: number; beneficiario: string; valor: number; vencimento: string; nosso_numero: string; codigo_barras: string; status: string; }
 
@@ -42,8 +43,13 @@ export default function BoletosTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-3">
         <button onClick={abrirCriar} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1.5 rounded-lg transition-colors">+ Novo Boleto</button>
+        <ExportButtons
+          columns={["Beneficiário", "Valor", "Vencimento", "Nosso Número", "Status"]}
+          rows={data.map(b => [b.beneficiario, fmt(b.valor), b.vencimento ? fmtDataBR(b.vencimento) : "—", b.nosso_numero, b.status])}
+          filename="boletos" title="Boletos"
+        />
       </div>
       {loading ? <p className="text-xs text-neutral-500">Carregando...</p> : (
         <div className="bg-neutral-800 border border-neutral-700 rounded-lg overflow-hidden">

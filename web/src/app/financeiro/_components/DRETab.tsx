@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import { fmtBRL as fmt } from "@/lib/format";
 import SidebarLayout from "../../_components/SidebarLayout";
+import ExportButtons from "@/app/_components/ExportButtons";
 
 const SUB_ITEMS = [
   { key: "lucro", label: "Lucro" },
@@ -31,7 +32,10 @@ export default function DRETab() {
         const total = receitas.reduce((s, i) => s + i.valor, 0);
         return (
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-neutral-200">Demonstração de Lucro</h3>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-neutral-200">Demonstração de Lucro</h3>
+              <ExportButtons columns={["Categoria", "Valor"]} rows={receitas.map(i => [i.categoria, fmt(i.valor)])} filename="dre-lucro" title="Demonstração de Lucro" />
+            </div>
             <div className="grid grid-cols-2 gap-3"><div className="bg-neutral-700/30 rounded-lg p-3"><p className="text-[10px] text-neutral-500">Receita Total</p><p className="text-sm font-semibold text-emerald-400">{fmt(total)}</p></div><div className="bg-neutral-700/30 rounded-lg p-3"><p className="text-[10px] text-neutral-500">Margem</p><p className="text-sm font-semibold text-blue-400">{dre.receitas > 0 ? Math.round((dre.resultado / dre.receitas) * 100) : 0}%</p></div></div>
             <table className="w-full text-xs"><thead><tr className="border-b border-neutral-700 text-neutral-400 text-left"><th className="px-3 py-2 font-medium">Categoria</th><th className="px-3 py-2 font-medium">Valor</th></tr></thead>
               <tbody>{receitas.map((i) => (
@@ -44,7 +48,10 @@ export default function DRETab() {
         const totalD = despesas.reduce((s, i) => s + Math.abs(i.valor), 0);
         return (
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-neutral-200">Demonstração de Prejuízo</h3>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-neutral-200">Demonstração de Prejuízo</h3>
+              <ExportButtons columns={["Categoria", "Valor"]} rows={despesas.map(i => [i.categoria, fmt(Math.abs(i.valor))])} filename="dre-prejuizo" title="Demonstração de Prejuízo" />
+            </div>
             <div className="grid grid-cols-2 gap-3"><div className="bg-neutral-700/30 rounded-lg p-3"><p className="text-[10px] text-neutral-500">Despesa Total</p><p className="text-sm font-semibold text-red-400">{fmt(totalD)}</p></div><div className="bg-neutral-700/30 rounded-lg p-3"><p className="text-[10px] text-neutral-500">% sobre Receita</p><p className="text-sm font-semibold text-amber-400">{dre.receitas > 0 ? Math.round((totalD / dre.receitas) * 100) : 0}%</p></div></div>
             <table className="w-full text-xs"><thead><tr className="border-b border-neutral-700 text-neutral-400 text-left"><th className="px-3 py-2 font-medium">Categoria</th><th className="px-3 py-2 font-medium">Valor</th></tr></thead>
               <tbody>{despesas.map((i) => (
@@ -57,7 +64,14 @@ export default function DRETab() {
         const total = dre.receitas + dre.despesas;
         return (
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-neutral-200">Rateio por Categoria</h3>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-neutral-200">Rateio por Categoria</h3>
+              <ExportButtons
+                columns={["Categoria", "Tipo", "Valor", "% do Total"]}
+                rows={dre.items.map(i => [i.categoria, i.tipo, fmt(Math.abs(i.valor)), `${total > 0 ? Math.round((Math.abs(i.valor) / total) * 100) : 0}%`])}
+                filename="dre-rateio" title="Rateio por Categoria"
+              />
+            </div>
             <table className="w-full text-xs"><thead><tr className="border-b border-neutral-700 text-neutral-400 text-left"><th className="px-3 py-2 font-medium">Categoria</th><th className="px-3 py-2 font-medium">Tipo</th><th className="px-3 py-2 font-medium">Valor</th><th className="px-3 py-2 font-medium">% do Total</th></tr></thead>
               <tbody>{dre.items.map((i) => {
                 const pct = total > 0 ? Math.round((Math.abs(i.valor) / total) * 100) : 0;

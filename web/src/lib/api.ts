@@ -108,6 +108,37 @@ function leadsQueryString(f: LeadFiltro, opts?: { export?: boolean }): string {
   return q.toString();
 }
 
+export interface CofreMovimento {
+  id: number;
+  cofre_id: number;
+  tipo: "entrada_sangria" | "saida_troco" | "saida_despesa" | "ajuste";
+  categoria?: string | null;
+  valor: number;
+  descricao?: string | null;
+  caixa_id?: number | null;
+  data: string;
+  criado_por?: string | null;
+  created_at: string;
+}
+
+export interface VendasPorLojaResp {
+  lojas: { id: number; nome: string }[];
+  dias: { data: string; valores_por_loja: Record<number, number>; total_dia: number }[];
+  totais_por_loja: Record<number, number>;
+}
+
+export interface MovimentoDiarioResp {
+  loja_id: number;
+  dias: {
+    data: string;
+    receita_por_forma: Record<string, number>;
+    despesa_por_categoria: Record<string, number>;
+    receita_total: number;
+    despesa_total: number;
+    total_liquido: number;
+  }[];
+}
+
 export const api = {
   // Auth
   login: (email: string, password: string) =>
@@ -931,6 +962,21 @@ export const api = {
   finDelete: (tabela: string, id: number) => request<{ success: boolean }>(`/api/financeiro/${tabela}/${id}`, { method: "DELETE" }),
   finFluxoResumo: (dias?: number) => request<{ resumo: Record<string, number>; diario: unknown[] }>(`/api/financeiro/fluxo_caixa/resumo${dias ? "?dias=" + dias : ""}`),
   finDREResumo: (mes?: string) => request<{ receitas: number; despesas: number; resultado: number; lucro: boolean; items: unknown[] }>(`/api/financeiro/dre/resumo${mes ? "/" + mes : ""}`),
+
+  // Financeiro — Cofre
+  cofreExtrato: (lojaId: number, dias?: number) =>
+    request<{ saldo_atual: number; movimentos: CofreMovimento[] }>(`/api/financeiro/cofre?loja_id=${lojaId}${dias ? `&dias=${dias}` : ""}`),
+  cofreSaldoTotal: () => request<{ saldo_total: number }>("/api/financeiro/cofre/saldo-total"),
+  cofreCriarMovimento: (data: { loja_id: number; tipo: string; valor: number; categoria?: string; descricao?: string; caixa_id?: number }) =>
+    request<{ movimento?: CofreMovimento; saldo_atual?: number; error?: string }>("/api/financeiro/cofre/movimento", { method: "POST", body: JSON.stringify(data) }),
+  cofreExcluirMovimento: (movimentoId: number) =>
+    request<{ success?: boolean; error?: string }>(`/api/financeiro/cofre/movimento/${movimentoId}`, { method: "DELETE" }),
+
+  // Financeiro — Relatórios por loja
+  finVendasPorLoja: (de: string, ate: string) =>
+    request<VendasPorLojaResp>(`/api/financeiro/relatorios/vendas-por-loja?de=${de}&ate=${ate}`),
+  finMovimentoDiario: (de: string, ate: string, lojaId: number) =>
+    request<MovimentoDiarioResp>(`/api/financeiro/relatorios/movimento-diario?de=${de}&ate=${ate}&loja_id=${lojaId}`),
 
   // Auditoria
   auditoriaList: (filtros: { modulo?: string; email?: string; entidade?: string; acao?: string; data_inicio?: string; data_fim?: string; limit?: number }) => {

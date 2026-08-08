@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
-import { fmtBRL as fmt } from "@/lib/format";
+import { fmtBRL as fmt, fmtDataBR } from "@/lib/format";
+import ExportButtons from "@/app/_components/ExportButtons";
 
 interface Pix { id: number; chave: string; tipo_chave: string; descricao: string; valor: number; data_transacao: string; status: string; }
 
@@ -43,8 +44,13 @@ export default function PIXTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-3">
         <button onClick={abrirCriar} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1.5 rounded-lg transition-colors">+ Novo PIX</button>
+        <ExportButtons
+          columns={["Chave", "Tipo", "Descrição", "Valor", "Data", "Status"]}
+          rows={data.map(p => [p.chave, p.tipo_chave, p.descricao, fmt(p.valor), p.data_transacao ? fmtDataBR(p.data_transacao) : "—", p.status])}
+          filename="pix" title="PIX"
+        />
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[

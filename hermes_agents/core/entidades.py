@@ -430,7 +430,11 @@ def ao_finalizar_producao(op_id: int) -> dict:
     except Exception as e: return {"error": str(e)}
 
 def ao_fechar_caixa_pdv(caixa_id: int) -> dict:
-    """Quando um caixa PDV e fechado: lancar no fluxo de caixa."""
+    """Quando um caixa PDV e fechado: lancar no fluxo de caixa e, se a loja
+    tiver cofre (fin_cofre e' lazy-criado na primeira movimentacao), creditar
+    a sangria do turno la' — mesmo padrao de tolerancia a falha ja usado em
+    ao_faturar_pedido/ao_receber_compra (nao bloqueia o fechamento do caixa
+    se o lancamento no cofre falhar)."""
     async def _go():
         db = await get_db()
         caixa = await db.fetchrow("SELECT * FROM pdv_caixas WHERE id = $1", caixa_id)
@@ -444,9 +448,21 @@ def ao_fechar_caixa_pdv(caixa_id: int) -> dict:
             await db.execute("INSERT INTO fin_fluxo_caixa (data, descricao, tipo, valor, categoria) VALUES ($1,$2,'saida',$3,'Sangria PDV')", hoje_str, f"Sangria Caixa #{caixa_id}", float(sangrias or 0))
         if float(suprimentos or 0) > 0:
             await db.execute("INSERT INTO fin_fluxo_caixa (data, descricao, tipo, valor, categoria) VALUES ($1,$2,'entrada',$3,'Suprimento PDV')", hoje_str, f"Suprimento Caixa #{caixa_id}", float(suprimentos or 0))
-        return {"total_vendas": float(total_vendas or 0), "sangrias": float(sangrias or 0), "suprimentos": float(suprimentos or 0)}
-    try: return run_async(_go())
-    except Exception as e: return {"error": str(e)}
+        return {"total_vendas": float(total_vendas or 0), "sangrias": float(sangrias or 0),
+                "suprimentos": float(suprimentos or 0), "loja_id": caixa.get("loja_id")}
+    try:
+        resultado = run_async(_go())
+    except Exception as e:
+        return {"error": str(e)}
+    if not resultado.get("error") and resultado.get("loja_id") and resultado.get("sangrias", 0) > 0:
+        try:
+            from core.cofre import criar_movimento
+            criar_movimento(
+                resultado["loja_id"], "entrada_sangria", resultado["sangrias"],
+                caixa_id=caixa_id, descricao=f"Sangria Caixa #{caixa_id}")
+        except Exception as e:
+            log(AGENT, f"Erro ao creditar sangria do caixa {caixa_id} no cofre: {e}")
+    return resultado
 
 def ao_converter_lead(lead_id: int) -> dict:
     """Quando um lead CRM e convertido em cliente: cria cad_clientes e vincula."""

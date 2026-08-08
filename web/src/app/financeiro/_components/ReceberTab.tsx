@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
-import { fmtBRL as fmt } from "@/lib/format";
+import { fmtBRL as fmt, fmtDataBR } from "@/lib/format";
+import ExportButtons from "@/app/_components/ExportButtons";
 
 interface Conta { id: number; cliente: string; descricao: string; valor: number; vencimento: string; data_recebimento?: string; status: string; forma_pagamento: string; }
 
@@ -60,8 +61,13 @@ export default function ReceberTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-3">
         <button onClick={abrirCriar} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1.5 rounded-lg transition-colors">+ Nova Conta</button>
+        <ExportButtons
+          columns={["Cliente", "Descrição", "Valor", "Vencimento", "Forma Pag.", "Status"]}
+          rows={data.map(c => [c.cliente, c.descricao, fmt(c.valor), c.vencimento ? fmtDataBR(c.vencimento) : "—", c.forma_pagamento, c.status])}
+          filename="contas-receber" title="Contas a Receber"
+        />
       </div>
       {erroLista && <div className="text-red-400 text-xs bg-red-950/40 border border-red-900/50 rounded-lg px-3 py-2">{erroLista}</div>}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

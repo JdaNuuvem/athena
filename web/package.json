@@ -10,6 +10,9 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "exceljs": "^4.4.0",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "next": "^15.3.2",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",

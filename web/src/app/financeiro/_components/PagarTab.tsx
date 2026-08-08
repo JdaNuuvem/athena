@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
-import { fmtBRL as fmt } from "@/lib/format";
+import { fmtBRL as fmt, fmtDataBR } from "@/lib/format";
 import { AutorizacaoGerencial, type AutorizacaoGerencialValue } from "../../_components/AutorizacaoGerencial";
+import ExportButtons from "@/app/_components/ExportButtons";
 
 interface Conta { id: number; fornecedor: string; descricao: string; valor: number; vencimento: string; data_pagamento?: string; status: string; forma_pagamento: string; }
 
@@ -77,8 +78,13 @@ export default function PagarTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-3">
         <button onClick={abrirCriar} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1.5 rounded-lg transition-colors">+ Nova Conta</button>
+        <ExportButtons
+          columns={["Fornecedor", "Descrição", "Valor", "Vencimento", "Forma Pag.", "Status"]}
+          rows={data.map(c => [c.fornecedor, c.descricao, fmt(c.valor), c.vencimento ? fmtDataBR(c.vencimento) : "—", c.forma_pagamento, c.status])}
+          filename="contas-pagar" title="Contas a Pagar"
+        />
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[{ label: "Total Pendente", v: data.filter(c => c.status !== "pago").reduce((s, c) => s + c.valor, 0), c: "text-amber-400" }, { label: "Total Pago", v: data.filter(c => c.status === "pago").reduce((s, c) => s + c.valor, 0), c: "text-emerald-400" }, { label: "Vencidas", v: data.filter(c => c.status === "atrasado").length, c: "text-red-400" }, { label: "Total", v: data.length, c: "text-neutral-200" }].map((c) => (
