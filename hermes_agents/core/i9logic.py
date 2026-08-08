@@ -25,9 +25,10 @@ _coleta_em_andamento = set()  # filial_id -> coleta rodando agora, evita disparo
 _coleta_erro_recente = {}  # filial_id -> mensagem de erro da ultima tentativa
 _coleta_lock = threading.Lock()
 
-LIMIAR_ALERTA_ABSOLUTO = 5
-LIMIAR_ALERTA_PERCENTUAL = 0.10
-TOLERANCIA_ZERO = 0.5
+from core.estoque_divergencia import (
+    LIMIAR_ALERTA_ABSOLUTO, LIMIAR_ALERTA_PERCENTUAL, TOLERANCIA_ZERO,
+    classificar_divergencia,
+)
 
 MAX_TENTATIVAS_PAGINA = 3
 BACKOFF_SEGUNDOS = [2.5, 5, 10]
@@ -350,20 +351,6 @@ def gravar_snapshot(idproduto_i9logic: int, codproduto_i9logic: str, filial_i9lo
 
 
 # ── Divergencia: classificacao, listagem, comparacao com Athena ──
-
-def classificar_divergencia(qtd_fisico: float, qtd_comparacao: float) -> str:
-    """qtd_comparacao e' o contabil (i9Logic isolado, modo seed/auditoria) ou o
-    disponivel do Athena (modo monitoramento continuo) — a mesma regra de
-    classificacao serve pros dois casos, so' muda o que se compara contra o
-    fisico. Nunca ajusta nada sozinho, so' classifica pra fila de revisao."""
-    divergencia = abs(float(qtd_comparacao) - float(qtd_fisico))
-    if divergencia <= TOLERANCIA_ZERO:
-        return "sem_acao"
-    base = max(float(qtd_fisico), 1)
-    if divergencia >= LIMIAR_ALERTA_ABSOLUTO or (divergencia / base) >= LIMIAR_ALERTA_PERCENTUAL:
-        return "alerta"
-    return "registrado"
-
 
 def listar_itens_para_revisao(revisado: bool = False) -> list:
     async def _go():

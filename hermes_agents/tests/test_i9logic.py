@@ -676,6 +676,29 @@ class TestEstoqueFisicoPorLoja(unittest.TestCase):
         self.assertEqual(resultado["status"], "processando")
 
 
+class TestClassificarDivergenciaReexport(unittest.TestCase):
+    """i9logic.classificar_divergencia agora e' um re-export de
+    core.estoque_divergencia — este teste confirma que o comportamento nao
+    mudou apos a extracao."""
+    def test_dentro_da_tolerancia_zero_e_sem_acao(self):
+        self.assertEqual(i9logic.classificar_divergencia(100, 100.3), "sem_acao")
+
+    def test_acima_do_limiar_absoluto_e_alerta(self):
+        self.assertEqual(i9logic.classificar_divergencia(100, 106), "alerta")
+
+    def test_acima_do_limiar_percentual_e_alerta(self):
+        self.assertEqual(i9logic.classificar_divergencia(10, 12), "alerta")
+
+    def test_divergencia_pequena_mas_fora_da_tolerancia_e_registrado(self):
+        self.assertEqual(i9logic.classificar_divergencia(100, 102), "registrado")
+
+    def test_constantes_reexportadas(self):
+        from core.estoque_divergencia import TOLERANCIA_ZERO, LIMIAR_ALERTA_ABSOLUTO, LIMIAR_ALERTA_PERCENTUAL
+        self.assertEqual(i9logic.TOLERANCIA_ZERO, TOLERANCIA_ZERO)
+        self.assertEqual(i9logic.LIMIAR_ALERTA_ABSOLUTO, LIMIAR_ALERTA_ABSOLUTO)
+        self.assertEqual(i9logic.LIMIAR_ALERTA_PERCENTUAL, LIMIAR_ALERTA_PERCENTUAL)
+
+
 from flask import Flask
 import core.rbac as rbac
 
