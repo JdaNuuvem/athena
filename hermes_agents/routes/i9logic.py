@@ -118,9 +118,13 @@ def i9logic_divergencias_athena_ajustar():
         quantidade = dados.get("quantidade")
         if not sku or not loja or quantidade is None:
             return jsonify({"erro": "sku, loja e quantidade sao obrigatorios"}), 400
+        try:
+            quantidade_float = float(quantidade)
+        except (TypeError, ValueError):
+            return jsonify({"erro": "quantidade deve ser um numero"}), 400
         usuario = usuario_atual_da_request()
         resultado = ajustar_absoluto(
-            sku, loja, float(quantidade), motivo="ajuste_inventario",
+            sku, loja, quantidade_float, motivo="ajuste_inventario",
             usuario_id=usuario.get("user_id"), usuario_nome=usuario.get("nome", ""))
         if resultado.get("erro"):
             return jsonify(resultado), 400

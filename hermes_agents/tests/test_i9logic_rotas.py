@@ -55,6 +55,18 @@ class TestDivergenciasAthenaRota(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         mock_fn.assert_called_once_with("Matriz")
 
+    def test_listar_com_permissao_granular_estoque_ver_libera(self):
+        """Usa um token de sessao comum (nao master) com exatamente 'estoque.ver'
+        concedida — fecha o buraco onde inverter os decorators GET/POST passaria
+        despercebido (token master ignora RBAC granular e nao pegaria isso)."""
+        token = rbac.gerar_token_sessao(8, "ver@x.com", "Operador")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=["estoque.ver"]), \
+             patch("core.i9logic.listar_divergencias_athena", return_value={"ok": True, "data": []}) as mock_fn:
+            r = self.client.get("/api/integrations/i9logic/divergencias-athena?loja=Matriz", headers=headers)
+        self.assertEqual(r.status_code, 200)
+        mock_fn.assert_called_once_with("Matriz")
+
     def test_ajustar_sem_permissao_nega(self):
         token = rbac.gerar_token_sessao(7, "op@x.com", "Sem Papel")
         headers = {"Authorization": f"Bearer {token}"}
@@ -76,7 +88,29 @@ class TestDivergenciasAthenaRota(unittest.TestCase):
         self.assertEqual(mock_fn.call_args.args[1], "Matriz")
         self.assertEqual(mock_fn.call_args.args[2], 100)
 
+    def test_ajustar_com_permissao_granular_estoque_editar_libera(self):
+        """Usa um token de sessao comum (nao master) com exatamente 'estoque.editar'
+        concedida — mesma logica de test_listar_com_permissao_granular_estoque_ver_libera,
+        mas pra rota POST."""
+        token = rbac.gerar_token_sessao(9, "editar@x.com", "Operador")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=["estoque.editar"]), \
+             patch("core.estoque.ajustar_absoluto", return_value={"ok": True}) as mock_fn:
+            r = self.client.post("/api/integrations/i9logic/divergencias-athena/ajustar",
+                                  json={"sku": "SKU-A", "loja": "Matriz", "quantidade": 100},
+                                  headers=headers)
+        self.assertEqual(r.status_code, 200)
+        mock_fn.assert_called_once()
+
     def test_ajustar_sem_sku_retorna_400(self):
         r = self.client.post("/api/integrations/i9logic/divergencias-athena/ajustar",
                               json={"loja": "Matriz", "quantidade": 100}, headers=self._headers())
         self.assertEqual(r.status_code, 400)
+
+    def test_ajustar_quantidade_nao_numerica_retorna_400(self):
+        with patch("core.estoque.ajustar_absoluto") as mock_fn:
+            r = self.client.post("/api/integrations/i9logic/divergencias-athena/ajustar",
+                                  json={"sku": "SKU-A", "loja": "Matriz", "quantidade": "abc"},
+                                  headers=self._headers())
+        self.assertEqual(r.status_code, 400)
+        mock_fn.assert_not_called()
