@@ -37,15 +37,19 @@ export default function DivergenciaSaldo() {
   const carregar = useCallback(async (primeiraVez = false) => {
     cancelarPoll();
     if (!loja) return;
+    if (tipoLojaSelecionada !== "fisica" && tipoLojaSelecionada !== "virtual") {
+      // Loja sem tipo classificado: sem fonte determinada, nao consulta nenhuma integracao.
+      setLoading(false);
+      setAtualizando(false);
+      setErro(null);
+      return;
+    }
     if (primeiraVez) setLoading(true);
     setErro(null);
     try {
-      let r: DivergenciaResponse;
-      if (tipoLojaSelecionada === "fisica") {
-        r = await i9logicListarDivergenciasAthena(loja.nome);
-      } else {
-        r = await shopeeListarDivergencias(loja.id);
-      }
+      const r: DivergenciaResponse = tipoLojaSelecionada === "fisica"
+        ? await i9logicListarDivergenciasAthena(loja.nome)
+        : await shopeeListarDivergencias(loja.id);
       if (r.erro) {
         setErro(r.erro);
         setAtualizando(false);
@@ -73,6 +77,7 @@ export default function DivergenciaSaldo() {
 
   const ajustar = async (item: DivergenciaItem) => {
     if (!loja) return;
+    if (tipoLojaSelecionada !== "fisica" && tipoLojaSelecionada !== "virtual") return;
     const chave = tipoLojaSelecionada === "fisica" ? item.sku : (item.id as number);
     setAjustando(chave);
     try {
@@ -81,6 +86,8 @@ export default function DivergenciaSaldo() {
         : await shopeeAjustarDivergencia(item.id as number);
       if (r.erro) { setErro(r.erro); return; }
       await carregar(true);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro ao aplicar ajuste");
     } finally {
       setAjustando(null);
     }
@@ -93,24 +100,32 @@ export default function DivergenciaSaldo() {
       const r = await shopeeResolverDivergencia(item.id);
       if (r.erro) { setErro(r.erro); return; }
       await carregar(true);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro ao marcar divergencia como revisada");
     } finally {
       setAjustando(null);
     }
   };
 
-  const fonteLabel = tipoLojaSelecionada === "fisica" ? "i9Logic" : "Shopee";
+  const fonteLabel = tipoLojaSelecionada === "fisica" ? "i9Logic"
+    : tipoLojaSelecionada === "virtual" ? "Shopee"
+    : null;
 
   return (
     <section className="space-y-2">
       <div>
         <h2 className="text-sm font-medium text-neutral-400">Divergência de Saldo</h2>
         <p className="text-xs text-neutral-500 mt-0.5">
-          Compara o saldo disponível no Athena contra o saldo real no {fonteLabel} — aponta onde o saldo local está desatualizado.
+          {fonteLabel
+            ? `Compara o saldo disponível no Athena contra o saldo real no ${fonteLabel} — aponta onde o saldo local está desatualizado.`
+            : "Compara o saldo disponível no Athena contra o saldo real na fonte da loja (i9Logic para lojas físicas, Shopee para lojas virtuais)."}
         </p>
       </div>
 
       {!loja ? (
         <div className="text-neutral-500 text-xs">Selecione uma loja no topo da página.</div>
+      ) : tipoLojaSelecionada !== "fisica" && tipoLojaSelecionada !== "virtual" ? (
+        <div className="text-neutral-500 text-xs">Selecione uma loja com tipo definido para ver divergências de saldo.</div>
       ) : erro ? (
         <div className="text-red-400 text-sm bg-red-950/40 border border-red-900/50 rounded-lg px-4 py-3">{erro}</div>
       ) : loading ? (
@@ -139,8 +154,12 @@ export default function DivergenciaSaldo() {
                 </thead>
                 <tbody>
                   {itens.map(item => {
-                    const chave = tipoLojaSelecionada === "fisica" ? item.sku : (item.id as number);
-                    const saldoExterno = tipoLojaSelecionada === "fisica" ? item.qtd_fisico_i9logic : item.qtd_shopee;
+                    const chave = tipoLojaSelecionada === "fisica" ? item.sku
+                      : tipoLojaSelecionada === "virtual" ? (item.id as number)
+                      : item.sku;
+                    const saldoExterno = tipoLojaSelecionada === "fisica" ? item.qtd_fisico_i9logic
+                      : tipoLojaSelecionada === "virtual" ? item.qtd_shopee
+                      : undefined;
                     return (
                       <tr key={chave} className="border-t border-neutral-800 text-neutral-300">
                         <td className="px-3 py-2 font-mono text-neutral-200">{item.sku}</td>
