@@ -26,6 +26,22 @@ def _ensure_tables():
             multa_por_atraso DECIMAL(12,2) DEFAULT 0, observacoes TEXT,
             created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW()
         )""")
+        # ponytail: data_vencimento/competencia/status (colunas acima) eram
+        # calculadas uma unica vez no primeiro boot (hoje() + N dias) e nunca
+        # mais atualizadas — a tela mostrava vencimento congelado desde o
+        # deploy, nao o mes corrente. Viram cadastro (dia_vencimento fixo +
+        # ativo) + fiscal_obrigacoes_ocorrencias abaixo (uma linha real por
+        # competencia, gerada sob demanda). Colunas antigas ficam no schema,
+        # sem uso — nunca DROP em producao.
+        await db.execute("ALTER TABLE fiscal_obrigacoes ADD COLUMN IF NOT EXISTS dia_vencimento INT")
+        await db.execute("ALTER TABLE fiscal_obrigacoes ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT true")
+        await db.execute("""CREATE TABLE IF NOT EXISTS fiscal_obrigacoes_ocorrencias (
+            id SERIAL PRIMARY KEY, obrigacao_id INT REFERENCES fiscal_obrigacoes(id),
+            competencia VARCHAR(7) NOT NULL, data_vencimento DATE NOT NULL,
+            status VARCHAR(30) DEFAULT 'pendente', data_entrega TIMESTAMP,
+            responsavel VARCHAR(100), created_at TIMESTAMP DEFAULT NOW(),
+            UNIQUE(obrigacao_id, competencia)
+        )""")
         await db.execute("""CREATE TABLE IF NOT EXISTS fiscal_notas_fiscais (
             id SERIAL PRIMARY KEY, numero VARCHAR(30) NOT NULL, serie VARCHAR(5) DEFAULT '1',
             modelo VARCHAR(5) DEFAULT '55', chave_acesso VARCHAR(50),
@@ -199,28 +215,97 @@ def impostos_da_nota(nota_id: int) -> list:
     try: return run_async(_go())
     except Exception as e: log(AGENT, f"impostos_da_nota {nota_id}: {e}"); return []
 
-# ── Obrigacoes ──
+# ── Obrigacoes: cadastro + ocorrencia por competencia ──
+
+def _calcular_vencimento(ano: int, mes: int, dia: int):
+    """Data de vencimento real do mes (ano, mes) pro dia configurado no
+    cadastro — clampa pro ultimo dia do mes quando o mes e' mais curto
+    (ex.: dia 31 configurado, fevereiro so' tem 28/29)."""
+    import calendar, datetime
+    ultimo_dia = calendar.monthrange(ano, mes)[1]
+    return datetime.date(ano, mes, min(dia or 1, ultimo_dia))
+
+async def _garantir_ocorrencias(db) -> int:
+    """Garante que a ocorrencia do mes corrente existe pra cada obrigacao
+    ativa — idempotente (ON CONFLICT DO NOTHING). Retorna quantas foram
+    criadas nesta chamada."""
+    hoje_data = await db.fetchval("SELECT CURRENT_DATE")
+    ano, mes = hoje_data.year, hoje_data.month
+    competencia = f"{ano:04d}-{mes:02d}"
+    obrigacoes = await db.fetch("SELECT id, dia_vencimento FROM fiscal_obrigacoes WHERE ativo = true")
+    criadas = 0
+    for o in obrigacoes:
+        venc = _calcular_vencimento(ano, mes, o["dia_vencimento"])
+        tag = await db.execute(
+            """INSERT INTO fiscal_obrigacoes_ocorrencias (obrigacao_id, competencia, data_vencimento)
+               VALUES ($1,$2,$3) ON CONFLICT (obrigacao_id, competencia) DO NOTHING""",
+            o["id"], competencia, venc)
+        if tag == "INSERT 0 1":
+            criadas += 1
+    return criadas
+
+def garantir_ocorrencias_mes_atual() -> dict:
+    async def _go():
+        db = await get_db()
+        criadas = await _garantir_ocorrencias(db)
+        return {"criadas": criadas}
+    try: return run_async(_go())
+    except Exception as e:
+        log(AGENT, f"garantir_ocorrencias_mes_atual: {e}")
+        return {"criadas": 0, "erro": str(e)}
+
+_OCORRENCIA_SELECT = """SELECT oc.id, oc.obrigacao_id, oc.competencia, oc.data_vencimento, oc.status,
+           oc.data_entrega, oc.responsavel,
+           ob.nome, ob.sigla, ob.orgao, ob.periodicidade, ob.regime, ob.descricao
+    FROM fiscal_obrigacoes_ocorrencias oc
+    JOIN fiscal_obrigacoes ob ON ob.id = oc.obrigacao_id"""
 
 def obrigacoes_proximas(dias: int = 30) -> list:
     async def _go():
         db = await get_db()
-        rows = await db.fetch("""SELECT * FROM fiscal_obrigacoes WHERE data_vencimento BETWEEN CURRENT_DATE AND CURRENT_DATE + $1
-            ORDER BY data_vencimento""", dias)
+        await _garantir_ocorrencias(db)
+        rows = await db.fetch(
+            f"{_OCORRENCIA_SELECT} WHERE oc.data_vencimento BETWEEN CURRENT_DATE AND CURRENT_DATE + $1 AND oc.status = 'pendente' ORDER BY oc.data_vencimento",
+            dias)
         return [dict(r) for r in rows]
     try: return run_async(_go())
-    except Exception as e: return []
+    except Exception as e: log(AGENT, f"obrigacoes_proximas: {e}"); return []
 
 def obrigacoes_atrasadas() -> list:
     async def _go():
         db = await get_db()
-        rows = await db.fetch("""SELECT * FROM fiscal_obrigacoes WHERE data_vencimento < CURRENT_DATE AND status = 'pendente'
-            ORDER BY data_vencimento""")
+        await _garantir_ocorrencias(db)
+        rows = await db.fetch(
+            f"{_OCORRENCIA_SELECT} WHERE oc.data_vencimento < CURRENT_DATE AND oc.status = 'pendente' ORDER BY oc.data_vencimento")
         return [dict(r) for r in rows]
     try: return run_async(_go())
-    except Exception as e: return []
+    except Exception as e: log(AGENT, f"obrigacoes_atrasadas: {e}"); return []
 
-def baixar_obrigacao(id: int) -> dict:
-    return update("obrigacoes", id, {"status": "entregue"})
+def obrigacoes_ocorrencias_competencia(competencia: str = None) -> list:
+    """Lista as ocorrencias de uma competencia (formato 'YYYY-MM'); sem
+    argumento, usa o mes corrente e garante que as ocorrencias existam
+    antes de listar."""
+    async def _go():
+        db = await get_db()
+        comp = competencia
+        if not comp:
+            await _garantir_ocorrencias(db)
+            hoje_data = await db.fetchval("SELECT CURRENT_DATE")
+            comp = f"{hoje_data.year:04d}-{hoje_data.month:02d}"
+        rows = await db.fetch(f"{_OCORRENCIA_SELECT} WHERE oc.competencia = $1 ORDER BY oc.data_vencimento", comp)
+        return [dict(r) for r in rows]
+    try: return run_async(_go())
+    except Exception as e: log(AGENT, f"obrigacoes_ocorrencias_competencia: {e}"); return []
+
+def baixar_ocorrencia(ocorrencia_id: int, responsavel: str = "") -> dict:
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow(
+            "UPDATE fiscal_obrigacoes_ocorrencias SET status='entregue', data_entrega=NOW(), responsavel=$1 WHERE id=$2 RETURNING *",
+            responsavel, ocorrencia_id)
+        return dict(row) if row else {"error": "ocorrencia nao encontrada"}
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
 
 # ── Dashboard ──
 
@@ -825,21 +910,16 @@ def _seed():
                 ('PIS/COFINS Monofasico','PIS/COFINS-M',0,'federal','monofasico','Produtos especificos')""")
         count = await db.fetchval("SELECT COUNT(*) FROM fiscal_obrigacoes")
         if count == 0:
-            hoje = __import__('datetime').date.today()
-            await db.execute("""INSERT INTO fiscal_obrigacoes (nome, sigla, descricao, periodicidade, data_vencimento, orgao, regime, status) VALUES
-                ('SPED Fiscal','SPED','Escrituracao Fiscal Digital','mensal',
-                    $1::date + interval '15 days','SEFAZ','normal','pendente'),
-                ('EFD-Contribuicoes','EFD','Escrituracao Fiscal Digital de PIS/COFINS','mensal',
-                    $1::date + interval '10 days','Receita Federal','normal','pendente'),
-                ('DCTF','DCTF','Declaracao de Debitos e Creditos Tributarios','mensal',
-                    $1::date + interval '15 days','Receita Federal','normal','pendente'),
-                ('DAS','DAS','Documento de Arrecadacao do Simples','mensal',
-                    $1::date, 'Receita Federal','simples_nacional','pendente'),
-                ('GIA','GIA','Guia de Informacao e Apuracao do ICMS','mensal',
-                    $1::date + interval '14 days','SEFAZ','normal','pendente'),
-                ('SINTEGRA','SINTEGRA','Sistema Integrado de Informacoes','mensal',
-                    $1::date + interval '12 days','SEFAZ','normal','pendente')""",
-                    hoje)
+            # dia_vencimento e' ponto de partida editavel (tela de Obrigacoes
+            # tem CRUD) — nao e' obrigacao de ajustar a data real de cada
+            # empresa sem contador/i9Logic confirmando.
+            await db.execute("""INSERT INTO fiscal_obrigacoes (nome, sigla, descricao, periodicidade, dia_vencimento, orgao, regime, ativo) VALUES
+                ('SPED Fiscal','SPED','Escrituracao Fiscal Digital','mensal',15,'SEFAZ','normal',true),
+                ('EFD-Contribuicoes','EFD','Escrituracao Fiscal Digital de PIS/COFINS','mensal',10,'Receita Federal','normal',true),
+                ('DCTF','DCTF','Declaracao de Debitos e Creditos Tributarios','mensal',15,'Receita Federal','normal',true),
+                ('DAS','DAS','Documento de Arrecadacao do Simples','mensal',20,'Receita Federal','simples_nacional',true),
+                ('GIA','GIA','Guia de Informacao e Apuracao do ICMS','mensal',14,'SEFAZ','normal',true),
+                ('SINTEGRA','SINTEGRA','Sistema Integrado de Informacoes','mensal',12,'SEFAZ','normal',true)""")
     try: run_async(_go())
     except Exception as e: log(AGENT, f"Erro seed fiscal: {e}")
 

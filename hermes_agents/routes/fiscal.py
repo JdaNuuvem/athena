@@ -117,11 +117,25 @@ def fiscal_obrigacoes_atrasadas():
 
 @fiscal_bp.route("/obrigacoes/<int:id>/baixar", methods=["POST"])
 def fiscal_baixar_obrigacao(id):
-    from core.fiscal import baixar_obrigacao
+    from core.fiscal import baixar_ocorrencia
+    from core.rbac import usuario_atual_da_request
 
     @requer_permissao("fiscal.editar")
     def _go():
-        return jsonify(baixar_obrigacao(id))
+        usuario = usuario_atual_da_request()
+        responsavel = usuario.get("email") or usuario.get("nome") or ""
+        return jsonify(baixar_ocorrencia(id, responsavel))
+    return _go()
+
+
+@fiscal_bp.route("/obrigacoes/ocorrencias", methods=["GET"])
+def fiscal_obrigacoes_ocorrencias():
+    from core.fiscal import obrigacoes_ocorrencias_competencia
+
+    @requer_permissao("fiscal.ver")
+    def _go():
+        competencia = request.args.get("competencia", default=None, type=str)
+        return jsonify({"data": obrigacoes_ocorrencias_competencia(competencia)})
     return _go()
 
 

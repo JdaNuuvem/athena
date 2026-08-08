@@ -245,7 +245,7 @@ class TestFiscalApuracaoRotasRBAC(unittest.TestCase):
         token = rbac.gerar_token_sessao(1, "op@x.com", "Sem Papel")
         headers = {"Authorization": f"Bearer {token}"}
         with patch("core.rbac.get_permissoes_por_usuario", return_value=[]), \
-             patch("core.fiscal.baixar_obrigacao") as mock_baixar:
+             patch("core.fiscal.baixar_ocorrencia") as mock_baixar:
             r = self.client.post("/api/fiscal/obrigacoes/1/baixar", headers=headers)
         self.assertEqual(r.status_code, 403)
         mock_baixar.assert_not_called()
