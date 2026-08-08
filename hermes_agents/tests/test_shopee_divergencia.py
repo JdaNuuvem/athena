@@ -377,5 +377,24 @@ class TestAplicarAjusteDivergencia(unittest.TestCase):
         mock_ajustar.assert_not_called()
 
 
+class TestLojaDoSnapshot(unittest.TestCase):
+    def test_devolve_loja_id_do_snapshot_existente(self):
+        with patch("shopee.divergencia._buscar_snapshot_raw", return_value={"sku": "SKU-A", "loja_id": 3, "qtd_shopee": 10}):
+            self.assertEqual(divergencia.loja_do_snapshot(1), 3)
+
+    def test_devolve_none_para_snapshot_inexistente(self):
+        with patch("shopee.divergencia._buscar_snapshot_raw", return_value=None):
+            self.assertIsNone(divergencia.loja_do_snapshot(999))
+
+    def test_propaga_excecao_de_banco_fail_closed(self):
+        # loja_do_snapshot NAO pode engolir excecao — routes/shopee.py::
+        # _negar_se_loja_fora_do_escopo depende de receber a excecao pra negar
+        # por seguranca em vez de tratar erro de banco como "snapshot inexistente,
+        # deixa passar" (bug encontrado na revisao — fail-open silencioso).
+        with patch("shopee.divergencia._buscar_snapshot_raw", side_effect=RuntimeError("erro de conexao")):
+            with self.assertRaises(RuntimeError):
+                divergencia.loja_do_snapshot(1)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

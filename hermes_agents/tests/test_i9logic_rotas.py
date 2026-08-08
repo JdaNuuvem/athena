@@ -62,10 +62,55 @@ class TestDivergenciasAthenaRota(unittest.TestCase):
         token = rbac.gerar_token_sessao(8, "ver@x.com", "Operador")
         headers = {"Authorization": f"Bearer {token}"}
         with patch("core.rbac.get_permissoes_por_usuario", return_value=["estoque.ver"]), \
+             patch("core.lojas.resolver_loja_id", return_value=1), \
+             patch("core.rbac_lojas.lojas_permitidas", return_value=None), \
              patch("core.i9logic.listar_divergencias_athena", return_value={"ok": True, "data": []}) as mock_fn:
             r = self.client.get("/api/integrations/i9logic/divergencias-athena?loja=Matriz", headers=headers)
         self.assertEqual(r.status_code, 200)
         mock_fn.assert_called_once_with("Matriz")
+
+    def test_listar_fora_do_escopo_da_loja_nega(self):
+        """Usuario com permissao granular estoque.ver, mas restrito a lojas
+        diferentes de 'Matriz' — antes deste fix, /divergencias-athena nao
+        checava escopo por loja nenhuma (so' /divergencias-athena/ajustar
+        aplicava direto no banco, este GET so' listava, mas o mesmo buraco
+        existia nos dois: um usuario escopado a uma loja conseguia ver/ajustar
+        qualquer outra so' trocando o parametro `loja`)."""
+        token = rbac.gerar_token_sessao(10, "restrito@x.com", "Operador")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=["estoque.ver"]), \
+             patch("core.lojas.resolver_loja_id", return_value=99), \
+             patch("core.rbac_lojas.lojas_permitidas", return_value={1, 2}), \
+             patch("core.i9logic.listar_divergencias_athena") as mock_fn:
+            r = self.client.get("/api/integrations/i9logic/divergencias-athena?loja=Matriz", headers=headers)
+        self.assertEqual(r.status_code, 403)
+        mock_fn.assert_not_called()
+
+    def test_listar_falha_ao_resolver_loja_nega_fail_closed(self):
+        """resolver_loja_id devolve None tanto pra loja inexistente quanto pra
+        falha de banco (engole excecao) — a checagem tem que negar nos dois
+        casos, nunca deixar passar so' porque nao concluiu a resolucao."""
+        token = rbac.gerar_token_sessao(11, "restrito2@x.com", "Operador")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=["estoque.ver"]), \
+             patch("core.lojas.resolver_loja_id", return_value=None), \
+             patch("core.i9logic.listar_divergencias_athena") as mock_fn:
+            r = self.client.get("/api/integrations/i9logic/divergencias-athena?loja=Matriz", headers=headers)
+        self.assertEqual(r.status_code, 403)
+        mock_fn.assert_not_called()
+
+    def test_ajustar_fora_do_escopo_da_loja_nega(self):
+        token = rbac.gerar_token_sessao(12, "restrito3@x.com", "Operador")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=["estoque.editar"]), \
+             patch("core.lojas.resolver_loja_id", return_value=99), \
+             patch("core.rbac_lojas.lojas_permitidas", return_value={1, 2}), \
+             patch("core.estoque.ajustar_absoluto") as mock_fn:
+            r = self.client.post("/api/integrations/i9logic/divergencias-athena/ajustar",
+                                  json={"sku": "SKU-A", "loja": "Matriz", "quantidade": 100},
+                                  headers=headers)
+        self.assertEqual(r.status_code, 403)
+        mock_fn.assert_not_called()
 
     def test_ajustar_sem_permissao_nega(self):
         token = rbac.gerar_token_sessao(7, "op@x.com", "Sem Papel")
@@ -96,6 +141,8 @@ class TestDivergenciasAthenaRota(unittest.TestCase):
         token = rbac.gerar_token_sessao(9, "editar@x.com", "Operador")
         headers = {"Authorization": f"Bearer {token}"}
         with patch("core.rbac.get_permissoes_por_usuario", return_value=["estoque.editar"]), \
+             patch("core.lojas.resolver_loja_id", return_value=1), \
+             patch("core.rbac_lojas.lojas_permitidas", return_value=None), \
              patch("core.i9logic.qtd_fisico_mais_recente", return_value=100), \
              patch("core.estoque.ajustar_absoluto", return_value={"ok": True}) as mock_fn:
             r = self.client.post("/api/integrations/i9logic/divergencias-athena/ajustar",

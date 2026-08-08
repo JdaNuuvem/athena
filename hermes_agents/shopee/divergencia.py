@@ -260,25 +260,33 @@ def marcar_revisado(snapshot_id: int) -> dict:
         return {"erro": str(e)}
 
 
-def _buscar_snapshot(snapshot_id: int):
+def _buscar_snapshot_raw(snapshot_id: int):
+    """Nao engole excecao (ao contrario de _buscar_snapshot) — usada por
+    loja_do_snapshot, que precisa distinguir 'snapshot nao existe' (None
+    valido) de 'falha ao consultar' (excecao), pra a checagem de escopo por
+    loja em routes/shopee.py::_negar_se_loja_fora_do_escopo nao virar
+    fail-open so' porque o banco deu erro nessa query."""
     async def _go():
         db = await get_db()
         return await db.fetchrow(
             "SELECT sku, loja_id, qtd_shopee FROM shopee_estoque_snapshot WHERE id=$1", snapshot_id)
+    row = run_async(_go())
+    return dict(row) if row else None
+
+
+def _buscar_snapshot(snapshot_id: int):
     try:
-        row = run_async(_go())
-        return dict(row) if row else None
+        return _buscar_snapshot_raw(snapshot_id)
     except Exception:
         return None
 
 
 def loja_do_snapshot(snapshot_id: int):
-    """loja_id dono de um snapshot (None se nao existir ou a consulta falhar).
-    As rotas usam isso pra checar escopo por loja ANTES de agir: o loja_id
-    desta feature so' existe DENTRO do snapshot, entao o decorator
-    core.rbac.requer_acesso_loja — que procura loja_id no path/query/body da
-    request — nao tem como enxergar e a checagem precisa ser manual."""
-    snap = _buscar_snapshot(snapshot_id)
+    """loja_id dono de um snapshot. Propaga excecao de banco (fail-closed) —
+    quem chama (routes/shopee.py::_negar_se_loja_fora_do_escopo) precisa
+    negar por seguranca quando a consulta falha, nunca tratar erro de banco
+    como 'snapshot inexistente, deixa passar'."""
+    snap = _buscar_snapshot_raw(snapshot_id)
     return snap["loja_id"] if snap else None
 
 

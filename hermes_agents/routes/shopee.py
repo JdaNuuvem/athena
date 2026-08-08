@@ -693,7 +693,13 @@ def _negar_se_loja_fora_do_escopo(snapshot_id):
     usuario = usuario_atual_da_request()
     if usuario["is_master"] or not usuario["user_id"]:
         return None
-    loja_id = loja_do_snapshot(snapshot_id)
+    try:
+        loja_id = loja_do_snapshot(snapshot_id)
+    except Exception:
+        # Fail-closed: falha ao consultar o snapshot nega por seguranca, nao
+        # equivale a "snapshot inexistente" (que ai' sim deixa passar pro 404
+        # que quem chama ja' devolve).
+        return jsonify({"error": "Falha ao verificar acesso a esta loja"}), 403
     if loja_id is None:
         return None  # snapshot inexistente: quem chama ja' devolve "nao encontrado"
     from core.rbac_lojas import lojas_permitidas

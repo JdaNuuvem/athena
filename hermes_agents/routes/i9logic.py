@@ -14,6 +14,31 @@ from core.lojas import obter as obter_loja
 i9logic_bp = Blueprint("i9logic", __name__, url_prefix="/api/integrations/i9logic")
 
 
+def _negar_se_loja_fora_do_escopo(loja_nome: str):
+    """Mesmo principio de routes/shopee.py::_negar_se_loja_fora_do_escopo,
+    mas aqui a loja ja' vem como nome/string direto no query/body (nao ha'
+    indirecao via snapshot_id) — /divergencias-athena e /divergencias-athena/ajustar
+    nao tem checagem de core.rbac.requer_acesso_loja porque o decorator so'
+    enxerga loja_id no path/query/body, nao um nome de loja pra resolver.
+
+    Fail-closed: se a loja nao resolver pra um id (inexistente OU falha ao
+    consultar o banco — resolver_loja_id engole excecao e devolve None nos
+    dois casos), a checagem nega em vez de deixar passar sem ter concluido."""
+    from core.rbac import usuario_atual_da_request
+    usuario = usuario_atual_da_request()
+    if usuario["is_master"] or not usuario["user_id"]:
+        return None
+    from core.lojas import resolver_loja_id
+    loja_id = resolver_loja_id(loja_nome)
+    if loja_id is None:
+        return jsonify({"error": "Nao foi possivel verificar acesso a esta loja"}), 403
+    from core.rbac_lojas import lojas_permitidas
+    permitidas = lojas_permitidas(usuario["user_id"])
+    if permitidas is not None and int(loja_id) not in permitidas:
+        return jsonify({"error": "Sem acesso a esta loja", "loja_id": loja_id}), 403
+    return None
+
+
 @i9logic_bp.route("/depara", methods=["GET"])
 def i9logic_listar_depara():
     @requer_permissao("estoque.ver")
@@ -100,7 +125,12 @@ def i9logic_divergencias_athena():
     @requer_permissao("estoque.ver")
     def _go():
         from core.i9logic import listar_divergencias_athena
-        return jsonify(listar_divergencias_athena(request.args.get("loja", "")))
+        loja = request.args.get("loja", "")
+        if loja:
+            negado = _negar_se_loja_fora_do_escopo(loja)
+            if negado:
+                return negado
+        return jsonify(listar_divergencias_athena(loja))
     return _go()
 
 
@@ -118,6 +148,9 @@ def i9logic_divergencias_athena_ajustar():
         quantidade = dados.get("quantidade")
         if not sku or not loja or quantidade is None:
             return jsonify({"erro": "sku, loja e quantidade sao obrigatorios"}), 400
+        negado = _negar_se_loja_fora_do_escopo(loja)
+        if negado:
+            return negado
         try:
             quantidade_float = float(quantidade)
         except (TypeError, ValueError):

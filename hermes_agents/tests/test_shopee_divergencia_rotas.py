@@ -120,6 +120,19 @@ class TestDivergenciasShopeeRota(unittest.TestCase):
         self.assertEqual(r.status_code, 403)
         mock_fn.assert_not_called()
 
+    def test_resolver_com_falha_ao_verificar_escopo_nega_fail_closed(self):
+        """loja_do_snapshot propaga excecao de banco — a checagem de escopo
+        tem que negar (403) em vez de tratar erro de banco como 'snapshot
+        inexistente, deixa passar'."""
+        token = rbac.gerar_token_sessao(9, "editar@x.com", "Operador")
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("core.rbac.get_permissoes_por_usuario", return_value=["estoque.editar"]), \
+             patch("shopee.divergencia.loja_do_snapshot", side_effect=RuntimeError("db down")), \
+             patch("shopee.divergencia.marcar_revisado") as mock_fn:
+            r = self.client.post("/api/shopee/divergencias/1/resolver", headers=headers)
+        self.assertEqual(r.status_code, 403)
+        mock_fn.assert_not_called()
+
     def test_resolver_com_erro_retorna_400(self):
         with patch("shopee.divergencia.marcar_revisado", return_value={"erro": "snapshot nao encontrado"}):
             r = self.client.post("/api/shopee/divergencias/999/resolver", headers=self._headers())
