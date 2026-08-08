@@ -2003,41 +2003,43 @@ export interface DivergenciaResponse {
   status?: "processando" | "pronto";
   data_coleta?: string | null;
   data: DivergenciaItem[];
+  /** Erro da ultima coleta em background (Shopee) — mesmo papel de
+   *  EstoqueI9LogicResposta.erro_ultima_coleta: a coleta falhou, mas a lista
+   *  (possivelmente vazia/velha) ainda e' devolvida com o aviso junto. */
+  erro_ultima_coleta?: string;
   erro?: string;
 }
 
-export async function i9logicListarDivergenciasAthena(loja: string): Promise<DivergenciaResponse> {
-  const res = await fetch(`/api/integrations/i9logic/divergencias-athena?loja=${encodeURIComponent(loja)}`);
-  if (!res.ok) return { data: [], erro: `HTTP ${res.status}` };
-  return res.json().catch(() => ({ data: [], erro: "Resposta invalida" }));
-}
+// ponytail: estas 5 funcoes usavam fetch() cru sem checar res.ok — exatamente o
+// bug ja' documentado em fiscalList acima: um 403 de requer_permissao (corpo
+// {"error":"Permissao negada"}, chave "error" e nao "erro") resolvia como JSON
+// valido sem campo `erro`, e o componente tratava como SUCESSO e recarregava a
+// lista — o usuario via a tela confirmar um ajuste de inventario que nunca
+// aconteceu. request<T>() lanca em !res.ok, injeta o Authorization, trata 401 e
+// extrai err.error || err.erro; quem chama usa try/catch.
+export const i9logicListarDivergenciasAthena = (loja: string) =>
+  request<DivergenciaResponse>(
+    `/api/integrations/i9logic/divergencias-athena?loja=${encodeURIComponent(loja)}`
+  );
 
-export async function i9logicAjustarDivergenciaAthena(
-  sku: string, loja: string, quantidade: number
-): Promise<{ ok?: boolean; erro?: string }> {
-  const res = await fetch("/api/integrations/i9logic/divergencias-athena/ajustar", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sku, loja, quantidade }),
-  });
-  return res.json().catch(() => ({ erro: `HTTP ${res.status}` }));
-}
+export const i9logicAjustarDivergenciaAthena = (sku: string, loja: string, quantidade: number) =>
+  request<{ ok?: boolean; erro?: string }>(
+    "/api/integrations/i9logic/divergencias-athena/ajustar",
+    { method: "POST", body: JSON.stringify({ sku, loja, quantidade }) }
+  );
 
-export async function shopeeListarDivergencias(lojaId: number): Promise<DivergenciaResponse> {
-  const res = await fetch(`/api/shopee/divergencias?loja_id=${lojaId}`);
-  if (!res.ok) return { data: [], erro: `HTTP ${res.status}` };
-  return res.json().catch(() => ({ data: [], erro: "Resposta invalida" }));
-}
+export const shopeeListarDivergencias = (lojaId: number) =>
+  request<DivergenciaResponse>(`/api/shopee/divergencias?loja_id=${lojaId}`);
 
-export async function shopeeResolverDivergencia(id: number): Promise<{ ok?: boolean; erro?: string }> {
-  const res = await fetch(`/api/shopee/divergencias/${id}/resolver`, { method: "POST" });
-  return res.json().catch(() => ({ erro: `HTTP ${res.status}` }));
-}
+export const shopeeResolverDivergencia = (id: number) =>
+  request<{ ok?: boolean; erro?: string }>(
+    `/api/shopee/divergencias/${id}/resolver`, { method: "POST" }
+  );
 
-export async function shopeeAjustarDivergencia(id: number): Promise<{ ok?: boolean; erro?: string }> {
-  const res = await fetch(`/api/shopee/divergencias/${id}/ajustar`, { method: "POST" });
-  return res.json().catch(() => ({ erro: `HTTP ${res.status}` }));
-}
+export const shopeeAjustarDivergencia = (id: number) =>
+  request<{ ok?: boolean; erro?: string }>(
+    `/api/shopee/divergencias/${id}/ajustar`, { method: "POST" }
+  );
 
 // ── Produtos por Loja ──
 

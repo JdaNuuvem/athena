@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useStore } from "@/lib/store-context";
+import { useAuth } from "@/lib/auth";
 import {
   i9logicListarDivergenciasAthena, i9logicAjustarDivergenciaAthena,
   shopeeListarDivergencias, shopeeResolverDivergencia, shopeeAjustarDivergencia,
@@ -19,11 +20,17 @@ const CLASSIFICACAO_CLASSE: Record<string, string> = {
 
 export default function DivergenciaSaldo() {
   const { lojaId, lojas, tipoLojaSelecionada } = useStore();
+  const { hasPermission } = useAuth();
+  // Sem esse gate, quem so' tem estoque.ver enxergava os botoes de escrita e
+  // batia num 403 a cada clique. Nao substitui o RBAC do backend (que continua
+  // sendo a autoridade) — so' evita oferecer uma acao que vai ser negada.
+  const podeEditar = hasPermission("estoque.editar");
   const loja = lojas.find(l => String(l.id) === lojaId);
   const [itens, setItens] = useState<DivergenciaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [atualizando, setAtualizando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [avisoColeta, setAvisoColeta] = useState<string | null>(null);
   const [ajustando, setAjustando] = useState<string | number | null>(null);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -47,15 +54,13 @@ export default function DivergenciaSaldo() {
     if (primeiraVez) setLoading(true);
     setErro(null);
     try {
+      // request<T>() lanca em !res.ok — 403/500 caem no catch abaixo em vez de
+      // passar por sucesso silencioso (ver comentario em api.ts).
       const r: DivergenciaResponse = tipoLojaSelecionada === "fisica"
         ? await i9logicListarDivergenciasAthena(loja.nome)
         : await shopeeListarDivergencias(loja.id);
-      if (r.erro) {
-        setErro(r.erro);
-        setAtualizando(false);
-        return;
-      }
       setItens(r.data || []);
+      setAvisoColeta(r.erro_ultima_coleta || null);
       const processando = r.status === "processando";
       setAtualizando(processando);
       if (processando) {
@@ -76,15 +81,19 @@ export default function DivergenciaSaldo() {
   }, [carregar]);
 
   const ajustar = async (item: DivergenciaItem) => {
-    if (!loja) return;
+    if (!loja || !podeEditar) return;
     if (tipoLojaSelecionada !== "fisica" && tipoLojaSelecionada !== "virtual") return;
     const chave = tipoLojaSelecionada === "fisica" ? item.sku : (item.id as number);
     setAjustando(chave);
+    setErro(null);
     try {
-      const r = tipoLojaSelecionada === "fisica"
-        ? await i9logicAjustarDivergenciaAthena(item.sku, loja.nome, item.qtd_fisico_i9logic || 0)
-        : await shopeeAjustarDivergencia(item.id as number);
-      if (r.erro) { setErro(r.erro); return; }
+      // Sem checagem de `r.erro`: request<T>() ja' lanca em qualquer !res.ok,
+      // entao permissao negada / dados desatualizados (409) caem no catch.
+      if (tipoLojaSelecionada === "fisica") {
+        await i9logicAjustarDivergenciaAthena(item.sku, loja.nome, item.qtd_fisico_i9logic || 0);
+      } else {
+        await shopeeAjustarDivergencia(item.id as number);
+      }
       await carregar(true);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao aplicar ajuste");
@@ -94,11 +103,12 @@ export default function DivergenciaSaldo() {
   };
 
   const resolver = async (item: DivergenciaItem) => {
+    if (!podeEditar) return;
     if (tipoLojaSelecionada !== "virtual" || item.id === undefined) return;
     setAjustando(item.id);
+    setErro(null);
     try {
-      const r = await shopeeResolverDivergencia(item.id);
-      if (r.erro) { setErro(r.erro); return; }
+      await shopeeResolverDivergencia(item.id);
       await carregar(true);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao marcar divergencia como revisada");
@@ -137,6 +147,11 @@ export default function DivergenciaSaldo() {
               Coletando saldo atualizado do {fonteLabel} em segundo plano — a lista atualiza sozinha quando terminar.
             </div>
           )}
+          {avisoColeta && (
+            <div className="bg-amber-900/20 border border-amber-800/60 text-amber-300 text-xs px-3 py-2 rounded-lg">
+              A última coleta do {fonteLabel} falhou: {avisoColeta}. Os saldos abaixo podem estar desatualizados.
+            </div>
+          )}
           {itens.length === 0 ? (
             <div className="text-neutral-500 text-xs">Nenhuma divergência encontrada.</div>
           ) : (
@@ -161,25 +176,41 @@ export default function DivergenciaSaldo() {
                       : tipoLojaSelecionada === "virtual" ? item.qtd_shopee
                       : undefined;
                     return (
-                      <tr key={chave} className="border-t border-neutral-800 text-neutral-300">
+                      <tr key={chave}
+                        className={`border-t border-neutral-800 text-neutral-300 ${item.revisado ? "opacity-50" : ""}`}>
                         <td className="px-3 py-2 font-mono text-neutral-200">{item.sku}</td>
                         <td className="px-3 py-2 text-right numeric">{item.disponivel_athena}</td>
                         <td className="px-3 py-2 text-right numeric">{saldoExterno}</td>
                         <td className="px-3 py-2 text-right numeric font-medium">{item.divergencia > 0 ? `+${item.divergencia}` : item.divergencia}</td>
-                        <td className={`px-3 py-2 font-medium ${CLASSIFICACAO_CLASSE[item.classificacao]}`}>
-                          {CLASSIFICACAO_LABEL[item.classificacao]}
+                        <td className="px-3 py-2 font-medium">
+                          <span className={CLASSIFICACAO_CLASSE[item.classificacao]}>
+                            {CLASSIFICACAO_LABEL[item.classificacao]}
+                          </span>
+                          {/* Sem isso o clique em "Marcar revisado" recarregava a lista
+                              e nada mudava na tela — indistinguivel de um clique falho. */}
+                          {item.revisado && (
+                            <span className="ml-2 text-[10px] uppercase tracking-wide text-emerald-400 border border-emerald-800/60 rounded px-1.5 py-0.5">
+                              Revisado
+                            </span>
+                          )}
                         </td>
                         <td className="px-3 py-2 text-right">
                           <div className="flex justify-end gap-2">
-                            <button onClick={() => ajustar(item)} disabled={ajustando === chave}
-                              className="text-indigo-400 hover:text-indigo-300 disabled:opacity-50">
-                              Ajustar
-                            </button>
-                            {tipoLojaSelecionada === "virtual" && (
-                              <button onClick={() => resolver(item)} disabled={ajustando === chave}
-                                className="text-neutral-500 hover:text-neutral-300 disabled:opacity-50">
-                                Marcar revisado
-                              </button>
+                            {podeEditar ? (
+                              <>
+                                <button onClick={() => ajustar(item)} disabled={ajustando === chave}
+                                  className="text-indigo-400 hover:text-indigo-300 disabled:opacity-50">
+                                  Ajustar
+                                </button>
+                                {tipoLojaSelecionada === "virtual" && !item.revisado && (
+                                  <button onClick={() => resolver(item)} disabled={ajustando === chave}
+                                    className="text-neutral-500 hover:text-neutral-300 disabled:opacity-50">
+                                    Marcar revisado
+                                  </button>
+                                )}
+                              </>
+                            ) : (
+                              <span className="text-neutral-600">—</span>
                             )}
                           </div>
                         </td>
