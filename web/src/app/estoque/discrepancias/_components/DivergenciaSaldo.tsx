@@ -59,6 +59,15 @@ export default function DivergenciaSaldo() {
       const r: DivergenciaResponse = tipoLojaSelecionada === "fisica"
         ? await i9logicListarDivergenciasAthena(loja.nome)
         : await shopeeListarDivergencias(loja.id);
+      // As rotas GET de listagem devolvem {erro: "..."} com HTTP 200 (sem
+      // mapeamento de status), entao request<T>() nao lanca — precisa checar
+      // o corpo aqui, senao o erro mais comum (mapeamento de filial i9Logic
+      // ausente) vira silenciosamente "Nenhuma divergencia encontrada".
+      if (r.erro) {
+        setErro(r.erro);
+        setAtualizando(false);
+        return;
+      }
       setItens(r.data || []);
       setAvisoColeta(r.erro_ultima_coleta || null);
       const processando = r.status === "processando";
