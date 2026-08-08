@@ -180,14 +180,18 @@ def fluxo_caixa(dias=30, loja_id=None):
 _FAIXAS_AGING = [("0-30 dias", 0, 30), ("31-60 dias", 31, 60), ("61-90 dias", 61, 90), ("90+ dias", 91, None)]
 
 def aging_financeiro():
+    # status != 'pago' (nao so' == 'pendente'): mesmo criterio ja usado pela
+    # home do Financeiro (web/.../VisaoGeralTab.tsx, "Contas Atrasadas") —
+    # linhas com status 'atrasado' (existe no seed de demonstracao, fora do
+    # enum 'pendente'|'pago' documentado) tambem contam como divida em aberto.
     async def _go():
         db = await get_db()
-        avencer = await db.fetchval("SELECT COUNT(*) FROM fin_contas_receber WHERE vencimento >= CURRENT_DATE AND status='pendente'")
-        avencer_valor = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_contas_receber WHERE vencimento >= CURRENT_DATE AND status='pendente'")
-        vencidas = await db.fetchval("SELECT COUNT(*) FROM fin_contas_receber WHERE vencimento < CURRENT_DATE AND status='pendente'")
-        vencidas_valor = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_contas_receber WHERE vencimento < CURRENT_DATE AND status='pendente'")
-        pagar_vencidas = await db.fetchval("SELECT COUNT(*) FROM fin_contas_pagar WHERE vencimento < CURRENT_DATE AND status='pendente'")
-        pagar_vencidas_valor = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_contas_pagar WHERE vencimento < CURRENT_DATE AND status='pendente'")
+        avencer = await db.fetchval("SELECT COUNT(*) FROM fin_contas_receber WHERE vencimento >= CURRENT_DATE AND status!='pago'")
+        avencer_valor = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_contas_receber WHERE vencimento >= CURRENT_DATE AND status!='pago'")
+        vencidas = await db.fetchval("SELECT COUNT(*) FROM fin_contas_receber WHERE vencimento < CURRENT_DATE AND status!='pago'")
+        vencidas_valor = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_contas_receber WHERE vencimento < CURRENT_DATE AND status!='pago'")
+        pagar_vencidas = await db.fetchval("SELECT COUNT(*) FROM fin_contas_pagar WHERE vencimento < CURRENT_DATE AND status!='pago'")
+        pagar_vencidas_valor = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_contas_pagar WHERE vencimento < CURRENT_DATE AND status!='pago'")
 
         por_faixa = await db.fetch("""
             SELECT
@@ -198,14 +202,14 @@ def aging_financeiro():
                     ELSE '90+ dias'
                 END AS faixa,
                 COUNT(*) AS qtd, COALESCE(SUM(valor),0) AS valor
-            FROM fin_contas_receber WHERE status='pendente' AND vencimento < CURRENT_DATE
+            FROM fin_contas_receber WHERE status!='pago' AND vencimento < CURRENT_DATE
             GROUP BY 1
         """)
         por_faixa_map = {r["faixa"]: {"qtd": r["qtd"], "valor": float(r["valor"] or 0)} for r in por_faixa}
 
         maiores = await db.fetch("""
             SELECT cliente, valor, vencimento, (CURRENT_DATE - vencimento) AS dias_vencido
-            FROM fin_contas_receber WHERE status='pendente' AND vencimento < CURRENT_DATE
+            FROM fin_contas_receber WHERE status!='pago' AND vencimento < CURRENT_DATE
             ORDER BY valor DESC LIMIT 5
         """)
         return {
