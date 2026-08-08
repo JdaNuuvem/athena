@@ -15,9 +15,25 @@ export default function PIXTab() {
   const [criando, setCriando] = useState(false);
   const [novo, setNovo] = useState({ chave: "", tipo_chave: "email", descricao: "", valor: "" });
   const [erro, setErro] = useState("");
+  const [erroLista, setErroLista] = useState("");
+  const [concluindoId, setConcluindoId] = useState<number | null>(null);
 
   const load = () => { api.finList("pix").then((r) => setData((r.data || []) as Pix[])).catch(() => {}).finally(() => setLoading(false)); };
   useEffect(() => { load(); }, []);
+
+  const marcarConcluido = async (p: Pix) => {
+    setErroLista("");
+    setConcluindoId(p.id);
+    try {
+      const r = await api.finUpdate("pix", p.id, { status: "concluido" });
+      if ((r as { error?: string }).error) { setErroLista((r as { error?: string }).error || "Erro ao marcar como concluído"); return; }
+      load();
+    } catch {
+      setErroLista("Erro ao marcar como concluído — tente novamente.");
+    } finally {
+      setConcluindoId(null);
+    }
+  };
 
   const abrirCriar = () => {
     setNovo({ chave: "", tipo_chave: "email", descricao: "", valor: "" });
@@ -65,6 +81,7 @@ export default function PIXTab() {
           </div>
         ))}
       </div>
+      {erroLista && <div className="text-red-400 text-xs bg-red-950/40 border border-red-900/50 rounded-lg px-3 py-2">{erroLista}</div>}
       {loading ? <p className="text-xs text-neutral-500">Carregando...</p> : (
         <div className="bg-neutral-800 border border-neutral-700 rounded-lg overflow-hidden">
           <table className="w-full text-xs">
@@ -76,6 +93,7 @@ export default function PIXTab() {
                 <th className="px-4 py-2 font-medium">Valor</th>
                 <th className="px-4 py-2 font-medium">Data</th>
                 <th className="px-4 py-2 font-medium">Status</th>
+                <th className="px-4 py-2 font-medium"></th>
               </tr>
             </thead>
             <tbody>
@@ -89,6 +107,12 @@ export default function PIXTab() {
                     <td className="px-4 py-2.5">{fmt(p.valor)}</td>
                     <td className="px-4 py-2.5">{p.data_transacao ? new Date(p.data_transacao).toLocaleDateString("pt-BR") : "—"}</td>
                     <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded text-[10px] ${sc}`}>{p.status}</span></td>
+                    <td className="px-4 py-2.5">{p.status !== "concluido" && (
+                      <button onClick={() => marcarConcluido(p)} disabled={concluindoId === p.id}
+                        className="text-indigo-400 hover:text-indigo-300 text-[11px] disabled:opacity-50">
+                        {concluindoId === p.id ? "Marcando..." : "Marcar como concluído"}
+                      </button>
+                    )}</td>
                   </tr>
                 );
               })}

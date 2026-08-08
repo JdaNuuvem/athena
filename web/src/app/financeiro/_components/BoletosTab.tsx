@@ -13,9 +13,25 @@ export default function BoletosTab() {
   const [criando, setCriando] = useState(false);
   const [novo, setNovo] = useState({ beneficiario: "", valor: "", vencimento: "", nosso_numero: "", codigo_barras: "" });
   const [erro, setErro] = useState("");
+  const [erroLista, setErroLista] = useState("");
+  const [pagandoId, setPagandoId] = useState<number | null>(null);
 
   const load = () => { api.finList("boletos").then((r) => setData((r.data || []) as Boleto[])).catch(() => {}).finally(() => setLoading(false)); };
   useEffect(() => { load(); }, []);
+
+  const marcarPago = async (b: Boleto) => {
+    setErroLista("");
+    setPagandoId(b.id);
+    try {
+      const r = await api.finUpdate("boletos", b.id, { status: "pago" });
+      if ((r as { error?: string }).error) { setErroLista((r as { error?: string }).error || "Erro ao marcar como pago"); return; }
+      load();
+    } catch {
+      setErroLista("Erro ao marcar como pago — tente novamente.");
+    } finally {
+      setPagandoId(null);
+    }
+  };
 
   const abrirCriar = () => {
     setNovo({ beneficiario: "", valor: "", vencimento: "", nosso_numero: "", codigo_barras: "" });
@@ -51,6 +67,7 @@ export default function BoletosTab() {
           filename="boletos" title="Boletos"
         />
       </div>
+      {erroLista && <div className="text-red-400 text-xs bg-red-950/40 border border-red-900/50 rounded-lg px-3 py-2">{erroLista}</div>}
       {loading ? <p className="text-xs text-neutral-500">Carregando...</p> : (
         <div className="bg-neutral-800 border border-neutral-700 rounded-lg overflow-hidden">
           <table className="w-full text-xs">
@@ -61,6 +78,7 @@ export default function BoletosTab() {
                 <th className="px-4 py-2 font-medium">Vencimento</th>
                 <th className="px-4 py-2 font-medium">Nosso Número</th>
                 <th className="px-4 py-2 font-medium">Status</th>
+                <th className="px-4 py-2 font-medium"></th>
               </tr>
             </thead>
             <tbody>
@@ -73,6 +91,12 @@ export default function BoletosTab() {
                     <td className="px-4 py-2.5">{b.vencimento ? new Date(b.vencimento + "T00:00:00").toLocaleDateString("pt-BR") : "—"}</td>
                     <td className="px-4 py-2.5 text-neutral-400">{b.nosso_numero}</td>
                     <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded text-[10px] ${sc}`}>{b.status}</span></td>
+                    <td className="px-4 py-2.5">{b.status !== "pago" && (
+                      <button onClick={() => marcarPago(b)} disabled={pagandoId === b.id}
+                        className="text-indigo-400 hover:text-indigo-300 text-[11px] disabled:opacity-50">
+                        {pagandoId === b.id ? "Marcando..." : "Marcar como pago"}
+                      </button>
+                    )}</td>
                   </tr>
                 );
               })}

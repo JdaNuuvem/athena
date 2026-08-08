@@ -14,7 +14,7 @@ const SUB_ITEMS = [
 
 interface Banco { id: number; nome: string; agencia: string; conta: string; saldo: number; status: string; }
 interface CentroCusto { id: number; nome: string; codigo: string; descricao: string; status: string; }
-interface PlanoContas { id: number; codigo: string; nome: string; tipo: string; natureza: string; }
+interface PlanoContas { id: number; codigo: string; nome: string; tipo: string; natureza: string; conta_pai_id: number | null; }
 
 const TIPOS_PLANO = ["sintetica", "analitica"];
 const NATUREZAS_PLANO = ["devedora", "credora"];
@@ -28,8 +28,10 @@ export default function BancoTab() {
   const [criando, setCriando] = useState<"conta" | "centro_custo" | "plano_contas" | null>(null);
   const [novoBanco, setNovoBanco] = useState({ nome: "", agencia: "", conta: "", saldo: "" });
   const [novoCentro, setNovoCentro] = useState({ nome: "", codigo: "", descricao: "" });
-  const [novoPlano, setNovoPlano] = useState({ codigo: "", nome: "", tipo: "sintetica", natureza: "devedora" });
+  const [novoPlano, setNovoPlano] = useState({ codigo: "", nome: "", tipo: "sintetica", natureza: "devedora", conta_pai_id: "" });
   const [erro, setErro] = useState("");
+  const [erroLista, setErroLista] = useState("");
+  const [alternandoId, setAlternandoId] = useState<number | null>(null);
 
   const load = () => {
     Promise.all([api.finList("bancos"), api.finList("centro_custo"), api.finList("plano_contas")])
@@ -41,9 +43,23 @@ export default function BancoTab() {
   const abrirCriar = (tipo: "conta" | "centro_custo" | "plano_contas") => {
     setNovoBanco({ nome: "", agencia: "", conta: "", saldo: "" });
     setNovoCentro({ nome: "", codigo: "", descricao: "" });
-    setNovoPlano({ codigo: "", nome: "", tipo: "sintetica", natureza: "devedora" });
+    setNovoPlano({ codigo: "", nome: "", tipo: "sintetica", natureza: "devedora", conta_pai_id: "" });
     setErro("");
     setCriando(tipo);
+  };
+
+  const alternarStatusBanco = async (b: Banco) => {
+    setErroLista("");
+    setAlternandoId(b.id);
+    try {
+      const r = await api.finUpdate("bancos", b.id, { status: b.status === "ativa" ? "inativa" : "ativa" });
+      if ((r as { error?: string }).error) { setErroLista((r as { error?: string }).error || "Erro ao alterar status"); return; }
+      load();
+    } catch {
+      setErroLista("Erro ao alterar status — tente novamente.");
+    } finally {
+      setAlternandoId(null);
+    }
   };
 
   const confirmarCriarConta = async () => {
@@ -73,7 +89,10 @@ export default function BancoTab() {
   const confirmarCriarPlano = async () => {
     if (!novoPlano.nome.trim() || !novoPlano.codigo.trim()) { setErro("Nome e código são obrigatórios"); return; }
     try {
-      const r = await api.finCreate("plano_contas", { codigo: novoPlano.codigo.trim(), nome: novoPlano.nome.trim(), tipo: novoPlano.tipo, natureza: novoPlano.natureza });
+      const r = await api.finCreate("plano_contas", {
+        codigo: novoPlano.codigo.trim(), nome: novoPlano.nome.trim(), tipo: novoPlano.tipo, natureza: novoPlano.natureza,
+        conta_pai_id: novoPlano.conta_pai_id ? Number(novoPlano.conta_pai_id) : null,
+      });
       if ((r as { error?: string }).error) { setErro((r as { error?: string }).error || "Erro ao criar"); return; }
       setCriando(null);
       load();
@@ -99,9 +118,17 @@ export default function BancoTab() {
                 <button onClick={() => abrirCriar("conta")} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1.5 rounded-lg transition-colors">+ Nova Conta</button>
               </div>
             </div>
-            <table className="w-full text-xs"><thead><tr className="border-b border-neutral-700 text-neutral-400 text-left"><th className="px-3 py-2 font-medium">Banco</th><th className="px-3 py-2 font-medium">Agência</th><th className="px-3 py-2 font-medium">Conta</th><th className="px-3 py-2 font-medium">Saldo</th><th className="px-3 py-2 font-medium">Status</th></tr></thead>
+            {erroLista && <div className="text-red-400 text-xs bg-red-950/40 border border-red-900/50 rounded-lg px-3 py-2">{erroLista}</div>}
+            <table className="w-full text-xs"><thead><tr className="border-b border-neutral-700 text-neutral-400 text-left"><th className="px-3 py-2 font-medium">Banco</th><th className="px-3 py-2 font-medium">Agência</th><th className="px-3 py-2 font-medium">Conta</th><th className="px-3 py-2 font-medium">Saldo</th><th className="px-3 py-2 font-medium">Status</th><th className="px-3 py-2 font-medium"></th></tr></thead>
               <tbody>{bancos.map((b) => (
-                <tr key={b.id} className="border-b border-neutral-700/50 hover:bg-neutral-700/30 text-neutral-300"><td className="px-3 py-2">{b.nome}</td><td className="px-3 py-2">{b.agencia}</td><td className="px-3 py-2">{b.conta}</td><td className="px-3 py-2 text-emerald-400 font-medium">{fmt(b.saldo)}</td><td className="px-3 py-2"><span className={`px-2 py-0.5 rounded text-[10px] ${b.status === "ativa" ? "bg-emerald-500/20 text-emerald-400" : "bg-neutral-500/20 text-neutral-400"}`}>{b.status}</span></td></tr>
+                <tr key={b.id} className="border-b border-neutral-700/50 hover:bg-neutral-700/30 text-neutral-300"><td className="px-3 py-2">{b.nome}</td><td className="px-3 py-2">{b.agencia}</td><td className="px-3 py-2">{b.conta}</td><td className="px-3 py-2 text-emerald-400 font-medium">{fmt(b.saldo)}</td><td className="px-3 py-2"><span className={`px-2 py-0.5 rounded text-[10px] ${b.status === "ativa" ? "bg-emerald-500/20 text-emerald-400" : "bg-neutral-500/20 text-neutral-400"}`}>{b.status}</span></td>
+                  <td className="px-3 py-2">
+                    <button onClick={() => alternarStatusBanco(b)} disabled={alternandoId === b.id}
+                      className="text-indigo-400 hover:text-indigo-300 text-[11px] disabled:opacity-50">
+                      {alternandoId === b.id ? "Alterando..." : b.status === "ativa" ? "Desativar" : "Ativar"}
+                    </button>
+                  </td>
+                </tr>
               ))}</tbody>
             </table>
           </div>
@@ -141,10 +168,13 @@ export default function BancoTab() {
                 <button onClick={() => abrirCriar("plano_contas")} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1.5 rounded-lg transition-colors">+ Nova Conta</button>
               </div>
             </div>
-            <table className="w-full text-xs"><thead><tr className="border-b border-neutral-700 text-neutral-400 text-left"><th className="px-3 py-2 font-medium">Código</th><th className="px-3 py-2 font-medium">Nome</th><th className="px-3 py-2 font-medium">Tipo</th><th className="px-3 py-2 font-medium">Natureza</th></tr></thead>
-              <tbody>{plano.map((p) => (
-                <tr key={p.id} className="border-b border-neutral-700/50 hover:bg-neutral-700/30 text-neutral-300"><td className="px-3 py-2 font-medium">{p.codigo}</td><td className={`px-3 py-2 ${p.tipo === "sintetica" ? "font-bold text-indigo-300" : "text-neutral-300"}`}>{p.nome}</td><td className="px-3 py-2 text-neutral-400">{p.tipo}</td><td className="px-3 py-2 text-neutral-400">{p.natureza}</td></tr>
-              ))}</tbody>
+            <table className="w-full text-xs"><thead><tr className="border-b border-neutral-700 text-neutral-400 text-left"><th className="px-3 py-2 font-medium">Código</th><th className="px-3 py-2 font-medium">Nome</th><th className="px-3 py-2 font-medium">Tipo</th><th className="px-3 py-2 font-medium">Natureza</th><th className="px-3 py-2 font-medium">Conta Pai</th></tr></thead>
+              <tbody>{plano.map((p) => {
+                const pai = plano.find(x => x.id === p.conta_pai_id);
+                return (
+                  <tr key={p.id} className="border-b border-neutral-700/50 hover:bg-neutral-700/30 text-neutral-300"><td className="px-3 py-2 font-medium">{p.codigo}</td><td className={`px-3 py-2 ${p.tipo === "sintetica" ? "font-bold text-indigo-300" : "text-neutral-300"}`}>{p.nome}</td><td className="px-3 py-2 text-neutral-400">{p.tipo}</td><td className="px-3 py-2 text-neutral-400">{p.natureza}</td><td className="px-3 py-2 text-neutral-400">{pai ? `${pai.codigo} — ${pai.nome}` : "—"}</td></tr>
+                );
+              })}</tbody>
             </table>
           </div>
         );
@@ -217,6 +247,11 @@ export default function BancoTab() {
               <select value={novoPlano.natureza} onChange={e => setNovoPlano({ ...novoPlano, natureza: e.target.value })}
                 className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-1.5 text-xs text-neutral-200">
                 {NATUREZAS_PLANO.map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+              <select value={novoPlano.conta_pai_id} onChange={e => setNovoPlano({ ...novoPlano, conta_pai_id: e.target.value })}
+                className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-1.5 text-xs text-neutral-200">
+                <option value="">Sem conta pai (raiz)</option>
+                {plano.filter(p => p.tipo === "sintetica").map(p => <option key={p.id} value={p.id}>{p.codigo} — {p.nome}</option>)}
               </select>
             </div>
             <div className="flex gap-2 mt-4">

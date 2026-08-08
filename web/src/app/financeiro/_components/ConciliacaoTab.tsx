@@ -15,12 +15,28 @@ export default function ConciliacaoTab() {
   const [criando, setCriando] = useState(false);
   const [novo, setNovo] = useState({ banco_id: "", data: "", descricao: "", valor_extrato: "", valor_sistema: "" });
   const [erro, setErro] = useState("");
+  const [erroLista, setErroLista] = useState("");
+  const [conciliandoId, setConciliandoId] = useState<number | null>(null);
 
   const load = () => { api.finList("conciliacao").then((r) => setData((r.data || []) as Conciliacao[])).catch(() => {}).finally(() => setLoading(false)); };
   useEffect(() => {
     load();
     api.finList("bancos").then((r) => setBancos((r.data || []) as Banco[])).catch(() => {});
   }, []);
+
+  const conciliar = async (c: Conciliacao) => {
+    setErroLista("");
+    setConciliandoId(c.id);
+    try {
+      const r = await api.finUpdate("conciliacao", c.id, { status: "conciliado" });
+      if ((r as { error?: string }).error) { setErroLista((r as { error?: string }).error || "Erro ao conciliar"); return; }
+      load();
+    } catch {
+      setErroLista("Erro ao conciliar — tente novamente.");
+    } finally {
+      setConciliandoId(null);
+    }
+  };
 
   const abrirCriar = () => {
     setNovo({ banco_id: bancos[0] ? String(bancos[0].id) : "", data: new Date().toISOString().slice(0, 10), descricao: "", valor_extrato: "", valor_sistema: "" });
@@ -56,6 +72,7 @@ export default function ConciliacaoTab() {
           filename="conciliacao" title="Conciliação Bancária"
         />
       </div>
+      {erroLista && <div className="text-red-400 text-xs bg-red-950/40 border border-red-900/50 rounded-lg px-3 py-2">{erroLista}</div>}
       {loading ? <p className="text-xs text-neutral-500">Carregando...</p> : (
         <div className="bg-neutral-800 border border-neutral-700 rounded-lg overflow-hidden">
           <table className="w-full text-xs">
@@ -67,6 +84,7 @@ export default function ConciliacaoTab() {
                 <th className="px-4 py-2 font-medium">Sistema</th>
                 <th className="px-4 py-2 font-medium">Diferença</th>
                 <th className="px-4 py-2 font-medium">Status</th>
+                <th className="px-4 py-2 font-medium"></th>
               </tr>
             </thead>
             <tbody>
@@ -81,6 +99,12 @@ export default function ConciliacaoTab() {
                     <td className="px-4 py-2.5">{fmt(c.valor_sistema)}</td>
                     <td className={`px-4 py-2.5 font-medium ${diff === 0 ? "text-emerald-400" : "text-red-400"}`}>{fmt(diff)}</td>
                     <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded text-[10px] ${sc}`}>{c.status}</span></td>
+                    <td className="px-4 py-2.5">{c.status !== "conciliado" && (
+                      <button onClick={() => conciliar(c)} disabled={conciliandoId === c.id}
+                        className="text-indigo-400 hover:text-indigo-300 text-[11px] disabled:opacity-50">
+                        {conciliandoId === c.id ? "Conciliando..." : "Conciliar"}
+                      </button>
+                    )}</td>
                   </tr>
                 );
               })}

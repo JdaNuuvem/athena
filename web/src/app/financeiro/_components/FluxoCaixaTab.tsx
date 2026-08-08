@@ -16,8 +16,8 @@ export default function FluxoCaixaTab() {
   const [erro, setErro] = useState("");
 
   const load = () => {
-    api.finFluxoResumo()
-      .then((r) => { setData((r.diario || []) as Lancamento[]); setResumo(r.resumo || {}); })
+    Promise.all([api.finList("fluxo_caixa"), api.finFluxoResumo()])
+      .then(([lista, r]) => { setData((lista.data || []) as Lancamento[]); setResumo(r.resumo || {}); })
       .catch(() => {})
       .finally(() => setLoading(false));
   };

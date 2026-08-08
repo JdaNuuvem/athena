@@ -87,7 +87,7 @@ export default function PagarTab() {
         />
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[{ label: "Total Pendente", v: data.filter(c => c.status !== "pago").reduce((s, c) => s + c.valor, 0), c: "text-amber-400" }, { label: "Total Pago", v: data.filter(c => c.status === "pago").reduce((s, c) => s + c.valor, 0), c: "text-emerald-400" }, { label: "Vencidas", v: data.filter(c => c.status === "atrasado").length, c: "text-red-400" }, { label: "Total", v: data.length, c: "text-neutral-200" }].map((c) => (
+        {[{ label: "Total Pendente", v: data.filter(c => c.status !== "pago").reduce((s, c) => s + c.valor, 0), c: "text-amber-400" }, { label: "Total Pago", v: data.filter(c => c.status === "pago").reduce((s, c) => s + c.valor, 0), c: "text-emerald-400" }, { label: "Vencidas", v: data.filter(c => c.status !== "pago" && c.vencimento && new Date(c.vencimento) < new Date(new Date().toDateString())).length, c: "text-red-400" }, { label: "Total", v: data.length, c: "text-neutral-200" }].map((c) => (
           <div key={c.label} className="bg-neutral-800 border border-neutral-700 rounded-lg p-3"><p className="text-[10px] text-neutral-500">{c.label}</p><p className={`text-sm font-semibold mt-0.5 ${c.c}`}>{c.label === "Vencidas" || c.label === "Total" ? c.v : fmt(c.v)}</p></div>
         ))}</div>
       {loading ? <p className="text-xs text-neutral-500">Carregando...</p> : (
