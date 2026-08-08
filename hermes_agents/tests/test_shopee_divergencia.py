@@ -55,6 +55,78 @@ class TestExecutarColetaLoja(unittest.TestCase):
             resultado = divergencia.executar_coleta_loja(1)
         self.assertIn("erro", resultado)
 
+    def test_itens_que_falharam_ao_gravar_viram_erro_visivel(self):
+        """O contador `erros` era calculado e descartado por
+        _coleta_em_background — ninguem via que N itens nao entraram."""
+        itens_shopee = [{"item_id": 111, "sku": "SKU-A", "stock": 50}]
+        async def fetchrow_que_falha(query, *params):
+            raise Exception("valor longo demais pra coluna")
+        with patch("shopee.divergencia.sync_all_items", return_value=itens_shopee), \
+             patch("shopee.divergencia.get_db") as mock_get_db:
+            db = AsyncMock()
+            db.fetch = AsyncMock(return_value=[])
+            db.fetchrow = AsyncMock(side_effect=fetchrow_que_falha)
+            mock_get_db.return_value = db
+            resultado = divergencia.executar_coleta_loja(1)
+        self.assertEqual(resultado["erros"], 1)
+        self.assertIn("erro", resultado)
+
+
+class TestRevisadoPersisteEntreColetas(unittest.TestCase):
+    """Cada corrida insere linhas NOVAS (data_coleta faz parte da UNIQUE), entao
+    sem herdar o flag toda divergencia marcada como revisada reaparecia como
+    nova a cada <=30min — esvaziando o unico diferencial do lado Shopee."""
+
+    def _coletar(self, itens_shopee, revisados_anteriores):
+        gravados = []
+        async def fake_fetchrow(query, *params):
+            gravados.append(params)
+            return {"id": len(gravados)}
+        with patch("shopee.divergencia.sync_all_items", return_value=itens_shopee), \
+             patch("shopee.divergencia.get_db") as mock_get_db:
+            db = AsyncMock()
+            db.fetch = AsyncMock(return_value=revisados_anteriores)
+            db.fetchrow = AsyncMock(side_effect=fake_fetchrow)
+            mock_get_db.return_value = db
+            divergencia.executar_coleta_loja(1)
+        return gravados
+
+    def test_sku_revisado_com_mesma_qtd_continua_revisado(self):
+        gravados = self._coletar(
+            [{"item_id": 111, "sku": "SKU-A", "stock": 50}],
+            [{"sku": "SKU-A", "qtd_shopee": 50}])
+        self.assertTrue(gravados[0][5])  # parametro $6 = revisado
+
+    def test_sku_revisado_com_qtd_diferente_volta_a_nao_revisado(self):
+        # Divergencia mudou -> e' outra divergencia, tem que ser revista de novo.
+        gravados = self._coletar(
+            [{"item_id": 111, "sku": "SKU-A", "stock": 42}],
+            [{"sku": "SKU-A", "qtd_shopee": 50}])
+        self.assertFalse(gravados[0][5])
+
+    def test_sku_nunca_revisado_entra_como_nao_revisado(self):
+        gravados = self._coletar(
+            [{"item_id": 222, "sku": "SKU-B", "stock": 30}],
+            [{"sku": "SKU-A", "qtd_shopee": 50}])
+        self.assertFalse(gravados[0][5])
+
+    def test_falha_ao_ler_estado_anterior_nao_derruba_a_coleta(self):
+        """Degradacao aceitavel: perder o flag e' menos grave que perder a coleta."""
+        gravados = []
+        async def fake_fetchrow(query, *params):
+            gravados.append(params)
+            return {"id": 1}
+        with patch("shopee.divergencia.sync_all_items",
+                   return_value=[{"item_id": 111, "sku": "SKU-A", "stock": 50}]), \
+             patch("shopee.divergencia.get_db") as mock_get_db:
+            db = AsyncMock()
+            db.fetch = AsyncMock(side_effect=Exception("erro na leitura anterior"))
+            db.fetchrow = AsyncMock(side_effect=fake_fetchrow)
+            mock_get_db.return_value = db
+            resultado = divergencia.executar_coleta_loja(1)
+        self.assertEqual(resultado["gravados"], 1)
+        self.assertFalse(gravados[0][5])
+
 
 class TestSnapshotMaisRecente(unittest.TestCase):
     def test_sem_coleta_retorna_none_e_lista_vazia(self):
@@ -83,6 +155,8 @@ class TestSnapshotMaisRecente(unittest.TestCase):
 class TestDispararColetaSeNecessario(unittest.TestCase):
     def setUp(self):
         divergencia._coleta_em_andamento.clear()
+        divergencia._ultima_falha.clear()
+        divergencia._coleta_erro_recente.clear()
 
     def test_sem_snapshot_dispara_coleta(self):
         with patch("shopee.divergencia.threading.Thread") as mock_thread:
@@ -114,6 +188,57 @@ class TestDispararColetaSeNecessario(unittest.TestCase):
         finally:
             divergencia._coleta_em_andamento.discard(1)
 
+    def test_falha_recente_segura_nova_coleta_por_cooldown(self):
+        """Sem cooldown, uma coleta que falha rapido (token expirado) libera o
+        lock em ~1s e o polling de 5s da tela redispara indefinidamente —
+        martelando a API da Shopee. Retorna False (nao 'processando') pra tela
+        parar de fazer polling e mostrar o erro."""
+        divergencia._ultima_falha[1] = datetime.now()
+        with patch("shopee.divergencia.threading.Thread") as mock_thread:
+            resultado = divergencia.disparar_coleta_se_necessario(1, None)
+        self.assertFalse(resultado)
+        mock_thread.assert_not_called()
+
+    def test_falha_antiga_ja_saiu_do_cooldown_e_dispara(self):
+        divergencia._ultima_falha[1] = datetime.now() - timedelta(
+            seconds=divergencia.COOLDOWN_APOS_FALHA_SEGUNDOS + 5)
+        with patch("shopee.divergencia.threading.Thread") as mock_thread:
+            resultado = divergencia.disparar_coleta_se_necessario(1, None)
+        self.assertTrue(resultado)
+        mock_thread.assert_called_once()
+
+
+class TestColetaEmBackgroundRegistraErro(unittest.TestCase):
+    def setUp(self):
+        divergencia._coleta_em_andamento.clear()
+        divergencia._ultima_falha.clear()
+        divergencia._coleta_erro_recente.clear()
+
+    def test_erro_retornado_por_executar_coleta_e_registrado(self):
+        """executar_coleta_loja CAPTURA suas excecoes e devolve {"erro":...} —
+        so' o `except` de _coleta_em_background nunca detectava nada, entao
+        _coleta_erro_recente ficava eternamente vazio e a tela nunca sabia da
+        falha. O retorno tem que ser inspecionado."""
+        with patch("shopee.divergencia.executar_coleta_loja",
+                   return_value={"erro": "token Shopee expirado"}):
+            divergencia._coleta_em_background(1)
+        self.assertEqual(divergencia._coleta_erro_recente.get(1), "token Shopee expirado")
+        self.assertIn(1, divergencia._ultima_falha)
+        self.assertNotIn(1, divergencia._coleta_em_andamento)
+
+    def test_coleta_bem_sucedida_limpa_erro_e_cooldown(self):
+        divergencia._coleta_erro_recente[1] = "falha antiga"
+        divergencia._ultima_falha[1] = datetime.now()
+        with patch("shopee.divergencia.executar_coleta_loja", return_value={"ok": True, "erros": 0}):
+            divergencia._coleta_em_background(1)
+        self.assertNotIn(1, divergencia._coleta_erro_recente)
+        self.assertNotIn(1, divergencia._ultima_falha)
+
+    def test_excecao_inesperada_tambem_e_registrada(self):
+        with patch("shopee.divergencia.executar_coleta_loja", side_effect=Exception("boom")):
+            divergencia._coleta_em_background(1)
+        self.assertIn("boom", divergencia._coleta_erro_recente.get(1, ""))
+
 
 class TestListarDivergencias(unittest.TestCase):
     def test_calcula_divergencia_contra_saldo_athena(self):
@@ -121,7 +246,7 @@ class TestListarDivergencias(unittest.TestCase):
         with patch("shopee.divergencia.snapshot_mais_recente", return_value=(datetime.now(), itens)), \
              patch("shopee.divergencia.disparar_coleta_se_necessario", return_value=False), \
              patch("shopee.divergencia.obter_loja", return_value={"id": 1, "nome": "Loja Online"}), \
-             patch("core.estoque_saldos.saldo", return_value=44.0):
+             patch("core.estoque_saldos.saldos_em_lote", return_value={"SKU-A": 44.0}):
             resultado = divergencia.listar_divergencias(1)
         self.assertEqual(len(resultado["data"]), 1)
         item = resultado["data"][0]
@@ -146,9 +271,50 @@ class TestListarDivergencias(unittest.TestCase):
         with patch("shopee.divergencia.snapshot_mais_recente", return_value=(datetime.now(), itens)), \
              patch("shopee.divergencia.disparar_coleta_se_necessario", return_value=False), \
              patch("shopee.divergencia.obter_loja", return_value={"id": 1, "nome": "Loja Online"}), \
-             patch("core.estoque_saldos.saldo", return_value=50.0):
+             patch("core.estoque_saldos.saldos_em_lote", return_value={"SKU-A": 50.0}):
             resultado = divergencia.listar_divergencias(1)
         self.assertTrue(resultado["data"][0]["revisado"])
+
+    def test_le_saldos_numa_unica_query_em_lote(self):
+        """Regressao de performance: era um saldo() por sku dentro do loop."""
+        itens = [
+            {"id": 1, "sku": "SKU-A", "item_id_shopee": "111", "qtd_shopee": 50},
+            {"id": 2, "sku": "SKU-B", "item_id_shopee": "222", "qtd_shopee": 30},
+        ]
+        with patch("shopee.divergencia.snapshot_mais_recente", return_value=(datetime.now(), itens)), \
+             patch("shopee.divergencia.disparar_coleta_se_necessario", return_value=False), \
+             patch("shopee.divergencia.obter_loja", return_value={"id": 1, "nome": "Loja Online"}), \
+             patch("core.estoque_saldos.saldos_em_lote",
+                   return_value={"SKU-A": 50.0, "SKU-B": 30.0}) as mock_lote:
+            resultado = divergencia.listar_divergencias(1)
+        mock_lote.assert_called_once()
+        self.assertEqual(mock_lote.call_args.args[0], ["SKU-A", "SKU-B"])
+        self.assertEqual(mock_lote.call_args.args[1], "Loja Online")
+        self.assertEqual(len(resultado["data"]), 2)
+
+    def test_falha_ao_ler_saldos_retorna_erro_em_vez_de_zeros(self):
+        itens = [{"id": 1, "sku": "SKU-A", "item_id_shopee": "111", "qtd_shopee": 50}]
+        with patch("shopee.divergencia.snapshot_mais_recente", return_value=(datetime.now(), itens)), \
+             patch("shopee.divergencia.disparar_coleta_se_necessario", return_value=False), \
+             patch("shopee.divergencia.obter_loja", return_value={"id": 1, "nome": "Loja Online"}), \
+             patch("core.estoque_saldos.saldos_em_lote", side_effect=Exception("conexao caiu")):
+            resultado = divergencia.listar_divergencias(1)
+        self.assertIn("erro", resultado)
+        self.assertNotIn("data", resultado)
+
+    def test_erro_da_ultima_coleta_e_exposto_na_resposta(self):
+        """Sem esse campo, uma loja com token Shopee expirado ficava em silencio
+        total: lista vazia, nenhum aviso, usuario sem saber que a coleta falhou.
+        Mesmo campo que estoque_fisico_por_loja ja' expunha no lado i9Logic."""
+        divergencia._coleta_erro_recente[1] = "token Shopee expirado"
+        try:
+            with patch("shopee.divergencia.snapshot_mais_recente", return_value=(None, [])), \
+                 patch("shopee.divergencia.disparar_coleta_se_necessario", return_value=False), \
+                 patch("shopee.divergencia.obter_loja", return_value={"id": 1, "nome": "Loja Online"}):
+                resultado = divergencia.listar_divergencias(1)
+            self.assertEqual(resultado["erro_ultima_coleta"], "token Shopee expirado")
+        finally:
+            divergencia._coleta_erro_recente.pop(1, None)
 
 
 class TestMarcarRevisado(unittest.TestCase):
