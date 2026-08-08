@@ -65,16 +65,17 @@ CREATE TABLE IF NOT EXISTS shopee_estoque_snapshot (
 )
 ```
 
-Mais simples que a de i9Logic — Shopee já resolve `sku`↔`loja_id`↔`item_id` direto via `anuncios` (colunas `sku`, `shop_id`, `anuncio_id`, `marketplace='shopee'` — `anuncios.shop_id` casa com `lojas.shopee_shop_id`), sem precisar de tabela de-para manual.
+Mais simples que a de i9Logic — `shopee.products.sync_all_items()` já devolve `sku` resolvido por item (via `item_sku` da própria API Shopee, com fallback pro `item_id` como string), sem precisar de tabela de-para manual nem join com `anuncios`.
 
 Funções (mesmo formato do módulo i9Logic, pra manter os dois times legíveis lado a lado):
 
 ```python
 def executar_coleta_loja(loja_id: int) -> dict:
-    """Chama shopee.products.sync_all_items(loja_id) (ja existente — traz
-    stock_info_v2.summary_info de todos os itens da loja), casa cada item
-    com o sku via anuncios, le o saldo Athena atual (core.estoque_saldos.saldo)
-    e grava um snapshot por sku com a divergencia calculada."""
+    """Resolve o nome da loja (SELECT nome FROM lojas WHERE id=$1), chama
+    shopee.products.sync_all_items(loja_id) (ja existente — devolve lista de
+    {item_id, sku, name, status, stock, reserved, price} por item), le o
+    saldo Athena atual de cada sku via core.estoque_saldos.saldo(sku, nome_loja,
+    "disponivel") e grava um snapshot por sku com a divergencia calculada."""
 
 def listar_itens_para_revisao(loja_id: int, revisado: bool = False) -> list:
     """Mesma forma de core.i9logic.listar_itens_para_revisao, filtrado por loja_id
@@ -85,12 +86,21 @@ def marcar_revisado(snapshot_id: int) -> dict:
     """Identico em forma a core.i9logic.marcar_revisado."""
 
 def aplicar_ajuste_divergencia(snapshot_id: int, usuario_id=None, usuario_nome="") -> dict:
-    """Le o snapshot, chama core.estoque.ajustar_absoluto(sku, loja_nome, qtd_shopee, ...)
-    — mesma funcao que core.i9logic.aplicar_ajuste_divergencia e
+    """Le o snapshot, resolve o nome da loja a partir de loja_id, chama
+    core.estoque.ajustar_absoluto(sku, nome_loja, qtd_shopee, ...) — mesma
+    funcao que core.i9logic.aplicar_ajuste_divergencia e
     shopee.estoque_rapido.atualizar_celula_estoque_rapido ja usam. Mesma guarda
     de frescor (so' aplica se for o snapshot mais recente pra aquele sku/loja)
     que a versao i9Logic ja implementa — copiar a logica, adaptando pra loja_id
     em vez de loja_athena (texto)."""
+
+def snapshot_mais_recente(loja_id: int):
+    """Identico em forma a core.i9logic.snapshot_mais_recente — (data_coleta,
+    itens) da corrida mais recente da loja, ou (None, []) se nunca coletada."""
+
+def disparar_coleta_se_necessario(loja_id: int, data_coleta) -> bool:
+    """Identico em forma a core.i9logic._disparar_coleta_se_necessario —
+    mesmas constantes/lock/set/thread daemon, chave por loja_id."""
 ```
 
 Diferente do i9Logic (que zera silenciosamente sem alertar quando o produto não aparece no feed contábil), aqui: se `sync_all_items` não retornar o item pra aquele SKU (ex.: produto pausado/deletado na Shopee), o snapshot não é gravado para esse SKU — não existe "gravar zero com alerta", porque a ausência já é informação suficiente (produto não está mais anunciado).
@@ -101,14 +111,18 @@ Diferente do i9Logic (que zera silenciosamente sem alertar quando o produto não
 GET  /api/shopee/divergencias?loja_id=&revisado=false
 POST /api/shopee/divergencias/<id>/resolver
 POST /api/shopee/divergencias/<id>/ajustar
-POST /api/shopee/divergencias/coletar   (dispara executar_coleta_loja pra todas as lojas Shopee ativas — usado pelo botão manual e pelo job)
 ```
 
 Permissão: `estoque.ver` pra GET, `estoque.editar` pra `resolver`/`ajustar` (mesmo par usado pelas rotas equivalentes de i9Logic).
 
-### Job de coleta (`hermes_agents/core/scheduler.py`)
+### Coleta em background — mesmo mecanismo do i9Logic, não é job cronado
 
-Nova entrada ao lado do job de coleta i9Logic já existente, chamando `shopee.divergencia.executar_coleta_loja` pra cada loja retornada por `core.lojas.listar_lojas_shopee()`. Frequência: mesma do job i9Logic (confirmar valor lendo o scheduler existente ao implementar — não decidido aqui, segue o precedente já em produção).
+Investigação corrigiu a premissa inicial em dois pontos:
+
+1. O i9Logic não tem job periódico no `scheduler.py` pra coleta de estoque físico (só tem job cronado pra sync de *pedidos*, `i9logic-pedidos`, 10 min — outra coisa). O que existe é **lazy-trigger-on-read**: `core/i9logic.py:223-287` — ao ler o snapshot, se ele estiver ausente ou mais velho que `FRESCOR_MAXIMO_MINUTOS` (30) e nenhuma coleta já estiver rodando pra aquela filial (`_coleta_em_andamento`, `_coleta_lock`), dispara uma `threading.Thread(daemon=True)` que roda a coleta completa em background e libera o lock ao final (mesmo em erro). O chamador nunca espera a thread — lê o snapshot que já tinha (ou vazio) e a tela faz polling até o status virar "pronto".
+2. Quem dispara esse mecanismo pro i9Logic hoje é `estoque_fisico_por_loja()` (usada pelo hub `/estoque`, componente `EstoqueFisicoI9Logic` — a tela de estoque físico do dia a dia), **não** a rota de divergências. A tela de divergências só lê snapshots que já existem porque o operador abriu a tela de estoque físico antes. Não existe um "hub de estoque Shopee" equivalente que dispararia isso organicamente pro lado Shopee — a rota `GET /api/shopee/divergencias` precisa disparar o próprio lazy-trigger (via `disparar_coleta_se_necessario`) dentro dela mesma, retornando também `status: "processando" | "pronto"` no payload (mesmo formato que `estoque_fisico_por_loja` já retorna), pra a UI saber quando fazer polling.
+
+Isso cumpre a decisão do usuário ("periódica em background, mesmo padrão do i9Logic — não sob demanda bloqueando a tela"): mesmo padrão de mecanismo, só que o ponto de disparo é a própria tela de divergências (não há alternativa orgânica pro lado Shopee).
 
 ## Frontend
 
@@ -116,24 +130,22 @@ Nova entrada ao lado do job de coleta i9Logic já existente, chamando `shopee.di
 
 Adicionada abaixo das duas seções existentes (Por loja / Por operador), com um cabeçalho próprio "Divergência de Saldo" e subtítulo explicando a comparação. Usa o tipo de loja selecionada no seletor global do app (mesmo hook/contexto que `web/src/app/estoque/page.tsx` já usa — `useStore()`, `tipoLojaSelecionada`) pra decidir a fonte:
 
-- **Física**: chama as rotas i9Logic existentes. Tabela: SKU, saldo Athena (disponível), saldo físico i9Logic, divergência, classificação (badge sem_acao/registrado/alerta — cores neutra/âmbar/vermelho, mesmo padrão semântico do DESIGN.md), data da coleta, botões "Ajustar" e "Marcar revisado".
-- **Virtual**: mesma tabela, mesmas colunas, trocando "i9Logic" por "Shopee" nos rótulos, consumindo as rotas novas de `/api/shopee/divergencias`.
+- **Física**: chama as rotas i9Logic existentes (`GET /api/integrations/i9logic/divergencias`). Tabela: SKU, saldo Athena (disponível), saldo físico i9Logic, divergência, classificação (badge sem_acao/registrado/alerta — cores neutra/âmbar/vermelho, mesmo padrão semântico do DESIGN.md), data da coleta, botões "Ajustar" e "Marcar revisado". Como a coleta i9Logic é dispara pela tela de estoque físico (não por esta seção), se não houver snapshot ainda a seção mostra "Nenhuma coleta ainda — abra a tela de Estoque Físico desta loja primeiro" em vez de lista vazia.
+- **Virtual**: mesma tabela, mesmas colunas, trocando "i9Logic" por "Shopee" nos rótulos, consumindo `GET /api/shopee/divergencias?loja_id=`. Essa chamada já dispara a coleta em background quando necessário (ver seção de backend) — a UI usa o `status` retornado (`"processando" | "pronto"`) pra fazer polling a cada alguns segundos até ficar pronto, mesmo padrão de UX que `EstoqueFisicoI9Logic.tsx` já usa pro lado físico.
 - Nenhuma loja selecionada: mensagem "Selecione uma loja no topo da página" (mesmo texto/padrão já usado no hub `/estoque`).
-- Botão "Verificar agora" na seção, chamando a rota de coleta manual (i9Logic já tem esse padrão via `_disparar_coleta_se_necessario`; Shopee usa a rota `/coletar` nova) — não substitui o job periódico, só permite forçar uma atualização fora do ciclo.
 
 ### `web/src/lib/api.ts`
 
-Funções novas: `i9logicListarDivergencias`, `i9logicResolverDivergencia`, `i9logicAjustarDivergencia` (consumindo rotas já existentes, nunca chamadas do frontend hoje) e `shopeeListarDivergencias`, `shopeeResolverDivergencia`, `shopeeAjustarDivergencia`, `shopeeColetarDivergencias` (rotas novas).
+Funções novas: `i9logicListarDivergencias`, `i9logicResolverDivergencia`, `i9logicAjustarDivergencia` (consumindo rotas já existentes, nunca chamadas do frontend hoje) e `shopeeListarDivergencias`, `shopeeResolverDivergencia`, `shopeeAjustarDivergencia` (rotas novas).
 
 ## Fora de escopo
 
 - Ajustar a Shopee pra bater com o Athena (decidido: só a direção Athena←Shopee).
-- Coleta sob demanda como único modo (decidido: periódica, com botão manual complementar).
-- Unificar a tabela de snapshot i9Logic e Shopee num schema só — schemas diferentes o suficiente (de-para manual vs mapeamento direto) pra não valer a pena forçar unificação agora.
+- Job cronado no scheduler pra coleta Shopee — decidido: mesmo mecanismo lazy-trigger-on-read do i9Logic, disparado pela própria rota de divergências (não há hub de estoque Shopee equivalente ao físico pra disparar organicamente).
+- Unificar a tabela de snapshot i9Logic e Shopee num schema só — schemas diferentes o suficiente (mapeamento de-para manual vs resolução direta via API) pra não valer a pena forçar unificação agora.
 - Mexer na seção comportamental existente (Por loja / Por operador) — fica como está.
-- Frequência exata do job de coleta Shopee — segue o precedente do job i9Logic já em produção, sem decisão nova aqui.
 
 ## Testes
 
-- Backend: `classificar_divergencia` movida — teste de regressão confirmando que o comportamento não mudou (mesmos casos de teste que já existem para `core.i9logic.classificar_divergencia`, agora importados de `core.estoque_divergencia`). `shopee.divergencia.executar_coleta_loja`: item presente com divergência (grava snapshot classificado corretamente), item sem divergência (classificação `sem_acao`), item ausente do retorno da Shopee (não grava, não quebra), erro de API Shopee (não quebra o job, loja seguinte continua). `aplicar_ajuste_divergencia`: guarda de frescor (não aplica snapshot desatualizado), aplica corretamente via `ajustar_absoluto`. Testes de RBAC nas rotas novas seguindo o padrão já usado no projeto (`crm.ver`/`crm.criar` equivalente pra `estoque.ver`/`estoque.aprovar`).
+- Backend: `classificar_divergencia` movida — teste de regressão confirmando que o comportamento não mudou (mesmos casos de teste que já existem para `core.i9logic.classificar_divergencia`, agora importados de `core.estoque_divergencia`). `shopee.divergencia.executar_coleta_loja`: item presente com divergência (grava snapshot classificado corretamente), item sem divergência (classificação `sem_acao`), item ausente do retorno da Shopee (não grava, não quebra), erro de API Shopee (não quebra a coleta da loja seguinte). `aplicar_ajuste_divergencia`: guarda de frescor (não aplica snapshot desatualizado), aplica corretamente via `ajustar_absoluto`. `disparar_coleta_se_necessario`: não dispara segunda thread se já há coleta em andamento pra mesma loja; dispara quando snapshot ausente ou mais velho que o limite. Testes de RBAC nas rotas novas seguindo o padrão já usado no projeto (`crm.ver`/`crm.criar` equivalente pra `estoque.ver`/`estoque.editar`).
 - Frontend: verificação manual (sem backend/DB local disponível nesta sessão, mesma limitação já registrada em specs anteriores) cobrindo: seção mostra i9Logic com loja física selecionada, Shopee com loja virtual, troca de fonte ao trocar o tipo de loja no seletor, ajustar/marcar revisado atualizam a lista, botão "Verificar agora" dispara coleta.
