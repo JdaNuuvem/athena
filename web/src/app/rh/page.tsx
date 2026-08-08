@@ -1,49 +1,60 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import Icon from "../_components/Icon";
+import SidebarLayout from "../_components/SidebarLayout";
+import VisaoGeralTab from "./_components/VisaoGeralTab";
+import FuncionariosTab from "./_components/FuncionariosTab";
+import PontoTab from "./_components/PontoTab";
+import FeriasTab from "./_components/FeriasTab";
+import FolhaTab from "./_components/FolhaTab";
+import BeneficiosTab from "./_components/BeneficiosTab";
+import ValeTab from "./_components/ValeTab";
+import ComissoesTab from "./_components/ComissoesTab";
+import AvaliacoesTab from "./_components/AvaliacoesTab";
+import TreinamentosTab from "./_components/TreinamentosTab";
 
 export default function RHPage() {
-  const [dash, setDash] = useState<Record<string, unknown> | null>(null);
-
-  useEffect(() => {
-    fetch("/api/rh/dashboard").then(r => r.json()).then(setDash).catch(() => {});
-  }, []);
-
-  const KPI = ({ label, value, color }: { label: string; value: string; color: string }) => (
-    <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-3">
-      <p className="text-xs text-neutral-500">{label}</p>
-      <p className={`text-lg font-bold ${color}`}>{value}</p>
-    </div>
-  );
-
   return (
-    <div className="p-6 space-y-6">
-      <div><h1 className="text-lg font-bold text-neutral-100">RH</h1><p className="text-xs text-neutral-500 mt-1">Funcionarios, ponto, ferias, folha, beneficios, vale e comissoes</p></div>
-
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-        <KPI label="Funcionarios" value={String(dash?.total_funcionarios ?? 0)} color="text-blue-400" />
-        <KPI label="Ativos" value={String(dash?.ativos ?? 0)} color="text-emerald-400" />
-        <KPI label="Em Ferias" value={String(dash?.ferias ?? 0)} color="text-amber-400" />
-        <KPI label="Folha do Mes" value={"R$ " + (Number(dash?.folha_mes ?? 0)).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} color="text-purple-400" />
-        <KPI label="Ponto Hoje" value={String(dash?.ponto_hoje ?? 0)} color="text-cyan-400" />
+    <div className="max-w-[1400px] space-y-5 p-6">
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400">
+          <Icon name="rh" size={20} />
+        </div>
+        <div>
+          <h1 className="text-lg font-semibold text-neutral-100">RH</h1>
+          <p className="text-xs text-neutral-500">Funcionários, ponto, férias, folha, benefícios, avaliações de desempenho e treinamentos</p>
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[
-          { href: "/rh/funcionarios", label: "Funcionarios", color: "bg-blue-600" },
-          { href: "/rh/ponto", label: "Ponto Eletronico", color: "bg-emerald-600" },
-          { href: "/rh/ferias", label: "Ferias", color: "bg-amber-600" },
-          { href: "/rh/folha", label: "Folha Pagamento", color: "bg-purple-600" },
-          { href: "/rh/beneficios", label: "Beneficios", color: "bg-rose-600" },
-          { href: "/rh/vale", label: "Vale / Adiantamento", color: "bg-teal-600" },
-          { href: "/rh/comissoes", label: "Comissoes", color: "bg-orange-600" },
-        ].map(m => (
-          <Link key={m.href} href={m.href} className={`${m.color} hover:opacity-90 text-white rounded-lg p-4 transition-opacity`}>
-            <p className="text-sm font-semibold">{m.label}</p>
-          </Link>
-        ))}
-      </div>
+      <SidebarLayout
+        subItems={[
+          { key: "visao_geral", label: "Visão Geral" },
+          { key: "funcionarios", label: "Funcionários" },
+          { key: "ponto", label: "Ponto" },
+          { key: "ferias", label: "Férias" },
+          { key: "folha", label: "Folha" },
+          { key: "beneficios", label: "Benefícios" },
+          { key: "vale", label: "Vale" },
+          { key: "comissoes", label: "Comissões" },
+          { key: "avaliacoes", label: "Avaliações" },
+          { key: "treinamentos", label: "Treinamentos" },
+        ]}
+        renderContent={(key) => {
+          switch (key) {
+            case "visao_geral": return <VisaoGeralTab />;
+            case "funcionarios": return <FuncionariosTab />;
+            case "ponto": return <PontoTab />;
+            case "ferias": return <FeriasTab />;
+            case "folha": return <FolhaTab />;
+            case "beneficios": return <BeneficiosTab />;
+            case "vale": return <ValeTab />;
+            case "comissoes": return <ComissoesTab />;
+            case "avaliacoes": return <AvaliacoesTab />;
+            case "treinamentos": return <TreinamentosTab />;
+            default: return null;
+          }
+        }}
+      />
     </div>
   );
 }

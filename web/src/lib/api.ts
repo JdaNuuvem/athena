@@ -832,6 +832,11 @@ export const api = {
 
   // RH
   rhList: (tabela: string) => request<{ data: unknown[] }>(`/api/rh/${tabela}`),
+  rhListPaginado: (tabela: string, pagina: number, porPagina = 50, busca?: string) => {
+    const q = new URLSearchParams({ pagina: String(pagina), por_pagina: String(porPagina) });
+    if (busca) q.set("busca", busca);
+    return request<{ data: unknown[]; total: number; pagina: number; por_pagina: number; total_paginas: number }>(`/api/rh/${tabela}?${q}`);
+  },
   rhGet: (tabela: string, id: number) => request<Record<string, unknown>>(`/api/rh/${tabela}/${id}`),
   rhCreate: (tabela: string, data: Record<string, unknown>) =>
     request<Record<string, unknown>>(`/api/rh/${tabela}`, { method: "POST", body: JSON.stringify(data) }),
@@ -843,6 +848,33 @@ export const api = {
   rhFolhaResumo: (mes: string) => request<Record<string, number>>(`/api/rh/folha/resumo/${mes}`),
   rhBeneficiosResumo: () =>
     request<{ total_empresa: number; total_funcionario: number; beneficios: unknown[] }>("/api/rh/beneficios/resumo"),
+  rhDashboard: () => request<{
+    total_funcionarios: number; ativos: number; ferias: number; afastados: number;
+    folha_mes: number; ponto_hoje: number; ferias_proximas: { nome: string; inicio: string; fim: string }[];
+  }>("/api/rh/dashboard"),
+  rhFuncionarioDetalhe: (id: number) => request<{
+    funcionario: Record<string, unknown>; ponto: unknown[]; ferias: unknown[]; folha: unknown[];
+    beneficios: unknown[]; escala: Record<string, unknown> | null;
+    avaliacoes: unknown[]; treinamentos: unknown[];
+  }>(`/api/rh/funcionario/${id}`),
+  rhAvaliacaoDetalhe: (id: number) =>
+    request<{ avaliacao: Record<string, unknown>; competencias: Record<string, unknown>[] }>(`/api/rh/avaliacoes/${id}/detalhe`),
+  rhRelatorioDesempenho: (funcionarioId?: number, periodo?: string) => {
+    const q = new URLSearchParams();
+    if (funcionarioId) q.set("funcionario_id", String(funcionarioId));
+    if (periodo) q.set("periodo", periodo);
+    return request<{ avaliacoes: Record<string, unknown>[]; por_departamento: Record<string, unknown>[] }>(`/api/rh/avaliacoes/relatorio?${q}`);
+  },
+  rhTreinamentoDetalhe: (id: number) =>
+    request<{ treinamento: Record<string, unknown>; participantes: Record<string, unknown>[] }>(`/api/rh/treinamentos/${id}/detalhe`),
+  rhRelatorioTreinamentos: (funcionarioId?: number) =>
+    request<{ por_funcionario: Record<string, unknown>[] }>(`/api/rh/treinamentos/relatorio${funcionarioId ? `?funcionario_id=${funcionarioId}` : ""}`),
+  rhValeList: () => request<{ data: Record<string, unknown>[] }>("/api/rh/vale"),
+  rhValeCreate: (data: Record<string, unknown>) => request<Record<string, unknown>>("/api/rh/vale", { method: "POST", body: JSON.stringify(data) }),
+  rhValeMarcarPago: (id: number) => request<Record<string, unknown>>(`/api/rh/vale/${id}`, { method: "PUT", body: JSON.stringify({ status: "pago" }) }),
+  rhComissoesList: () => request<{ data: Record<string, unknown>[] }>("/api/rh/comissoes"),
+  rhComissoesCreate: (data: Record<string, unknown>) => request<Record<string, unknown>>("/api/rh/comissoes", { method: "POST", body: JSON.stringify(data) }),
+  rhComissoesMarcarPago: (id: number) => request<Record<string, unknown>>(`/api/rh/comissoes/${id}`, { method: "PUT", body: JSON.stringify({ status: "pago" }) }),
 
   // Manutencao
   manutencaoDashboard: () => request<Record<string, unknown>>("/api/manutencao/kpi"),

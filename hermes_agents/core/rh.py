@@ -3,7 +3,29 @@ from core import get_db, run_async, log, hoje
 
 AGENT = "RH Core"
 
-RH_TABLES = ["funcionarios", "ponto", "ferias", "escala", "folha", "beneficios"]
+RH_TABLES = ["funcionarios", "ponto", "ferias", "escala", "folha", "beneficios", "avaliacoes", "avaliacao_competencias", "treinamentos", "treinamento_participantes"]
+
+# ponytail: whitelist de colunas por tabela — _create/_update concatenam as
+# CHAVES do dict recebido direto na string SQL (so' os valores sao
+# parametrizados com $1, $2...). Sem essa whitelist, um cliente com permissao
+# rh.criar/rh.editar poderia injetar SQL arbitrario via nome de campo no
+# JSON (mesma classe de bug ja corrigida em core/crm.py, core/financeiro.py,
+# core/compras.py e core/cadastros.py nesta sessao).
+RH_COLUNAS = {
+    "funcionarios": {"nome", "cargo", "departamento", "email", "telefone", "data_admissao", "status"},
+    "ponto": {"funcionario_id", "data", "entrada", "saida_almoco", "volta_almoco", "saida"},
+    "ferias": {"funcionario_id", "periodo_aquisitivo", "dias", "inicio", "fim", "status"},
+    "escala": {"funcionario_id", "turno", "horario", "dias_semana", "inicio"},
+    "folha": {"funcionario_id", "mes", "salario", "beneficios", "descontos", "liquido", "status"},
+    "beneficios": {"nome", "tipo", "valor_empresa", "valor_funcionario"},
+    "avaliacoes": {"funcionario_id", "avaliador_nome", "periodo", "tipo", "nota_geral",
+                    "pontos_fortes", "pontos_melhoria", "plano_acao", "status", "data_avaliacao"},
+    "avaliacao_competencias": {"avaliacao_id", "competencia", "nota", "comentario"},
+    "treinamentos": {"nome", "descricao", "categoria", "carga_horaria", "instrutor",
+                      "data_inicio", "data_fim", "status"},
+    "treinamento_participantes": {"treinamento_id", "funcionario_id", "presenca",
+                                   "nota_avaliacao", "certificado_emitido"},
+}
 
 def _ensure_tables():
     async def _go():
@@ -89,6 +111,50 @@ def _ensure_tables():
                 created_at TIMESTAMP DEFAULT NOW()
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS rh_avaliacoes (
+                id SERIAL PRIMARY KEY,
+                funcionario_id INT NOT NULL REFERENCES rh_funcionarios(id),
+                avaliador_nome VARCHAR(200),
+                periodo VARCHAR(20) NOT NULL,
+                tipo VARCHAR(20) DEFAULT 'desempenho',
+                nota_geral DECIMAL(3,1),
+                pontos_fortes TEXT, pontos_melhoria TEXT, plano_acao TEXT,
+                status VARCHAR(20) DEFAULT 'pendente',
+                data_avaliacao DATE,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS rh_avaliacao_competencias (
+                id SERIAL PRIMARY KEY,
+                avaliacao_id INT NOT NULL REFERENCES rh_avaliacoes(id),
+                competencia VARCHAR(100) NOT NULL,
+                nota DECIMAL(3,1), comentario TEXT
+            )
+        """)
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_rh_avaliacao_competencias_avaliacao_id ON rh_avaliacao_competencias (avaliacao_id)")
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS rh_treinamentos (
+                id SERIAL PRIMARY KEY,
+                nome VARCHAR(200) NOT NULL, descricao TEXT,
+                categoria VARCHAR(50), carga_horaria INT DEFAULT 0, instrutor VARCHAR(200),
+                data_inicio DATE, data_fim DATE,
+                status VARCHAR(20) DEFAULT 'planejado',
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS rh_treinamento_participantes (
+                id SERIAL PRIMARY KEY,
+                treinamento_id INT NOT NULL REFERENCES rh_treinamentos(id),
+                funcionario_id INT NOT NULL REFERENCES rh_funcionarios(id),
+                presenca VARCHAR(20) DEFAULT 'pendente',
+                nota_avaliacao DECIMAL(3,1), certificado_emitido BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_rh_treinamento_participantes_treinamento_id ON rh_treinamento_participantes (treinamento_id)")
         # Seed data if empty
         count = await db.fetchval("SELECT COUNT(*) FROM rh_funcionarios")
         if count == 0:
@@ -175,6 +241,50 @@ def _get(tabela: str, id: int) -> dict:
     except Exception as e:
         return {"error": str(e)}
 
+# campos-alvo de busca por tabela — usado pelo FkPicker (ex.: funcionario_id
+# em ponto/ferias/folha/avaliacoes/treinamento_participantes) pra buscar por
+# nome em vez de exigir o id de cor.
+_CAMPOS_BUSCA = {
+    "funcionarios": ["nome", "cargo", "departamento"],
+    "treinamentos": ["nome", "categoria", "instrutor"],
+}
+
+def _count(tabela_sql: str, campos_busca=None, busca: str = None) -> int:
+    async def _go():
+        db = await get_db()
+        if busca and campos_busca:
+            where = " OR ".join(f"{c} ILIKE $1" for c in campos_busca)
+            return await db.fetchval(f"SELECT COUNT(*) FROM {tabela_sql} WHERE {where}", f"%{busca}%")
+        return await db.fetchval(f"SELECT COUNT(*) FROM {tabela_sql}")
+    try: return run_async(_go()) or 0
+    except Exception as e: log(AGENT, f"Erro count {tabela_sql}: {e}"); return 0
+
+def _list_pagina(tabela_sql: str, order="id DESC", limit=50, offset=0, campos_busca=None, busca: str = None) -> list:
+    async def _go():
+        db = await get_db()
+        if busca and campos_busca:
+            where = " OR ".join(f"{c} ILIKE $1" for c in campos_busca)
+            rows = await db.fetch(
+                f"SELECT * FROM {tabela_sql} WHERE {where} ORDER BY {order} LIMIT {limit} OFFSET {offset}",
+                f"%{busca}%")
+        else:
+            rows = await db.fetch(f"SELECT * FROM {tabela_sql} ORDER BY {order} LIMIT {limit} OFFSET {offset}")
+        return [dict(r) for r in rows]
+    try: return run_async(_go())
+    except Exception as e: log(AGENT, f"Erro list_pagina {tabela_sql}: {e}"); return []
+
+def list_paginado(tabela: str, pagina: int = 1, por_pagina: int = 50, busca: str = None) -> dict:
+    pagina = max(1, pagina or 1)
+    por_pagina = max(1, min(por_pagina or 50, 200))
+    tabela_sql = f"rh_{tabela}"
+    campos_busca = _CAMPOS_BUSCA.get(tabela)
+    busca = (busca or "").strip() or None
+    offset = (pagina - 1) * por_pagina
+    dados = _list_pagina(tabela_sql, limit=por_pagina, offset=offset, campos_busca=campos_busca, busca=busca)
+    total = _count(tabela_sql, campos_busca=campos_busca, busca=busca)
+    total_paginas = max(1, -(-total // por_pagina)) if total else 1
+    return {"data": dados, "total": total, "pagina": pagina, "por_pagina": por_pagina, "total_paginas": total_paginas}
+
 def _create(tabela: str, dados: dict) -> dict:
     # ponytail: NAO usar list(...) — este modulo define list(t) no nivel de
     # modulo, que sombreia o builtin para qualquer funcao neste arquivo.
@@ -218,8 +328,25 @@ def _delete(tabela: str, id: int) -> dict:
 
 def list(tabela: str): return _list(tabela)
 def get(tabela: str, id: int): return _get(tabela, id)
-def create(tabela: str, data: dict): return _create(tabela, data)
-def update(tabela: str, id: int, data: dict): return _update(tabela, id, data)
+
+def create(tabela: str, data: dict) -> dict:
+    colunas_validas = RH_COLUNAS.get(tabela)
+    if colunas_validas is None:
+        return {"error": "Tabela invalida"}
+    filtrado = {k: v for k, v in data.items() if k in colunas_validas}
+    if not filtrado:
+        return {"error": "Nenhum campo valido informado"}
+    return _create(tabela, filtrado)
+
+def update(tabela: str, id: int, data: dict) -> dict:
+    colunas_validas = RH_COLUNAS.get(tabela)
+    if colunas_validas is None:
+        return {"error": "Tabela invalida"}
+    filtrado = {k: v for k, v in data.items() if k in colunas_validas}
+    if not filtrado:
+        return {"error": "Nenhum campo valido informado"}
+    return _update(tabela, id, filtrado)
+
 def delete(tabela: str, id: int): return _delete(tabela, id)
 
 # ── Queries especiais ──
@@ -345,6 +472,12 @@ def funcionario_detalhe(id: int) -> dict:
         beneficios = await db.fetch("""SELECT b.*, fb.ativo FROM rh_beneficios b
             JOIN rh_funcionario_beneficio fb ON fb.beneficio_id = b.id WHERE fb.funcionario_id = $1""", id)
         escala = await db.fetchrow("SELECT * FROM rh_escala WHERE funcionario_id = $1 LIMIT 1", id)
+        avaliacoes = await db.fetch("SELECT * FROM rh_avaliacoes WHERE funcionario_id = $1 ORDER BY data_avaliacao DESC NULLS LAST, id DESC", id)
+        treinamentos = await db.fetch("""
+            SELECT t.*, p.presenca, p.nota_avaliacao, p.certificado_emitido
+            FROM rh_treinamento_participantes p JOIN rh_treinamentos t ON t.id = p.treinamento_id
+            WHERE p.funcionario_id = $1 ORDER BY t.data_inicio DESC NULLS LAST, t.id DESC
+        """, id)
         return {
             "funcionario": dict(func),
             "ponto": [dict(r) for r in ponto],
@@ -352,9 +485,96 @@ def funcionario_detalhe(id: int) -> dict:
             "folha": [dict(r) for r in folha],
             "beneficios": [dict(r) for r in beneficios],
             "escala": dict(escala) if escala else None,
+            "avaliacoes": [dict(r) for r in avaliacoes],
+            "treinamentos": [dict(r) for r in treinamentos],
         }
     try: return run_async(_go())
     except Exception as e: return {"error": str(e)}
+
+# ── Avaliação de Desempenho ──
+
+def avaliacao_detalhe(id: int) -> dict:
+    async def _go():
+        db = await get_db()
+        aval = await db.fetchrow("""
+            SELECT a.*, f.nome AS funcionario_nome FROM rh_avaliacoes a
+            JOIN rh_funcionarios f ON f.id = a.funcionario_id WHERE a.id = $1
+        """, id)
+        if not aval: return {"error": "not found"}
+        competencias = await db.fetch("SELECT * FROM rh_avaliacao_competencias WHERE avaliacao_id = $1 ORDER BY id", id)
+        return {"avaliacao": dict(aval), "competencias": [dict(r) for r in competencias]}
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
+
+def relatorio_desempenho(funcionario_id: int = None, periodo: str = None) -> dict:
+    """Nota media por funcionario/departamento — base do relatorio
+    exportavel de desempenho."""
+    async def _go():
+        db = await get_db()
+        where, params = [], []
+        if funcionario_id:
+            params.append(funcionario_id); where.append(f"a.funcionario_id = ${len(params)}")
+        if periodo:
+            params.append(periodo); where.append(f"a.periodo = ${len(params)}")
+        where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+        rows = await db.fetch(f"""
+            SELECT f.id AS funcionario_id, f.nome, f.departamento, f.cargo,
+                   a.periodo, a.tipo, a.nota_geral, a.status, a.data_avaliacao, a.avaliador_nome
+            FROM rh_avaliacoes a JOIN rh_funcionarios f ON f.id = a.funcionario_id
+            {where_sql} ORDER BY a.data_avaliacao DESC NULLS LAST, a.id DESC
+        """, *params)
+        por_departamento = await db.fetch(f"""
+            SELECT f.departamento, ROUND(AVG(a.nota_geral), 2) AS nota_media, COUNT(*) AS total_avaliacoes
+            FROM rh_avaliacoes a JOIN rh_funcionarios f ON f.id = a.funcionario_id
+            {where_sql} GROUP BY f.departamento ORDER BY nota_media DESC NULLS LAST
+        """, *params)
+        return {"avaliacoes": [dict(r) for r in rows], "por_departamento": [dict(r) for r in por_departamento]}
+    try: return run_async(_go())
+    except Exception as e:
+        log(AGENT, f"Erro relatorio_desempenho: {e}")
+        return {"avaliacoes": [], "por_departamento": []}
+
+# ── Treinamentos ──
+
+def treinamento_detalhe(id: int) -> dict:
+    async def _go():
+        db = await get_db()
+        trein = await db.fetchrow("SELECT * FROM rh_treinamentos WHERE id = $1", id)
+        if not trein: return {"error": "not found"}
+        participantes = await db.fetch("""
+            SELECT p.*, f.nome AS funcionario_nome FROM rh_treinamento_participantes p
+            JOIN rh_funcionarios f ON f.id = p.funcionario_id
+            WHERE p.treinamento_id = $1 ORDER BY f.nome
+        """, id)
+        return {"treinamento": dict(trein), "participantes": [dict(r) for r in participantes]}
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
+
+def relatorio_treinamentos(funcionario_id: int = None) -> dict:
+    """Horas de treino e certificados por funcionario — base do relatorio
+    exportavel de treinamentos."""
+    async def _go():
+        db = await get_db()
+        where, params = [], []
+        if funcionario_id:
+            params.append(funcionario_id); where.append(f"p.funcionario_id = ${len(params)}")
+        where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+        rows = await db.fetch(f"""
+            SELECT f.id AS funcionario_id, f.nome, f.departamento,
+                   COUNT(*) AS treinamentos_participados,
+                   COALESCE(SUM(t.carga_horaria) FILTER (WHERE p.presenca = 'presente'), 0) AS horas_treino,
+                   COUNT(*) FILTER (WHERE p.certificado_emitido) AS certificados_emitidos
+            FROM rh_treinamento_participantes p
+            JOIN rh_funcionarios f ON f.id = p.funcionario_id
+            JOIN rh_treinamentos t ON t.id = p.treinamento_id
+            {where_sql}
+            GROUP BY f.id, f.nome, f.departamento ORDER BY horas_treino DESC
+        """, *params)
+        return {"por_funcionario": [dict(r) for r in rows]}
+    try: return run_async(_go())
+    except Exception as e:
+        log(AGENT, f"Erro relatorio_treinamentos: {e}")
+        return {"por_funcionario": []}
 
 # ── Vale / Adiantamento ──
 
