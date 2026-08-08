@@ -677,6 +677,44 @@ def shopee_estoque_rapido_atualizar_celula():
 
     return _handler()
 
+
+@shopee_bp.route('/divergencias', methods=['GET'])
+def shopee_divergencias_listar():
+    from core.rbac import requer_permissao
+    @requer_permissao("estoque.ver")
+    def _handler():
+        from shopee.divergencia import listar_divergencias
+        loja_id = request.args.get("loja_id", type=int)
+        if not loja_id:
+            return jsonify({"erro": "loja_id e' obrigatorio"}), 400
+        return jsonify(listar_divergencias(loja_id))
+    return _handler()
+
+
+@shopee_bp.route('/divergencias/<int:snapshot_id>/resolver', methods=['POST'])
+def shopee_divergencias_resolver(snapshot_id):
+    from core.rbac import requer_permissao
+    @requer_permissao("estoque.editar")
+    def _handler():
+        from shopee.divergencia import marcar_revisado
+        return jsonify(marcar_revisado(snapshot_id))
+    return _handler()
+
+
+@shopee_bp.route('/divergencias/<int:snapshot_id>/ajustar', methods=['POST'])
+def shopee_divergencias_ajustar(snapshot_id):
+    from core.rbac import requer_permissao, usuario_atual_da_request
+    @requer_permissao("estoque.editar")
+    def _handler():
+        from shopee.divergencia import aplicar_ajuste_divergencia
+        usuario = usuario_atual_da_request()
+        resultado = aplicar_ajuste_divergencia(
+            snapshot_id, usuario_id=usuario.get("user_id"), usuario_nome=usuario.get("nome", ""))
+        if resultado.get("erro"):
+            return jsonify(resultado), 400
+        return jsonify(resultado)
+    return _handler()
+
 @shopee_bp.route('/categorias', methods=['GET'])
 def shopee_categorias():
     from shopee import listar_categorias_cache
