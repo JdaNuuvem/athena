@@ -16,7 +16,7 @@ import MidiaTab from "./_components/MidiaTab";
 const TABS = [
   { id: "geral", label: "Geral" },
   { id: "operacional", label: "Operacional & Comercial" },
-  { id: "fiscal", label: "Fiscal & Financeiro" },
+  { id: "financeiro", label: "Financeiro" },
   { id: "virtual", label: "Virtual & Delivery" },
   { id: "responsaveis", label: "Responsáveis" },
   { id: "integracoes", label: "Integrações" },
@@ -82,7 +82,7 @@ export default function LojaClientPage() {
 
       {tab === "geral" && <GeralTab id={id} loja={loja} onUpdate={carregar} />}
       {tab === "operacional" && <OperacionalComercialTab id={id} loja={loja} />}
-      {tab === "fiscal" && <FiscalFinanceiroTab id={id} loja={loja} />}
+      {tab === "financeiro" && <FiscalFinanceiroTab id={id} loja={loja} />}
       {tab === "virtual" && <VirtualDeliveryTab id={id} loja={loja} />}
       {tab === "responsaveis" && <ResponsaveisTab id={id} />}
       {tab === "integracoes" && <IntegracoesTab id={id} />}

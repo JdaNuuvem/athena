@@ -1729,13 +1729,15 @@ export async function fiscalDelete(tabela: string, id: number): Promise<{ succes
 }
 
 export async function fiscalObrigacoesProximas(dias?: number): Promise<{ data: unknown[] }> {
-  const res = await fetch(`/api/fiscal/obrigacoes/proximas${dias ? "?dias=" + dias : ""}`);
-  return res.json();
+  return request(`/api/fiscal/obrigacoes/proximas${dias ? "?dias=" + dias : ""}`);
 }
 
 export async function fiscalObrigacoesAtrasadas(): Promise<{ data: unknown[] }> {
-  const res = await fetch("/api/fiscal/obrigacoes/atrasadas");
-  return res.json();
+  return request("/api/fiscal/obrigacoes/atrasadas");
+}
+
+export async function fiscalObrigacoesOcorrencias(competencia?: string): Promise<{ data: unknown[] }> {
+  return request(`/api/fiscal/obrigacoes/ocorrencias${competencia ? "?competencia=" + competencia : ""}`);
 }
 
 export async function fiscalApuracao(params?: { ano?: number; mes?: number; dias?: number }): Promise<{ resumo: Record<string, unknown>; mensal: unknown[]; fechamento?: { fechado: boolean; fechado_por?: string; fechado_em?: string; divergente?: boolean; total_tributos_no_fechamento?: number }; error?: string }> {
@@ -1771,8 +1773,7 @@ export async function fiscalApuracaoFechamentos(): Promise<{ data: unknown[] }> 
 }
 
 export async function fiscalBaixarObrigacao(id: number): Promise<Record<string, unknown>> {
-  const res = await fetch(`/api/fiscal/obrigacoes/${id}/baixar`, { method: "POST" });
-  return res.json();
+  return request(`/api/fiscal/obrigacoes/${id}/baixar`, { method: "POST" });
 }
 
 // ponytail: sync de notas fiscais processa o DETALHE de cada nota via
