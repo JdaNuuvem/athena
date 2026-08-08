@@ -699,6 +699,46 @@ class TestClassificarDivergenciaReexport(unittest.TestCase):
         self.assertEqual(i9logic.LIMIAR_ALERTA_PERCENTUAL, LIMIAR_ALERTA_PERCENTUAL)
 
 
+class TestListarDivergenciasAthena(unittest.TestCase):
+    def test_loja_sem_mapeamento_retorna_erro(self):
+        with patch("core.i9logic.buscar_id_i9logic", return_value=None):
+            resultado = i9logic.listar_divergencias_athena("Loja Sem Mapeamento")
+        self.assertIn("erro", resultado)
+        self.assertIn("mapeamento de filial", resultado["erro"])
+
+    def test_snapshot_vazio_retorna_lista_vazia_sem_quebrar(self):
+        with patch("core.i9logic.buscar_id_i9logic", return_value="63"), \
+             patch("core.i9logic.snapshot_mais_recente", return_value=(None, [])), \
+             patch("core.i9logic._disparar_coleta_se_necessario", return_value=True):
+            resultado = i9logic.listar_divergencias_athena("Loja Matriz")
+        self.assertEqual(resultado["data"], [])
+        self.assertEqual(resultado["status"], "processando")
+
+    def test_item_sem_sku_athena_e_ignorado(self):
+        itens = [{"idproduto": 1, "sku_athena": None, "qtd": 10, "descricao": "X"}]
+        with patch("core.i9logic.buscar_id_i9logic", return_value="63"), \
+             patch("core.i9logic.snapshot_mais_recente", return_value=(datetime.now(), itens)), \
+             patch("core.i9logic._disparar_coleta_se_necessario", return_value=False):
+            resultado = i9logic.listar_divergencias_athena("Loja Matriz")
+        self.assertEqual(resultado["data"], [])
+
+    def test_calcula_divergencia_e_classificacao_contra_saldo_athena(self):
+        itens = [{"idproduto": 1, "sku_athena": "SKU-A", "qtd": 100, "descricao": "Produto A"}]
+        with patch("core.i9logic.buscar_id_i9logic", return_value="63"), \
+             patch("core.i9logic.snapshot_mais_recente", return_value=(datetime.now(), itens)), \
+             patch("core.i9logic._disparar_coleta_se_necessario", return_value=False), \
+             patch("core.estoque_saldos.saldo", return_value=106.0):
+            resultado = i9logic.listar_divergencias_athena("Loja Matriz")
+        self.assertEqual(len(resultado["data"]), 1)
+        item = resultado["data"][0]
+        self.assertEqual(item["sku"], "SKU-A")
+        self.assertEqual(item["disponivel_athena"], 106.0)
+        self.assertEqual(item["qtd_fisico_i9logic"], 100.0)
+        self.assertEqual(item["divergencia"], 6.0)
+        self.assertEqual(item["classificacao"], "alerta")
+        self.assertEqual(resultado["status"], "pronto")
+
+
 from flask import Flask
 import core.rbac as rbac
 

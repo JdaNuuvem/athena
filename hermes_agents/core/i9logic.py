@@ -471,6 +471,45 @@ def comparar_com_athena(sku: str, loja: str) -> dict:
     }
 
 
+def listar_divergencias_athena(loja_athena: str) -> dict:
+    """Modo monitoramento continuo EM LOTE — mesmo calculo de
+    comparar_com_athena(), mas pra todos os skus de uma loja de uma vez,
+    usando o snapshot fisico mais recente da filial em vez de uma query por
+    sku. Dispara o mesmo lazy-trigger que a tela de Estoque Fisico usa —
+    esta funcao nao tem coleta propria, so' consome o que a tela de Estoque
+    Fisico ja mantem atualizado (mesma fonte de dado, outra visualizacao)."""
+    from core.estoque_saldos import saldo
+    id_i9logic = buscar_id_i9logic("filial", loja_athena)
+    if id_i9logic is None:
+        return {"erro": f"mapeamento de filial i9Logic nao encontrado para a loja '{loja_athena}' "
+                         f"(cadastre em /api/integrations/i9logic/depara antes)"}
+    filial_id = int(id_i9logic)
+    data_coleta, itens = snapshot_mais_recente(filial_id)
+    processando = _disparar_coleta_se_necessario(filial_id, data_coleta)
+    divergencias = []
+    for item in itens:
+        sku = item.get("sku_athena")
+        if not sku:
+            continue
+        qtd_fisico = float(item.get("qtd") or 0)
+        disponivel_athena = saldo(sku, loja_athena, "disponivel")
+        divergencias.append({
+            "sku": sku,
+            "descricao": item.get("descricao"),
+            "disponivel_athena": disponivel_athena,
+            "qtd_fisico_i9logic": qtd_fisico,
+            "divergencia": round(disponivel_athena - qtd_fisico, 3),
+            "classificacao": classificar_divergencia(qtd_fisico, disponivel_athena),
+        })
+    return {
+        "ok": True,
+        "status": "processando" if processando else "pronto",
+        "filial_i9logic": filial_id,
+        "data_coleta": data_coleta.isoformat() if data_coleta else None,
+        "data": divergencias,
+    }
+
+
 # ── Job de coleta ──
 
 def executar_coleta_filial(filial_id_i9logic: int) -> dict:
