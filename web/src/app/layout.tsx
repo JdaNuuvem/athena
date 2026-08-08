@@ -27,7 +27,7 @@ const NAV_PERMS: Record<string, string> = {
   "/vendas": "orders:view",
   "/pdv": "pdv:view",
   "/financeiro": "financial:view",
-  "/fiscal": "fiscal:view",
+  "/fiscal": "fiscal.ver",
   "/crm": "crm:view",
   "/atendimento": "services:view",
   // Abas desativadas temporariamente (não usadas no momento) — ver NAV_ITEMS abaixo

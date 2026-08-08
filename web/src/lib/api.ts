@@ -1713,31 +1713,19 @@ export async function fiscalList(
 }
 
 export async function fiscalGet(tabela: string, id: number): Promise<Record<string, unknown>> {
-  const res = await fetch(`/api/fiscal/${tabela}/${id}`);
-  return res.json();
+  return request(`/api/fiscal/${tabela}/${id}`);
 }
 
 export async function fiscalCreate(tabela: string, data: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const res = await fetch(`/api/fiscal/${tabela}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  return res.json();
+  return request(`/api/fiscal/${tabela}`, { method: "POST", body: JSON.stringify(data) });
 }
 
 export async function fiscalUpdate(tabela: string, id: number, data: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const res = await fetch(`/api/fiscal/${tabela}/${id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  return res.json();
+  return request(`/api/fiscal/${tabela}/${id}`, { method: "PUT", body: JSON.stringify(data) });
 }
 
 export async function fiscalDelete(tabela: string, id: number): Promise<{ success: boolean }> {
-  const res = await fetch(`/api/fiscal/${tabela}/${id}`, { method: "DELETE" });
-  return res.json();
+  return request(`/api/fiscal/${tabela}/${id}`, { method: "DELETE" });
 }
 
 export async function fiscalObrigacoesProximas(dias?: number): Promise<{ data: unknown[] }> {
