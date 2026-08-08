@@ -1,38 +1,48 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import type { AnomalyResult, CustomerSegment, MLRecommendation } from "../types";
-import { ANOMALIAS, SEGMENTOS, RECOMENDACOES } from "../data/ml";
 import { formatCurrency } from "../types";
 import PageHeader from "@/app/_components/PageHeader";
 import AnomalyCard from "../_components/AnomalyCard";
+import ErroCarregamento from "../_components/ErroCarregamento";
+import ExportButtons from "@/app/_components/ExportButtons";
 
 export default function MLPage() {
   const [anomalias, setAnomalias] = useState<AnomalyResult[]>([]);
   const [segmentos, setSegmentos] = useState<CustomerSegment[]>([]);
   const [recomendacoes, setRecomendacoes] = useState<MLRecommendation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoading(true); setErro(false);
     Promise.all([
-      fetch("/api/bi/ml/anomalias").then(r => r.ok ? r.json() : null),
-      fetch("/api/bi/ml/segmentos").then(r => r.ok ? r.json() : null),
-      fetch("/api/bi/ml/recomendacoes").then(r => r.ok ? r.json() : null),
+      fetch("/api/bi/ml/anomalias").then(r => r.ok ? r.json() : Promise.reject()),
+      fetch("/api/bi/ml/segmentos").then(r => r.ok ? r.json() : Promise.reject()),
+      fetch("/api/bi/ml/recomendacoes").then(r => r.ok ? r.json() : Promise.reject()),
     ]).then(([a, s, r]) => {
-      setAnomalias((a as AnomalyResult[]) ?? ANOMALIAS);
-      setSegmentos((s as CustomerSegment[]) ?? SEGMENTOS);
-      setRecomendacoes((r as MLRecommendation[]) ?? RECOMENDACOES);
-    }).catch(() => {
-      setAnomalias(ANOMALIAS);
-      setSegmentos(SEGMENTOS);
-      setRecomendacoes(RECOMENDACOES);
-    }).finally(() => setLoading(false));
+      setAnomalias(a as AnomalyResult[]);
+      setSegmentos(s as CustomerSegment[]);
+      setRecomendacoes(r as MLRecommendation[]);
+    }).catch(() => setErro(true))
+      .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => { load(); }, [load]);
+
   if (loading) return <div className="p-6 text-neutral-400">Carregando...</div>;
+  if (erro) return <ErroCarregamento onRetry={load} />;
   return (
     <div className="p-6 space-y-6">
-      <PageHeader title="Machine Learning" subtitle="Detecção de anomalias, segmentação de clientes e recomendações inteligentes" />
+      <div className="flex items-center justify-between gap-3">
+        <PageHeader title="Machine Learning" subtitle="Detecção de anomalias, segmentação RFM e recomendações por co-ocorrência real" />
+        <ExportButtons
+          columns={["Tipo", "Descrição", "Confiança", "Receita Estimada", "Ação"]}
+          rows={recomendacoes.map(r => [r.tipo, r.descricao, `${r.confianca}%`, formatCurrency(r.receitaEstimada), r.acao])}
+          filename="bi-ml-recomendacoes" title="Recomendações ML"
+        />
+      </div>
 
       <section>
         <h2 className="text-sm font-medium text-neutral-400 mb-3">Anomalias Detectadas</h2>

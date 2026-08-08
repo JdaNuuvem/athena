@@ -133,7 +133,7 @@ class TestForecast(unittest.TestCase):
 class TestMLSegmentos(unittest.TestCase):
     def test_classifica_cliente_sem_compra_como_inativo(self):
         with patch("core.bi.get_db"), \
-             patch("core.bi.run_async", return_value=[{"id": 1, "ultima_compra": None, "freq": 0, "monetario": 0}]):
+             patch("core.bi.run_async", return_value=[{"id": 1, "nome": "Cliente Sumido", "ultima_compra": None, "freq": 0, "monetario": 0}]):
             resultado = bi.ml_segmentos()
         self.assertEqual(len(resultado), 1)
         self.assertEqual(resultado[0]["segmento"], "Inativos")
@@ -141,10 +141,11 @@ class TestMLSegmentos(unittest.TestCase):
 
     def test_classifica_cliente_recente_frequente_e_de_alto_valor_como_campeao(self):
         hoje = date.today()
-        clientes = [{"id": 1, "ultima_compra": hoje - timedelta(days=5), "freq": 6, "monetario": 5000.0}]
+        clientes = [{"id": 1, "nome": "Cliente Top", "ultima_compra": hoje - timedelta(days=5), "freq": 6, "monetario": 5000.0}]
         with patch("core.bi.get_db"), patch("core.bi.run_async", return_value=clientes):
             resultado = bi.ml_segmentos()
         self.assertEqual(resultado[0]["segmento"], "Campeões")
+        self.assertEqual(resultado[0]["clientes"][0]["nome"], "Cliente Top")
 
 
 class TestMLRecomendacoes(unittest.TestCase):

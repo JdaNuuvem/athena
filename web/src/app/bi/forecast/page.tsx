@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import type { KpiMetric, ForecastDataPoint } from "../types";
 import { formatCurrency } from "../types";
-import { gerarForecast, FORECAST_RESUMO } from "../data/forecast";
 import PageHeader from "@/app/_components/PageHeader";
 import KpiCard from "@/app/_components/KpiCard";
 import ForecastChart from "../_components/ForecastChart";
+import ErroCarregamento from "../_components/ErroCarregamento";
+import ExportButtons from "@/app/_components/ExportButtons";
 
 interface ForecastResumo { receitaProjetada: number; crescimentoEsperado: number; confianca: number; cenarios: { otimista: number; esperado: number; pessimista: number }; fatores: Array<{ nome: string; impacto: string; valor: string }> }
 
@@ -14,30 +15,41 @@ export default function ForecastPage() {
   const [forecastData, setForecastData] = useState<ForecastDataPoint[]>([]);
   const [resumo, setResumo] = useState<ForecastResumo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoading(true); setErro(false);
     fetch("/api/bi/forecast")
-      .then(r => r.ok ? r.json() : null)
-      .then((data: { pontos: ForecastDataPoint[]; resumo: ForecastResumo } | null) => {
-        if (data) { setForecastData(data.pontos); setResumo(data.resumo); }
-        else { setForecastData(gerarForecast()); setResumo(FORECAST_RESUMO); }
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then((data: { pontos: ForecastDataPoint[]; resumo: ForecastResumo }) => {
+        setForecastData(data.pontos); setResumo(data.resumo);
       })
-      .catch(() => { setForecastData(gerarForecast()); setResumo(FORECAST_RESUMO); })
+      .catch(() => setErro(true))
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading || !resumo) return <div className="p-6 text-neutral-400">Carregando...</div>;
+  useEffect(() => { load(); }, [load]);
+
+  if (loading) return <div className="p-6 text-neutral-400">Carregando...</div>;
+  if (erro || !resumo) return <ErroCarregamento onRetry={load} />;
 
   const kpis: KpiMetric[] = [
     { label: "Receita Projetada", value: formatCurrency(resumo.receitaProjetada), color: "text-indigo-400" },
-    { label: "Crescimento Esperado", value: `+${resumo.crescimentoEsperado}%`, color: "text-emerald-400" },
+    { label: "Crescimento Esperado", value: `${resumo.crescimentoEsperado >= 0 ? "+" : ""}${resumo.crescimentoEsperado}%`, color: resumo.crescimentoEsperado >= 0 ? "text-emerald-400" : "text-red-400" },
     { label: "Confiança do Modelo", value: `${resumo.confianca}%`, color: "text-blue-400" },
     { label: "Cenário Pessimista", value: formatCurrency(resumo.cenarios.pessimista), color: "text-amber-400" },
   ];
 
   return (
     <div className="p-6 space-y-6">
-      <PageHeader title="Forecast" subtitle="Previsão de vendas com séries temporais e análise de cenários" />
+      <div className="flex items-center justify-between gap-3">
+        <PageHeader title="Forecast" subtitle="Extrapolação estatística (média/desvio histórico) — não é um modelo de IA" />
+        <ExportButtons
+          columns={["Período", "Histórico", "Previsão", "Limite Inferior", "Limite Superior"]}
+          rows={forecastData.map(p => [p.periodo, p.historico ?? "", p.previsao ?? "", p.limiteInferior ?? "", p.limiteSuperior ?? ""])}
+          filename="bi-forecast" title="Forecast"
+        />
+      </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {kpis.map(kpi => <KpiCard key={kpi.label} metric={kpi} />)}

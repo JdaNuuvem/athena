@@ -62,3 +62,18 @@ def bi_ml_recomendacoes():
     from core.bi import ml_recomendacoes
     dias = request.args.get("dias", 90, type=int)
     return jsonify(ml_recomendacoes(dias))
+
+
+@bi_bp.route("/acoes-mes", methods=["GET"])
+@requer_permissao("bi.ver")
+def bi_acoes_mes():
+    from core.bi import acoes_do_mes
+    return jsonify(acoes_do_mes())
+
+
+@bi_bp.route("/lojas", methods=["GET"])
+@requer_permissao("bi.ver")
+def bi_lojas():
+    from core.relatorios import dre_por_loja
+    dias = request.args.get("dias", 30, type=int)
+    return jsonify(dre_por_loja(dias))

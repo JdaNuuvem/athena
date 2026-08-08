@@ -72,6 +72,37 @@ export interface CustomerSegment {
   receitaMedia: number;
   churn: number;
   descricao: string;
+  qtd_clientes: number;
+  clientes: Array<{ nome: string; valor: number; dias_sem_comprar: number | null }>;
+}
+
+export interface VariacaoMensal {
+  pct: number;
+  label: string;
+  positiva: boolean;
+}
+
+export interface LojaDre {
+  loja_id: number;
+  loja_nome: string;
+  receita: number;
+  receita_online: number;
+  receita_shopee: number;
+  receita_pdv: number;
+  qtd_vendas: number;
+  ticket_medio: number;
+  comissao_valor: number;
+  frete: number;
+  custos_producao: number;
+  lucro: number;
+  margem_pct: number;
+}
+
+export interface AcoesDoMes {
+  capital_parado: { total_valor: number; itens: Array<{ sku: string; nome: string; quantidade: number; valor_imobilizado: number; dias_sem_venda: number }> } | null;
+  inadimplencia: { total_valor: number; total_qtd: number; maiores_devedores: Array<{ cliente: string; valor: number; vencimento: string | null; dias_vencido: number }> } | null;
+  clientes_em_risco: { qtd_clientes: number; clientes: Array<{ nome: string; valor: number; dias_sem_comprar: number | null }> } | null;
+  maior_anomalia: AnomalyResult | null;
 }
 
 export interface MLRecommendation {
@@ -82,6 +113,9 @@ export interface MLRecommendation {
   receitaEstimada: number;
   acao: string;
 }
+
+export const STATUS_TEXTO: Record<string, string> = { good: "Saudável", warning: "Atenção", danger: "Crítico" };
+export const STATUS_COR: Record<string, string> = { good: "text-emerald-400", warning: "text-amber-400", danger: "text-red-400" };
 
 // ── Utilitários ──
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, Cell
@@ -8,11 +8,12 @@ import {
 import type { KpiMetric, VendaDiaria, CategoriaVenda } from "../types";
 import { formatCurrency } from "../types";
 import { useTheme, chartAxisColors } from "@/lib/theme-context";
-import { gerarVendasDiarias, gerarCategorias } from "../data/vendas";
 import PageHeader from "@/app/_components/PageHeader";
 import KpiCard from "@/app/_components/KpiCard";
 import Icon from "@/app/_components/Icon";
 import DrillDownTable from "../_components/DrillDownTable";
+import ErroCarregamento from "../_components/ErroCarregamento";
+import ExportButtons from "@/app/_components/ExportButtons";
 
 function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) {
   if (!active || !payload?.length) return null;
@@ -33,21 +34,22 @@ export default function VendasPage() {
   const [diarias, setDiarias] = useState<VendaDiaria[]>([]);
   const [categorias, setCategorias] = useState<CategoriaVenda[]>([]);
   const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoading(true); setErro(false);
     Promise.all([
-      fetch("/api/bi/vendas/diarias").then(r => r.ok ? r.json() : null),
-      fetch("/api/bi/vendas/categorias").then(r => r.ok ? r.json() : null),
-    ]).then(([d, c]) => {
-      setDiarias(d ?? gerarVendasDiarias());
-      setCategorias(c ?? gerarCategorias());
-    }).catch(() => {
-      setDiarias(gerarVendasDiarias());
-      setCategorias(gerarCategorias());
-    }).finally(() => setLoading(false));
+      fetch("/api/bi/vendas/diarias").then(r => r.ok ? r.json() : Promise.reject()),
+      fetch("/api/bi/vendas/categorias").then(r => r.ok ? r.json() : Promise.reject()),
+    ]).then(([d, c]) => { setDiarias(d); setCategorias(c); })
+      .catch(() => setErro(true))
+      .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => { load(); }, [load]);
+
   if (loading) return <div className="p-6 text-neutral-400">Carregando...</div>;
+  if (erro) return <ErroCarregamento onRetry={load} />;
 
   const receitaTotal = diarias.reduce((s, d) => s + d.valor, 0);
   const mediaDiaria = Math.round(receitaTotal / (diarias.length || 1));
@@ -61,7 +63,14 @@ export default function VendasPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <PageHeader title="Vendas & Drill-down" subtitle="Receita diária, categorias e produtos detalhados" />
+      <div className="flex items-center justify-between gap-3">
+        <PageHeader title="Vendas & Drill-down" subtitle="Receita diária, categorias e produtos detalhados" />
+        <ExportButtons
+          columns={["Dia", "Valor"]}
+          rows={diarias.map(d => [d.dia, formatCurrency(d.valor)])}
+          filename="bi-vendas-diarias" title="Vendas Diárias"
+        />
+      </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {kpis.map(kpi => <KpiCard key={kpi.label} metric={kpi} />)}

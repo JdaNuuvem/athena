@@ -173,22 +173,60 @@ def fluxo_caixa(dias=30, loja_id=None):
     except Exception as e: return {"entradas":0,"saidas":0,"saldo":0,"periodo_dias":dias}
 
 # ── 9. Aging Financeiro ──
+# Faixas de inadimplencia (contas VENCIDAS, nao a vencer) com valor somado —
+# usado pelo card "Inadimplencia" do BI (core/bi.py::acoes_do_mes) alem da
+# tela generica /relatorios/aging.
+
+_FAIXAS_AGING = [("0-30 dias", 0, 30), ("31-60 dias", 31, 60), ("61-90 dias", 61, 90), ("90+ dias", 91, None)]
 
 def aging_financeiro():
     async def _go():
         db = await get_db()
         avencer = await db.fetchval("SELECT COUNT(*) FROM fin_contas_receber WHERE vencimento >= CURRENT_DATE AND status='pendente'")
+        avencer_valor = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_contas_receber WHERE vencimento >= CURRENT_DATE AND status='pendente'")
         vencidas = await db.fetchval("SELECT COUNT(*) FROM fin_contas_receber WHERE vencimento < CURRENT_DATE AND status='pendente'")
-        faixa1 = await db.fetchval("SELECT COUNT(*) FROM fin_contas_receber WHERE vencimento BETWEEN CURRENT_DATE AND CURRENT_DATE + 7 AND status='pendente'")
-        faixa2 = await db.fetchval("SELECT COUNT(*) FROM fin_contas_receber WHERE vencimento BETWEEN CURRENT_DATE + 8 AND CURRENT_DATE + 30 AND status='pendente'")
-        return {"a_vencer": avencer or 0, "vencidas": vencidas or 0, "faixas": [
-            {"faixa":"Vencidas","qtd":vencidas or 0},
-            {"faixa":"7 dias","qtd":faixa1 or 0},
-            {"faixa":"30 dias","qtd":faixa2 or 0},
-            {"faixa":"31+ dias","qtd":max((avencer or 0) - (faixa1 or 0) - (faixa2 or 0), 0)},
-        ]}
+        vencidas_valor = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_contas_receber WHERE vencimento < CURRENT_DATE AND status='pendente'")
+        pagar_vencidas = await db.fetchval("SELECT COUNT(*) FROM fin_contas_pagar WHERE vencimento < CURRENT_DATE AND status='pendente'")
+        pagar_vencidas_valor = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_contas_pagar WHERE vencimento < CURRENT_DATE AND status='pendente'")
+
+        por_faixa = await db.fetch("""
+            SELECT
+                CASE
+                    WHEN CURRENT_DATE - vencimento BETWEEN 0 AND 30 THEN '0-30 dias'
+                    WHEN CURRENT_DATE - vencimento BETWEEN 31 AND 60 THEN '31-60 dias'
+                    WHEN CURRENT_DATE - vencimento BETWEEN 61 AND 90 THEN '61-90 dias'
+                    ELSE '90+ dias'
+                END AS faixa,
+                COUNT(*) AS qtd, COALESCE(SUM(valor),0) AS valor
+            FROM fin_contas_receber WHERE status='pendente' AND vencimento < CURRENT_DATE
+            GROUP BY 1
+        """)
+        por_faixa_map = {r["faixa"]: {"qtd": r["qtd"], "valor": float(r["valor"] or 0)} for r in por_faixa}
+
+        maiores = await db.fetch("""
+            SELECT cliente, valor, vencimento, (CURRENT_DATE - vencimento) AS dias_vencido
+            FROM fin_contas_receber WHERE status='pendente' AND vencimento < CURRENT_DATE
+            ORDER BY valor DESC LIMIT 5
+        """)
+        return {
+            "a_vencer": avencer or 0, "a_vencer_valor": float(avencer_valor or 0),
+            "vencidas": vencidas or 0, "vencidas_valor": float(vencidas_valor or 0),
+            "a_pagar_vencidas": pagar_vencidas or 0, "a_pagar_vencidas_valor": float(pagar_vencidas_valor or 0),
+            "faixas": [
+                {"faixa": nome, **por_faixa_map.get(nome, {"qtd": 0, "valor": 0.0})}
+                for nome, _, _ in _FAIXAS_AGING
+            ],
+            "maiores_devedores": [
+                {"cliente": r["cliente"], "valor": float(r["valor"] or 0),
+                 "vencimento": r["vencimento"].isoformat() if r["vencimento"] else None,
+                 "dias_vencido": r["dias_vencido"]}
+                for r in (maiores or [])
+            ],
+        }
     try: return run_async(_go())
-    except Exception as e: return {"a_vencer":0,"vencidas":0,"faixas":[{"faixa":"Sem dados","qtd":0}]}
+    except Exception as e:
+        log(AGENT, f"Erro aging_financeiro: {e}")
+        return {"a_vencer": 0, "vencidas": 0, "faixas": [{"faixa": nome, "qtd": 0, "valor": 0.0} for nome, _, _ in _FAIXAS_AGING], "maiores_devedores": []}
 
 # ── 10. Previsão ──
 

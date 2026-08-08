@@ -26,12 +26,62 @@ def _fmt_pct(v: float) -> str:
 
 # ── Dashboard ──
 
+def _variacao(atual: float, anterior: float):
+    """None se nao da' pra comparar (sem historico no periodo anterior) — em vez
+    de mostrar 0%/queda de 100% que enganaria o usuario."""
+    if not anterior:
+        return None
+    pct = round((atual - anterior) / anterior * 100, 1)
+    sinal = "+" if pct >= 0 else ""
+    return {"pct": pct, "label": f"{sinal}{pct}% vs. mês anterior", "positiva": pct >= 0}
+
+
 def dashboard() -> dict:
     from core.relatorios import vendas as rel_vendas, ticket_medio as rel_ticket, dre as rel_dre, previsao as rel_previsao
     v = rel_vendas(30)
     t = rel_ticket(30)
     d = rel_dre(30)
     p = rel_previsao(30)
+
+    async def _comparativo_mensal():
+        db = await get_db()
+        receita_atual = await db.fetchval("""
+            SELECT COALESCE(SUM(total),0) FROM (
+                SELECT total FROM vendas_pedidos WHERE data >= CURRENT_DATE - 30 AND status != 'cancelado'
+                UNION ALL SELECT total FROM pdv_vendas WHERE DATE(data) >= CURRENT_DATE - 30
+            ) x
+        """)
+        receita_anterior = await db.fetchval("""
+            SELECT COALESCE(SUM(total),0) FROM (
+                SELECT total FROM vendas_pedidos WHERE data >= CURRENT_DATE - 60 AND data < CURRENT_DATE - 30 AND status != 'cancelado'
+                UNION ALL SELECT total FROM pdv_vendas WHERE DATE(data) >= CURRENT_DATE - 60 AND DATE(data) < CURRENT_DATE - 30
+            ) x
+        """)
+        qtd_atual = await db.fetchval("""
+            SELECT COUNT(*) FROM (
+                SELECT id FROM vendas_pedidos WHERE data >= CURRENT_DATE - 30 AND status != 'cancelado'
+                UNION ALL SELECT id FROM pdv_vendas WHERE DATE(data) >= CURRENT_DATE - 30
+            ) x
+        """)
+        qtd_anterior = await db.fetchval("""
+            SELECT COUNT(*) FROM (
+                SELECT id FROM vendas_pedidos WHERE data >= CURRENT_DATE - 60 AND data < CURRENT_DATE - 30 AND status != 'cancelado'
+                UNION ALL SELECT id FROM pdv_vendas WHERE DATE(data) >= CURRENT_DATE - 60 AND DATE(data) < CURRENT_DATE - 30
+            ) x
+        """)
+        return float(receita_atual or 0), float(receita_anterior or 0), qtd_atual or 0, qtd_anterior or 0
+    try:
+        receita_atual, receita_anterior, qtd_atual, qtd_anterior = run_async(_comparativo_mensal())
+        var_receita = _variacao(receita_atual, receita_anterior)
+        ticket_atual = receita_atual / max(qtd_atual, 1)
+        ticket_anterior = receita_anterior / max(qtd_anterior, 1)
+        var_ticket = _variacao(ticket_atual, ticket_anterior)
+    except Exception as e:
+        log(AGENT, f"Erro comparativo mensal dashboard: {e}")
+        var_receita = var_ticket = None
+    # Margem do periodo anterior nao e' calculavel com precisao (CMV via
+    # fin_contas_pagar reflete status PENDENTE atual, nao o custo real daquele
+    # periodo passado) — omitido em vez de estimado, mesma logica de indicadores().
 
     async def _churn():
         db = await get_db()
@@ -57,8 +107,8 @@ def dashboard() -> dict:
         churn = None
 
     return {"kpis": [
-        {"label": "Receita (mês)", "value": _fmt_brl(v["total"]), "color": "text-emerald-400"},
-        {"label": "Ticket Médio", "value": _fmt_brl(t["ticket_medio"]), "color": "text-blue-400"},
+        {"label": "Receita (mês)", "value": _fmt_brl(v["total"]), "color": "text-emerald-400", "variacao": var_receita},
+        {"label": "Ticket Médio", "value": _fmt_brl(t["ticket_medio"]), "color": "text-blue-400", "variacao": var_ticket},
         {"label": "Margem Média", "value": _fmt_pct(d["margem_bruta_pct"]), "color": "text-purple-400"},
         {"label": "Previsão (próx. mês)", "value": _fmt_brl(p["previsao_30d"]), "color": "text-indigo-400"},
         {"label": "ROI", "value": "--", "color": "text-neutral-500"},
@@ -325,14 +375,14 @@ def ml_segmentos() -> list:
     async def _go():
         db = await get_db()
         rows = await db.fetch("""
-            SELECT c.id, MAX(v.data) AS ultima_compra, COUNT(v.id) AS freq, COALESCE(SUM(v.total),0) AS monetario
+            SELECT c.id, c.nome, MAX(v.data) AS ultima_compra, COUNT(v.id) AS freq, COALESCE(SUM(v.total),0) AS monetario
             FROM cad_clientes c
             LEFT JOIN (
                 SELECT cliente_id, data, total FROM vendas_pedidos WHERE status != 'cancelado'
                 UNION ALL SELECT cliente_id, data, total FROM pdv_vendas
             ) v ON v.cliente_id = c.id
             WHERE c.status = 'ativo'
-            GROUP BY c.id
+            GROUP BY c.id, c.nome
         """)
         return [dict(r) for r in rows]
     try:
@@ -375,6 +425,7 @@ def ml_segmentos() -> list:
         if not membros:
             continue
         churn_membros = sum(1 for m in membros if not m["ultima_compra"] or (hoje_ref - m["ultima_compra"]).days > 90)
+        top_membros = sorted(membros, key=lambda m: float(m["monetario"] or 0), reverse=True)[:5]
         resultado.append({
             "segmento": nome,
             "percentual": round(len(membros) / total * 100, 1),
@@ -382,6 +433,11 @@ def ml_segmentos() -> list:
             "churn": round(churn_membros / len(membros) * 100, 1),
             "descricao": dados["descricao"],
             "qtd_clientes": len(membros),
+            "clientes": [
+                {"nome": m["nome"], "valor": round(float(m["monetario"] or 0), 2),
+                 "dias_sem_comprar": (hoje_ref - m["ultima_compra"]).days if m["ultima_compra"] else None}
+                for m in top_membros
+            ],
         })
     resultado.sort(key=lambda s: s["percentual"], reverse=True)
     return resultado
@@ -430,3 +486,84 @@ def ml_recomendacoes(dias: int = 90, minimo_ocorrencias: int = 3) -> list:
             "acao": f"Sugerir \"{nome_b}\" no checkout/atendimento ao vender \"{nome_a}\"",
         })
     return recomendacoes
+
+
+# ── Capital parado em estoque ──
+
+def estoque_parado(dias: int = 60, limite: int = 10) -> list:
+    """Produtos com saldo em estoque mas sem nenhuma venda nos ultimos `dias` —
+    capital imobilizado parado, calculado cruzando saldo real (estoque_lojas)
+    com historico real de venda (vendas_itens/pdv_itens), nada estimado."""
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch(f"""
+            SELECT e.sku, MAX(c.descricao) AS nome, SUM(e.quantidade) AS quantidade, MAX(c.preco_custo) AS preco_custo
+            FROM estoque_lojas e
+            JOIN catalogo_produtos c ON c.sku = e.sku
+            WHERE e.quantidade > 0
+              AND e.sku NOT IN (
+                  SELECT DISTINCT i.sku FROM vendas_itens i JOIN vendas_pedidos p ON p.id = i.pedido_id
+                  WHERE p.data >= CURRENT_DATE - $1::int AND p.status != 'cancelado' AND i.sku IS NOT NULL
+                  UNION
+                  SELECT DISTINCT i.produto_codigo FROM pdv_itens i JOIN pdv_vendas v ON v.id = i.venda_id
+                  WHERE DATE(v.data) >= CURRENT_DATE - $1::int AND i.produto_codigo IS NOT NULL
+              )
+            GROUP BY e.sku
+        """, dias)
+        return [dict(r) for r in rows]
+    try:
+        linhas = run_async(_go())
+    except Exception as e:
+        log(AGENT, f"Erro estoque_parado: {e}")
+        return []
+
+    resultado = []
+    for r in linhas:
+        preco_custo = float(r["preco_custo"] or 0)
+        quantidade = float(r["quantidade"] or 0)
+        resultado.append({
+            "sku": r["sku"], "nome": r["nome"] or r["sku"],
+            "quantidade": round(quantidade, 2), "valor_imobilizado": round(quantidade * preco_custo, 2),
+            "dias_sem_venda": dias,
+        })
+    resultado.sort(key=lambda p: p["valor_imobilizado"], reverse=True)
+    return resultado[:limite]
+
+
+# ── Acoes do mes: alertas acionaveis cruzando os sinais acima ──
+# Cada bloco so' aparece se houver dado real por tras — nenhum card e' mostrado
+# vazio/zerado so' pra preencher espaco.
+
+def acoes_do_mes() -> dict:
+    from core.relatorios import aging_financeiro as rel_aging
+
+    parados = estoque_parado(dias=60, limite=5)
+    capital_parado = {
+        "total_valor": round(sum(p["valor_imobilizado"] for p in parados), 2),
+        "itens": parados,
+    } if parados else None
+
+    aging = rel_aging()
+    inadimplencia = {
+        "total_valor": aging.get("vencidas_valor", 0),
+        "total_qtd": aging.get("vencidas", 0),
+        "maiores_devedores": aging.get("maiores_devedores", []),
+    } if aging.get("vencidas") else None
+
+    segmentos = ml_segmentos()
+    em_risco = next((s for s in segmentos if s["segmento"] == "Em risco"), None)
+    clientes_em_risco = {
+        "qtd_clientes": em_risco["qtd_clientes"], "clientes": em_risco["clientes"],
+    } if em_risco and em_risco.get("clientes") else None
+
+    anomalias = ml_anomalias(dias=30)
+    maior_anomalia = None
+    if anomalias:
+        maior_anomalia = sorted(anomalias, key=lambda a: 2 if a["severidade"] == "critico" else 1, reverse=True)[0]
+
+    return {
+        "capital_parado": capital_parado,
+        "inadimplencia": inadimplencia,
+        "clientes_em_risco": clientes_em_risco,
+        "maior_anomalia": maior_anomalia,
+    }

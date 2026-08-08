@@ -1,27 +1,41 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import type { IndicadorFinanceiro } from "../types";
-import { INDICADORES, STATUS_TEXTO, STATUS_COR } from "../data/indicadores";
+import { STATUS_TEXTO, STATUS_COR } from "../types";
 import PageHeader from "@/app/_components/PageHeader";
 import TrendIndicator from "../_components/TrendIndicator";
+import ErroCarregamento from "../_components/ErroCarregamento";
+import ExportButtons from "@/app/_components/ExportButtons";
 
 export default function IndicadoresPage() {
   const [indicadores, setIndicadores] = useState<IndicadorFinanceiro[]>([]);
   const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoading(true); setErro(false);
     fetch("/api/bi/indicadores")
-      .then(r => r.ok ? r.json() : null)
-      .then((data: IndicadorFinanceiro[] | null) => setIndicadores(data ?? INDICADORES))
-      .catch(() => setIndicadores(INDICADORES))
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then((data: IndicadorFinanceiro[]) => setIndicadores(data))
+      .catch(() => setErro(true))
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => { load(); }, [load]);
+
   if (loading) return <div className="p-6 text-neutral-400">Carregando...</div>;
+  if (erro) return <ErroCarregamento onRetry={load} />;
   return (
     <div className="p-6 space-y-6">
-      <PageHeader title="Indicadores Financeiros" subtitle="Liquidez, rentabilidade, endividamento e eficiência operacional" />
+      <div className="flex items-center justify-between gap-3">
+        <PageHeader title="Indicadores Financeiros" subtitle="Margem, giro de estoque, prazos e crescimento — só o que dá pra calcular com dado real" />
+        <ExportButtons
+          columns={["Indicador", "Valor", "Unidade", "Referência", "Status"]}
+          rows={indicadores.map(i => [i.nome, i.valor, i.unidade, i.referencia, STATUS_TEXTO[i.status]])}
+          filename="bi-indicadores" title="Indicadores Financeiros"
+        />
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {indicadores.map(ind => (
