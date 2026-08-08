@@ -34,6 +34,9 @@ def _ensure_tables():
         # competencia, gerada sob demanda). Colunas antigas ficam no schema,
         # sem uso — nunca DROP em producao.
         await db.execute("ALTER TABLE fiscal_obrigacoes ADD COLUMN IF NOT EXISTS dia_vencimento INT")
+        await db.execute("""UPDATE fiscal_obrigacoes SET dia_vencimento = v.dia FROM (VALUES
+            ('SPED',15),('EFD',10),('DCTF',15),('DAS',20),('GIA',14),('SINTEGRA',12)) AS v(sigla,dia)
+            WHERE fiscal_obrigacoes.sigla = v.sigla AND fiscal_obrigacoes.dia_vencimento IS NULL""")
         await db.execute("ALTER TABLE fiscal_obrigacoes ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT true")
         await db.execute("""CREATE TABLE IF NOT EXISTS fiscal_obrigacoes_ocorrencias (
             id SERIAL PRIMARY KEY, obrigacao_id INT REFERENCES fiscal_obrigacoes(id),
@@ -232,7 +235,7 @@ async def _garantir_ocorrencias(db) -> int:
     hoje_data = await db.fetchval("SELECT CURRENT_DATE")
     ano, mes = hoje_data.year, hoje_data.month
     competencia = f"{ano:04d}-{mes:02d}"
-    obrigacoes = await db.fetch("SELECT id, dia_vencimento FROM fiscal_obrigacoes WHERE ativo = true")
+    obrigacoes = await db.fetch("SELECT id, dia_vencimento FROM fiscal_obrigacoes WHERE ativo = true AND periodicidade = 'mensal'")
     criadas = 0
     for o in obrigacoes:
         venc = _calcular_vencimento(ano, mes, o["dia_vencimento"])

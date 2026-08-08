@@ -75,8 +75,12 @@ export default function ObrigacoesPage() {
   useEffect(() => { carregar(); }, [carregar]);
 
   const baixar = async (id: number) => {
-    await fiscalBaixarObrigacao(id);
-    carregar();
+    try {
+      await fiscalBaixarObrigacao(id);
+      carregar();
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro ao marcar como entregue");
+    }
   };
 
   const abrirNovo = () => {
@@ -121,7 +125,8 @@ export default function ObrigacoesPage() {
     } finally { setSaving(false); }
   };
 
-  const atrasadas = ocorrencias.filter(o => o.status === "pendente" && new Date(o.data_vencimento) < new Date(new Date().toDateString()));
+  const hojeISO = new Date().toLocaleDateString("en-CA");
+  const atrasadas = ocorrencias.filter(o => o.status === "pendente" && o.data_vencimento.slice(0, 10) < hojeISO);
   const pendentesNoPrazo = ocorrencias.filter(o => o.status === "pendente" && !atrasadas.includes(o));
   const entregues = ocorrencias.filter(o => o.status === "entregue");
 
@@ -281,7 +286,6 @@ export default function ObrigacoesPage() {
                 <select value={form.periodicidade || "mensal"} onChange={e => setForm({ ...form, periodicidade: e.target.value })}
                   className="w-full rounded-lg border border-neutral-600 bg-neutral-700 px-3 py-2 text-xs text-neutral-200 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/50">
                   <option value="mensal">Mensal</option>
-                  <option value="anual">Anual</option>
                 </select>
               </div>
               <div>

@@ -1,5 +1,4 @@
 from flask import Blueprint, request, jsonify
-from core import run_async, get_db
 from core.rbac import requer_permissao
 
 fiscal_bp = Blueprint("fiscal", __name__, url_prefix="/api/fiscal")
