@@ -93,6 +93,62 @@ def i9logic_comparar():
     return _go()
 
 
+@i9logic_bp.route("/divergencias-athena", methods=["GET"])
+def i9logic_divergencias_athena():
+    """Comparacao Athena x i9Logic EM LOTE — diferente de /divergencias
+    (fisico x contabil, interno ao i9Logic). Ver core.i9logic.listar_divergencias_athena."""
+    @requer_permissao("estoque.ver")
+    def _go():
+        from core.i9logic import listar_divergencias_athena
+        return jsonify(listar_divergencias_athena(request.args.get("loja", "")))
+    return _go()
+
+
+@i9logic_bp.route("/divergencias-athena/ajustar", methods=["POST"])
+def i9logic_divergencias_athena_ajustar():
+    """Ajusta o saldo Athena pro fisico i9Logic coletado — mesma direcao de
+    aplicar_ajuste_divergencia, mas por (sku, loja) direto (esta comparacao
+    nao tem snapshot_id proprio, e' calculada em memoria)."""
+    @requer_permissao("estoque.editar")
+    def _go():
+        from core.estoque import ajustar_absoluto
+        dados = request.get_json(silent=True) or {}
+        sku = str(dados.get("sku", "")).strip()
+        loja = str(dados.get("loja", "")).strip()
+        quantidade = dados.get("quantidade")
+        if not sku or not loja or quantidade is None:
+            return jsonify({"erro": "sku, loja e quantidade sao obrigatorios"}), 400
+        try:
+            quantidade_float = float(quantidade)
+        except (TypeError, ValueError):
+            return jsonify({"erro": "quantidade deve ser um numero"}), 400
+        # Guarda de frescor: `quantidade` vem da lista em cache no navegador e
+        # pode estar horas desatualizada. O lado Shopee tem a guarda equivalente
+        # (shopee.divergencia._snapshot_mais_recente_id); aqui nao ha' snapshot_id
+        # pra comparar, entao rele' o fisico do snapshot e confere. Fail-closed:
+        # erro de banco bloqueia o ajuste, nunca aplica sem ter checado.
+        from core.i9logic import qtd_fisico_mais_recente
+        try:
+            qtd_snapshot = qtd_fisico_mais_recente(sku, loja)
+        except Exception as e:
+            return jsonify({"erro": f"falha ao verificar frescor do snapshot i9Logic: {e}"}), 400
+        if qtd_snapshot is None:
+            return jsonify({"erro": f"sem snapshot i9Logic para o sku '{sku}' na loja '{loja}' - "
+                                    f"recarregue a pagina"}), 400
+        if round(float(qtd_snapshot), 3) != round(quantidade_float, 3):
+            return jsonify({"erro": f"dados desatualizados: o fisico i9Logic de '{sku}' agora e' "
+                                    f"{float(qtd_snapshot)} (a tela enviou {quantidade_float}) - "
+                                    f"recarregue a pagina e tente de novo"}), 409
+        usuario = usuario_atual_da_request()
+        resultado = ajustar_absoluto(
+            sku, loja, quantidade_float, motivo="ajuste_inventario",
+            usuario_id=usuario.get("user_id"), usuario_nome=usuario.get("nome", ""))
+        if resultado.get("erro"):
+            return jsonify(resultado), 400
+        return jsonify(resultado)
+    return _go()
+
+
 @i9logic_bp.route("/seed", methods=["POST"])
 def i9logic_seed():
     @requer_permissao("estoque.editar")

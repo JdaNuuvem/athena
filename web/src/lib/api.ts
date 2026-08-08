@@ -2064,6 +2064,61 @@ export const i9logicEstoquePorLoja = (lojaId: number) =>
     `/api/integrations/i9logic/estoque/${lojaId}`
   );
 
+export interface DivergenciaItem {
+  id?: number;
+  sku: string;
+  descricao?: string;
+  disponivel_athena: number;
+  qtd_fisico_i9logic?: number;
+  qtd_shopee?: number;
+  divergencia: number;
+  classificacao: "sem_acao" | "registrado" | "alerta";
+  revisado?: boolean;
+}
+
+export interface DivergenciaResponse {
+  ok?: boolean;
+  status?: "processando" | "pronto";
+  data_coleta?: string | null;
+  data: DivergenciaItem[];
+  /** Erro da ultima coleta em background (Shopee) — mesmo papel de
+   *  EstoqueI9LogicResposta.erro_ultima_coleta: a coleta falhou, mas a lista
+   *  (possivelmente vazia/velha) ainda e' devolvida com o aviso junto. */
+  erro_ultima_coleta?: string;
+  erro?: string;
+}
+
+// ponytail: estas 5 funcoes usavam fetch() cru sem checar res.ok — exatamente o
+// bug ja' documentado em fiscalList acima: um 403 de requer_permissao (corpo
+// {"error":"Permissao negada"}, chave "error" e nao "erro") resolvia como JSON
+// valido sem campo `erro`, e o componente tratava como SUCESSO e recarregava a
+// lista — o usuario via a tela confirmar um ajuste de inventario que nunca
+// aconteceu. request<T>() lanca em !res.ok, injeta o Authorization, trata 401 e
+// extrai err.error || err.erro; quem chama usa try/catch.
+export const i9logicListarDivergenciasAthena = (loja: string) =>
+  request<DivergenciaResponse>(
+    `/api/integrations/i9logic/divergencias-athena?loja=${encodeURIComponent(loja)}`
+  );
+
+export const i9logicAjustarDivergenciaAthena = (sku: string, loja: string, quantidade: number) =>
+  request<{ ok?: boolean; erro?: string }>(
+    "/api/integrations/i9logic/divergencias-athena/ajustar",
+    { method: "POST", body: JSON.stringify({ sku, loja, quantidade }) }
+  );
+
+export const shopeeListarDivergencias = (lojaId: number) =>
+  request<DivergenciaResponse>(`/api/shopee/divergencias?loja_id=${lojaId}`);
+
+export const shopeeResolverDivergencia = (id: number) =>
+  request<{ ok?: boolean; erro?: string }>(
+    `/api/shopee/divergencias/${id}/resolver`, { method: "POST" }
+  );
+
+export const shopeeAjustarDivergencia = (id: number) =>
+  request<{ ok?: boolean; erro?: string }>(
+    `/api/shopee/divergencias/${id}/ajustar`, { method: "POST" }
+  );
+
 // ── Produtos por Loja ──
 
 export interface ProdutoLojaRow {

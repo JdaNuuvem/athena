@@ -676,6 +676,106 @@ class TestEstoqueFisicoPorLoja(unittest.TestCase):
         self.assertEqual(resultado["status"], "processando")
 
 
+class TestClassificarDivergenciaReexport(unittest.TestCase):
+    """i9logic.classificar_divergencia agora e' um re-export de
+    core.estoque_divergencia — este teste confirma que o comportamento nao
+    mudou apos a extracao."""
+    def test_dentro_da_tolerancia_zero_e_sem_acao(self):
+        self.assertEqual(i9logic.classificar_divergencia(100, 100.3), "sem_acao")
+
+    def test_acima_do_limiar_absoluto_e_alerta(self):
+        self.assertEqual(i9logic.classificar_divergencia(100, 106), "alerta")
+
+    def test_acima_do_limiar_percentual_e_alerta(self):
+        self.assertEqual(i9logic.classificar_divergencia(10, 12), "alerta")
+
+    def test_divergencia_pequena_mas_fora_da_tolerancia_e_registrado(self):
+        self.assertEqual(i9logic.classificar_divergencia(100, 102), "registrado")
+
+    def test_constantes_reexportadas(self):
+        from core.estoque_divergencia import TOLERANCIA_ZERO, LIMIAR_ALERTA_ABSOLUTO, LIMIAR_ALERTA_PERCENTUAL
+        self.assertEqual(i9logic.TOLERANCIA_ZERO, TOLERANCIA_ZERO)
+        self.assertEqual(i9logic.LIMIAR_ALERTA_ABSOLUTO, LIMIAR_ALERTA_ABSOLUTO)
+        self.assertEqual(i9logic.LIMIAR_ALERTA_PERCENTUAL, LIMIAR_ALERTA_PERCENTUAL)
+
+
+class TestListarDivergenciasAthena(unittest.TestCase):
+    def test_loja_sem_mapeamento_retorna_erro(self):
+        with patch("core.i9logic.buscar_id_i9logic", return_value=None):
+            resultado = i9logic.listar_divergencias_athena("Loja Sem Mapeamento")
+        self.assertIn("erro", resultado)
+        self.assertIn("mapeamento de filial", resultado["erro"])
+
+    def test_snapshot_vazio_retorna_lista_vazia_sem_quebrar(self):
+        with patch("core.i9logic.buscar_id_i9logic", return_value="63"), \
+             patch("core.i9logic.snapshot_mais_recente", return_value=(None, [])), \
+             patch("core.i9logic._disparar_coleta_se_necessario", return_value=True):
+            resultado = i9logic.listar_divergencias_athena("Loja Matriz")
+        self.assertEqual(resultado["data"], [])
+        self.assertEqual(resultado["status"], "processando")
+
+    def test_item_sem_sku_athena_e_ignorado(self):
+        itens = [{"idproduto": 1, "sku_athena": None, "qtd": 10, "descricao": "X"}]
+        with patch("core.i9logic.buscar_id_i9logic", return_value="63"), \
+             patch("core.i9logic.snapshot_mais_recente", return_value=(datetime.now(), itens)), \
+             patch("core.i9logic._disparar_coleta_se_necessario", return_value=False):
+            resultado = i9logic.listar_divergencias_athena("Loja Matriz")
+        self.assertEqual(resultado["data"], [])
+
+    def test_calcula_divergencia_e_classificacao_contra_saldo_athena(self):
+        itens = [{"idproduto": 1, "sku_athena": "SKU-A", "qtd": 100, "descricao": "Produto A"}]
+        with patch("core.i9logic.buscar_id_i9logic", return_value="63"), \
+             patch("core.i9logic.snapshot_mais_recente", return_value=(datetime.now(), itens)), \
+             patch("core.i9logic._disparar_coleta_se_necessario", return_value=False), \
+             patch("core.estoque_saldos.saldos_em_lote", return_value={"SKU-A": 106.0}):
+            resultado = i9logic.listar_divergencias_athena("Loja Matriz")
+        self.assertEqual(len(resultado["data"]), 1)
+        item = resultado["data"][0]
+        self.assertEqual(item["sku"], "SKU-A")
+        self.assertEqual(item["disponivel_athena"], 106.0)
+        self.assertEqual(item["qtd_fisico_i9logic"], 100.0)
+        self.assertEqual(item["divergencia"], 6.0)
+        self.assertEqual(item["classificacao"], "alerta")
+        self.assertEqual(resultado["status"], "pronto")
+
+    def test_le_saldos_numa_unica_query_em_lote(self):
+        """Regressao de performance: era um saldo() por sku (~9k round-trips
+        sequenciais numa filial grande). saldos_em_lote tem que ser chamada UMA
+        vez, com todos os skus de uma vez."""
+        itens = [
+            {"idproduto": 1, "sku_athena": "SKU-A", "qtd": 10, "descricao": "A"},
+            {"idproduto": 2, "sku_athena": "SKU-B", "qtd": 20, "descricao": "B"},
+            {"idproduto": 3, "sku_athena": None, "qtd": 30, "descricao": "sem de-para"},
+        ]
+        with patch("core.i9logic.buscar_id_i9logic", return_value="63"), \
+             patch("core.i9logic.snapshot_mais_recente", return_value=(datetime.now(), itens)), \
+             patch("core.i9logic._disparar_coleta_se_necessario", return_value=False), \
+             patch("core.estoque_saldos.saldos_em_lote",
+                   return_value={"SKU-A": 10.0, "SKU-B": 25.0}) as mock_lote:
+            resultado = i9logic.listar_divergencias_athena("Loja Matriz")
+        mock_lote.assert_called_once()
+        self.assertEqual(mock_lote.call_args.args[0], ["SKU-A", "SKU-B"])  # item sem sku fora
+        self.assertEqual(mock_lote.call_args.args[1], "Loja Matriz")
+        self.assertEqual(len(resultado["data"]), 2)
+        self.assertEqual(resultado["data"][0]["divergencia"], 0.0)
+        self.assertEqual(resultado["data"][1]["divergencia"], 5.0)
+
+    def test_falha_ao_ler_saldos_retorna_erro_em_vez_de_zeros(self):
+        """Antes o loop usava saldo(), que e' fail-open (0.0 em qualquer
+        excecao) — um erro transiente de banco virava uma lista inteira de
+        'alerta' fabricados com botao de Ajustar do lado. Agora a falha e'
+        visivel."""
+        itens = [{"idproduto": 1, "sku_athena": "SKU-A", "qtd": 100, "descricao": "A"}]
+        with patch("core.i9logic.buscar_id_i9logic", return_value="63"), \
+             patch("core.i9logic.snapshot_mais_recente", return_value=(datetime.now(), itens)), \
+             patch("core.i9logic._disparar_coleta_se_necessario", return_value=False), \
+             patch("core.estoque_saldos.saldos_em_lote", side_effect=Exception("conexao caiu")):
+            resultado = i9logic.listar_divergencias_athena("Loja Matriz")
+        self.assertIn("erro", resultado)
+        self.assertIn("conexao caiu", resultado["erro"])
+        self.assertNotIn("data", resultado)
+
+
 from flask import Flask
 import core.rbac as rbac
 

@@ -25,9 +25,10 @@ _coleta_em_andamento = set()  # filial_id -> coleta rodando agora, evita disparo
 _coleta_erro_recente = {}  # filial_id -> mensagem de erro da ultima tentativa
 _coleta_lock = threading.Lock()
 
-LIMIAR_ALERTA_ABSOLUTO = 5
-LIMIAR_ALERTA_PERCENTUAL = 0.10
-TOLERANCIA_ZERO = 0.5
+from core.estoque_divergencia import (
+    LIMIAR_ALERTA_ABSOLUTO, LIMIAR_ALERTA_PERCENTUAL, TOLERANCIA_ZERO,
+    classificar_divergencia,
+)
 
 MAX_TENTATIVAS_PAGINA = 3
 BACKOFF_SEGUNDOS = [2.5, 5, 10]
@@ -351,20 +352,6 @@ def gravar_snapshot(idproduto_i9logic: int, codproduto_i9logic: str, filial_i9lo
 
 # ── Divergencia: classificacao, listagem, comparacao com Athena ──
 
-def classificar_divergencia(qtd_fisico: float, qtd_comparacao: float) -> str:
-    """qtd_comparacao e' o contabil (i9Logic isolado, modo seed/auditoria) ou o
-    disponivel do Athena (modo monitoramento continuo) — a mesma regra de
-    classificacao serve pros dois casos, so' muda o que se compara contra o
-    fisico. Nunca ajusta nada sozinho, so' classifica pra fila de revisao."""
-    divergencia = abs(float(qtd_comparacao) - float(qtd_fisico))
-    if divergencia <= TOLERANCIA_ZERO:
-        return "sem_acao"
-    base = max(float(qtd_fisico), 1)
-    if divergencia >= LIMIAR_ALERTA_ABSOLUTO or (divergencia / base) >= LIMIAR_ALERTA_PERCENTUAL:
-        return "alerta"
-    return "registrado"
-
-
 def listar_itens_para_revisao(revisado: bool = False) -> list:
     async def _go():
         db = await get_db()
@@ -482,6 +469,73 @@ def comparar_com_athena(sku: str, loja: str) -> dict:
         "classificacao": classificar_divergencia(qtd_fisico, disponivel_athena),
         "data_coleta": ultimo["data_coleta"],
     }
+
+
+def listar_divergencias_athena(loja_athena: str) -> dict:
+    """Modo monitoramento continuo EM LOTE — mesmo calculo de
+    comparar_com_athena(), mas pra todos os skus de uma loja de uma vez,
+    usando o snapshot fisico mais recente da filial em vez de uma query por
+    sku. Dispara o mesmo lazy-trigger que a tela de Estoque Fisico usa —
+    esta funcao nao tem coleta propria, so' consome o que a tela de Estoque
+    Fisico ja mantem atualizado (mesma fonte de dado, outra visualizacao)."""
+    from core.estoque_saldos import saldos_em_lote
+    id_i9logic = buscar_id_i9logic("filial", loja_athena)
+    if id_i9logic is None:
+        return {"erro": f"mapeamento de filial i9Logic nao encontrado para a loja '{loja_athena}' "
+                         f"(cadastre em /api/integrations/i9logic/depara antes)"}
+    filial_id = int(id_i9logic)
+    data_coleta, itens = snapshot_mais_recente(filial_id)
+    processando = _disparar_coleta_se_necessario(filial_id, data_coleta)
+    # Uma unica query pros saldos de TODOS os skus (era um saldo() por item —
+    # ~9k round-trips sequenciais numa filial grande). saldos_em_lote levanta
+    # em falha de banco em vez de devolver zeros, entao um erro transiente
+    # vira erro visivel na tela, nao uma lista de "alerta" fabricados.
+    itens_com_sku = [item for item in itens if item.get("sku_athena")]
+    try:
+        saldos = saldos_em_lote([item["sku_athena"] for item in itens_com_sku], loja_athena, "disponivel")
+    except Exception as e:
+        return {"erro": f"falha ao ler os saldos do Athena para a loja '{loja_athena}': {e}"}
+    divergencias = []
+    for item in itens_com_sku:
+        sku = item["sku_athena"]
+        qtd_fisico = float(item.get("qtd") or 0)
+        disponivel_athena = saldos.get(sku, 0.0)
+        divergencias.append({
+            "sku": sku,
+            "descricao": item.get("descricao"),
+            "disponivel_athena": disponivel_athena,
+            "qtd_fisico_i9logic": qtd_fisico,
+            "divergencia": round(disponivel_athena - qtd_fisico, 3),
+            "classificacao": classificar_divergencia(qtd_fisico, disponivel_athena),
+        })
+    return {
+        "ok": True,
+        "status": "processando" if processando else "pronto",
+        "filial_i9logic": filial_id,
+        "data_coleta": data_coleta.isoformat() if data_coleta else None,
+        "data": divergencias,
+    }
+
+
+def qtd_fisico_mais_recente(sku_athena: str, loja_athena: str):
+    """Rele' o qtd_fisico do snapshot mais recente pra um sku/loja (mesmo
+    WHERE de comparar_com_athena). Existe pra guarda de frescor do ajuste
+    Athena x i9Logic: a rota de ajuste recebe a quantidade do CLIENTE (a
+    lista em cache no navegador, que pode ter minutos/horas), e sem reler o
+    servidor aplicaria cegamente um fisico ja' obsoleto. O lado Shopee tem a
+    guarda equivalente em shopee.divergencia._snapshot_mais_recente_id.
+
+    NAO engole excecao (fail-closed, mesma escolha do lado Shopee): uma falha
+    de banco aqui tem que bloquear o ajuste, nunca deixar passar sem checar.
+    Devolve None quando nao ha' snapshot nenhum pra esse sku/loja."""
+    async def _go():
+        db = await get_db()
+        return await db.fetchval("""
+            SELECT qtd_fisico FROM i9logic_estoque_snapshot
+            WHERE sku_athena=$1 AND loja_athena=$2
+            ORDER BY data_coleta DESC LIMIT 1
+        """, sku_athena, loja_athena)
+    return run_async(_go())
 
 
 # ── Job de coleta ──

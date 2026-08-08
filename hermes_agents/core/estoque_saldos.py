@@ -276,6 +276,55 @@ def saldo(sku: str, loja: str, tipo: str = "disponivel") -> float:
         return 0.0
 
 
+def saldos_em_lote(skus, loja: str, tipo: str = "disponivel") -> dict:
+    """Versao EM LOTE de saldo(): resolve loja_efetiva UMA vez e le todos os
+    skus num unico SELECT, em vez de N chamadas sequenciais de saldo() (cada
+    uma custa um run_async — hop entre threads — mais um round-trip proprio).
+    Telas que comparam um catalogo inteiro contra um sistema externo (a
+    Divergencia de Saldo i9Logic/Shopee) faziam ~9k queries sequenciais por
+    request com o loop de saldo(), segurando uma thread do Flask por dezenas
+    de segundos.
+
+    DIFERENCA DELIBERADA em relacao a saldo(): esta versao NAO e' fail-open.
+    saldo() devolve 0.0 em qualquer excecao, o que num loop de milhares de
+    chamadas transforma um erro transiente de banco num zero indistinguivel
+    de um zero legitimo — e numa tela de divergencia isso vira uma linha
+    "alerta" FABRICADA, com botao de "Ajustar" do lado. Aqui a excecao sobe e
+    quem chama decide (as duas telas de divergencia devolvem erro claro).
+
+    Sku ausente na tabela sai como 0.0: ai a ausencia de linha e' mesmo
+    ausencia de saldo, nao uma falha mascarada.
+    """
+    skus_unicos = sorted({str(s) for s in skus if s})
+    if not skus_unicos:
+        return {}
+    _ensure()
+    async def _go():
+        db = await get_db()
+        # Mesmo fail-open de saldo() SO' pra resolucao de loja vinculada (ver
+        # comentario detalhado em _saldo_async): um vinculo irresolvivel nao
+        # pode derrubar a leitura inteira, o nome original serve de fallback.
+        loja_efetiva = loja
+        try:
+            loja_resolvida = await _loja_efetiva_async(loja)
+            if isinstance(loja_resolvida, str) and loja_resolvida:
+                loja_efetiva = loja_resolvida
+            else:
+                _log_erro(
+                    "estoque_saldos.saldos_em_lote: resolver_loja_efetiva",
+                    ValueError(f"loja '{loja}' -> valor invalido {loja_resolvida!r} (esperado str nao-vazia)"))
+        except Exception as e:
+            _log_erro("estoque_saldos.saldos_em_lote: resolver_loja_efetiva", e)
+
+        rows = await db.fetch(
+            "SELECT sku, quantidade FROM estoque_saldos "
+            "WHERE loja = $1 AND tipo = $2 AND sku = ANY($3::text[])",
+            loja_efetiva, tipo, skus_unicos)
+        encontrados = {r["sku"]: float(r["quantidade"] or 0) for r in rows}
+        return {sku: encontrados.get(sku, 0.0) for sku in skus_unicos}
+    return run_async(_go())
+
+
 async def _mover_saldo_async(conn, sku: str, loja: str, tipo_origem, tipo_destino,
                              quantidade: float, tipo_movimento: str, motivo: str = "",
                              usuario_id: int = None, usuario_nome: str = "",
