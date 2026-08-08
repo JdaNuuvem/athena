@@ -1,8 +1,20 @@
 """Financeiro Core — Fluxo Caixa, Receber, Pagar, Boletos, PIX, Conciliação, Banco, DRE"""
+from decimal import Decimal
 from core import get_db, run_async, log, hoje
 from core.config import get_config
 
 AGENT = "Financeiro Core"
+
+def _row(row) -> dict:
+    """asyncpg devolve coluna DECIMAL/NUMERIC como decimal.Decimal — o
+    encoder JSON padrao do Flask serializa Decimal como STRING (nao
+    float), entao todo valor monetario chegava no frontend como "100.00"
+    em vez de 100.0. Isso quebrava silenciosamente: fmtBRL(string) nao
+    formata (string tem .toLocaleString() mas nao faz nada especial), e
+    somas tipo `0 + "100.00"` viravam concatenacao ("0100.00") em vez de
+    soma numerica. Converte pra float logo na saida do banco, antes do
+    dict virar JSON."""
+    return {k: (float(v) if isinstance(v, Decimal) else v) for k, v in dict(row).items()}
 
 FIN_TABLES = ["fluxo_caixa", "contas_receber", "contas_pagar", "boletos", "pix", "conciliacao", "bancos", "centro_custo", "plano_contas", "dre"]
 
@@ -209,7 +221,7 @@ def _list(tabela: str, cols="*", order="id DESC", limit=100) -> list:
     async def _go():
         db = await get_db()
         rows = await db.fetch(f"SELECT {cols} FROM {tabela} ORDER BY {order} LIMIT {limit}")
-        return [dict(r) for r in rows]
+        return [_row(r) for r in rows]
     try: return run_async(_go())
     except Exception as e: log(AGENT, f"Erro list {tabela}: {e}"); return []
 
@@ -217,7 +229,7 @@ def _get(tabela: str, id: int) -> dict:
     async def _go():
         db = await get_db()
         row = await db.fetchrow(f"SELECT * FROM {tabela} WHERE id = $1", id)
-        return dict(row) if row else {"error": "not found"}
+        return _row(row) if row else {"error": "not found"}
     try: return run_async(_go())
     except Exception as e: return {"error": str(e)}
 
@@ -229,7 +241,7 @@ def _create(tabela: str, dados: dict) -> dict:
     async def _go():
         db = await get_db()
         row = await db.fetchrow(f"INSERT INTO {tabela} ({cols}) VALUES ({ph}) RETURNING *", *vals)
-        return dict(row) if row else {"error": "insert failed"}
+        return _row(row) if row else {"error": "insert failed"}
     try: return run_async(_go())
     except Exception as e: return {"error": str(e)}
 
@@ -239,7 +251,7 @@ def _update(tabela: str, id: int, dados: dict) -> dict:
     async def _go():
         db = await get_db()
         row = await db.fetchrow(f"UPDATE {tabela} SET {sets} WHERE id = ${len(vals)} RETURNING *", *vals)
-        return dict(row) if row else {"error": "not found"}
+        return _row(row) if row else {"error": "not found"}
     try: return run_async(_go())
     except Exception as e: return {"error": str(e)}
 
@@ -348,7 +360,7 @@ def fluxo_caixa_resumo(dias=30) -> dict:
                    COALESCE(SUM(CASE WHEN tipo='saida' THEN valor ELSE 0 END),0) as total_saidas
             FROM fin_fluxo_caixa WHERE data >= CURRENT_DATE - $1::int""", dias)
         rows = await db.fetch("SELECT data, SUM(CASE WHEN tipo='entrada' THEN valor ELSE 0 END) as entradas, SUM(CASE WHEN tipo='saida' THEN valor ELSE 0 END) as saidas FROM fin_fluxo_caixa WHERE data >= CURRENT_DATE - $1::int GROUP BY data ORDER BY data", dias)
-        return {"resumo": dict(row) if row else {}, "diario": [dict(r) for r in rows]}
+        return {"resumo": _row(row) if row else {}, "diario": [_row(r) for r in rows]}
     try: return run_async(_go())
     except Exception as e: return {"resumo": {}, "diario": []}
 
@@ -360,6 +372,6 @@ def dre_resumo(mes: str = None) -> dict:
         despesas = await db.fetchval("SELECT COALESCE(SUM(ABS(valor)),0) FROM fin_dre WHERE mes = $1 AND tipo = 'despesa'", m)
         items = await db.fetch("SELECT * FROM fin_dre WHERE mes = $1 ORDER BY tipo, id", m)
         resultado = float(receitas or 0) - float(despesas or 0)
-        return {"receitas": float(receitas or 0), "despesas": float(despesas or 0), "resultado": resultado, "lucro": resultado > 0, "items": [dict(r) for r in items]}
+        return {"receitas": float(receitas or 0), "despesas": float(despesas or 0), "resultado": resultado, "lucro": resultado > 0, "items": [_row(r) for r in items]}
     try: return run_async(_go())
     except Exception as e: return {"receitas": 0, "despesas": 0, "resultado": 0, "lucro": False, "items": []}

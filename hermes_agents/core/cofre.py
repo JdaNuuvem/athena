@@ -5,12 +5,20 @@ transacional. Cofre e' a camada de categorizacao/rastreio por loja: sangria
 do PDV entra automaticamente (ver core/entidades.py::ao_fechar_caixa_pdv),
 saidas de despesa/troco e ajustes entram manualmente por aqui.
 """
+from decimal import Decimal
 from core import get_db, run_async, log
 
 AGENT = "Cofre Core"
 
 TIPOS_VALIDOS = ("entrada_sangria", "saida_troco", "saida_despesa", "ajuste")
 CATEGORIAS_DESPESA = ("mat_limpeza", "padaria", "papelaria", "passagem", "outros")
+
+
+def _row(row) -> dict:
+    """Mesma conversao de core/financeiro.py::_row — asyncpg devolve
+    DECIMAL/NUMERIC como decimal.Decimal, e o encoder JSON do Flask
+    serializa Decimal como string, nao float."""
+    return {k: (float(v) if isinstance(v, Decimal) else v) for k, v in dict(row).items()}
 
 
 def _ensure_tables():
@@ -52,11 +60,11 @@ def get_ou_criar_cofre(loja_id: int) -> dict:
         db = await get_db()
         row = await db.fetchrow("SELECT * FROM fin_cofre WHERE loja_id = $1", loja_id)
         if row:
-            return dict(row)
+            return _row(row)
         row = await db.fetchrow(
             "INSERT INTO fin_cofre (loja_id, saldo_atual) VALUES ($1, 0) ON CONFLICT (loja_id) DO UPDATE SET loja_id = EXCLUDED.loja_id RETURNING *",
             loja_id)
-        return dict(row)
+        return _row(row)
     try:
         return run_async(_go())
     except Exception as e:
@@ -85,7 +93,7 @@ def listar_movimentos(loja_id: int, dias: int = 90) -> dict:
         rows = await db.fetch(
             "SELECT * FROM fin_cofre_movimentos WHERE cofre_id = $1 AND data >= CURRENT_DATE - $2::int ORDER BY data DESC, id DESC",
             cofre["id"], dias)
-        return {"saldo_atual": float(cofre["saldo_atual"] or 0), "movimentos": [dict(r) for r in rows]}
+        return {"saldo_atual": float(cofre["saldo_atual"] or 0), "movimentos": [_row(r) for r in rows]}
     try:
         return run_async(_go())
     except Exception as e:
