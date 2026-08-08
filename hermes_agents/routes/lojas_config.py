@@ -35,14 +35,13 @@ def _registrar_secao(nome_secao: str, atualizar_fn, whitelist: set, mascarar=Non
 
 from core.lojas_operacional import atualizar_operacional, atualizar_comercial, CAMPOS_OPERACIONAL, CAMPOS_COMERCIAL
 from core.lojas_fiscal_financeiro import (
-    atualizar_fiscal, atualizar_financeiro, atualizar_estoque_config,
-    CAMPOS_FISCAL, CAMPOS_FINANCEIRO, CAMPOS_ESTOQUE_CONFIG, mascarar_para_auditoria,
+    atualizar_financeiro, atualizar_estoque_config,
+    CAMPOS_FINANCEIRO, CAMPOS_ESTOQUE_CONFIG, mascarar_para_auditoria,
 )
 from core.lojas_virtual import atualizar_virtual, atualizar_delivery, CAMPOS_VIRTUAL, CAMPOS_DELIVERY
 
 _registrar_secao("operacional", atualizar_operacional, CAMPOS_OPERACIONAL)
 _registrar_secao("comercial", atualizar_comercial, CAMPOS_COMERCIAL)
-_registrar_secao("fiscal", atualizar_fiscal, CAMPOS_FISCAL, mascarar=mascarar_para_auditoria)
 _registrar_secao("financeiro", atualizar_financeiro, CAMPOS_FINANCEIRO, mascarar=mascarar_para_auditoria)
 _registrar_secao("estoque-config", atualizar_estoque_config, CAMPOS_ESTOQUE_CONFIG)
 _registrar_secao("virtual", atualizar_virtual, CAMPOS_VIRTUAL)

@@ -112,15 +112,6 @@ class TestLojasManageExigePermissao(unittest.TestCase):
                               headers=headers)
         self.assertEqual(r.status_code, 400)
 
-    def test_atualizar_fiscal_sem_permissao_nega(self):
-        token = rbac.gerar_token_sessao(9, "gerente@x.com", "Gerente")
-        headers = {"Authorization": f"Bearer {token}"}
-        with patch("core.rbac.get_permissoes_por_usuario", return_value=[]), \
-             patch("core.lojas_fiscal_financeiro.atualizar_fiscal") as mock_fiscal:
-            r = self.client.put("/api/lojas/manage/1/fiscal", json={"regime_tributario": "simples"}, headers=headers)
-        self.assertEqual(r.status_code, 403)
-        mock_fiscal.assert_not_called()
-
     def test_vincular_responsavel_sem_permissao_nega(self):
         token = rbac.gerar_token_sessao(9, "gerente@x.com", "Gerente")
         headers = {"Authorization": f"Bearer {token}"}
@@ -153,15 +144,13 @@ class TestLojasManageExigePermissao(unittest.TestCase):
     def test_obter_loja_esconde_campos_sensiveis(self):
         headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
         loja_com_segredos = {
-            "id": 1, "nome": "Loja Charme", "token_fiscal": "segredo-super-secreto",
-            "pix_chave": "chave@pix.com", "certificado_digital": "/certs/x.pfx", "csc_nfce": "abc123",
+            "id": 1, "nome": "Loja Charme", "pix_chave": "chave@pix.com",
         }
         with patch("core.lojas.obter", return_value=loja_com_segredos):
             r = self.client.get("/api/lojas/manage/1", headers=headers)
         self.assertEqual(r.status_code, 200)
         body = r.get_json()["loja"]
-        for campo in ("token_fiscal", "pix_chave", "certificado_digital", "csc_nfce"):
-            self.assertNotIn(campo, body)
+        self.assertNotIn("pix_chave", body)
         self.assertEqual(body["nome"], "Loja Charme")
 
     def test_listar_integracoes_sem_permissao_nega(self):

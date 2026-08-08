@@ -658,8 +658,6 @@ export const api = {
     request<{ success?: boolean; error?: string }>(`/api/lojas/manage/${id}/operacional`, { method: "PUT", body: JSON.stringify(campos) }),
   lojasComercialAtualizar: (id: number, campos: Record<string, unknown>) =>
     request<{ success?: boolean; error?: string }>(`/api/lojas/manage/${id}/comercial`, { method: "PUT", body: JSON.stringify(campos) }),
-  lojasFiscalAtualizar: (id: number, campos: Record<string, unknown>) =>
-    request<{ success?: boolean; error?: string }>(`/api/lojas/manage/${id}/fiscal`, { method: "PUT", body: JSON.stringify(campos) }),
   lojasFinanceiroAtualizar: (id: number, campos: Record<string, unknown>) =>
     request<{ success?: boolean; error?: string }>(`/api/lojas/manage/${id}/financeiro`, { method: "PUT", body: JSON.stringify(campos) }),
   lojasEstoqueConfigAtualizar: (id: number, campos: Record<string, unknown>) =>
@@ -1739,11 +1737,6 @@ export async function fiscalUpdate(tabela: string, id: number, data: Record<stri
 
 export async function fiscalDelete(tabela: string, id: number): Promise<{ success: boolean }> {
   const res = await fetch(`/api/fiscal/${tabela}/${id}`, { method: "DELETE" });
-  return res.json();
-}
-
-export async function fiscalCalcularTributos(notaId: number): Promise<Record<string, unknown>> {
-  const res = await fetch(`/api/fiscal/tributos/calcular/${notaId}`);
   return res.json();
 }
 

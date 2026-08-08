@@ -1,4 +1,4 @@
-"""PDV Core — Vendas, Caixa, Pagamentos, Sangria, Suprimento, Fechamento, NFCe"""
+"""PDV Core — Vendas, Caixa, Pagamentos, Sangria, Suprimento, Fechamento"""
 from datetime import datetime
 from core import get_db, run_async, log
 from core.estoque import saida_async, entrada_async
@@ -347,12 +347,6 @@ def _ensure_tables():
                 "Admin", None, "admin", 100)
             log(AGENT, "Operador PDV padrao 'Admin' criado sem senha — defina uma senha em Cadastros > Operadores antes de usar o PDV")
 
-        await db.execute("""CREATE TABLE IF NOT EXISTS pdv_nfce (
-            id SERIAL PRIMARY KEY, venda_id INT REFERENCES pdv_vendas(id),
-            numero VARCHAR(20), chave_acesso VARCHAR(50), serie VARCHAR(10),
-            status VARCHAR(30) DEFAULT 'emitida', xml_url VARCHAR(500),
-            data_emissao TIMESTAMP DEFAULT NOW()
-        )""")
     try: run_async(_go())
     except Exception as e: log(AGENT, f"Erro tabelas PDV: {e}")
 
@@ -422,7 +416,7 @@ def _delete(t: str, id: int) -> dict:
     try: run_async(_go()); return {"success": True}
     except Exception as e: return {"error": str(e)}
 
-TABLES = ["caixas","vendas","itens","pagamentos","sangrias","suprimentos","nfce","operadores","turnos","devolucoes"]
+TABLES = ["caixas","vendas","itens","pagamentos","sangrias","suprimentos","operadores","turnos","devolucoes"]
 
 # operadores guarda hash de senha/PIN/codigo de barras — o CRUD generico nunca
 # pode ler nem escrever esses campos direto (leitura vazaria hash pro cliente;

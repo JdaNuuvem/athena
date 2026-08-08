@@ -15,51 +15,6 @@ def fiscal_dashboard():
     return _go()
 
 
-@fiscal_bp.route("/tabelas/cfop", methods=["GET"])
-def fiscal_tabelas_cfop():
-    @requer_permissao("fiscal.ver")
-    def _go():
-        async def _query():
-            db = await get_db()
-            rows = await db.fetch("SELECT DISTINCT cfop as codigo, natureza_operacao as descricao, tipo FROM fiscal_notas_fiscais WHERE cfop IS NOT NULL AND cfop != '' ORDER BY cfop LIMIT 50")
-            return [dict(r) for r in (rows or [])]
-        try:
-            return jsonify(run_async(_query()))
-        except Exception:
-            return jsonify([])
-    return _go()
-
-
-@fiscal_bp.route("/tabelas/ncm", methods=["GET"])
-def fiscal_tabelas_ncm():
-    @requer_permissao("fiscal.ver")
-    def _go():
-        async def _query():
-            db = await get_db()
-            rows = await db.fetch("SELECT DISTINCT ncm as codigo, '' as descricao FROM fiscal_nfe_itens WHERE ncm IS NOT NULL AND ncm != '' ORDER BY ncm LIMIT 50")
-            return [dict(r) for r in (rows or [])]
-        try:
-            return jsonify(run_async(_query()))
-        except Exception:
-            return jsonify([])
-    return _go()
-
-
-@fiscal_bp.route("/tabelas/cest", methods=["GET"])
-def fiscal_tabelas_cest():
-    @requer_permissao("fiscal.ver")
-    def _go():
-        async def _query():
-            db = await get_db()
-            rows = await db.fetch("SELECT DISTINCT cest as codigo, '' as descricao FROM fiscal_nfe_itens WHERE cest IS NOT NULL AND cest != '' ORDER BY cest LIMIT 50")
-            return [dict(r) for r in (rows or [])]
-        try:
-            return jsonify(run_async(_query()))
-        except Exception:
-            return jsonify([])
-    return _go()
-
-
 @fiscal_bp.route("/<tabela>", methods=["GET"])
 def fiscal_list(tabela):
     from core.fiscal import list as fl, listar_filtrado, TABLES
@@ -136,16 +91,6 @@ def fiscal_delete(tabela, id):
         if not resultado.get("error"):
             auditar_exclusao("fiscal", tabela, id, dados_antes if not dados_antes.get("error") else None)
         return jsonify(resultado)
-    return _go()
-
-
-@fiscal_bp.route("/tributos/calcular/<int:nota_id>", methods=["GET"])
-def fiscal_calcular_tributos(nota_id):
-    from core.fiscal import calcular_tributos_nota
-
-    @requer_permissao("fiscal.ver")
-    def _go():
-        return jsonify(calcular_tributos_nota(nota_id))
     return _go()
 
 

@@ -4,7 +4,7 @@ from core import get_db, run_async, log, hoje
 
 AGENT = "Fiscal Core"
 
-TABLES = ["tributos","obrigacoes","notas_fiscais","nfe_itens","impostos_nota","contas_receber_bling","contas_pagar_bling"]
+TABLES = ["tributos","obrigacoes","notas_fiscais","nfe_itens","impostos_nota"]
 
 def _ensure_tables():
     async def _go():
@@ -70,28 +70,6 @@ def _ensure_tables():
             base_calculo DECIMAL(12,2) DEFAULT 0, aliquota DECIMAL(8,4) DEFAULT 0,
             valor DECIMAL(12,2) DEFAULT 0, retido BOOLEAN DEFAULT false,
             created_at TIMESTAMP DEFAULT NOW()
-        )""")
-        await db.execute("""CREATE TABLE IF NOT EXISTS fiscal_contas_receber_bling (
-            id SERIAL PRIMARY KEY, bling_id BIGINT,
-            numero VARCHAR(50), descricao VARCHAR(200),
-            contato_nome VARCHAR(200), contato_documento VARCHAR(20),
-            valor DECIMAL(12,2) DEFAULT 0, valor_pago DECIMAL(12,2) DEFAULT 0,
-            vencimento DATE, data_recebimento DATE, data_emissao DATE,
-            situacao VARCHAR(30) DEFAULT 'pendente', forma_pagamento VARCHAR(50),
-            portador VARCHAR(100), categoria VARCHAR(100),
-            data_pagamento DATE, competencia VARCHAR(7),
-            sincronizado_em TIMESTAMP DEFAULT NOW(), created_at TIMESTAMP DEFAULT NOW()
-        )""")
-        await db.execute("""CREATE TABLE IF NOT EXISTS fiscal_contas_pagar_bling (
-            id SERIAL PRIMARY KEY, bling_id BIGINT,
-            numero VARCHAR(50), descricao VARCHAR(200),
-            fornecedor_nome VARCHAR(200), fornecedor_documento VARCHAR(20),
-            valor DECIMAL(12,2) DEFAULT 0, valor_pago DECIMAL(12,2) DEFAULT 0,
-            vencimento DATE, data_pagamento DATE, data_emissao DATE,
-            situacao VARCHAR(30) DEFAULT 'pendente', forma_pagamento VARCHAR(50),
-            portador VARCHAR(100), categoria VARCHAR(100),
-            competencia VARCHAR(7),
-            sincronizado_em TIMESTAMP DEFAULT NOW(), created_at TIMESTAMP DEFAULT NOW()
         )""")
         # Snapshot congelado de apuracao fechada por (ano, mes) — antes a
         # apuracao era so' um SUM() ao vivo, sem nenhum registro de "isso foi
@@ -170,7 +148,7 @@ def delete(t: str, i: int): return _delete(f"fiscal_{t}", i)
 
 # ── Listagem com filtro de data ──
 
-DATE_FIELDS = {"notas_fiscais": "data_emissao", "obrigacoes": "data_vencimento", "contas_receber_bling": "vencimento", "contas_pagar_bling": "vencimento"}
+DATE_FIELDS = {"notas_fiscais": "data_emissao", "obrigacoes": "data_vencimento"}
 
 def _list_filtered(t: str, date_field: str, data_inicio: str = "", data_fim: str = "", dias: int = 0, order: str = "id DESC", limit: int = 500) -> list:
     async def _go():
@@ -220,43 +198,6 @@ def impostos_da_nota(nota_id: int) -> list:
         return [dict(r) for r in rows]
     try: return run_async(_go())
     except Exception as e: log(AGENT, f"impostos_da_nota {nota_id}: {e}"); return []
-
-# ── Tributos ──
-
-def calcular_tributos_nota(nota_id: int) -> dict:
-    """Aplica a aliquota de cada tributo ATIVO sobre valor_produtos da nota.
-
-    ponytail: usa Decimal, nao float, pro calculo em si — asyncpg ja devolve
-    colunas NUMERIC/DECIMAL como Decimal nativo; converter pra float antes de
-    multiplicar/dividir reintroduz erro de arredondamento de ponto flutuante
-    num calculo fiscal (a coluna do banco e' DECIMAL exatamente pra evitar
-    isso). Converte pra float so' na saida, pra serializar em JSON.
-
-    Atencao (limitacao de dominio, nao bug de codigo): esta funcao soma
-    cegamente TODOS os tributos ativos sobre a mesma base — nao distingue
-    regime (Simples Nacional substitui ICMS/PIS/COFINS/IPI, nao soma com
-    eles), nem tipo de operacao (ISS de servico vs ICMS de mercadoria nao
-    coexistem na mesma nota). Nao ha nenhuma tela usando esse endpoint hoje;
-    exige regra de negocio fiscal real (contador/especialista) antes de
-    expor pra uso operacional."""
-    from decimal import Decimal, ROUND_HALF_UP
-    async def _go():
-        db = await get_db()
-        nota = await db.fetchrow("SELECT * FROM fiscal_notas_fiscais WHERE id = $1", nota_id)
-        if not nota: return {"error": "nota nao encontrada"}
-        tributos = await db.fetch("SELECT * FROM fiscal_tributos WHERE ativo = true")
-        base = Decimal(nota["valor_produtos"] or 0)
-        total = Decimal("0")
-        calculated = []
-        for trib in tributos:
-            t = dict(trib)
-            aliq = Decimal(t["aliquota"] or 0)
-            valor = (base * aliq / Decimal(100)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-            total += valor
-            calculated.append({"nome": t["nome"], "sigla": t["sigla"], "aliquota_pct": float(aliq), "valor": float(valor)})
-        return {"nota_id": nota_id, "base_calculo": float(base), "tributos": calculated, "total_tributos": float(total)}
-    try: return run_async(_go())
-    except Exception as e: return {"error": str(e)}
 
 # ── Obrigacoes ──
 
