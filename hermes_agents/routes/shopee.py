@@ -229,7 +229,8 @@ def shopee_produtos_sincronizados():
         loja_id = request.args.get("loja_id", type=int)
         if not loja_id:
             return jsonify({"error": "loja_id obrigatorio"}), 400
-        return jsonify({"produtos": listar_produtos_sincronizados(loja_id)})
+        dias = request.args.get("dias", default=90, type=int)
+        return jsonify({"produtos": listar_produtos_sincronizados(loja_id, dias)})
     return _handler()
 
 @shopee_bp.route('/pedidos', methods=['GET'])

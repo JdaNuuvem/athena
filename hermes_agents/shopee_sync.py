@@ -521,9 +521,11 @@ def atualizar_vinculo_pedido(order_sn: str, shop_id: str, **campos) -> dict:
     except Exception as e:
         return {"erro": str(e)}
 
-def listar_produtos_sincronizados(loja_id: int) -> list:
+def listar_produtos_sincronizados(loja_id: int, dias: int = 90) -> list:
     """Produtos ja sincronizados (tabela anuncios) para uma loja Shopee especifica —
-    usado pela aba Produtos, sem bater na API da Shopee a cada carregamento de tela."""
+    usado pela aba Produtos, sem bater na API da Shopee a cada carregamento de tela.
+    `qtd_vendida` soma vendas_itens dessa loja nos ultimos `dias` dias — usado pro
+    filtro "mais vendidos" da aba Anuncios em /estoque."""
     async def _go():
         db = await get_db()
         shop_id = get_shopee_config(loja_id).get("shop_id") or ""
@@ -531,12 +533,20 @@ def listar_produtos_sincronizados(loja_id: int) -> list:
             return []
         rows = await db.fetch("""
             SELECT a.sku, a.titulo, a.preco, a.estoque, a.status, a.anuncio_id, a.ultima_atualizacao,
-                   COALESCE(a.imagem_url, c.imagem_url) AS imagem_url
+                   COALESCE(a.imagem_url, c.imagem_url) AS imagem_url,
+                   COALESCE(vendas.qtd_vendida, 0) AS qtd_vendida
             FROM anuncios a
             LEFT JOIN catalogo_produtos c ON c.sku = a.sku
+            LEFT JOIN LATERAL (
+                SELECT SUM(vi.quantidade) AS qtd_vendida
+                FROM vendas_itens vi
+                JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
+                WHERE vi.sku = a.sku AND vp.loja_id = $2 AND vp.status != 'cancelado'
+                  AND vp.data >= CURRENT_DATE - $3::int
+            ) vendas ON TRUE
             WHERE a.marketplace = 'shopee' AND a.shop_id = $1
             ORDER BY a.titulo
-        """, shop_id)
+        """, shop_id, loja_id, dias)
         return [dict(r) for r in rows]
     try:
         return run_async(_go())

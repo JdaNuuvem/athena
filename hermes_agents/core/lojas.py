@@ -334,7 +334,8 @@ def listar() -> list:
         # silenciosamente qualquer markup real configurado.
         rows = await db.fetch(
             "SELECT id, nome, ativa, created_at, bling_id, tipo, "
-            "shopee_markup_pct, grupos_publicacao FROM lojas ORDER BY id")
+            "shopee_markup_pct, grupos_publicacao, (shopee_shop_id IS NOT NULL) AS shopee_conectado "
+            "FROM lojas ORDER BY id")
         return [dict(r) for r in rows]
     try: return run_async(_go())
     except Exception as e: _log_erro("listar", e); return []

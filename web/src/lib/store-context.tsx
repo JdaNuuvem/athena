@@ -9,6 +9,7 @@ export interface LojaInfo {
   ativa: boolean;
   bling_id?: number | null;
   tipo?: "fisica" | "virtual";
+  shopee_conectado?: boolean;
 }
 
 interface StoreContextValue {

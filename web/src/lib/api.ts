@@ -230,8 +230,8 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ loja_id: lojaId, quantidade }),
     }),
-  shopeeProdutosSincronizados: (lojaId: number) =>
-    request<{ produtos: ShopeeProdutoSincronizado[]; error?: string }>(`/api/shopee/produtos-sincronizados?loja_id=${lojaId}`),
+  shopeeProdutosSincronizados: (lojaId: number, dias?: number) =>
+    request<{ produtos: ShopeeProdutoSincronizado[]; error?: string }>(`/api/shopee/produtos-sincronizados?loja_id=${lojaId}${dias ? `&dias=${dias}` : ""}`),
   shopeeEstoqueTodasLojas: (sku: string, quantidade: number) =>
     request<{ total: number; sucesso: number; erro?: string; resultados: Array<{ loja_id: number; loja_nome: string; resultado: Record<string, unknown> }> }>("/api/shopee/estoque/todas-lojas", {
       method: "POST",
@@ -1006,6 +1006,7 @@ export interface ShopeeProdutoSincronizado {
   anuncio_id: string;
   imagem_url?: string | null;
   ultima_atualizacao: string | null;
+  qtd_vendida: number;
 }
 
 export interface EstoqueRapidoLoja {

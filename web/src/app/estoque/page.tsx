@@ -3,6 +3,7 @@
 import { useStore } from "@/lib/store-context";
 import EstoqueFisicoI9Logic from "./_components/EstoqueFisicoI9Logic";
 import EstoqueRapidoVirtual from "./_components/EstoqueRapidoVirtual";
+import AnunciosShopeeTab from "./_components/AnunciosShopeeTab";
 
 export default function EstoquePage() {
   const { lojaId, lojas, tipoLojaSelecionada } = useStore();
@@ -26,6 +27,8 @@ export default function EstoquePage() {
         </div>
       ) : tipoLojaSelecionada === "fisica" ? (
         <EstoqueFisicoI9Logic lojaId={loja.id} lojaNome={loja.nome} />
+      ) : tipoLojaSelecionada === "virtual" && loja.shopee_conectado ? (
+        <AnunciosShopeeTab lojaId={loja.id} lojaNome={loja.nome} />
       ) : (
         <EstoqueRapidoVirtual lojaNome={loja.nome} />
       )}
