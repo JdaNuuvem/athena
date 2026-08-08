@@ -93,6 +93,41 @@ def i9logic_comparar():
     return _go()
 
 
+@i9logic_bp.route("/divergencias-athena", methods=["GET"])
+def i9logic_divergencias_athena():
+    """Comparacao Athena x i9Logic EM LOTE — diferente de /divergencias
+    (fisico x contabil, interno ao i9Logic). Ver core.i9logic.listar_divergencias_athena."""
+    @requer_permissao("estoque.ver")
+    def _go():
+        from core.i9logic import listar_divergencias_athena
+        return jsonify(listar_divergencias_athena(request.args.get("loja", "")))
+    return _go()
+
+
+@i9logic_bp.route("/divergencias-athena/ajustar", methods=["POST"])
+def i9logic_divergencias_athena_ajustar():
+    """Ajusta o saldo Athena pro fisico i9Logic coletado — mesma direcao de
+    aplicar_ajuste_divergencia, mas por (sku, loja) direto (esta comparacao
+    nao tem snapshot_id proprio, e' calculada em memoria)."""
+    @requer_permissao("estoque.editar")
+    def _go():
+        from core.estoque import ajustar_absoluto
+        dados = request.get_json(silent=True) or {}
+        sku = str(dados.get("sku", "")).strip()
+        loja = str(dados.get("loja", "")).strip()
+        quantidade = dados.get("quantidade")
+        if not sku or not loja or quantidade is None:
+            return jsonify({"erro": "sku, loja e quantidade sao obrigatorios"}), 400
+        usuario = usuario_atual_da_request()
+        resultado = ajustar_absoluto(
+            sku, loja, float(quantidade), motivo="ajuste_inventario",
+            usuario_id=usuario.get("user_id"), usuario_nome=usuario.get("nome", ""))
+        if resultado.get("erro"):
+            return jsonify(resultado), 400
+        return jsonify(resultado)
+    return _go()
+
+
 @i9logic_bp.route("/seed", methods=["POST"])
 def i9logic_seed():
     @requer_permissao("estoque.editar")
