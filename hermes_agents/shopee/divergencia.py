@@ -9,6 +9,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from datetime import datetime
 from core import get_db, run_async, log
 from core.lojas import obter as obter_loja
+from core.estoque_divergencia import classificar_divergencia
+from core.estoque import ajustar_absoluto
 from .products import sync_all_items
 
 AGENT = "Shopee Divergencia"
@@ -125,3 +127,102 @@ def disparar_coleta_se_necessario(loja_id: int, data_coleta) -> bool:
     if deve_iniciar:
         threading.Thread(target=_coleta_em_background, args=(loja_id,), daemon=True).start()
     return ja_rodando or deve_iniciar
+
+
+def listar_divergencias(loja_id: int) -> dict:
+    """Le o snapshot mais recente da loja (disparando coleta se
+    necessario), resolve o nome da loja, e pra cada sku compara qtd_shopee
+    contra core.estoque_saldos.saldo() — mesmo formato de retorno de
+    core.i9logic.listar_divergencias_athena, pra o frontend tratar os dois
+    lados de forma simetrica."""
+    from core.estoque_saldos import saldo  # import local (nao no topo do modulo):
+    # precisa resolver core.estoque_saldos.saldo em tempo de chamada, nao em tempo
+    # de import do modulo, senao o patch("core.estoque_saldos.saldo", ...) usado
+    # nos testes (e no i9logic.py, mesmo padrao la') nao teria efeito aqui.
+    loja = obter_loja(loja_id)
+    nome_loja = loja["nome"] if loja else ""
+    data_coleta, itens = snapshot_mais_recente(loja_id)
+    processando = disparar_coleta_se_necessario(loja_id, data_coleta)
+    divergencias = []
+    for item in itens:
+        qtd_shopee = float(item["qtd_shopee"] or 0)
+        disponivel_athena = saldo(item["sku"], nome_loja, "disponivel")
+        divergencias.append({
+            "id": item["id"],
+            "sku": item["sku"],
+            "qtd_shopee": qtd_shopee,
+            "disponivel_athena": disponivel_athena,
+            "divergencia": round(disponivel_athena - qtd_shopee, 3),
+            "classificacao": classificar_divergencia(qtd_shopee, disponivel_athena),
+            "revisado": item.get("revisado", False),
+        })
+    return {
+        "ok": True,
+        "status": "processando" if processando else "pronto",
+        "data_coleta": data_coleta.isoformat() if data_coleta else None,
+        "data": divergencias,
+    }
+
+
+def marcar_revisado(snapshot_id: int) -> dict:
+    """Aceita a divergencia como conhecida — so' marca revisado, nunca
+    ajusta saldo. Identico em forma a core.i9logic.marcar_revisado."""
+    async def _go():
+        db = await get_db()
+        row = await db.fetchrow(
+            "UPDATE shopee_estoque_snapshot SET revisado=TRUE WHERE id=$1 RETURNING *", snapshot_id)
+        return dict(row) if row else None
+    try:
+        r = run_async(_go())
+        return {"ok": True, "snapshot": r} if r else {"erro": "snapshot nao encontrado"}
+    except Exception as e:
+        return {"erro": str(e)}
+
+
+def _buscar_snapshot(snapshot_id: int):
+    async def _go():
+        db = await get_db()
+        return await db.fetchrow(
+            "SELECT sku, loja_id, qtd_shopee FROM shopee_estoque_snapshot WHERE id=$1", snapshot_id)
+    try:
+        row = run_async(_go())
+        return dict(row) if row else None
+    except Exception:
+        return None
+
+
+def _snapshot_mais_recente_id(sku: str, loja_id: int):
+    async def _go():
+        db = await get_db()
+        return await db.fetchval(
+            "SELECT id FROM shopee_estoque_snapshot WHERE sku=$1 AND loja_id=$2 "
+            "ORDER BY data_coleta DESC LIMIT 1", sku, loja_id)
+    try:
+        return run_async(_go())
+    except Exception:
+        return None
+
+
+def aplicar_ajuste_divergencia(snapshot_id: int, usuario_id: int = None, usuario_nome: str = "") -> dict:
+    """Le o snapshot (sku, qtd_shopee), resolve o nome da loja a partir de
+    loja_id, chama core.estoque.ajustar_absoluto(sku, nome_loja, qtd_shopee,
+    ...). Mesma guarda de frescor do i9Logic: so' aplica se for o snapshot
+    mais recente pra aquele sku/loja."""
+    snap = _buscar_snapshot(snapshot_id)
+    if not snap:
+        return {"erro": "snapshot nao encontrado"}
+    id_mais_recente = _snapshot_mais_recente_id(snap["sku"], snap["loja_id"])
+    if id_mais_recente is not None and id_mais_recente != snapshot_id:
+        return {"erro": f"este snapshot (id={snapshot_id}) nao e' o mais recente pra este sku/loja "
+                         f"(o mais recente e' id={id_mais_recente}) - ajuste a partir do mais recente"}
+    loja = obter_loja(snap["loja_id"])
+    nome_loja = loja["nome"] if loja else ""
+    resultado = ajustar_absoluto(
+        snap["sku"], nome_loja, float(snap["qtd_shopee"] or 0),
+        motivo="ajuste_inventario", usuario_id=usuario_id, usuario_nome=usuario_nome)
+    if resultado.get("erro"):
+        return resultado
+    marcado = marcar_revisado(snapshot_id)
+    if marcado.get("erro"):
+        return {"erro": f"ajuste aplicado mas falha ao marcar revisado: {marcado['erro']}", "ajuste": resultado}
+    return {"ok": True, "ajuste": resultado, "snapshot": marcado.get("snapshot")}

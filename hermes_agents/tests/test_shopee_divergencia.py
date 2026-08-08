@@ -115,5 +115,79 @@ class TestDispararColetaSeNecessario(unittest.TestCase):
             divergencia._coleta_em_andamento.discard(1)
 
 
+class TestListarDivergencias(unittest.TestCase):
+    def test_calcula_divergencia_contra_saldo_athena(self):
+        itens = [{"id": 1, "sku": "SKU-A", "item_id_shopee": "111", "qtd_shopee": 50}]
+        with patch("shopee.divergencia.snapshot_mais_recente", return_value=(datetime.now(), itens)), \
+             patch("shopee.divergencia.disparar_coleta_se_necessario", return_value=False), \
+             patch("shopee.divergencia.obter_loja", return_value={"id": 1, "nome": "Loja Online"}), \
+             patch("core.estoque_saldos.saldo", return_value=44.0):
+            resultado = divergencia.listar_divergencias(1)
+        self.assertEqual(len(resultado["data"]), 1)
+        item = resultado["data"][0]
+        self.assertEqual(item["qtd_shopee"], 50.0)
+        self.assertEqual(item["disponivel_athena"], 44.0)
+        self.assertEqual(item["divergencia"], -6.0)
+        self.assertEqual(item["classificacao"], "alerta")
+        self.assertEqual(resultado["status"], "pronto")
+
+    def test_snapshot_ausente_dispara_coleta_e_retorna_processando(self):
+        with patch("shopee.divergencia.snapshot_mais_recente", return_value=(None, [])), \
+             patch("shopee.divergencia.disparar_coleta_se_necessario", return_value=True), \
+             patch("shopee.divergencia.obter_loja", return_value={"id": 1, "nome": "Loja Online"}):
+            resultado = divergencia.listar_divergencias(1)
+        self.assertEqual(resultado["data"], [])
+        self.assertEqual(resultado["status"], "processando")
+
+
+class TestMarcarRevisado(unittest.TestCase):
+    def test_marca_revisado_true(self):
+        async def fake_fetchrow(query, *params):
+            return {"id": 1, "sku": "SKU-A", "revisado": True}
+        with patch("shopee.divergencia.get_db") as mock_get_db:
+            db = AsyncMock()
+            db.fetchrow = AsyncMock(side_effect=fake_fetchrow)
+            mock_get_db.return_value = db
+            resultado = divergencia.marcar_revisado(1)
+        self.assertTrue(resultado["ok"])
+
+    def test_snapshot_inexistente_retorna_erro(self):
+        async def fake_fetchrow(query, *params):
+            return None
+        with patch("shopee.divergencia.get_db") as mock_get_db:
+            db = AsyncMock()
+            db.fetchrow = AsyncMock(side_effect=fake_fetchrow)
+            mock_get_db.return_value = db
+            resultado = divergencia.marcar_revisado(999)
+        self.assertIn("erro", resultado)
+
+
+class TestAplicarAjusteDivergencia(unittest.TestCase):
+    def test_aplica_ajuste_com_sucesso(self):
+        async def fake_buscar():
+            return {"sku": "SKU-A", "loja_id": 1, "qtd_shopee": 50}
+        with patch("shopee.divergencia._buscar_snapshot", return_value={"sku": "SKU-A", "loja_id": 1, "qtd_shopee": 50}), \
+             patch("shopee.divergencia._snapshot_mais_recente_id", return_value=1), \
+             patch("shopee.divergencia.obter_loja", return_value={"id": 1, "nome": "Loja Online"}), \
+             patch("shopee.divergencia.ajustar_absoluto", return_value={"ok": True}) as mock_ajustar, \
+             patch("shopee.divergencia.marcar_revisado", return_value={"ok": True}):
+            resultado = divergencia.aplicar_ajuste_divergencia(1, usuario_id=7, usuario_nome="Op")
+        self.assertTrue(resultado["ok"])
+        mock_ajustar.assert_called_once_with(
+            "SKU-A", "Loja Online", 50, motivo="ajuste_inventario", usuario_id=7, usuario_nome="Op")
+
+    def test_snapshot_desatualizado_recusa_ajuste(self):
+        with patch("shopee.divergencia._buscar_snapshot", return_value={"sku": "SKU-A", "loja_id": 1, "qtd_shopee": 50}), \
+             patch("shopee.divergencia._snapshot_mais_recente_id", return_value=2):
+            resultado = divergencia.aplicar_ajuste_divergencia(1)
+        self.assertIn("erro", resultado)
+        self.assertIn("nao e' o mais recente", resultado["erro"])
+
+    def test_snapshot_nao_encontrado_retorna_erro(self):
+        with patch("shopee.divergencia._buscar_snapshot", return_value=None):
+            resultado = divergencia.aplicar_ajuste_divergencia(999)
+        self.assertIn("erro", resultado)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
