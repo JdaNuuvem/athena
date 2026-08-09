@@ -490,7 +490,7 @@ def ml_recomendacoes(dias: int = 90, minimo_ocorrencias: int = 3) -> list:
 
 # ── Capital parado em estoque ──
 
-def estoque_parado(dias: int = 60, limite: int = 10) -> list:
+def estoque_parado(dias: int = 60, limite: int = 10, loja_id: int = None) -> list:
     """Produtos com saldo em estoque mas sem nenhuma venda nos ultimos `dias` —
     capital imobilizado parado, calculado cruzando saldo real (estoque_lojas)
     com historico real de venda (vendas_itens/pdv_itens), nada estimado."""
@@ -501,15 +501,17 @@ def estoque_parado(dias: int = 60, limite: int = 10) -> list:
             FROM estoque_lojas e
             JOIN catalogo_produtos c ON c.sku = e.sku
             WHERE e.quantidade > 0
+              AND ($2::int IS NULL OR e.loja_id = $2)
               AND e.sku NOT IN (
                   SELECT DISTINCT i.sku FROM vendas_itens i JOIN vendas_pedidos p ON p.id = i.pedido_id
                   WHERE p.data >= CURRENT_DATE - $1::int AND p.status != 'cancelado' AND i.sku IS NOT NULL
+                    AND ($2::int IS NULL OR p.loja_id = $2)
                   UNION
                   SELECT DISTINCT i.produto_codigo FROM pdv_itens i JOIN pdv_vendas v ON v.id = i.venda_id
                   WHERE DATE(v.data) >= CURRENT_DATE - $1::int AND i.produto_codigo IS NOT NULL
               )
             GROUP BY e.sku
-        """, dias)
+        """, dias, loja_id)
         return [dict(r) for r in rows]
     try:
         linhas = run_async(_go())

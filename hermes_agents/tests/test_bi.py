@@ -161,5 +161,27 @@ class TestMLRecomendacoes(unittest.TestCase):
         self.assertEqual(resultado[0]["receitaEstimada"], 800.0)
 
 
+class TestEstoqueParado(unittest.TestCase):
+    @patch("core.bi.get_db")
+    def test_estoque_parado_repassa_loja_id_pra_query(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = []
+        mock_get_db.return_value = fake_db
+
+        bi.estoque_parado(60, 10, loja_id=4)
+
+        self.assertEqual(fake_db.fetch.call_args.args[1:], (60, 4))
+
+    @patch("core.bi.get_db")
+    def test_estoque_parado_sem_loja_id_mantem_comportamento_atual(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = []
+        mock_get_db.return_value = fake_db
+
+        bi.estoque_parado(60, 10)
+
+        self.assertEqual(fake_db.fetch.call_args.args[1:], (60, None))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

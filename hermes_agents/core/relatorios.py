@@ -337,13 +337,14 @@ def rupturas():
 
 # ── 17. Curva ABC ──
 
-def curvas(dias=90):
+def curvas(dias=90, loja_id=None):
     async def _go():
         db = await get_db()
         rows = await db.fetch("""SELECT vi.sku, vi.descricao, SUM(vi.valor_total) as valor_total, SUM(vi.quantidade) as qtd
             FROM vendas_itens vi JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
             WHERE vp.data >= CURRENT_DATE - $1::int AND vp.status != 'cancelado'
-            GROUP BY vi.sku, vi.descricao ORDER BY valor_total DESC LIMIT 30""", dias)
+              AND ($2::int IS NULL OR vp.loja_id = $2)
+            GROUP BY vi.sku, vi.descricao ORDER BY valor_total DESC LIMIT 30""", dias, loja_id)
         items = [dict(r) for r in (rows or [])]
         for it in items:
             it["valor_total"] = float(it.get("valor_total", 0) or 0)
@@ -376,14 +377,19 @@ def produtos(dias=30):
 
 SHOPEE_COMISSAO_PCT = 12  # mesma taxa default de shopee/pricing.calcular_margem_produto
 
-def ranking_produtos(dias=30):
+def ranking_produtos(dias=30, loja_id=None):
     """Lucro/vendas por SKU somando Bling+marketplaces (vendas_itens/vendas_pedidos,
     mesma fonte unificada de produtos()/curvas() acima) e PDV loja fisica
     (pdv_itens/pdv_vendas, canal direto sem sync). Comissao de marketplace so'
     e' deduzida do canal 'shopee' (taxa conhecida via env var/config); demais
     marketplaces sincronizados via Bling entram brutos de comissao por falta
     de taxa cadastrada por canal — nao inventa numero. PDV e' de fato sem
-    comissao (venda direta), entao 0 ali e' o valor correto, nao uma lacuna."""
+    comissao (venda direta), entao 0 ali e' o valor correto, nao uma lacuna.
+
+    loja_id opcional: filtra so' os pedidos daquela loja. Bling/Shopee ja
+    grava loja_id resolvido no sync (shop_id->loja), i9Logic idem
+    (filial->loja) — filtrar por loja_id ja' separa Shopee de i9Logic sem
+    precisar checar tipo de loja em lugar nenhum."""
     async def _go():
         db = await get_db()
         vendas_rows = await db.fetch(f"""
@@ -396,6 +402,7 @@ def ranking_produtos(dias=30):
                        CASE WHEN vp.total > 0 THEN vi.valor_total / vp.total * COALESCE(vp.frete, 0) ELSE 0 END AS frete_alocado
                 FROM vendas_itens vi JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
                 WHERE vp.data >= CURRENT_DATE - $1::int AND vp.status != 'cancelado'
+                  AND ($2::int IS NULL OR vp.loja_id = $2)
                 UNION ALL
                 SELECT pi.produto_codigo AS sku, pi.quantidade AS quantidade, pi.valor_total AS valor_total,
                        'pdv' AS canal, 0 AS frete_alocado
@@ -404,7 +411,7 @@ def ranking_produtos(dias=30):
             ) unificado
             WHERE sku IS NOT NULL AND sku != ''
             GROUP BY sku
-        """, dias)
+        """, dias, loja_id)
         if not vendas_rows:
             return []
         skus = [r["sku"] for r in vendas_rows]
@@ -442,7 +449,7 @@ def ranking_produtos(dias=30):
 
 # ── 18c. Tendencia e risco de ruptura por produto ──
 
-def produtos_tendencia(dias=30):
+def produtos_tendencia(dias=30, loja_id=None):
     """Crescimento de vendas por SKU: periodo atual vs periodo anterior de
     mesmo tamanho. anterior=0 com atual>0 vira crescimento_pct=None (produto
     novo/reativado, sem base de comparacao pra inventar percentual) — mesma
@@ -457,8 +464,9 @@ def produtos_tendencia(dias=30):
             FROM vendas_itens vi JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
             WHERE vp.data >= CURRENT_DATE - $1::int * 2 AND vp.status != 'cancelado'
               AND vi.sku IS NOT NULL AND vi.sku != ''
+              AND ($2::int IS NULL OR vp.loja_id = $2)
             GROUP BY vi.sku
-        """, dias)
+        """, dias, loja_id)
         return [dict(r) for r in (rows or [])]
     try:
         linhas = run_async(_go())
@@ -480,7 +488,7 @@ def produtos_tendencia(dias=30):
     return resultado
 
 
-def risco_ruptura(dias=30):
+def risco_ruptura(dias=30, loja_id=None):
     """Produtos vendendo bem MAS com estoque acabando — velocidade de venda
     alta, estoque baixo. Diferente de 'parado' (zero venda) e de rupturas()
     (zero estoque, ja consumada) — aqui e' o alerta ANTES de zerar."""
@@ -489,12 +497,14 @@ def risco_ruptura(dias=30):
         db = await get_db()
         rows = await db.fetch(f"""
             SELECT vi.sku, MAX(vi.descricao) AS descricao, SUM(vi.quantidade) AS qtd_vendida,
-                   (SELECT COALESCE(SUM(e.quantidade), 0) FROM estoque_lojas e WHERE e.sku = vi.sku) AS estoque_atual
+                   (SELECT COALESCE(SUM(e.quantidade), 0) FROM estoque_lojas e
+                    WHERE e.sku = vi.sku AND ($2::int IS NULL OR e.loja_id = $2)) AS estoque_atual
             FROM vendas_itens vi JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
             WHERE vp.data >= CURRENT_DATE - $1::int AND vp.status != 'cancelado'
               AND vi.sku IS NOT NULL AND vi.sku != ''
+              AND ($2::int IS NULL OR vp.loja_id = $2)
             GROUP BY vi.sku
-        """, dias)
+        """, dias, loja_id)
         return [dict(r) for r in (rows or [])]
     try:
         linhas = run_async(_go())
