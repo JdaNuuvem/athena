@@ -42,16 +42,29 @@ def _sync_pedidos():
     except Exception as e: pass
 
 def _sync_pedidos_shopee():
-    """Chamava sincronizar_pedidos_shopee() sem loja_id — usava so' a config
-    legada de loja unica, nunca de fato iterando as lojas Shopee conectadas
-    (multiloja). Com 2+ lojas conectadas, so' a ultima autorizada seria
-    sincronizada de verdade."""
+    """Dois estagios por loja: (1) busca pedido novo na API da Shopee
+    (shopee_sync.sync_pedidos_shopee, janela rolante de 1 dia — mesmo padrao
+    de auto-cura do job i9logic-pedidos) e (2) copia de
+    shopee_pedidos_sincronizados pra vendas_pedidos (core.vendas.sincronizar_pedidos_shopee).
+    Antes so' rodava o estagio 2 — que so' le' a tabela local, nunca fala com
+    a API — entao vendas Shopee novas so' entravam quando alguem clicava
+    "Sincronizar" manualmente na tela de integracoes. Vendas do mes/hoje,
+    fluxo de caixa e ranking de produtos ficavam presos no ultimo clique
+    manual porque todos somam vendas_pedidos.
+
+    Falha no estagio 1 (API fora do ar, rate limit) nao impede o estagio 2:
+    ainda vale copiar o que ja' estiver sincronizado localmente."""
     try:
+        from shopee_sync import sync_pedidos_shopee as _buscar_pedidos_api
         from core.vendas import sincronizar_pedidos_shopee
         from core.lojas import listar_lojas_shopee
         for loja in listar_lojas_shopee():
             if not loja.get("tem_token"):
                 continue
+            try:
+                _buscar_pedidos_api(dias=1, loja_id=loja["id"])
+            except Exception as e:
+                log(AGENT, f"Erro ao buscar pedidos na API Shopee loja {loja['id']}: {e}")
             try:
                 r = sincronizar_pedidos_shopee(loja_id=loja["id"])
                 if r.get("sync", 0) > 0:
