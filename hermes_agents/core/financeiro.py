@@ -48,6 +48,15 @@ def _ensure_tables():
             tipo VARCHAR(10) DEFAULT 'entrada', valor DECIMAL(12,2) DEFAULT 0,
             categoria VARCHAR(50), conta_id INT, created_at TIMESTAMP DEFAULT NOW()
         )""")
+        # pedido_id: rastreia de qual vendas_pedidos.id um lancamento de venda
+        # a vista (Shopee/i9Logic — ver core/entidades.py::ao_concluir_venda_avista)
+        # veio, pra sync periodico (a cada 5-10min) nao duplicar lancamento a
+        # cada rodada que reprocessa o mesmo pedido ja concluido.
+        try: await db.execute("ALTER TABLE fin_fluxo_caixa ADD COLUMN IF NOT EXISTS pedido_id INT")
+        except Exception: pass
+        try:
+            await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_fin_fluxo_caixa_pedido_id ON fin_fluxo_caixa (pedido_id) WHERE pedido_id IS NOT NULL")
+        except Exception: pass
         await db.execute("""CREATE TABLE IF NOT EXISTS fin_contas_receber (
             id SERIAL PRIMARY KEY, cliente VARCHAR(200) NOT NULL, descricao VARCHAR(200),
             valor DECIMAL(12,2) DEFAULT 0, vencimento DATE, data_recebimento DATE,
@@ -124,50 +133,12 @@ def _ensure_tables():
             categoria VARCHAR(50), created_at TIMESTAMP DEFAULT NOW()
         )""")
 
-        # Seed
-        count = await db.fetchval("SELECT COUNT(*) FROM fin_fluxo_caixa")
-        if count == 0:
-            await db.execute("""INSERT INTO fin_fluxo_caixa (data, descricao, tipo, valor, categoria) VALUES
-                (CURRENT_DATE - 3, 'Venda Loja Centro', 'entrada', 15000, 'Vendas'),
-                (CURRENT_DATE - 2, 'Pagamento Fornecedor A', 'saida', 5000, 'Compras'),
-                (CURRENT_DATE - 1, 'Recebimento Cliente B', 'entrada', 8000, 'Recebimentos'),
-                (CURRENT_DATE, 'Aluguel', 'saida', 3500, 'Custos Fixos'),
-                (CURRENT_DATE - 1, 'Venda Online', 'entrada', 12000, 'Vendas'),
-                (CURRENT_DATE - 2, 'Salários', 'saida', 25000, 'Pessoal')""")
-        count = await db.fetchval("SELECT COUNT(*) FROM fin_contas_receber")
-        if count == 0:
-            await db.execute("""INSERT INTO fin_contas_receber (cliente, descricao, valor, vencimento, status, forma_pagamento) VALUES
-                ('Carlos Alberto', 'Pedido #1001', 3500, CURRENT_DATE + 15, 'pendente', 'boleto'),
-                ('Distribuidora ABC', 'Pedido #1002', 12000, CURRENT_DATE + 7, 'pendente', 'pix'),
-                ('Marina Santos', 'Pedido #1003', 1800, CURRENT_DATE - 3, 'pago', 'pix'),
-                ('Comercial XYZ', 'Pedido #1004', 5500, CURRENT_DATE - 10, 'atrasado', 'boleto')""")
-        count = await db.fetchval("SELECT COUNT(*) FROM fin_contas_pagar")
-        if count == 0:
-            await db.execute("""INSERT INTO fin_contas_pagar (fornecedor, descricao, valor, vencimento, status, forma_pagamento) VALUES
-                ('Fornecedor Alpha', 'Matéria-prima', 8000, CURRENT_DATE + 5, 'pendente', 'boleto'),
-                ('Beta Distribuidora', 'Embalagens', 3200, CURRENT_DATE + 10, 'pendente', 'pix'),
-                ('Gamma Importação', 'Frete Marítimo', 15000, CURRENT_DATE - 2, 'pago', 'ted'),
-                ('Fornecedor Alpha', 'Adiantamento', 5000, CURRENT_DATE - 15, 'atrasado', 'boleto')""")
-        count = await db.fetchval("SELECT COUNT(*) FROM fin_boletos")
-        if count == 0:
-            await db.execute("""INSERT INTO fin_boletos (beneficiario, valor, vencimento, nosso_numero, codigo_barras, status) VALUES
-                ('Fornecedor Alpha', 8000, CURRENT_DATE + 5, '001-00001', '34191.79001...', 'pendente'),
-                ('Carlos Alberto', 3500, CURRENT_DATE + 15, '001-00002', '34191.79002...', 'pendente'),
-                ('Comercial XYZ', 5500, CURRENT_DATE - 10, '001-00003', '34191.79003...', 'vencido'),
-                ('Fornecedor Alpha', 5000, CURRENT_DATE - 15, '001-00004', '34191.79004...', 'pago')""")
-        count = await db.fetchval("SELECT COUNT(*) FROM fin_pix")
-        if count == 0:
-            await db.execute("""INSERT INTO fin_pix (chave, tipo_chave, descricao, valor, status) VALUES
-                ('athena@empresa.com', 'email', 'Recebimento Cliente Online', 250, 'concluido'),
-                ('11912345678', 'celular', 'Pagamento Fornecedor', 1200, 'concluido'),
-                ('000.000.000-00', 'cpf', 'Transferência Interna', 5000, 'concluido'),
-                ('athenapix@empresa.com', 'aleatoria', 'Reembolso Despesas', 350, 'pendente')""")
-        count = await db.fetchval("SELECT COUNT(*) FROM fin_conciliacao")
-        if count == 0:
-            await db.execute("""INSERT INTO fin_conciliacao (banco_id, data, descricao, valor_extrato, valor_sistema, status) VALUES
-                (1, CURRENT_DATE - 1, 'Depósito Cliente', 3500, 3500, 'conciliado'),
-                (1, CURRENT_DATE, 'Taxa Bancária', -25, 0, 'pendente'),
-                (1, CURRENT_DATE, 'Transferência Recebida', 8000, 8000, 'conciliado')""")
+        # ponytail: fluxo_caixa/contas_receber/contas_pagar/boletos/pix/conciliacao
+        # tinham seed fake aqui (clientes/fornecedores ficticios tipo "Comercial
+        # XYZ") — removido. Dado real agora vem de core.entidades.ao_concluir_venda_avista
+        # (Shopee/i9Logic, disparado pelos syncs periodicos) e ao_faturar_pedido/
+        # ao_fechar_caixa_pdv (ja existentes). Sem seed, essas tabelas ficam
+        # vazias ate a primeira venda real sincronizar.
         count = await db.fetchval("SELECT COUNT(*) FROM fin_bancos")
         if count == 0:
             await db.execute("INSERT INTO fin_bancos (nome, agencia, conta, saldo) VALUES ('Banco do Brasil', '0001', '12345-6', 85000),('Itaú', '0002', '67890-1', 42000),('Caixa', '0003', '54321-0', 15000)")

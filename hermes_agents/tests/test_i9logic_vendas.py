@@ -248,6 +248,32 @@ class TestAtualizarStatusSeMudou(unittest.TestCase):
         self.assertFalse(resultado)
         mock_log.assert_called_once()
 
+    @patch("core.entidades.ao_concluir_venda_avista")
+    def test_pedido_que_vira_concluido_aciona_fluxo_de_caixa(self, mock_hook):
+        """Pedido ja sincronizado (ex: 'em_andamento' no i9Logic) que agora
+        aparece concluido deve gerar entrada no Fluxo de Caixa."""
+        async def _execute(query, *args):
+            return "OK"
+        async def _fetchval(query, *args):
+            return 42  # id em vendas_pedidos
+        pedido = {"id": 1, "cancelado": "0", "valor_total": 99.9}
+        with patch("core.i9logic_vendas.get_db") as mock_get_db:
+            mock_get_db.return_value = AsyncMock(execute=_execute, fetchval=_fetchval)
+            resultado = vendas_i9logic._atualizar_status_se_mudou(pedido, "algo_diferente")
+        self.assertTrue(resultado)
+        mock_hook.assert_called_once_with(42)
+
+    @patch("core.entidades.ao_concluir_venda_avista")
+    def test_pedido_que_vira_cancelado_nao_aciona_fluxo_de_caixa(self, mock_hook):
+        async def _execute(query, *args):
+            return "OK"
+        pedido = {"id": 1, "cancelado": "1", "valor_total": 0}
+        with patch("core.i9logic_vendas.get_db") as mock_get_db:
+            mock_get_db.return_value = AsyncMock(execute=_execute)
+            resultado = vendas_i9logic._atualizar_status_se_mudou(pedido, "concluido")
+        self.assertTrue(resultado)
+        mock_hook.assert_not_called()
+
 
 class TestSincronizarPedidosAtualizaStatus(unittest.TestCase):
     def test_pedido_ja_sincronizado_que_cancelou_gera_update_e_conta_em_atualizados(self):
@@ -376,6 +402,58 @@ class TestGravarPedido(unittest.TestCase):
             resultado = vendas_i9logic._gravar_pedido(dados)
         self.assertTrue(resultado["ok"])
         self.assertIsNone(args_insert_pedido[3])
+
+    @patch("core.entidades.ao_concluir_venda_avista")
+    def test_pedido_novo_concluido_aciona_fluxo_de_caixa(self, mock_hook):
+        dados = {
+            "pedido": {"id": 322645, "cancelado": "0", "valor_total": 25.97, "data": "2026-07-29"},
+            "loja_athena": "Loja Matriz", "itens": [], "pagamentos": [],
+        }
+        async def _fetchval(query, *args):
+            if "lojas" in query:
+                return 7
+            if "SELECT id FROM vendas_pedidos WHERE id_i9logic" in query:
+                return None
+            if "INSERT INTO vendas_pedidos" in query:
+                return 60
+            return None
+        async def _execute(query, *args):
+            return "OK"
+        conn = AsyncMock()
+        conn.fetchval = _fetchval
+        conn.execute = _execute
+        conn.transaction = MagicMock(return_value=AsyncMock(
+            __aenter__=AsyncMock(return_value=None), __aexit__=AsyncMock(return_value=None)))
+        with patch("core.i9logic_vendas.get_db") as mock_get_db:
+            mock_get_db.return_value = _fake_db_com_conn(conn)
+            vendas_i9logic._gravar_pedido(dados)
+        mock_hook.assert_called_once_with(60)
+
+    @patch("core.entidades.ao_concluir_venda_avista")
+    def test_pedido_novo_cancelado_nao_aciona_fluxo_de_caixa(self, mock_hook):
+        dados = {
+            "pedido": {"id": 322646, "cancelado": "1", "valor_total": 0, "data": "2026-07-29"},
+            "loja_athena": "Loja Matriz", "itens": [], "pagamentos": [],
+        }
+        async def _fetchval(query, *args):
+            if "lojas" in query:
+                return 7
+            if "SELECT id FROM vendas_pedidos WHERE id_i9logic" in query:
+                return None
+            if "INSERT INTO vendas_pedidos" in query:
+                return 61
+            return None
+        async def _execute(query, *args):
+            return "OK"
+        conn = AsyncMock()
+        conn.fetchval = _fetchval
+        conn.execute = _execute
+        conn.transaction = MagicMock(return_value=AsyncMock(
+            __aenter__=AsyncMock(return_value=None), __aexit__=AsyncMock(return_value=None)))
+        with patch("core.i9logic_vendas.get_db") as mock_get_db:
+            mock_get_db.return_value = _fake_db_com_conn(conn)
+            vendas_i9logic._gravar_pedido(dados)
+        mock_hook.assert_not_called()
 
 
 if __name__ == "__main__":

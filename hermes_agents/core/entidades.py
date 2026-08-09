@@ -365,6 +365,65 @@ def ao_receber_compra(recebimento_id: int) -> dict:
     try: return run_async(_go())
     except Exception as e: return {"error": str(e)}
 
+def ao_concluir_venda_avista(pedido_id: int) -> dict:
+    """Quando uma venda a vista (Shopee/i9Logic PDV) e' concluida: registra
+    entrada no Fluxo de Caixa na data da venda, valor cheio do pedido.
+
+    Diferente de ao_faturar_pedido (que so' gera fin_contas_receber quando ha'
+    pagamento a prazo em vendas_pagamentos), aqui a premissa e' o oposto:
+    Shopee e i9Logic PDV sao canais onde o cliente ja pagou na hora (Shopee
+    retem e repassa depois, mas nao ha' integracao com a API de
+    wallet/settlement da Shopee pra simular esse prazo real ainda, entao o
+    valor cheio entra como recebido na data da conclusao — decisao acertada
+    com o usuario). Idempotente via pedido_id (INSERT ... WHERE NOT EXISTS)
+    — chamada de novo pro mesmo pedido (sync roda a cada 5-10min) nao
+    duplica."""
+    async def _go():
+        db = await get_db()
+        pedido = await db.fetchrow("SELECT * FROM vendas_pedidos WHERE id = $1", pedido_id)
+        if not pedido: return {"error": "pedido nao encontrado"}
+        if pedido["status"] != "concluido":
+            return {"skip": "pedido nao esta concluido"}
+        canal = pedido["marketplace"] or pedido["origem"] or "venda"
+        numero = pedido["numero"] or pedido["bling_numero"] or str(pedido_id)
+        row = await db.fetchrow("""
+            INSERT INTO fin_fluxo_caixa (data, descricao, tipo, valor, categoria, pedido_id)
+            SELECT $1, $2, 'entrada', $3, $4, $5
+            WHERE NOT EXISTS (SELECT 1 FROM fin_fluxo_caixa WHERE pedido_id = $5)
+            RETURNING id
+        """, pedido["data"], f"Pedido #{numero} - {canal}", float(pedido["total"] or 0), f"Vendas {canal}", pedido_id)
+        return {"ok": True, "lancado": row is not None}
+    try: return run_async(_go())
+    except Exception as e: return {"error": str(e)}
+
+def backfill_fluxo_caixa_vendas() -> dict:
+    """Roda uma vez (via rota manual, ver routes/integrations.py) pra gerar
+    fluxo de caixa retroativo de pedidos Shopee/i9Logic ja sincronizados como
+    'concluido' ANTES de ao_concluir_venda_avista existir — o sync so' aciona
+    o hook quando um pedido MUDA de status, entao pedido ja concluido de antes
+    dessa mudanca ficaria de fora sem isso. Idempotente (mesmo INSERT ... WHERE
+    NOT EXISTS do hook), seguro rodar mais de uma vez."""
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch("""
+            SELECT id FROM vendas_pedidos
+            WHERE status = 'concluido' AND (marketplace = 'shopee' OR origem = 'i9logic_pdv')
+        """)
+        return [r["id"] for r in rows]
+    try:
+        pedido_ids = run_async(_go())
+    except Exception as e:
+        return {"error": str(e)}
+    lancados, erros = 0, []
+    for pid in pedido_ids:
+        r = ao_concluir_venda_avista(pid)
+        if r.get("error"):
+            erros.append({"pedido_id": pid, "erro": r["error"]})
+        elif r.get("lancado"):
+            lancados += 1
+    return {"total_pedidos": len(pedido_ids), "lancados": lancados,
+            "ja_existentes": len(pedido_ids) - lancados - len(erros), "erros": erros}
+
 def ao_finalizar_producao(op_id: int) -> dict:
     """Quando uma OP e finalizada: entrada do produto acabado no estoque + baixa de componentes."""
     async def _go():

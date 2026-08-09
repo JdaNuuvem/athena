@@ -499,6 +499,9 @@ def sincronizar_pedidos_shopee(dias: int = 30, loja_id: int = None) -> dict:
                         (pedido_id, numero_item, sku, descricao, quantidade, valor_unitario, valor_total)
                         VALUES ($1,$2,$3,$4,$5,$6,$7)""",
                         pid, idx, item["sku"] or "", item["nome"] or "", qtd, vu, qtd * vu)
+                if status == "concluido":
+                    from core.entidades import ao_concluir_venda_avista
+                    ao_concluir_venda_avista(pid)
                 total += 1
             except Exception as e:
                 erros.append(f"pedido {order_sn}: {e}")

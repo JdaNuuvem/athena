@@ -92,8 +92,14 @@ def _atualizar_status_se_mudou(pedido: dict, status_atual: str) -> bool:
         await db.execute(
             "UPDATE vendas_pedidos SET status=$1, total=$2, updated_at=NOW() WHERE id_i9logic=$3",
             status_esperado, pedido.get("valor_total", 0), pedido["id"])
+        if status_esperado == "concluido":
+            return await db.fetchval("SELECT id FROM vendas_pedidos WHERE id_i9logic=$1", pedido["id"])
+        return None
     try:
-        run_async(_go())
+        pedido_id = run_async(_go())
+        if status_esperado == "concluido" and pedido_id:
+            from core.entidades import ao_concluir_venda_avista
+            ao_concluir_venda_avista(pedido_id)
         return True
     except Exception as e:
         log(AGENT, f"Erro ao atualizar status do pedido {pedido['id']}: {e}")
@@ -157,9 +163,13 @@ def _gravar_pedido(dados: dict) -> dict:
                         VALUES ($1,$2,$3,$4)
                     """, pedido_id, str(pagamento.get("formadepagamento", "")),
                         pagamento.get("valor", 0), pagamento.get("codautorizacao") or None)
-        return {"ok": True, "pedido_id": pedido_id}
+        return {"ok": True, "pedido_id": pedido_id, "status": status}
     try:
-        return run_async(_go())
+        resultado = run_async(_go())
+        if resultado.get("status") == "concluido":
+            from core.entidades import ao_concluir_venda_avista
+            ao_concluir_venda_avista(resultado["pedido_id"])
+        return resultado
     except Exception as e:
         return {"erro": str(e)}
 

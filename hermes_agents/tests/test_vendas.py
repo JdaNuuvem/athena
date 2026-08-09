@@ -175,6 +175,28 @@ class TestSincronizarPedidosShopee(unittest.TestCase):
         update = next(e for e in db.executed if "UPDATE vendas_pedidos" in e[0])
         self.assertIn(18.5, update[1])
 
+    @patch("core.lojas.obter_credenciais_shopee", return_value={"shopee_shop_id": "999"})
+    @patch("core.entidades.ao_concluir_venda_avista")
+    def test_pedido_concluido_aciona_fluxo_de_caixa(self, mock_hook, mcred):
+        """Pedido Shopee COMPLETED -> status interno 'concluido' -> deve gerar
+        entrada no Fluxo de Caixa (ver core.entidades.ao_concluir_venda_avista),
+        pra Financeiro mostrar dado real de venda em vez de ficar vazio."""
+        db = _FakeDBPedidosShopee(pedidos=[_PEDIDO_SHOPEE_MOCK], existing_id=None)
+        async def fake_get_db(): return db
+        with patch.object(vendas, "get_db", fake_get_db):
+            vendas.sincronizar_pedidos_shopee(dias=7, loja_id=7)
+        mock_hook.assert_called_once_with(88)
+
+    @patch("core.lojas.obter_credenciais_shopee", return_value={"shopee_shop_id": "999"})
+    @patch("core.entidades.ao_concluir_venda_avista")
+    def test_pedido_nao_concluido_nao_aciona_fluxo_de_caixa(self, mock_hook, mcred):
+        pedido_aberto = {**_PEDIDO_SHOPEE_MOCK, "status": "UNPAID"}
+        db = _FakeDBPedidosShopee(pedidos=[pedido_aberto], existing_id=None)
+        async def fake_get_db(): return db
+        with patch.object(vendas, "get_db", fake_get_db):
+            vendas.sincronizar_pedidos_shopee(dias=7, loja_id=7)
+        mock_hook.assert_not_called()
+
 
 class _FakeDBQuery:
     """Fake DB minimo que so' grava as queries+args executadas, pra inspecionar

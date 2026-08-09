@@ -537,6 +537,19 @@ def migrar_contas():
     })
 
 
+@integrations_bp.route("/api/integracoes/backfill-fluxo-caixa", methods=["POST"])
+def backfill_fluxo_caixa():
+    """Gera fluxo de caixa retroativo pra pedidos Shopee/i9Logic ja
+    sincronizados como 'concluido' antes de core.entidades.ao_concluir_venda_avista
+    existir — rodar uma vez manualmente apos o deploy que introduziu o hook,
+    nao e' um job periodico. Idempotente, seguro rodar mais de uma vez."""
+    @requer_permissao("financeiro.criar")
+    def _go():
+        from core.entidades import backfill_fluxo_caixa_vendas
+        return jsonify(backfill_fluxo_caixa_vendas())
+    return _go()
+
+
 @integrations_bp.route("/api/eventos/compra/<int:id_compra>/receber", methods=["POST"])
 def receber_compra(id_compra):
     """Registra recebimento de compra no Bling e atualiza estoque local."""
