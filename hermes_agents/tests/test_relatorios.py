@@ -171,4 +171,37 @@ class TestRelatorios(unittest.TestCase):
         self.assertEqual(itens[0]["sku"], "URGENTE")
         self.assertEqual(itens[1]["sku"], "FOLGA")
 
+    @patch("core.relatorios.get_db")
+    def test_risco_ruptura_dias_zero_nao_lanca_zerodivisionerror(self, mock_get_db):
+        """dias=0 (ou negativo) vem direto de request.args sem validacao — a
+        funcao precisa se proteger em vez de deixar o /dias sourar um 500."""
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = [
+            {"sku": "SKU-E", "descricao": "Produto E", "qtd_vendida": 10.0, "estoque_atual": 5.0},
+        ]
+        mock_get_db.return_value = fake_db
+
+        itens = rel.risco_ruptura(0)
+
+        self.assertEqual(len(itens), 1)
+
+    @patch("core.relatorios.get_db")
+    def test_curvas_converte_decimal_para_float(self, mock_get_db):
+        """valor_total/qtd vem do asyncpg como Decimal — se nao forem
+        convertidas pra float antes de entrar no JSON, o Flask serializa
+        como STRING e quebra a formatacao de moeda/quantidade na aba ABC."""
+        from decimal import Decimal
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = [
+            {"sku": "SKU-X", "descricao": "Produto X", "valor_total": Decimal("1234.56"), "qtd": Decimal("10.000")},
+        ]
+        mock_get_db.return_value = fake_db
+
+        resultado = rel.curvas(90)
+
+        item = resultado["itens"][0]
+        self.assertIsInstance(item["valor_total"], float)
+        self.assertIsInstance(item["qtd"], float)
+        self.assertEqual(item["valor_total"], 1234.56)
+
 if __name__=="__main__":unittest.main(verbosity=2)

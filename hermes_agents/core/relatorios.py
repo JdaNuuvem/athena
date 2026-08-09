@@ -325,6 +325,9 @@ def curvas(dias=90):
             WHERE vp.data >= CURRENT_DATE - $1::int AND vp.status != 'cancelado'
             GROUP BY vi.sku, vi.descricao ORDER BY valor_total DESC LIMIT 30""", dias)
         items = [dict(r) for r in (rows or [])]
+        for it in items:
+            it["valor_total"] = float(it.get("valor_total", 0) or 0)
+            it["qtd"] = float(it.get("qtd", 0) or 0)
         total = sum(float(r.get("valor_total",0) or 0) for r in items) or 1
         acum = 0
         for it in items:
@@ -461,6 +464,7 @@ def risco_ruptura(dias=30):
     """Produtos vendendo bem MAS com estoque acabando — velocidade de venda
     alta, estoque baixo. Diferente de 'parado' (zero venda) e de rupturas()
     (zero estoque, ja consumada) — aqui e' o alerta ANTES de zerar."""
+    dias = max(1, int(dias or 30))
     async def _go():
         db = await get_db()
         rows = await db.fetch(f"""

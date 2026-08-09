@@ -116,6 +116,7 @@ export default function RankingProdutosModal({ onClose }: { onClose: () => void 
   const listaTendencia = useMemo(() => {
     if (aba === "em_alta") {
       return [...tendencia]
+        .filter((t) => t.crescimento_pct === null || t.crescimento_pct > 0)
         .sort((a, b) => {
           if (a.crescimento_pct === null && b.crescimento_pct === null) return b.quantidade_atual - a.quantidade_atual;
           if (a.crescimento_pct === null) return -1;
@@ -126,7 +127,7 @@ export default function RankingProdutosModal({ onClose }: { onClose: () => void 
     }
     if (aba === "em_queda") {
       return [...tendencia]
-        .filter((t) => t.crescimento_pct !== null)
+        .filter((t) => t.crescimento_pct !== null && t.crescimento_pct < 0)
         .sort((a, b) => (a.crescimento_pct as number) - (b.crescimento_pct as number))
         .slice(0, 15);
     }
@@ -262,7 +263,7 @@ export default function RankingProdutosModal({ onClose }: { onClose: () => void 
 
             {aba === "abc" &&
               listaAbc.map((item, i) => (
-                <ItemCard key={item.sku} rank={i + 1} titulo={item.descricao} subtitulo={`${item.sku} · ${item.qtd} un · ${item.pct_acum}% acumulado`}>
+                <ItemCard key={`${item.sku}-${i}`} rank={i + 1} titulo={item.descricao} subtitulo={`${item.sku} · ${item.qtd} un · ${item.pct_acum}% acumulado`}>
                   <p className="numeric text-sm font-medium" style={{ color: "var(--ink-100)" }}>{fmtBRL(item.valor_total)}</p>
                   <span
                     className="numeric text-[10px] font-semibold px-1.5 py-0.5 rounded"
