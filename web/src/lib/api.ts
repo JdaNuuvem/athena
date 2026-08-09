@@ -711,6 +711,14 @@ export const api = {
     request<Record<string, unknown>>(`/api/relatorios/clientes?dias=${dias}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
   relatorioRankingProdutos: (dias: number) =>
     request<{ itens: RankingProdutoItem[]; periodo_dias: number }>(`/api/relatorios/ranking-produtos?dias=${dias}`),
+  relatorioEstoqueParado: (dias: number, limite = 15) =>
+    request<EstoqueParadoItem[]>(`/api/relatorios/estoque-parado?dias=${dias}&limite=${limite}`),
+  relatorioProdutosTendencia: (dias: number) =>
+    request<ProdutoTendenciaItem[]>(`/api/relatorios/produtos-tendencia?dias=${dias}`),
+  relatorioRiscoRuptura: (dias: number) =>
+    request<RiscoRupturaItem[]>(`/api/relatorios/risco-ruptura?dias=${dias}`),
+  relatorioCurvas: (dias: number) =>
+    request<CurvaAbcResponse>(`/api/relatorios/curvas?dias=${dias}`),
   relatorioDrePorLoja: (dias: number, lojaId?: number) =>
     request<{ data: DreLoja[] }>(`/api/relatorios/dre-por-loja?dias=${dias}${lojaId ? `&loja_id=${lojaId}` : ""}`),
 
@@ -2185,6 +2193,47 @@ export interface RankingProdutoItem {
   lucro: number;
   margem_pct: number;
   custo_cadastrado: boolean;
+}
+
+export interface EstoqueParadoItem {
+  sku: string;
+  nome: string;
+  quantidade: number;
+  valor_imobilizado: number;
+  dias_sem_venda: number;
+}
+
+export interface ProdutoTendenciaItem {
+  sku: string;
+  descricao: string;
+  quantidade_atual: number;
+  quantidade_anterior: number;
+  crescimento_pct: number | null;
+}
+
+export interface RiscoRupturaItem {
+  sku: string;
+  descricao: string;
+  estoque_atual: number;
+  quantidade_vendida: number;
+  velocidade_diaria: number;
+  dias_restantes: number;
+}
+
+export interface CurvaAbcItem {
+  sku: string;
+  descricao: string;
+  valor_total: number;
+  qtd: number;
+  pct: number;
+  pct_acum: number;
+  classe: "A" | "B" | "C";
+}
+
+export interface CurvaAbcResponse {
+  total_valor: number;
+  total_itens: number;
+  itens: CurvaAbcItem[];
 }
 
 export interface DreLoja {
