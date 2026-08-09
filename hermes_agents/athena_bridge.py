@@ -1991,12 +1991,24 @@ def kpi_overview():
         loja_id = request.args.get("loja_id", type=int)
         loja_sql = " AND loja_id=%s" if loja_id else ""
         loja_args = (loja_id,) if loja_id else ()
+        loja_sql_pdv = " AND venda.caixa_id IN (SELECT id FROM pdv_caixas WHERE loja_id=%s)" if loja_id else ""
         def f(v,d=0): return float(v) if v is not None else d
         try:
-            cur.execute(f"SELECT COALESCE(SUM(receita_bruta),0) AS v FROM vendas WHERE data>=CURRENT_DATE-%s{loja_sql}", (periodo,) + loja_args)
-            total_receita = f(cur.fetchone()["v"])
-            cur.execute(f"SELECT COALESCE(SUM(quantidade),0) AS v FROM vendas WHERE data>=CURRENT_DATE-%s{loja_sql}", (periodo,) + loja_args)
-            total_pedidos = cur.fetchone()["v"] or 0
+            # receita_total/total_pedidos vinham da tabela 'vendas', que so'
+            # e' alimentada por POST /api/shopee/sync-orders — rota que nao e'
+            # chamada por nenhum lugar do frontend nem do scheduler, orfa
+            # desde que foi escrita. vendas_pedidos+pdv_vendas e' a fonte real,
+            # mesma que core.relatorios._union_vendas usa pro resto da dashboard.
+            cur.execute(f"SELECT COALESCE(SUM(total),0) AS v FROM vendas_pedidos WHERE data>=CURRENT_DATE-%s AND status != 'cancelado'{loja_sql}", (periodo,) + loja_args)
+            receita_vp = f(cur.fetchone()["v"])
+            cur.execute(f"SELECT COALESCE(SUM(total),0) AS v FROM pdv_vendas venda WHERE DATE(data)>=CURRENT_DATE-%s{loja_sql_pdv}", (periodo,) + loja_args)
+            receita_pdv = f(cur.fetchone()["v"])
+            total_receita = receita_vp + receita_pdv
+            cur.execute(f"SELECT COUNT(*) AS v FROM vendas_pedidos WHERE data>=CURRENT_DATE-%s{loja_sql}", (periodo,) + loja_args)
+            pedidos_vp = cur.fetchone()["v"] or 0
+            cur.execute(f"SELECT COUNT(*) AS v FROM pdv_vendas venda WHERE DATE(data)>=CURRENT_DATE-%s{loja_sql_pdv}", (periodo,) + loja_args)
+            pedidos_pdv = cur.fetchone()["v"] or 0
+            total_pedidos = pedidos_vp + pedidos_pdv
         except Exception:
             total_receita,total_pedidos=0,0
         try:
