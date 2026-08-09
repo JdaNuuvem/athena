@@ -227,6 +227,21 @@ class TestRelatoriosEndpoints(unittest.TestCase):
     def test_risco_ruptura(self):
         self._assert_200_json(self.client.get("/api/relatorios/risco-ruptura?dias=30", headers=self.headers), "risco-ruptura")
 
+    def test_ranking_produtos_com_loja_id(self):
+        self._assert_200_json(self.client.get("/api/relatorios/ranking-produtos?dias=30&loja_id=1", headers=self.headers), "ranking-produtos+loja_id")
+
+    def test_curvas_com_loja_id(self):
+        self._assert_200_json(self.client.get("/api/relatorios/curvas?dias=90&loja_id=1", headers=self.headers), "curvas+loja_id")
+
+    def test_estoque_parado_com_loja_id(self):
+        self._assert_200_json(self.client.get("/api/relatorios/estoque-parado?dias=60&loja_id=1", headers=self.headers), "estoque-parado+loja_id")
+
+    def test_produtos_tendencia_com_loja_id(self):
+        self._assert_200_json(self.client.get("/api/relatorios/produtos-tendencia?dias=30&loja_id=1", headers=self.headers), "produtos-tendencia+loja_id")
+
+    def test_risco_ruptura_com_loja_id(self):
+        self._assert_200_json(self.client.get("/api/relatorios/risco-ruptura?dias=30&loja_id=1", headers=self.headers), "risco-ruptura+loja_id")
+
 
 class TestLojasEndpoints(unittest.TestCase):
 

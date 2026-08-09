@@ -155,7 +155,8 @@ def rel_rupturas():
 def rel_curvas():
     from core.relatorios import curvas
     dias = request.args.get("dias", 90, type=int)
-    return jsonify(curvas(dias))
+    loja_id = request.args.get("loja_id", type=int)
+    return jsonify(curvas(dias, loja_id))
 
 
 @relatorios_bp.route("/produtos", methods=["GET"])
@@ -169,7 +170,8 @@ def rel_produtos():
 def rel_ranking_produtos():
     from core.relatorios import ranking_produtos
     dias = request.args.get("dias", 30, type=int)
-    return jsonify({"itens": ranking_produtos(dias), "periodo_dias": dias})
+    loja_id = request.args.get("loja_id", type=int)
+    return jsonify({"itens": ranking_produtos(dias, loja_id), "periodo_dias": dias})
 
 
 @relatorios_bp.route("/estoque-parado", methods=["GET"])
@@ -177,21 +179,24 @@ def rel_estoque_parado():
     from core.bi import estoque_parado
     dias = request.args.get("dias", 60, type=int)
     limite = request.args.get("limite", 15, type=int)
-    return jsonify(estoque_parado(dias, limite))
+    loja_id = request.args.get("loja_id", type=int)
+    return jsonify(estoque_parado(dias, limite, loja_id))
 
 
 @relatorios_bp.route("/produtos-tendencia", methods=["GET"])
 def rel_produtos_tendencia():
     from core.relatorios import produtos_tendencia
     dias = request.args.get("dias", 30, type=int)
-    return jsonify(produtos_tendencia(dias))
+    loja_id = request.args.get("loja_id", type=int)
+    return jsonify(produtos_tendencia(dias, loja_id))
 
 
 @relatorios_bp.route("/risco-ruptura", methods=["GET"])
 def rel_risco_ruptura():
     from core.relatorios import risco_ruptura
     dias = request.args.get("dias", 30, type=int)
-    return jsonify(risco_ruptura(dias))
+    loja_id = request.args.get("loja_id", type=int)
+    return jsonify(risco_ruptura(dias, loja_id))
 
 
 @relatorios_bp.route("/financeiro", methods=["GET"])
