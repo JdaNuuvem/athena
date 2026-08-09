@@ -298,12 +298,28 @@ def shopee_dashboard_consolidado():
         resultado = []
         for l in lojas:
             shop_id = l.get("shopee_shop_id") or ""
+            # vendas_row era uma unica query em `vendas` (tabela orfa, so'
+            # alimentada por POST /api/shopee/sync-orders — rota que nao e'
+            # chamada por nenhum lugar do frontend nem do scheduler).
+            # Redirecionado pra vendas_pedidos/vendas_itens (fonte real,
+            # mantida pelo job "shopee-pedidos" do scheduler). Receita
+            # (nivel pedido) e unidades/skus (nivel item) precisam de
+            # queries SEPARADAS — juntar num so JOIN faria SUM(total) do
+            # pedido ser contado uma vez por item (fan-out), multiplicando
+            # a receita.
             cur.execute("""
-                SELECT COALESCE(SUM(receita_bruta),0) AS receita, COALESCE(SUM(quantidade),0) AS unidades,
-                       COUNT(DISTINCT sku) AS skus_vendidos
-                FROM vendas WHERE marketplace = 'shopee' AND loja_id = %s AND data >= CURRENT_DATE - %s
+                SELECT COALESCE(SUM(total),0) AS receita
+                FROM vendas_pedidos
+                WHERE marketplace = 'shopee' AND loja_id = %s AND data >= CURRENT_DATE - %s AND status != 'cancelado'
             """, (l["id"], dias))
-            vendas_row = cur.fetchone() or {}
+            receita_row = cur.fetchone() or {}
+            cur.execute("""
+                SELECT COALESCE(SUM(vi.quantidade),0) AS unidades, COUNT(DISTINCT vi.sku) AS skus_vendidos
+                FROM vendas_itens vi JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
+                WHERE vp.marketplace = 'shopee' AND vp.loja_id = %s AND vp.data >= CURRENT_DATE - %s AND vp.status != 'cancelado'
+            """, (l["id"], dias))
+            itens_row = cur.fetchone() or {}
+            vendas_row = {**receita_row, **itens_row}
             # shopee_sync.py grava o item_status real da Shopee em minusculo
             # ("normal", "unlist", "banned" — nunca "ativo"); o filtro errado
             # fazia "Anuncios ativos" sempre mostrar 0 mesmo com produtos sincronizados.
@@ -322,12 +338,23 @@ def shopee_dashboard_consolidado():
                 GROUP BY a.sku HAVING COALESCE(SUM(e.quantidade), 0) <= MAX(c.estoque_minimo)
             """, (shop_id,))
             estoque_baixo = len(cur.fetchall() or [])
+            # vendas_pedidos ja tem 1 linha por pedido (upsert por
+            # shopee_order_sn em core.vendas.sincronizar_pedidos_shopee) —
+            # COUNT(*) direto substitui o COUNT(DISTINCT ...) que a query
+            # antiga precisava pra nao contar 1 linha por item da `vendas`.
             cur.execute("""
-                SELECT COALESCE(SUM(receita_bruta),0) AS receita, COALESCE(SUM(quantidade),0) AS unidades,
-                       COUNT(DISTINCT COALESCE(shopee_order_sn, id::text)) AS pedidos
-                FROM vendas WHERE marketplace = 'shopee' AND loja_id = %s AND data = CURRENT_DATE
+                SELECT COALESCE(SUM(total),0) AS receita, COUNT(*) AS pedidos
+                FROM vendas_pedidos
+                WHERE marketplace = 'shopee' AND loja_id = %s AND data = CURRENT_DATE AND status != 'cancelado'
             """, (l["id"],))
             hoje_row = cur.fetchone() or {}
+            cur.execute("""
+                SELECT COALESCE(SUM(vi.quantidade),0) AS unidades
+                FROM vendas_itens vi JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
+                WHERE vp.marketplace = 'shopee' AND vp.loja_id = %s AND vp.data = CURRENT_DATE AND vp.status != 'cancelado'
+            """, (l["id"],))
+            hoje_itens_row = cur.fetchone() or {}
+            hoje_row = {**hoje_row, **hoje_itens_row}
             receita_hoje = float(hoje_row.get("receita") or 0)
             pedidos_hoje = int(hoje_row.get("pedidos") or 0)
             token_expira = l.get("shopee_token_expira_em")
@@ -350,32 +377,35 @@ def shopee_dashboard_consolidado():
             })
 
         cur.execute("""
-            SELECT data AS dia, COALESCE(SUM(receita_bruta),0) AS receita,
-                   COUNT(DISTINCT COALESCE(shopee_order_sn, id::text)) AS pedidos
-            FROM vendas WHERE marketplace = 'shopee' AND data >= CURRENT_DATE - %s
+            SELECT data AS dia, COALESCE(SUM(total),0) AS receita, COUNT(*) AS pedidos
+            FROM vendas_pedidos
+            WHERE marketplace = 'shopee' AND data >= CURRENT_DATE - %s AND status != 'cancelado'
             GROUP BY data ORDER BY data
         """, (dias,))
         serie_diaria = [{"dia": r["dia"].isoformat(), "receita": float(r["receita"] or 0), "pedidos": int(r["pedidos"] or 0)} for r in (cur.fetchall() or [])]
 
         cur.execute("""
-            SELECT v.sku, COALESCE(c.descricao, v.sku) AS descricao,
-                   SUM(v.quantidade) AS quantidade, SUM(v.receita_bruta) AS receita
-            FROM vendas v LEFT JOIN catalogo_produtos c ON c.sku = v.sku
-            WHERE v.marketplace = 'shopee' AND v.data = CURRENT_DATE
-            GROUP BY v.sku, c.descricao ORDER BY quantidade DESC LIMIT 8
+            SELECT vi.sku, COALESCE(c.descricao, vi.sku) AS descricao,
+                   SUM(vi.quantidade) AS quantidade, SUM(vi.valor_total) AS receita
+            FROM vendas_itens vi
+            JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
+            LEFT JOIN catalogo_produtos c ON c.sku = vi.sku
+            WHERE vp.marketplace = 'shopee' AND vp.data = CURRENT_DATE AND vp.status != 'cancelado'
+            GROUP BY vi.sku, c.descricao ORDER BY quantidade DESC LIMIT 8
         """)
         top_produtos_hoje = [{"sku": r["sku"], "descricao": r["descricao"], "quantidade": int(r["quantidade"] or 0), "receita": float(r["receita"] or 0)} for r in (cur.fetchall() or [])]
 
         cur.execute("""
-            SELECT v.sku, COALESCE(c.descricao, v.sku) AS descricao, SUM(v.quantidade) AS vendidos,
+            SELECT vi.sku, COALESCE(c.descricao, vi.sku) AS descricao, SUM(vi.quantidade) AS vendidos,
                    COALESCE(e.estoque_total, 0) AS estoque_atual, c.estoque_minimo
-            FROM vendas v
-            JOIN catalogo_produtos c ON c.sku = v.sku
-            LEFT JOIN (SELECT sku, SUM(quantidade) AS estoque_total FROM estoque_lojas GROUP BY sku) e ON e.sku = v.sku
-            WHERE v.marketplace = 'shopee' AND v.data >= CURRENT_DATE - %s AND c.estoque_minimo IS NOT NULL
-            GROUP BY v.sku, c.descricao, e.estoque_total, c.estoque_minimo
+            FROM vendas_itens vi
+            JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
+            JOIN catalogo_produtos c ON c.sku = vi.sku
+            LEFT JOIN (SELECT sku, SUM(quantidade) AS estoque_total FROM estoque_lojas GROUP BY sku) e ON e.sku = vi.sku
+            WHERE vp.marketplace = 'shopee' AND vp.data >= CURRENT_DATE - %s AND vp.status != 'cancelado' AND c.estoque_minimo IS NOT NULL
+            GROUP BY vi.sku, c.descricao, e.estoque_total, c.estoque_minimo
             HAVING COALESCE(e.estoque_total, 0) <= c.estoque_minimo
-            ORDER BY SUM(v.quantidade) DESC LIMIT 10
+            ORDER BY SUM(vi.quantidade) DESC LIMIT 10
         """, (dias,))
         def _dias_ate_ruptura(vendidos, estoque_atual, dias):
             if vendidos <= 0:
@@ -414,10 +444,12 @@ def shopee_dashboard_consolidado():
         SHOPEE_COMISSAO_PCT = 12
 
         cur.execute("""
-            SELECT COALESCE(SUM(v.receita_bruta),0) AS receita,
-                   COALESCE(SUM(v.quantidade * COALESCE(c.preco_custo,0)),0) AS custo
-            FROM vendas v LEFT JOIN catalogo_produtos c ON c.sku = v.sku
-            WHERE v.marketplace = 'shopee' AND v.data >= CURRENT_DATE - %s
+            SELECT COALESCE(SUM(vi.valor_total),0) AS receita,
+                   COALESCE(SUM(vi.quantidade * COALESCE(c.preco_custo,0)),0) AS custo
+            FROM vendas_itens vi
+            JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
+            LEFT JOIN catalogo_produtos c ON c.sku = vi.sku
+            WHERE vp.marketplace = 'shopee' AND vp.data >= CURRENT_DATE - %s AND vp.status != 'cancelado'
         """, (dias,))
         lucro_row = cur.fetchone() or {}
         receita_periodo = float(lucro_row.get("receita") or 0)
@@ -425,19 +457,31 @@ def shopee_dashboard_consolidado():
         lucro_periodo = round(receita_periodo - (receita_periodo * SHOPEE_COMISSAO_PCT / 100.0) - custo_periodo, 2)
 
         cur.execute("""
-            SELECT COALESCE(SUM(receita_bruta),0) AS receita, COALESCE(SUM(quantidade),0) AS unidades
-            FROM vendas
-            WHERE marketplace = 'shopee' AND data >= CURRENT_DATE - (%s * 2) AND data < CURRENT_DATE - %s
+            SELECT COALESCE(SUM(total),0) AS receita
+            FROM vendas_pedidos
+            WHERE marketplace = 'shopee' AND data >= CURRENT_DATE - (%s * 2) AND data < CURRENT_DATE - %s AND status != 'cancelado'
         """, (dias, dias))
         anterior_row = cur.fetchone() or {}
-        periodo_anterior = {"receita": float(anterior_row.get("receita") or 0), "unidades": int(anterior_row.get("unidades") or 0)}
+        cur.execute("""
+            SELECT COALESCE(SUM(vi.quantidade),0) AS unidades
+            FROM vendas_itens vi JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
+            WHERE vp.marketplace = 'shopee' AND vp.data >= CURRENT_DATE - (%s * 2) AND vp.data < CURRENT_DATE - %s AND vp.status != 'cancelado'
+        """, (dias, dias))
+        anterior_itens_row = cur.fetchone() or {}
+        periodo_anterior = {"receita": float(anterior_row.get("receita") or 0), "unidades": int(anterior_itens_row.get("unidades") or 0)}
 
         cur.execute("""
-            SELECT COALESCE(SUM(receita_bruta),0) AS receita, COALESCE(SUM(quantidade),0) AS unidades,
-                   COUNT(DISTINCT COALESCE(shopee_order_sn, id::text)) AS pedidos
-            FROM vendas WHERE marketplace = 'shopee' AND data = CURRENT_DATE - 1
+            SELECT COALESCE(SUM(total),0) AS receita, COUNT(*) AS pedidos
+            FROM vendas_pedidos WHERE marketplace = 'shopee' AND data = CURRENT_DATE - 1 AND status != 'cancelado'
         """)
         ontem_row = cur.fetchone() or {}
+        cur.execute("""
+            SELECT COALESCE(SUM(vi.quantidade),0) AS unidades
+            FROM vendas_itens vi JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
+            WHERE vp.marketplace = 'shopee' AND vp.data = CURRENT_DATE - 1 AND vp.status != 'cancelado'
+        """)
+        ontem_itens_row = cur.fetchone() or {}
+        ontem_row = {**ontem_row, **ontem_itens_row}
         vendido_ontem = {
             "receita": float(ontem_row.get("receita") or 0),
             "unidades": int(ontem_row.get("unidades") or 0),
@@ -466,19 +510,22 @@ def shopee_dashboard_consolidado():
         hoje = date.today()
         dias_no_mes = calendar.monthrange(hoje.year, hoje.month)[1]
         cur.execute("""
-            SELECT COALESCE(SUM(receita_bruta),0) AS receita
-            FROM vendas WHERE marketplace = 'shopee' AND data >= DATE_TRUNC('month', CURRENT_DATE)::date
+            SELECT COALESCE(SUM(total),0) AS receita
+            FROM vendas_pedidos
+            WHERE marketplace = 'shopee' AND data >= DATE_TRUNC('month', CURRENT_DATE)::date AND status != 'cancelado'
         """)
         receita_mes = float((cur.fetchone() or {}).get("receita") or 0)
         projecao_mes = round(receita_mes / hoje.day * dias_no_mes, 2) if hoje.day > 0 else 0.0
 
         cur.execute("""
-            SELECT v.sku, COALESCE(c.descricao, v.sku) AS descricao, SUM(v.quantidade) AS quantidade,
-                   SUM(v.receita_bruta) AS receita,
-                   SUM(v.receita_bruta) - SUM(v.receita_bruta * %s / 100.0) - SUM(v.quantidade * COALESCE(c.preco_custo,0)) AS lucro
-            FROM vendas v LEFT JOIN catalogo_produtos c ON c.sku = v.sku
-            WHERE v.marketplace = 'shopee' AND v.data >= CURRENT_DATE - %s
-            GROUP BY v.sku, c.descricao ORDER BY receita DESC LIMIT 15
+            SELECT vi.sku, COALESCE(c.descricao, vi.sku) AS descricao, SUM(vi.quantidade) AS quantidade,
+                   SUM(vi.valor_total) AS receita,
+                   SUM(vi.valor_total) - SUM(vi.valor_total * %s / 100.0) - SUM(vi.quantidade * COALESCE(c.preco_custo,0)) AS lucro
+            FROM vendas_itens vi
+            JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
+            LEFT JOIN catalogo_produtos c ON c.sku = vi.sku
+            WHERE vp.marketplace = 'shopee' AND vp.data >= CURRENT_DATE - %s AND vp.status != 'cancelado'
+            GROUP BY vi.sku, c.descricao ORDER BY receita DESC LIMIT 15
         """, (SHOPEE_COMISSAO_PCT, dias))
         ranking_periodo = [{
             "sku": r["sku"], "descricao": r["descricao"], "quantidade": int(r["quantidade"] or 0),
@@ -490,7 +537,8 @@ def shopee_dashboard_consolidado():
             FROM anuncios a
             WHERE a.marketplace = 'shopee' AND a.status = 'normal' AND a.estoque > 0
               AND NOT EXISTS (
-                SELECT 1 FROM vendas v WHERE v.sku = a.sku AND v.marketplace = 'shopee' AND v.data >= CURRENT_DATE - %s
+                SELECT 1 FROM vendas_itens vi JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
+                WHERE vi.sku = a.sku AND vp.marketplace = 'shopee' AND vp.data >= CURRENT_DATE - %s AND vp.status != 'cancelado'
               )
             ORDER BY a.estoque DESC LIMIT 15
         """, (dias,))
