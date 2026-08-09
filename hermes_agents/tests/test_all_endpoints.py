@@ -136,7 +136,7 @@ class TestAuthRequiredEndpoints(unittest.TestCase):
 
 
 class TestRelatoriosEndpoints(unittest.TestCase):
-    """Todos os 20 endpoints de /api/relatorios/*."""
+    """Todos os 23 endpoints de /api/relatorios/*."""
 
     def setUp(self):
         self.client = app.test_client()
@@ -217,6 +217,15 @@ class TestRelatoriosEndpoints(unittest.TestCase):
 
     def test_dre_por_loja(self):
         self._assert_200_json(self.client.get("/api/relatorios/dre-por-loja?dias=30", headers=self.headers), "dre-por-loja")
+
+    def test_estoque_parado(self):
+        self._assert_200_json(self.client.get("/api/relatorios/estoque-parado?dias=60", headers=self.headers), "estoque-parado")
+
+    def test_produtos_tendencia(self):
+        self._assert_200_json(self.client.get("/api/relatorios/produtos-tendencia?dias=30", headers=self.headers), "produtos-tendencia")
+
+    def test_risco_ruptura(self):
+        self._assert_200_json(self.client.get("/api/relatorios/risco-ruptura?dias=30", headers=self.headers), "risco-ruptura")
 
 
 class TestLojasEndpoints(unittest.TestCase):

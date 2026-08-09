@@ -332,6 +332,9 @@ def curvas(dias=90):
             WHERE vp.data >= CURRENT_DATE - $1::int AND vp.status != 'cancelado'
             GROUP BY vi.sku, vi.descricao ORDER BY valor_total DESC LIMIT 30""", dias)
         items = [dict(r) for r in (rows or [])]
+        for it in items:
+            it["valor_total"] = float(it.get("valor_total", 0) or 0)
+            it["qtd"] = float(it.get("qtd", 0) or 0)
         total = sum(float(r.get("valor_total",0) or 0) for r in items) or 1
         acum = 0
         for it in items:
@@ -422,6 +425,84 @@ def ranking_produtos(dias=30):
         return itens
     try: return run_async(_go())
     except Exception as e: return []
+
+
+# ── 18c. Tendencia e risco de ruptura por produto ──
+
+def produtos_tendencia(dias=30):
+    """Crescimento de vendas por SKU: periodo atual vs periodo anterior de
+    mesmo tamanho. anterior=0 com atual>0 vira crescimento_pct=None (produto
+    novo/reativado, sem base de comparacao pra inventar percentual) — mesma
+    filosofia anti-numero-fabricado de core/bi.py::_variacao()."""
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch(f"""
+            SELECT vi.sku,
+                   MAX(vi.descricao) AS descricao,
+                   SUM(CASE WHEN vp.data >= CURRENT_DATE - $1::int THEN vi.quantidade ELSE 0 END) AS qtd_atual,
+                   SUM(CASE WHEN vp.data < CURRENT_DATE - $1::int THEN vi.quantidade ELSE 0 END) AS qtd_anterior
+            FROM vendas_itens vi JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
+            WHERE vp.data >= CURRENT_DATE - $1::int * 2 AND vp.status != 'cancelado'
+              AND vi.sku IS NOT NULL AND vi.sku != ''
+            GROUP BY vi.sku
+        """, dias)
+        return [dict(r) for r in (rows or [])]
+    try:
+        linhas = run_async(_go())
+    except Exception as e:
+        return []
+
+    resultado = []
+    for r in linhas:
+        atual = float(r["qtd_atual"] or 0)
+        anterior = float(r["qtd_anterior"] or 0)
+        if atual == 0 and anterior == 0:
+            continue
+        crescimento = round((atual - anterior) / anterior * 100, 1) if anterior else None
+        resultado.append({
+            "sku": r["sku"], "descricao": r["descricao"] or r["sku"],
+            "quantidade_atual": round(atual, 2), "quantidade_anterior": round(anterior, 2),
+            "crescimento_pct": crescimento,
+        })
+    return resultado
+
+
+def risco_ruptura(dias=30):
+    """Produtos vendendo bem MAS com estoque acabando — velocidade de venda
+    alta, estoque baixo. Diferente de 'parado' (zero venda) e de rupturas()
+    (zero estoque, ja consumada) — aqui e' o alerta ANTES de zerar."""
+    dias = max(1, int(dias or 30))
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch(f"""
+            SELECT vi.sku, MAX(vi.descricao) AS descricao, SUM(vi.quantidade) AS qtd_vendida,
+                   (SELECT COALESCE(SUM(e.quantidade), 0) FROM estoque_lojas e WHERE e.sku = vi.sku) AS estoque_atual
+            FROM vendas_itens vi JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
+            WHERE vp.data >= CURRENT_DATE - $1::int AND vp.status != 'cancelado'
+              AND vi.sku IS NOT NULL AND vi.sku != ''
+            GROUP BY vi.sku
+        """, dias)
+        return [dict(r) for r in (rows or [])]
+    try:
+        linhas = run_async(_go())
+    except Exception as e:
+        return []
+
+    resultado = []
+    for r in linhas:
+        qtd_vendida = float(r["qtd_vendida"] or 0)
+        estoque_atual = float(r["estoque_atual"] or 0)
+        velocidade_diaria = qtd_vendida / dias
+        if velocidade_diaria <= 0 or estoque_atual <= 0:
+            continue
+        resultado.append({
+            "sku": r["sku"], "descricao": r["descricao"] or r["sku"],
+            "estoque_atual": round(estoque_atual, 2), "quantidade_vendida": round(qtd_vendida, 2),
+            "velocidade_diaria": round(velocidade_diaria, 3),
+            "dias_restantes": round(estoque_atual / velocidade_diaria, 1),
+        })
+    resultado.sort(key=lambda p: p["dias_restantes"])
+    return resultado[:15]
 
 # ── 19. Financeiro ──
 
