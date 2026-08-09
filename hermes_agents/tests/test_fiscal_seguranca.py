@@ -245,5 +245,53 @@ class TestDanfeUrlResiliente(unittest.TestCase):
             self.assertEqual(bling_erp.get_nfe_danfe_url(1), "")
 
 
+
+class TestRotasFiscalRemovidas(unittest.TestCase):
+    """Fase 1 da limpeza do modulo Fiscal removeu tabelas/cfop|ncm|cest e
+    tributos/calcular/<id> — confirma que nao respondem mais (404), nao
+    algum outro erro que sugira que a rota ainda existe."""
+
+    def setUp(self):
+        self._env_patch = patch.dict(os.environ, {"ATHENA_TOKEN": _TEST_TOKEN})
+        self._env_patch.start()
+        app = Flask(__name__)
+        app.config["TESTING"] = True
+        app.register_blueprint(fiscal_bp)
+        self.client = app.test_client()
+
+    def tearDown(self):
+        self._env_patch.stop()
+
+    def test_tabelas_cfop_removida(self):
+        headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+        r = self.client.get("/api/fiscal/tabelas/cfop", headers=headers)
+        self.assertEqual(r.status_code, 404)
+
+    def test_tabelas_ncm_removida(self):
+        headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+        r = self.client.get("/api/fiscal/tabelas/ncm", headers=headers)
+        self.assertEqual(r.status_code, 404)
+
+    def test_tabelas_cest_removida(self):
+        headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+        r = self.client.get("/api/fiscal/tabelas/cest", headers=headers)
+        self.assertEqual(r.status_code, 404)
+
+    def test_tributos_calcular_removida(self):
+        headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+        r = self.client.get("/api/fiscal/tributos/calcular/1", headers=headers)
+        self.assertEqual(r.status_code, 404)
+
+    def test_contas_receber_bling_nao_e_mais_tabela_valida(self):
+        headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+        r = self.client.get("/api/fiscal/contas_receber_bling", headers=headers)
+        self.assertEqual(r.status_code, 404)
+
+    def test_contas_pagar_bling_nao_e_mais_tabela_valida(self):
+        headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+        r = self.client.get("/api/fiscal/contas_pagar_bling", headers=headers)
+        self.assertEqual(r.status_code, 404)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

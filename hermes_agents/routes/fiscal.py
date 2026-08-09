@@ -1,5 +1,4 @@
 from flask import Blueprint, request, jsonify
-from core import run_async, get_db
 from core.rbac import requer_permissao
 
 fiscal_bp = Blueprint("fiscal", __name__, url_prefix="/api/fiscal")
@@ -12,51 +11,6 @@ def fiscal_dashboard():
     @requer_permissao("fiscal.ver")
     def _go():
         return jsonify(dashboard())
-    return _go()
-
-
-@fiscal_bp.route("/tabelas/cfop", methods=["GET"])
-def fiscal_tabelas_cfop():
-    @requer_permissao("fiscal.ver")
-    def _go():
-        async def _query():
-            db = await get_db()
-            rows = await db.fetch("SELECT DISTINCT cfop as codigo, natureza_operacao as descricao, tipo FROM fiscal_notas_fiscais WHERE cfop IS NOT NULL AND cfop != '' ORDER BY cfop LIMIT 50")
-            return [dict(r) for r in (rows or [])]
-        try:
-            return jsonify(run_async(_query()))
-        except Exception:
-            return jsonify([])
-    return _go()
-
-
-@fiscal_bp.route("/tabelas/ncm", methods=["GET"])
-def fiscal_tabelas_ncm():
-    @requer_permissao("fiscal.ver")
-    def _go():
-        async def _query():
-            db = await get_db()
-            rows = await db.fetch("SELECT DISTINCT ncm as codigo, '' as descricao FROM fiscal_nfe_itens WHERE ncm IS NOT NULL AND ncm != '' ORDER BY ncm LIMIT 50")
-            return [dict(r) for r in (rows or [])]
-        try:
-            return jsonify(run_async(_query()))
-        except Exception:
-            return jsonify([])
-    return _go()
-
-
-@fiscal_bp.route("/tabelas/cest", methods=["GET"])
-def fiscal_tabelas_cest():
-    @requer_permissao("fiscal.ver")
-    def _go():
-        async def _query():
-            db = await get_db()
-            rows = await db.fetch("SELECT DISTINCT cest as codigo, '' as descricao FROM fiscal_nfe_itens WHERE cest IS NOT NULL AND cest != '' ORDER BY cest LIMIT 50")
-            return [dict(r) for r in (rows or [])]
-        try:
-            return jsonify(run_async(_query()))
-        except Exception:
-            return jsonify([])
     return _go()
 
 
@@ -139,16 +93,6 @@ def fiscal_delete(tabela, id):
     return _go()
 
 
-@fiscal_bp.route("/tributos/calcular/<int:nota_id>", methods=["GET"])
-def fiscal_calcular_tributos(nota_id):
-    from core.fiscal import calcular_tributos_nota
-
-    @requer_permissao("fiscal.ver")
-    def _go():
-        return jsonify(calcular_tributos_nota(nota_id))
-    return _go()
-
-
 @fiscal_bp.route("/obrigacoes/proximas", methods=["GET"])
 def fiscal_obrigacoes_proximas():
     from core.fiscal import obrigacoes_proximas
@@ -172,11 +116,25 @@ def fiscal_obrigacoes_atrasadas():
 
 @fiscal_bp.route("/obrigacoes/<int:id>/baixar", methods=["POST"])
 def fiscal_baixar_obrigacao(id):
-    from core.fiscal import baixar_obrigacao
+    from core.fiscal import baixar_ocorrencia
+    from core.rbac import usuario_atual_da_request
 
     @requer_permissao("fiscal.editar")
     def _go():
-        return jsonify(baixar_obrigacao(id))
+        usuario = usuario_atual_da_request()
+        responsavel = usuario.get("email") or usuario.get("nome") or ""
+        return jsonify(baixar_ocorrencia(id, responsavel))
+    return _go()
+
+
+@fiscal_bp.route("/obrigacoes/ocorrencias", methods=["GET"])
+def fiscal_obrigacoes_ocorrencias():
+    from core.fiscal import obrigacoes_ocorrencias_competencia
+
+    @requer_permissao("fiscal.ver")
+    def _go():
+        competencia = request.args.get("competencia", default=None, type=str)
+        return jsonify({"data": obrigacoes_ocorrencias_competencia(competencia)})
     return _go()
 
 

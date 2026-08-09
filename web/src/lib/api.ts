@@ -658,8 +658,6 @@ export const api = {
     request<{ success?: boolean; error?: string }>(`/api/lojas/manage/${id}/operacional`, { method: "PUT", body: JSON.stringify(campos) }),
   lojasComercialAtualizar: (id: number, campos: Record<string, unknown>) =>
     request<{ success?: boolean; error?: string }>(`/api/lojas/manage/${id}/comercial`, { method: "PUT", body: JSON.stringify(campos) }),
-  lojasFiscalAtualizar: (id: number, campos: Record<string, unknown>) =>
-    request<{ success?: boolean; error?: string }>(`/api/lojas/manage/${id}/fiscal`, { method: "PUT", body: JSON.stringify(campos) }),
   lojasFinanceiroAtualizar: (id: number, campos: Record<string, unknown>) =>
     request<{ success?: boolean; error?: string }>(`/api/lojas/manage/${id}/financeiro`, { method: "PUT", body: JSON.stringify(campos) }),
   lojasEstoqueConfigAtualizar: (id: number, campos: Record<string, unknown>) =>
@@ -1715,46 +1713,31 @@ export async function fiscalList(
 }
 
 export async function fiscalGet(tabela: string, id: number): Promise<Record<string, unknown>> {
-  const res = await fetch(`/api/fiscal/${tabela}/${id}`);
-  return res.json();
+  return request(`/api/fiscal/${tabela}/${id}`);
 }
 
 export async function fiscalCreate(tabela: string, data: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const res = await fetch(`/api/fiscal/${tabela}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  return res.json();
+  return request(`/api/fiscal/${tabela}`, { method: "POST", body: JSON.stringify(data) });
 }
 
 export async function fiscalUpdate(tabela: string, id: number, data: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const res = await fetch(`/api/fiscal/${tabela}/${id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  return res.json();
+  return request(`/api/fiscal/${tabela}/${id}`, { method: "PUT", body: JSON.stringify(data) });
 }
 
 export async function fiscalDelete(tabela: string, id: number): Promise<{ success: boolean }> {
-  const res = await fetch(`/api/fiscal/${tabela}/${id}`, { method: "DELETE" });
-  return res.json();
-}
-
-export async function fiscalCalcularTributos(notaId: number): Promise<Record<string, unknown>> {
-  const res = await fetch(`/api/fiscal/tributos/calcular/${notaId}`);
-  return res.json();
+  return request(`/api/fiscal/${tabela}/${id}`, { method: "DELETE" });
 }
 
 export async function fiscalObrigacoesProximas(dias?: number): Promise<{ data: unknown[] }> {
-  const res = await fetch(`/api/fiscal/obrigacoes/proximas${dias ? "?dias=" + dias : ""}`);
-  return res.json();
+  return request(`/api/fiscal/obrigacoes/proximas${dias ? "?dias=" + dias : ""}`);
 }
 
 export async function fiscalObrigacoesAtrasadas(): Promise<{ data: unknown[] }> {
-  const res = await fetch("/api/fiscal/obrigacoes/atrasadas");
-  return res.json();
+  return request("/api/fiscal/obrigacoes/atrasadas");
+}
+
+export async function fiscalObrigacoesOcorrencias(competencia?: string): Promise<{ data: unknown[] }> {
+  return request(`/api/fiscal/obrigacoes/ocorrencias${competencia ? "?competencia=" + competencia : ""}`);
 }
 
 export async function fiscalApuracao(params?: { ano?: number; mes?: number; dias?: number }): Promise<{ resumo: Record<string, unknown>; mensal: unknown[]; fechamento?: { fechado: boolean; fechado_por?: string; fechado_em?: string; divergente?: boolean; total_tributos_no_fechamento?: number }; error?: string }> {
@@ -1790,8 +1773,7 @@ export async function fiscalApuracaoFechamentos(): Promise<{ data: unknown[] }> 
 }
 
 export async function fiscalBaixarObrigacao(id: number): Promise<Record<string, unknown>> {
-  const res = await fetch(`/api/fiscal/obrigacoes/${id}/baixar`, { method: "POST" });
-  return res.json();
+  return request(`/api/fiscal/obrigacoes/${id}/baixar`, { method: "POST" });
 }
 
 // ponytail: sync de notas fiscais processa o DETALHE de cada nota via

@@ -1,6 +1,6 @@
-"""Testes de core/lojas_fiscal_financeiro.py — fiscal/financeiro/estoque-
-config, e a mascara de campos sensiveis antes de auditoria (certificado
-digital, CSC, token fiscal, chave PIX nunca em texto puro em audit_log)."""
+"""Testes de core/lojas_fiscal_financeiro.py — financeiro/estoque-config, e
+a mascara de campos sensiveis antes de auditoria (chave PIX nunca em texto
+puro em audit_log)."""
 import sys, os, re, unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from unittest.mock import patch, AsyncMock
@@ -60,18 +60,6 @@ class TestLojasFiscalFinanceiro(unittest.IsolatedAsyncioTestCase):
         self._p.stop()
         lojas._table_ok = False
 
-    async def test_atualizar_fiscal(self):
-        ok = ff.atualizar_fiscal(1, {
-            "regime_tributario": "simples_nacional", "serie_nfe": "1", "serie_nfce": "2",
-            "ambiente_fiscal": "producao", "certificado_digital": "/certs/loja1.pfx",
-            "csc_nfce": "abc123", "token_fiscal": "tok-xyz",
-        })
-        self.assertTrue(ok)
-        row = self.fake.rows[1]
-        self.assertEqual(row["regime_tributario"], "simples_nacional")
-        self.assertEqual(row["ambiente_fiscal"], "producao")
-        self.assertEqual(row["certificado_digital"], "/certs/loja1.pfx")
-
     async def test_atualizar_financeiro(self):
         ok = ff.atualizar_financeiro(1, {
             "conta_bancaria": "Banco X ag 0001 cc 12345", "gateway_pagamento": "mercado_pago",
@@ -99,21 +87,17 @@ class TestLojasFiscalFinanceiro(unittest.IsolatedAsyncioTestCase):
 
     def test_mascarar_para_auditoria_esconde_campos_sensiveis(self):
         campos = {
-            "regime_tributario": "simples_nacional",
-            "certificado_digital": "/certs/loja1.pfx",
-            "csc_nfce": "abc123",
-            "token_fiscal": "tok-xyz",
+            "gateway_pagamento": "mercado_pago",
             "pix_chave": "loja1@charme.com",
         }
         mascarado = ff.mascarar_para_auditoria(campos)
-        self.assertEqual(mascarado["regime_tributario"], "simples_nacional")
-        for campo in ("certificado_digital", "csc_nfce", "token_fiscal", "pix_chave"):
-            self.assertNotEqual(mascarado[campo], campos[campo])
-            self.assertTrue(mascarado[campo].startswith("configurado:"))
+        self.assertEqual(mascarado["gateway_pagamento"], "mercado_pago")
+        self.assertNotEqual(mascarado["pix_chave"], campos["pix_chave"])
+        self.assertTrue(mascarado["pix_chave"].startswith("configurado:"))
 
     def test_mascarar_para_auditoria_campo_vazio_marca_configurado_false(self):
-        mascarado = ff.mascarar_para_auditoria({"token_fiscal": ""})
-        self.assertEqual(mascarado["token_fiscal"], "configurado: False")
+        mascarado = ff.mascarar_para_auditoria({"pix_chave": ""})
+        self.assertEqual(mascarado["pix_chave"], "configurado: False")
 
 
 if __name__ == "__main__":

@@ -558,11 +558,21 @@ def ao_converter_proposta_em_contrato(proposta_id: int) -> dict:
 # ─────────────────────────────────────────────────────────
 
 def gerar_alertas_obrigacoes() -> dict:
-    """Gera alertas para obrigacoes vencendo hoje e atrasadas."""
+    """Gera alertas para obrigacoes vencendo hoje e atrasadas.
+
+    ponytail: consultava fiscal_obrigacoes.data_vencimento direto — coluna
+    congelada desde o primeiro boot (Fase 1 do redesenho Fiscal moveu
+    vencimento real pra fiscal_obrigacoes_ocorrencias, uma linha por
+    competencia). Ver core/fiscal.py::obrigacoes_proximas/atrasadas, mesma
+    fonte."""
     async def _go():
         db = await get_db()
-        vencendo = await db.fetch("SELECT * FROM fiscal_obrigacoes WHERE data_vencimento = CURRENT_DATE AND status = 'pendente'")
-        atrasadas = await db.fetch("SELECT * FROM fiscal_obrigacoes WHERE data_vencimento < CURRENT_DATE AND status = 'pendente'")
+        vencendo = await db.fetch("""SELECT oc.*, ob.nome, ob.sigla FROM fiscal_obrigacoes_ocorrencias oc
+            JOIN fiscal_obrigacoes ob ON ob.id = oc.obrigacao_id
+            WHERE oc.data_vencimento = CURRENT_DATE AND oc.status = 'pendente'""")
+        atrasadas = await db.fetch("""SELECT oc.*, ob.nome, ob.sigla FROM fiscal_obrigacoes_ocorrencias oc
+            JOIN fiscal_obrigacoes ob ON ob.id = oc.obrigacao_id
+            WHERE oc.data_vencimento < CURRENT_DATE AND oc.status = 'pendente'""")
         return {"vencendo_hoje": len(vencendo), "atrasadas": len(atrasadas),
             "alertas": [dict(r) for r in (vencendo + atrasadas)]}
     try: return run_async(_go())

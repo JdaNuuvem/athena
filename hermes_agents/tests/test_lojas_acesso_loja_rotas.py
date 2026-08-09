@@ -191,10 +191,6 @@ class TestRequerAcessoLojaSubRecursos(unittest.TestCase):
             r = self.client.put("/api/lojas/manage/1/operacional", json={"regiao": "Sul"}, headers=self.headers)
         self.assertNotEqual(r.status_code, 403)
 
-    def test_fiscal_loja_fora_da_lista_bloqueia(self):
-        r = self.client.put("/api/lojas/manage/2/fiscal", json={"regime_tributario": "simples"}, headers=self.headers)
-        self.assertEqual(r.status_code, 403)
-
     def test_financeiro_loja_fora_da_lista_bloqueia(self):
         r = self.client.put("/api/lojas/manage/2/financeiro", json={"pix_chave": "x"}, headers=self.headers)
         self.assertEqual(r.status_code, 403)

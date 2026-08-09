@@ -245,39 +245,10 @@ class TestFiscalApuracaoRotasRBAC(unittest.TestCase):
         token = rbac.gerar_token_sessao(1, "op@x.com", "Sem Papel")
         headers = {"Authorization": f"Bearer {token}"}
         with patch("core.rbac.get_permissoes_por_usuario", return_value=[]), \
-             patch("core.fiscal.baixar_obrigacao") as mock_baixar:
+             patch("core.fiscal.baixar_ocorrencia") as mock_baixar:
             r = self.client.post("/api/fiscal/obrigacoes/1/baixar", headers=headers)
         self.assertEqual(r.status_code, 403)
         mock_baixar.assert_not_called()
-
-
-class TestCalcularTributosNotaDecimal(unittest.TestCase):
-    def test_calcula_com_precisao_decimal(self):
-        db = AsyncMock()
-        db.fetchrow = AsyncMock(return_value={"valor_produtos": "100.10"})
-        db.fetch = AsyncMock(return_value=[
-            {"nome": "ICMS", "sigla": "ICMS", "aliquota": "18.0000"},
-            {"nome": "PIS", "sigla": "PIS", "aliquota": "1.6500"},
-        ])
-        async def _fake_get_db(): return db
-        with patch.object(fiscal, "get_db", _fake_get_db):
-            r = fiscal.calcular_tributos_nota(1)
-        self.assertNotIn("error", r)
-        # 100.10 * 18% = 18.018 -> arredonda pra 18.02; 100.10 * 1.65% = 1.65165 -> 1.65
-        icms = next(t for t in r["tributos"] if t["sigla"] == "ICMS")
-        pis = next(t for t in r["tributos"] if t["sigla"] == "PIS")
-        self.assertEqual(icms["valor"], 18.02)
-        self.assertEqual(pis["valor"], 1.65)
-        self.assertEqual(r["total_tributos"], 19.67)
-
-    def test_nota_nao_encontrada(self):
-        db = AsyncMock()
-        db.fetchrow = AsyncMock(return_value=None)
-        async def _fake_get_db(): return db
-        with patch.object(fiscal, "get_db", _fake_get_db):
-            r = fiscal.calcular_tributos_nota(999)
-        self.assertEqual(r, {"error": "nota nao encontrada"})
-
 
 class TestSincronizarUmaNotaFiscal(unittest.TestCase):
     """Usada pelo webhook de nota-fiscal — antes o webhook gravava so' um

@@ -14,7 +14,6 @@ const SUBMENU: SubmenuItem[] = [
   { href: "/fiscal/apuracao", label: "Apuração", color: "bg-red-600" },
   { href: "/fiscal/tributos", label: "Tributos", color: "bg-amber-600" },
   { href: "/fiscal/obrigacoes", label: "Obrigações", color: "bg-purple-600" },
-  { href: "/fiscal/tabelas", label: "Tabelas Fiscais", color: "bg-emerald-600" },
 ];
 
 export default function FiscalPage() {
