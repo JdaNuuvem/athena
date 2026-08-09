@@ -250,8 +250,7 @@ export interface KPIOverview {
   top_skus: Array<{
     sku: string;
     nome: string;
-    qtd: number;
-    receita: number;
+    valor: number;
     margem: number;
   }>;
 }

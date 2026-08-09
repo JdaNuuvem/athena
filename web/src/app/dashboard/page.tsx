@@ -100,7 +100,7 @@ export default function DashboardPage() {
         clientesTotal: Number(cli.total) || 0,
         vendasHoje: Number(r1.total) || 0,
         vendasQtd: Number(r1.quantidade) || 0,
-        topProdutos: (k as any)?.top_produtos || [],
+        topProdutos: (k as any)?.top_skus || [],
         alertas: [],
       });
     }).catch((e: unknown) => setError(e instanceof Error ? e.message : "Erro ao carregar"))

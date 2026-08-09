@@ -160,5 +160,58 @@ class TestKpiOverviewFonteDeVendas(unittest.TestCase):
         self.assertIn(7, params_pdv)
 
 
+class TestKpiOverviewTopSkus(unittest.TestCase):
+    """top_skus vinha de uma query direta na tabela orfa 'vendas' (nunca
+    alimentada), com campos {sku,nome,qtd,receita,margem} — o frontend
+    (dashboard/page.tsx) sempre leu a chave errada (`top_produtos`, que nao
+    existe) E esperava campos {nome,valor,margem} (BarChart dataKey="valor").
+    Corrigido pra reusar core.relatorios.ranking_produtos (ja' fonteado de
+    vendas_pedidos+pdv_vendas) e mapear pro shape que o frontend consome."""
+
+    def setUp(self):
+        self.client = app.test_client()
+        self.headers = {"Authorization": f"Bearer {USER_TOKEN}"}
+
+    def _rodar(self):
+        cursor = _FakeCursor(fetchone_values=[
+            {"v": 0.0}, {"v": 0.0}, {"v": 0}, {"v": 0},
+            {"v": 0}, {"v": 0}, {"v": 0}, {"v": 0},
+        ])
+        with patch("athena_bridge._db_sync", return_value=_FakeConn(cursor)):
+            return self.client.get("/api/kpi/overview", headers=self.headers)
+
+    @patch("core.relatorios.ranking_produtos")
+    def test_mapeia_descricao_receita_e_margem_pro_shape_do_frontend(self, mock_ranking):
+        mock_ranking.return_value = [
+            {"sku": "SKU-A", "descricao": "Produto A", "quantidade": 5,
+             "receita": 100.0, "margem_pct": 20.0},
+            {"sku": "SKU-B", "descricao": "Produto B", "quantidade": 2,
+             "receita": 300.0, "margem_pct": 40.0},
+        ]
+        r = self._rodar()
+        data = r.get_json()
+        # ordenado por receita desc — SKU-B (300) antes de SKU-A (100)
+        self.assertEqual(data["top_skus"][0], {"sku": "SKU-B", "nome": "Produto B", "valor": 300.0, "margem": 40.0})
+        self.assertEqual(data["top_skus"][1], {"sku": "SKU-A", "nome": "Produto A", "valor": 100.0, "margem": 20.0})
+
+    @patch("core.relatorios.ranking_produtos")
+    def test_limita_a_10_itens(self, mock_ranking):
+        mock_ranking.return_value = [
+            {"sku": f"SKU-{i}", "descricao": f"Produto {i}", "quantidade": 1,
+             "receita": float(i), "margem_pct": 10.0}
+            for i in range(15)
+        ]
+        r = self._rodar()
+        data = r.get_json()
+        self.assertEqual(len(data["top_skus"]), 10)
+
+    @patch("core.relatorios.ranking_produtos")
+    def test_erro_no_ranking_nao_quebra_a_rota(self, mock_ranking):
+        mock_ranking.side_effect = Exception("falha ao calcular ranking")
+        r = self._rodar()
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.get_json()["top_skus"], [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

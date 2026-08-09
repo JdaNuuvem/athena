@@ -2027,8 +2027,21 @@ def kpi_overview():
         except Exception:
             receita_shopee,receita_ml=0,0
         try:
-            cur.execute(f"SELECT v.sku,f.descricao AS nome,SUM(v.quantidade) AS qtd,SUM(v.receita_bruta) AS receita,COALESCE(m.margem_pct,0) AS margem FROM vendas v JOIN fichas_tecnicas f ON f.sku=v.sku LEFT JOIN margens_diarias m ON m.sku=v.sku AND m.data=CURRENT_DATE WHERE v.data>=CURRENT_DATE-%s{loja_sql.replace('loja_id', 'v.loja_id')} GROUP BY v.sku,f.descricao,m.margem_pct ORDER BY SUM(v.receita_bruta) DESC LIMIT 10", (periodo,) + loja_args)
-            top_skus=[dict(r) for r in cur.fetchall()]
+            # Query original lia da tabela orfa 'vendas' (nunca alimentada -
+            # ver comentario acima em receita_total/total_pedidos). Reusa
+            # core.relatorios.ranking_produtos, ja' fonteado de
+            # vendas_pedidos+pdv_vendas com margem calculada de verdade
+            # (lucro/receita), em vez de reescrever a mesma query aqui.
+            # Limitacao aceita: ranking_produtos nao filtra por loja hoje —
+            # este card ignora loja_id (a query original tambem nunca
+            # funcionou com ou sem esse filtro, entao nao e' regressao).
+            from core.relatorios import ranking_produtos
+            ranking = ranking_produtos(periodo)
+            top10 = sorted(ranking, key=lambda r: r.get("receita", 0), reverse=True)[:10]
+            top_skus = [
+                {"sku": r["sku"], "nome": r["descricao"], "valor": r["receita"], "margem": r["margem_pct"]}
+                for r in top10
+            ]
         except Exception:
             top_skus=[]
         cur.close(); conn.close()
