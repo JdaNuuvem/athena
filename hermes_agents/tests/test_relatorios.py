@@ -29,6 +29,31 @@ class TestRelatorios(unittest.TestCase):
         self.assertGreaterEqual(r["total"],0)
         self.assertEqual(r["periodo_dias"],99999)
 
+    def test_vendas_diarias_consolida_bling_e_pdv_do_mesmo_dia_e_ordena(self):
+        """Achado real: o Dashboard mostrava 'Vendas do mes' com o eixo X fora
+        de ordem cronologica — _union_vendas concatenava diarias_bling +
+        diarias_pdv sem consolidar por dia nem ordenar (nenhuma das duas
+        queries SQL tem ORDER BY), entao um dia com venda em Bling E PDV virava
+        2 pontos soltos na lista, na ordem que o Postgres decidisse devolver."""
+        from datetime import date
+        fake = {
+            "total": 300.0, "quantidade": 3,
+            "diarias_bling": [
+                {"dia": date(2026, 8, 3), "qtd": 1, "valor": 100.0},
+                {"dia": date(2026, 8, 1), "qtd": 1, "valor": 50.0},
+            ],
+            "diarias_pdv": [
+                {"dia": date(2026, 8, 3), "qtd": 1, "valor": 25.0},  # mesmo dia do bling acima
+                {"dia": date(2026, 8, 2), "qtd": 1, "valor": 125.0},
+            ],
+        }
+        with patch("core.relatorios._union_vendas", return_value=fake):
+            r = rel.vendas(30)
+        self.assertEqual([d["dia"] for d in r["diarias"]], ["2026-08-01", "2026-08-02", "2026-08-03"])
+        dia3 = next(d for d in r["diarias"] if d["dia"] == "2026-08-03")
+        self.assertEqual(dia3["valor"], 125.0)  # 100 (bling) + 25 (pdv) consolidado
+        self.assertEqual(dia3["qtd"], 2)
+
     @patch("core.relatorios.get_db")
     def test_ranking_produtos_calcula_lucro_com_comissao_so_shopee(self, mock_get_db):
         """Comissao de marketplace so' e' deduzida quando o SQL classificou o canal

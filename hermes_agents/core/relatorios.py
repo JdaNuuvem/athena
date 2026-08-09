@@ -67,7 +67,20 @@ def _union_vendas(dias: int, loja_id=None):
 
 def vendas(dias=30, loja_id=None):
     r = _union_vendas(dias, loja_id)
-    return {"total": r["total"], "quantidade": r["quantidade"], "diarias": r["diarias_bling"] + r["diarias_pdv"], "periodo_dias": dias}
+    # Consolida por dia (Bling + PDV podem ambos vender no mesmo dia — sem
+    # isso a lista tinha ate' 2 pontos por dia, e nenhuma das duas queries em
+    # _union_vendas tem ORDER BY, entao o grafico de vendas do Dashboard saia
+    # com o eixo X fora de ordem cronologica). Mesmo padrao ja usado em
+    # core/bi.py::vendas_diarias().
+    por_dia = {}
+    for row in r["diarias_bling"] + r["diarias_pdv"]:
+        d = row["dia"]
+        chave = d.isoformat() if hasattr(d, "isoformat") else str(d)
+        acc = por_dia.setdefault(chave, {"dia": chave, "qtd": 0, "valor": 0.0})
+        acc["qtd"] += int(row["qtd"] or 0)
+        acc["valor"] += float(row["valor"] or 0)
+    diarias = [por_dia[k] for k in sorted(por_dia.keys())]
+    return {"total": r["total"], "quantidade": r["quantidade"], "diarias": diarias, "periodo_dias": dias}
 
 # ── 2. Lucro e Margem ──
 
