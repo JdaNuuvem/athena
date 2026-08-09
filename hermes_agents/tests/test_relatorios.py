@@ -75,4 +75,100 @@ class TestRelatorios(unittest.TestCase):
 
         self.assertEqual(rel.ranking_produtos(30), [])
 
+    @patch("core.relatorios.get_db")
+    def test_produtos_tendencia_calcula_crescimento(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = [
+            {"sku": "SKU-A", "descricao": "Produto A", "qtd_atual": 30.0, "qtd_anterior": 10.0},
+        ]
+        mock_get_db.return_value = fake_db
+
+        itens = rel.produtos_tendencia(30)
+
+        self.assertEqual(len(itens), 1)
+        item = itens[0]
+        self.assertEqual(item["sku"], "SKU-A")
+        self.assertEqual(item["quantidade_atual"], 30.0)
+        self.assertEqual(item["quantidade_anterior"], 10.0)
+        self.assertEqual(item["crescimento_pct"], 200.0)  # (30-10)/10*100
+
+    @patch("core.relatorios.get_db")
+    def test_produtos_tendencia_sem_base_anterior_nao_inventa_percentual(self, mock_get_db):
+        """Produto novo (sem venda no periodo anterior) nao pode aparecer com
+        '+inf%' ou '0%' — sem base de comparacao, o crescimento fica None."""
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = [
+            {"sku": "SKU-NOVO", "descricao": "Produto Novo", "qtd_atual": 15.0, "qtd_anterior": 0.0},
+        ]
+        mock_get_db.return_value = fake_db
+
+        itens = rel.produtos_tendencia(30)
+
+        self.assertIsNone(itens[0]["crescimento_pct"])
+
+    @patch("core.relatorios.get_db")
+    def test_produtos_tendencia_queda_a_zero_fica_menos_100(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = [
+            {"sku": "SKU-B", "descricao": "Produto B", "qtd_atual": 0.0, "qtd_anterior": 20.0},
+        ]
+        mock_get_db.return_value = fake_db
+
+        itens = rel.produtos_tendencia(30)
+
+        self.assertEqual(itens[0]["crescimento_pct"], -100.0)
+
+    @patch("core.relatorios.get_db")
+    def test_produtos_tendencia_sem_venda_em_nenhum_periodo_nao_aparece(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = [
+            {"sku": "SKU-C", "descricao": "Produto C", "qtd_atual": 0.0, "qtd_anterior": 0.0},
+        ]
+        mock_get_db.return_value = fake_db
+
+        self.assertEqual(rel.produtos_tendencia(30), [])
+
+    @patch("core.relatorios.get_db")
+    def test_risco_ruptura_calcula_dias_restantes(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = [
+            {"sku": "SKU-D", "descricao": "Produto D", "qtd_vendida": 30.0, "estoque_atual": 15.0},
+        ]
+        mock_get_db.return_value = fake_db
+
+        itens = rel.risco_ruptura(30)
+
+        self.assertEqual(len(itens), 1)
+        item = itens[0]
+        self.assertEqual(item["velocidade_diaria"], 1.0)  # 30/30
+        self.assertEqual(item["dias_restantes"], 15.0)  # 15/1.0
+
+    @patch("core.relatorios.get_db")
+    def test_risco_ruptura_exclui_sem_venda_ou_sem_estoque(self, mock_get_db):
+        """Produto sem venda no periodo (velocidade=0) ou ja zerado (estoque=0)
+        NAO e' risco de ruptura — sao os casos de 'parado' e 'ruptura ja
+        consumada', metricas diferentes, nao podem se sobrepor aqui."""
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = [
+            {"sku": "SEM-VENDA", "descricao": "Sem venda", "qtd_vendida": 0.0, "estoque_atual": 50.0},
+            {"sku": "SEM-ESTOQUE", "descricao": "Sem estoque", "qtd_vendida": 20.0, "estoque_atual": 0.0},
+        ]
+        mock_get_db.return_value = fake_db
+
+        self.assertEqual(rel.risco_ruptura(30), [])
+
+    @patch("core.relatorios.get_db")
+    def test_risco_ruptura_ordena_por_dias_restantes_ascendente(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = [
+            {"sku": "URGENTE", "descricao": "Urgente", "qtd_vendida": 30.0, "estoque_atual": 3.0},  # 3 dias
+            {"sku": "FOLGA", "descricao": "Com folga", "qtd_vendida": 30.0, "estoque_atual": 30.0},  # 30 dias
+        ]
+        mock_get_db.return_value = fake_db
+
+        itens = rel.risco_ruptura(30)
+
+        self.assertEqual(itens[0]["sku"], "URGENTE")
+        self.assertEqual(itens[1]["sku"], "FOLGA")
+
 if __name__=="__main__":unittest.main(verbosity=2)
