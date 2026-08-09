@@ -2036,7 +2036,7 @@ def kpi_overview():
             # Shopee/i9Logic ja gravam loja_id certo no sync, filtrar aqui
             # separa loja virtual de fisica sem checar tipo em lugar nenhum.
             from core.relatorios import ranking_produtos
-            ranking = ranking_produtos(periodo, loja_id)
+            ranking = ranking_produtos(periodo, loja_id or None)
             top10 = sorted(ranking, key=lambda r: r.get("receita", 0), reverse=True)[:10]
             top_skus = [
                 {"sku": r["sku"], "nome": r["descricao"], "valor": r["receita"], "margem": r["margem_pct"]}

@@ -403,6 +403,7 @@ def ranking_produtos(dias=30, loja_id=None):
                 FROM vendas_itens vi JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
                 WHERE vp.data >= CURRENT_DATE - $1::int AND vp.status != 'cancelado'
                   AND ($2::int IS NULL OR vp.loja_id = $2)
+                -- branch PDV intencionalmente sem filtro de loja: tabela morta (0 linhas em producao)
                 UNION ALL
                 SELECT pi.produto_codigo AS sku, pi.quantidade AS quantidade, pi.valor_total AS valor_total,
                        'pdv' AS canal, 0 AS frete_alocado

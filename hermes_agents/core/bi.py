@@ -506,6 +506,7 @@ def estoque_parado(dias: int = 60, limite: int = 10, loja_id: int = None) -> lis
                   SELECT DISTINCT i.sku FROM vendas_itens i JOIN vendas_pedidos p ON p.id = i.pedido_id
                   WHERE p.data >= CURRENT_DATE - $1::int AND p.status != 'cancelado' AND i.sku IS NOT NULL
                     AND ($2::int IS NULL OR p.loja_id = $2)
+                  -- branch PDV intencionalmente sem filtro de loja: tabela morta (0 linhas em producao)
                   UNION
                   SELECT DISTINCT i.produto_codigo FROM pdv_itens i JOIN pdv_vendas v ON v.id = i.venda_id
                   WHERE DATE(v.data) >= CURRENT_DATE - $1::int AND i.produto_codigo IS NOT NULL

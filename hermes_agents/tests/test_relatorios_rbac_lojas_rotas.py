@@ -92,5 +92,24 @@ class TestDreLojaRotaComRestricaoDeLoja(unittest.TestCase):
         mock_dre.assert_called_once_with(365)  # clamp pro maximo de 365 dias
 
 
+class TestRankingProdutosRotaComRestricaoDeLoja(unittest.TestCase):
+    def setUp(self):
+        self.client = _app()
+        self.comum = {"Authorization": "Bearer qualquer"}
+
+    @patch("core.rbac.verificar_token_sessao", return_value={"user_id": 7, "email": "a@b.com", "role": "Vendedor"})
+    @patch("core.rbac_lojas.lojas_permitidas", return_value=[3, 4])
+    def test_loja_id_fora_da_lista_bloqueia_403(self, mock_permitidas, mock_verif):
+        r = self.client.get("/api/relatorios/ranking-produtos?loja_id=999", headers=self.comum)
+        self.assertEqual(r.status_code, 403)
+
+    @patch("core.rbac.verificar_token_sessao", return_value={"user_id": 7, "email": "a@b.com", "role": "Vendedor"})
+    @patch("core.rbac_lojas.lojas_permitidas", return_value=[3, 4])
+    @patch("core.relatorios.ranking_produtos", return_value=[])
+    def test_loja_id_permitida_passa(self, mock_ranking, mock_permitidas, mock_verif):
+        r = self.client.get("/api/relatorios/ranking-produtos?loja_id=3", headers=self.comum)
+        self.assertEqual(r.status_code, 200)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
