@@ -75,4 +75,42 @@ class TestRelatorios(unittest.TestCase):
 
         self.assertEqual(rel.ranking_produtos(30), [])
 
+    @patch("core.relatorios.get_db")
+    def test_vendas_hoje_dias_1_nao_inclui_ontem(self, mock_get_db):
+        """Card "Vendas hoje" chama vendas(1, ...) esperando so' o dia
+        corrente. O padrao generico da funcao (CURRENT_DATE - $1::int) usado
+        por vendas(30)/etc inclui o dia corrente MAIS N dias anteriores —
+        com dias=1 isso soma hoje + ontem inteiro, dobrando o valor do card.
+        A query deve filtrar so' por CURRENT_DATE quando dias=1 (parametro
+        0 subtraido de CURRENT_DATE), nao CURRENT_DATE - 1."""
+        fake_db = AsyncMock()
+        fake_db.fetchval.return_value = 0
+        fake_db.fetch.return_value = []
+        mock_get_db.return_value = fake_db
+
+        rel.vendas(1)
+
+        for call in fake_db.fetchval.call_args_list:
+            params = call.args[1:]
+            self.assertEqual(params, (0,), f"esperava filtro CURRENT_DATE - 0, achou {params} em {call.args[0]!r}")
+        for call in fake_db.fetch.call_args_list:
+            params = call.args[1:]
+            self.assertEqual(params, (0,), f"esperava filtro CURRENT_DATE - 0, achou {params} em {call.args[0]!r}")
+
+    @patch("core.relatorios.get_db")
+    def test_vendas_30_dias_comportamento_inalterado(self, mock_get_db):
+        """dias > 1 mantem o comportamento generico existente (CURRENT_DATE
+        - N) — o fix de dias=1 nao pode vazar pra outros periodos."""
+        fake_db = AsyncMock()
+        fake_db.fetchval.return_value = 0
+        fake_db.fetch.return_value = []
+        mock_get_db.return_value = fake_db
+
+        rel.vendas(30)
+
+        for call in fake_db.fetchval.call_args_list:
+            self.assertEqual(call.args[1:], (30,))
+        for call in fake_db.fetch.call_args_list:
+            self.assertEqual(call.args[1:], (30,))
+
 if __name__=="__main__":unittest.main(verbosity=2)

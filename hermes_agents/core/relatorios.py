@@ -36,17 +36,24 @@ def _loja_where_estoque(loja_id):
     return f" AND e.loja = (SELECT nome FROM lojas WHERE id = {int(loja_id)})"
 
 def _union_vendas(dias: int, loja_id=None):
-    """Retorna total, qtd, e diarias unindo vendas_pedidos + pdv_vendas."""
+    """Retorna total, qtd, e diarias unindo vendas_pedidos + pdv_vendas.
+
+    dias=1 e' tratado como "so' hoje" (filtro CURRENT_DATE, sem subtracao).
+    O padrao generico "CURRENT_DATE - N" inclui o dia corrente MAIS N dias
+    anteriores — com N=1 isso somaria hoje + ontem inteiro, dobrando o
+    valor do card "Vendas hoje" (unico chamador que usa dias=1; todo o
+    resto do modulo usa 30/60/90 e continua com o comportamento generico)."""
+    janela = 0 if dias <= 1 else dias
     loja_bl = _loja_where_bling(loja_id)
     loja_pdv = _loja_where_pdv(loja_id)
     async def _go():
         db = await get_db()
-        total_bling = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND status != 'cancelado'{loja_bl}", dias)
-        total_pdv = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM pdv_vendas venda WHERE DATE(data) >= CURRENT_DATE - $1::int{loja_pdv}", dias)
-        qtd_bling = await db.fetchval(f"SELECT COUNT(*) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int{loja_bl}", dias)
-        qtd_pdv = await db.fetchval(f"SELECT COUNT(*) FROM pdv_vendas venda WHERE DATE(data) >= CURRENT_DATE - $1::int{loja_pdv}", dias)
-        diarias_bling = await db.fetch(f"SELECT DATE(data) as dia, COUNT(*) as qtd, SUM(total) as valor FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND status != 'cancelado'{loja_bl} GROUP BY DATE(data)", dias)
-        diarias_pdv = await db.fetch(f"SELECT DATE(data) as dia, COUNT(*) as qtd, SUM(total) as valor FROM pdv_vendas venda WHERE DATE(data) >= CURRENT_DATE - $1::int{loja_pdv} GROUP BY DATE(data)", dias)
+        total_bling = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND status != 'cancelado'{loja_bl}", janela)
+        total_pdv = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM pdv_vendas venda WHERE DATE(data) >= CURRENT_DATE - $1::int{loja_pdv}", janela)
+        qtd_bling = await db.fetchval(f"SELECT COUNT(*) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int{loja_bl}", janela)
+        qtd_pdv = await db.fetchval(f"SELECT COUNT(*) FROM pdv_vendas venda WHERE DATE(data) >= CURRENT_DATE - $1::int{loja_pdv}", janela)
+        diarias_bling = await db.fetch(f"SELECT DATE(data) as dia, COUNT(*) as qtd, SUM(total) as valor FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND status != 'cancelado'{loja_bl} GROUP BY DATE(data)", janela)
+        diarias_pdv = await db.fetch(f"SELECT DATE(data) as dia, COUNT(*) as qtd, SUM(total) as valor FROM pdv_vendas venda WHERE DATE(data) >= CURRENT_DATE - $1::int{loja_pdv} GROUP BY DATE(data)", janela)
         return {
             "total": float((total_bling or 0) + (total_pdv or 0)),
             "quantidade": (qtd_bling or 0) + (qtd_pdv or 0),
