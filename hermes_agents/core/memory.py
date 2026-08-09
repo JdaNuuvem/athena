@@ -83,7 +83,7 @@ def store(query: str, response: str | None, agent_id: str,
         """, query, response, agent_id, category, success,
             json.dumps(metadata or {}, ensure_ascii=False))
         return row["id"] if row else None
-    return run_async(_go(), default=None)
+    return run_async(_go())
 
 
 def recall(query: str, agent_id: str | None = None,
