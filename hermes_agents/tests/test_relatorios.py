@@ -267,4 +267,92 @@ class TestRelatorios(unittest.TestCase):
         self.assertIsInstance(item["qtd"], float)
         self.assertEqual(item["valor_total"], 1234.56)
 
+    @patch("core.relatorios.get_db")
+    def test_ranking_produtos_repassa_loja_id_pra_query(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetch.side_effect = [
+            [{"sku": "SKU-A", "quantidade": 10, "receita": 1000.0, "comissao": 0.0, "frete": 0.0}],
+            [{"sku": "SKU-A", "descricao": "Produto A", "preco_custo": 30.0}],
+        ]
+        mock_get_db.return_value = fake_db
+
+        rel.ranking_produtos(30, loja_id=5)
+
+        primeira_query_params = fake_db.fetch.call_args_list[0].args[1:]
+        self.assertEqual(primeira_query_params, (30, 5))
+
+    @patch("core.relatorios.get_db")
+    def test_ranking_produtos_sem_loja_id_mantem_comportamento_atual(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetch.side_effect = [
+            [{"sku": "SKU-A", "quantidade": 10, "receita": 1000.0, "comissao": 0.0, "frete": 0.0}],
+            [{"sku": "SKU-A", "descricao": "Produto A", "preco_custo": 30.0}],
+        ]
+        mock_get_db.return_value = fake_db
+
+        rel.ranking_produtos(30)
+
+        primeira_query_params = fake_db.fetch.call_args_list[0].args[1:]
+        self.assertEqual(primeira_query_params, (30, None))
+
+    @patch("core.relatorios.get_db")
+    def test_curvas_repassa_loja_id_pra_query(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = []
+        mock_get_db.return_value = fake_db
+
+        rel.curvas(90, loja_id=3)
+
+        self.assertEqual(fake_db.fetch.call_args.args[1:], (90, 3))
+
+    @patch("core.relatorios.get_db")
+    def test_curvas_sem_loja_id_mantem_comportamento_atual(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = []
+        mock_get_db.return_value = fake_db
+
+        rel.curvas(90)
+
+        self.assertEqual(fake_db.fetch.call_args.args[1:], (90, None))
+
+    @patch("core.relatorios.get_db")
+    def test_produtos_tendencia_repassa_loja_id_pra_query(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = []
+        mock_get_db.return_value = fake_db
+
+        rel.produtos_tendencia(30, loja_id=8)
+
+        self.assertEqual(fake_db.fetch.call_args.args[1:], (30, 8))
+
+    @patch("core.relatorios.get_db")
+    def test_produtos_tendencia_sem_loja_id_mantem_comportamento_atual(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = []
+        mock_get_db.return_value = fake_db
+
+        rel.produtos_tendencia(30)
+
+        self.assertEqual(fake_db.fetch.call_args.args[1:], (30, None))
+
+    @patch("core.relatorios.get_db")
+    def test_risco_ruptura_repassa_loja_id_pra_query(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = []
+        mock_get_db.return_value = fake_db
+
+        rel.risco_ruptura(30, loja_id=2)
+
+        self.assertEqual(fake_db.fetch.call_args.args[1:], (30, 2))
+
+    @patch("core.relatorios.get_db")
+    def test_risco_ruptura_sem_loja_id_mantem_comportamento_atual(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = []
+        mock_get_db.return_value = fake_db
+
+        rel.risco_ruptura(30)
+
+        self.assertEqual(fake_db.fetch.call_args.args[1:], (30, None))
+
 if __name__=="__main__":unittest.main(verbosity=2)

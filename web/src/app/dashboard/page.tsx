@@ -243,7 +243,7 @@ export default function DashboardPage() {
         </section>
       )}
 
-      {showRanking && <RankingProdutosModal onClose={() => setShowRanking(false)} />}
+      {showRanking && <RankingProdutosModal onClose={() => setShowRanking(false)} lojaId={lojaId} />}
     </div>
   );
 }

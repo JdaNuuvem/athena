@@ -63,7 +63,7 @@ function ItemCard({ rank, titulo, subtitulo, children }: { rank: number; titulo:
   );
 }
 
-export default function RankingProdutosModal({ onClose }: { onClose: () => void }) {
+export default function RankingProdutosModal({ onClose, lojaId }: { onClose: () => void; lojaId?: string }) {
   const [dias, setDias] = useState(30);
   const [categoria, setCategoria] = useState<Categoria>("vendas");
   const [aba, setAba] = useState<Aba>("vendidos");
@@ -82,22 +82,22 @@ export default function RankingProdutosModal({ onClose }: { onClose: () => void 
     const tarefas: Promise<unknown>[] =
       categoria === "vendas"
         ? [
-            api.relatorioRankingProdutos(dias).then((r) => setRanking(r.itens || [])),
-            api.relatorioProdutosTendencia(dias).then(setTendencia),
+            api.relatorioRankingProdutos(dias, lojaId).then((r) => setRanking(r.itens || [])),
+            api.relatorioProdutosTendencia(dias, lojaId).then(setTendencia),
           ]
         : categoria === "lucratividade"
         ? [
-            api.relatorioRankingProdutos(dias).then((r) => setRanking(r.itens || [])),
-            api.relatorioCurvas(dias).then((r) => setAbc(r.itens || [])),
+            api.relatorioRankingProdutos(dias, lojaId).then((r) => setRanking(r.itens || [])),
+            api.relatorioCurvas(dias, lojaId).then((r) => setAbc(r.itens || [])),
           ]
         : [
-            api.relatorioEstoqueParado(dias).then(setParado),
-            api.relatorioRiscoRuptura(dias).then(setRuptura),
+            api.relatorioEstoqueParado(dias, 15, lojaId).then(setParado),
+            api.relatorioRiscoRuptura(dias, lojaId).then(setRuptura),
           ];
     Promise.all(tarefas)
       .catch((e) => setErro(e instanceof Error ? e.message : "Erro ao carregar ranking"))
       .finally(() => setLoading(false));
-  }, [categoria, dias]);
+  }, [categoria, dias, lojaId]);
 
   const trocarCategoria = (novaCategoria: string) => {
     const cat = novaCategoria as Categoria;

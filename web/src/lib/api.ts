@@ -709,16 +709,16 @@ export const api = {
     request<Record<string, unknown>>(`/api/relatorios/fluxo-caixa?dias=${dias}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
   relatorioClientes: (dias: number, lojaId?: string) =>
     request<Record<string, unknown>>(`/api/relatorios/clientes?dias=${dias}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
-  relatorioRankingProdutos: (dias: number) =>
-    request<{ itens: RankingProdutoItem[]; periodo_dias: number }>(`/api/relatorios/ranking-produtos?dias=${dias}`),
-  relatorioEstoqueParado: (dias: number, limite = 15) =>
-    request<EstoqueParadoItem[]>(`/api/relatorios/estoque-parado?dias=${dias}&limite=${limite}`),
-  relatorioProdutosTendencia: (dias: number) =>
-    request<ProdutoTendenciaItem[]>(`/api/relatorios/produtos-tendencia?dias=${dias}`),
-  relatorioRiscoRuptura: (dias: number) =>
-    request<RiscoRupturaItem[]>(`/api/relatorios/risco-ruptura?dias=${dias}`),
-  relatorioCurvas: (dias: number) =>
-    request<CurvaAbcResponse>(`/api/relatorios/curvas?dias=${dias}`),
+  relatorioRankingProdutos: (dias: number, lojaId?: string) =>
+    request<{ itens: RankingProdutoItem[]; periodo_dias: number }>(`/api/relatorios/ranking-produtos?dias=${dias}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
+  relatorioEstoqueParado: (dias: number, limite = 15, lojaId?: string) =>
+    request<EstoqueParadoItem[]>(`/api/relatorios/estoque-parado?dias=${dias}&limite=${limite}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
+  relatorioProdutosTendencia: (dias: number, lojaId?: string) =>
+    request<ProdutoTendenciaItem[]>(`/api/relatorios/produtos-tendencia?dias=${dias}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
+  relatorioRiscoRuptura: (dias: number, lojaId?: string) =>
+    request<RiscoRupturaItem[]>(`/api/relatorios/risco-ruptura?dias=${dias}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
+  relatorioCurvas: (dias: number, lojaId?: string) =>
+    request<CurvaAbcResponse>(`/api/relatorios/curvas?dias=${dias}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
   relatorioDrePorLoja: (dias: number, lojaId?: number) =>
     request<{ data: DreLoja[] }>(`/api/relatorios/dre-por-loja?dias=${dias}${lojaId ? `&loja_id=${lojaId}` : ""}`),
 

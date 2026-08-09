@@ -212,6 +212,17 @@ class TestKpiOverviewTopSkus(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.get_json()["top_skus"], [])
 
+    @patch("core.relatorios.ranking_produtos")
+    def test_repassa_loja_id_pro_ranking_produtos(self, mock_ranking):
+        mock_ranking.return_value = []
+        cursor = _FakeCursor(fetchone_values=[
+            {"v": 0.0}, {"v": 0.0}, {"v": 0}, {"v": 0},
+            {"v": 0}, {"v": 0}, {"v": 0}, {"v": 0},
+        ])
+        with patch("athena_bridge._db_sync", return_value=_FakeConn(cursor)):
+            self.client.get("/api/kpi/overview?loja_id=7", headers=self.headers)
+        mock_ranking.assert_called_once_with(30, 7)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

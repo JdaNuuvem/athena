@@ -2032,11 +2032,11 @@ def kpi_overview():
             # core.relatorios.ranking_produtos, ja' fonteado de
             # vendas_pedidos+pdv_vendas com margem calculada de verdade
             # (lucro/receita), em vez de reescrever a mesma query aqui.
-            # Limitacao aceita: ranking_produtos nao filtra por loja hoje —
-            # este card ignora loja_id (a query original tambem nunca
-            # funcionou com ou sem esse filtro, entao nao e' regressao).
+            # ranking_produtos ja filtra por loja_id (ver core/relatorios.py) —
+            # Shopee/i9Logic ja gravam loja_id certo no sync, filtrar aqui
+            # separa loja virtual de fisica sem checar tipo em lugar nenhum.
             from core.relatorios import ranking_produtos
-            ranking = ranking_produtos(periodo)
+            ranking = ranking_produtos(periodo, loja_id or None)
             top10 = sorted(ranking, key=lambda r: r.get("receita", 0), reverse=True)[:10]
             top_skus = [
                 {"sku": r["sku"], "nome": r["descricao"], "valor": r["receita"], "margem": r["margem_pct"]}
