@@ -533,6 +533,48 @@ def impacto_exclusao(id_loja: int) -> dict:
         _log_erro("impacto_exclusao", e)
         return {"erro": str(e)}
 
+
+def excluir_forcado(id_loja: int, confirmar_nome: str) -> dict:
+    """Apaga permanentemente uma loja inativa e todo o dado vinculado a ela
+    (ver _CASCATA_EXCLUSAO_FORCADA), numa unica transacao. Existe pra quando
+    o operador confirma que o historico vinculado e' dado errado/lixo (loja
+    de teste), nao venda real que precise ser preservada — a exclusao comum
+    (deletar()) continua bloqueando por FK de proposito pra todo o resto."""
+    _ensure_table()
+    async def _go():
+        db = await get_db()
+        async with db.acquire() as conn:
+            async with conn.transaction():
+                loja_row = await conn.fetchrow("SELECT * FROM lojas WHERE id = $1", id_loja)
+                if not loja_row:
+                    return {"erro": "Loja nao encontrada"}
+                loja = dict(loja_row)
+                if loja.get("status") != "inativa":
+                    return {"erro": "Loja precisa estar inativa antes de forcar exclusao"}
+                if confirmar_nome != loja["nome"]:
+                    return {"erro": "Nome de confirmacao nao confere"}
+                r = await conn.execute(
+                    f"UPDATE crm_negociacoes SET pedido_id = NULL WHERE {_WHERE_CRM_NEGOCIACOES_VINCULADAS}", id_loja)
+                negociacoes_desvinculadas = int(r.split()[-1])
+                apagado = {}
+                for tabela, where_clause in _CASCATA_EXCLUSAO_FORCADA:
+                    r = await conn.execute(f"DELETE FROM {tabela} WHERE {where_clause}", id_loja)
+                    apagado[tabela] = int(r.split()[-1])
+                await conn.execute("UPDATE lojas SET loja_vinculada_id = NULL WHERE loja_vinculada_id = $1", id_loja)
+                await conn.execute("UPDATE lojas SET loja_matriz_id = NULL WHERE loja_matriz_id = $1", id_loja)
+                await conn.execute("DELETE FROM lojas WHERE id = $1", id_loja)
+                return {"ok": True, "apagado": apagado,
+                        "negociacoes_crm_desvinculadas": negociacoes_desvinculadas}
+    try:
+        resultado = run_async(_go())
+    except Exception as e:
+        _log_erro("excluir_forcado", e)
+        return {"erro": str(e)}
+    if not resultado.get("erro"):
+        invalidar_cache_loja_efetiva()
+        invalidar_cache_loja_id()
+    return resultado
+
 # ── Sync Bling ──
 
 def _ensure_bling_id():
