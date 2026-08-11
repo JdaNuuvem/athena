@@ -2,12 +2,22 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { api, type TipoLoja } from "@/lib/api";
+import { api, type TipoLoja, type ImpactoExclusaoForcadaLoja } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import StatusBadge from "@/app/_components/StatusBadge";
 import LoadingState from "@/app/_components/LoadingState";
 import Icon from "@/app/_components/Icon";
 
-interface Loja { id: number; nome: string; ativa: boolean; bling_id?: number; bling_descricao?: string; shopee_markup_pct?: number; grupos_publicacao?: string; tipo?: TipoLoja; }
+interface Loja { id: number; nome: string; ativa: boolean; status?: string; bling_id?: number; bling_descricao?: string; shopee_markup_pct?: number; grupos_publicacao?: string; tipo?: TipoLoja; }
+
+const MENSAGEM_EXCLUSAO_BLOQUEADA =
+  "Nao e possivel excluir: existem dados vinculados a esta loja (estoque, vendas, caixas, etc). Desative-a em vez de excluir.";
+
+type ExclusaoForcadaState = {
+  lojaId: number; nome: string; modalAberto: boolean;
+  impacto: ImpactoExclusaoForcadaLoja | null; carregandoImpacto: boolean;
+  nomeDigitado: string; excluindo: boolean; erro: string;
+};
 
 const TIPO_LABEL: Record<TipoLoja, string> = {
   fisica: "Física",
@@ -17,11 +27,13 @@ const TIPO_LABEL: Record<TipoLoja, string> = {
 };
 
 export default function LojasPage() {
+  const { hasPermission } = useAuth();
   const [lojas, setLojas] = useState<Loja[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [erro, setErro] = useState("");
   const [modal, setModal] = useState<{ open: boolean; nome: string; markup: number; grupos: string; tipo: TipoLoja; editId?: number }>({ open: false, nome: "", markup: 100, grupos: "", tipo: "fisica" });
+  const [exclusaoForcada, setExclusaoForcada] = useState<ExclusaoForcadaState | null>(null);
 
   const carregar = () => {
     api.lojasManage()
@@ -40,14 +52,44 @@ export default function LojasPage() {
     carregar();
   };
 
-  const deletar = async (id: number) => {
+  const deletar = async (l: Loja) => {
     if (!confirm("Tem certeza que deseja excluir esta loja?")) return;
     setErro("");
+    setExclusaoForcada(null);
     try {
-      await api.lojasDeletar(id);
+      await api.lojasDeletar(l.id);
       carregar();
     } catch (e) {
-      setErro((e as Error).message);
+      const mensagem = (e as Error).message;
+      setErro(mensagem);
+      if (mensagem === MENSAGEM_EXCLUSAO_BLOQUEADA && l.status === "inativa" && hasPermission("lojas.excluir_forcado")) {
+        setExclusaoForcada({ lojaId: l.id, nome: l.nome, modalAberto: false,
+          impacto: null, carregandoImpacto: false, nomeDigitado: "", excluindo: false, erro: "" });
+      }
+    }
+  };
+
+  const abrirExclusaoForcada = async () => {
+    if (!exclusaoForcada) return;
+    setExclusaoForcada(p => p && { ...p, modalAberto: true, carregandoImpacto: true });
+    try {
+      const impacto = await api.lojasImpactoExclusaoForcada(exclusaoForcada.lojaId);
+      setExclusaoForcada(p => p && { ...p, impacto, carregandoImpacto: false });
+    } catch (e) {
+      setExclusaoForcada(p => p && { ...p, carregandoImpacto: false, erro: (e as Error).message });
+    }
+  };
+
+  const confirmarExclusaoForcada = async () => {
+    if (!exclusaoForcada) return;
+    setExclusaoForcada(p => p && { ...p, excluindo: true, erro: "" });
+    try {
+      await api.lojasExcluirForcado(exclusaoForcada.lojaId, exclusaoForcada.nomeDigitado);
+      setExclusaoForcada(null);
+      setErro("");
+      carregar();
+    } catch (e) {
+      setExclusaoForcada(p => p && { ...p, excluindo: false, erro: (e as Error).message });
     }
   };
 
@@ -81,7 +123,16 @@ export default function LojasPage() {
             Lojas
           </h1>
           <p className="text-xs text-neutral-500 mt-1">Gerencie os ambientes e filiais do sistema</p>
-          {erro && <p className="text-xs text-red-400 mt-1">{erro}</p>}
+          {erro && (
+            <p className="text-xs text-red-400 mt-1">
+              {erro}
+              {exclusaoForcada && !exclusaoForcada.modalAberto && (
+                <button onClick={abrirExclusaoForcada} className="ml-2 underline hover:text-red-300">
+                  Excluir mesmo assim
+                </button>
+              )}
+            </p>
+          )}
         </div>
         <div className="flex gap-2">
           <button
@@ -130,7 +181,7 @@ export default function LojasPage() {
                   className="text-xs text-neutral-400 hover:text-neutral-200"
                 >{l.ativa ? "Desativar" : "Ativar"}</button>
                 <button
-                  onClick={() => deletar(l.id)}
+                  onClick={() => deletar(l)}
                   className="text-xs text-red-400 hover:text-red-300"
                 >Excluir</button>
               </div>
@@ -187,6 +238,44 @@ export default function LojasPage() {
             <div className="flex justify-end gap-2">
               <button onClick={() => setModal({ open: false, nome: "", markup: 100, grupos: "", tipo: "fisica" })} className="text-xs px-3 py-1.5 rounded-lg text-neutral-400 hover:text-neutral-200">Cancelar</button>
               <button onClick={salvar} className="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white">Salvar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {exclusaoForcada?.modalAberto && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setExclusaoForcada(null)}>
+          <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-6 w-[420px]" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-semibold text-red-400 mb-1">Excluir &quot;{exclusaoForcada.nome}&quot; permanentemente</h3>
+            <p className="text-[10px] text-neutral-500 mb-4">Esta ação apaga todo o histórico vinculado a esta loja e não pode ser desfeita.</p>
+            {exclusaoForcada.carregandoImpacto ? (
+              <p className="text-xs text-neutral-400">Calculando impacto...</p>
+            ) : exclusaoForcada.impacto ? (
+              <div className="max-h-48 overflow-y-auto text-[10px] text-neutral-400 space-y-0.5 mb-4 border border-neutral-700 rounded p-2">
+                {Object.entries(exclusaoForcada.impacto.impacto).filter(([, n]) => n > 0).map(([tabela, n]) => (
+                  <div key={tabela} className="flex justify-between"><span>{tabela}</span><span>{n}</span></div>
+                ))}
+                <div className="flex justify-between font-semibold text-neutral-300 pt-1 border-t border-neutral-700">
+                  <span>Total de linhas</span><span>{exclusaoForcada.impacto.total_linhas}</span>
+                </div>
+              </div>
+            ) : null}
+            {exclusaoForcada.erro && <p className="text-xs text-red-400 mb-2">{exclusaoForcada.erro}</p>}
+            <label className="text-xs text-neutral-400 block mb-1">Digite &quot;{exclusaoForcada.nome}&quot; para confirmar:</label>
+            <input
+              type="text"
+              value={exclusaoForcada.nomeDigitado}
+              onChange={e => setExclusaoForcada(p => p && { ...p, nomeDigitado: e.target.value })}
+              className="w-full bg-neutral-700 border border-neutral-600 rounded px-3 py-2 text-xs text-neutral-200 mb-4 focus:outline-none focus:border-red-500"
+              autoFocus
+            />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setExclusaoForcada(null)} className="text-xs px-3 py-1.5 rounded-lg text-neutral-400 hover:text-neutral-200">Cancelar</button>
+              <button
+                onClick={confirmarExclusaoForcada}
+                disabled={exclusaoForcada.nomeDigitado !== exclusaoForcada.nome || exclusaoForcada.excluindo}
+                className="text-xs px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-40 disabled:cursor-not-allowed text-white"
+              >{exclusaoForcada.excluindo ? "Excluindo..." : "Excluir permanentemente"}</button>
             </div>
           </div>
         </div>
