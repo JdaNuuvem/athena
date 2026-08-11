@@ -6,6 +6,17 @@ import sys, os, unittest
 from unittest.mock import patch, AsyncMock, MagicMock
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+async def _mp(*a, **kw):
+    m = AsyncMock()
+    m.acquire.return_value = AsyncMock(__aenter__=AsyncMock(return_value=AsyncMock(
+        fetch=AsyncMock(return_value=[]), fetchrow=AsyncMock(return_value=None),
+        fetchval=AsyncMock(return_value=0), execute=AsyncMock(return_value="OK"))),
+        __aexit__=AsyncMock(return_value=None))
+    return m
+
+patcher = patch("asyncpg.create_pool", side_effect=_mp)
+patcher.start()
+
 import core.lojas as lojas
 
 
