@@ -23,25 +23,51 @@ Usuário tem um caso real onde precisa apagar de vez uma loja online com histór
 
 ## Escopo de tabelas e ordem da cascata
 
+**Revisado pós-aprovação:** a varredura em nível de implementação (lendo o `CREATE TABLE` real de cada módulo, não só o que a exclusão comum hoje bloqueia) achou uma árvore bem mais profunda do que a listada na primeira aprovação — faltavam 6 tabelas `pdv_*`, 2 `vendas_*`, as 5 `producao_*` e o cross-reference `crm_negociacoes`. Essa varredura também achou que `compras_pedidos` e `fin_contas_pagar` são dado **centralizado** (o `loja_id` delas é só um valor default de "loja principal", não um escopo real por loja — ver `core/compras.py:38-40`) — apagar por `loja_id` nessas duas destruiria registro da empresa inteira se a loja alvo calhar de ser a principal. Reapresentado ao usuário como duas perguntas extras; decisões abaixo.
+
 ### Com FK real hoje (o que hoje dispara o 409)
 
-Ordem respeitando dependência (filhas antes das mães):
+Ordem respeitando dependência (filhas antes das mães), com a coluna/subquery exata usada no `WHERE`:
 
-1. `pdv_pagamentos`, `pdv_itens` (FK → `pdv_vendas.id`)
-2. `pdv_vendas` (FK → `pdv_caixas.id`)
-3. `pdv_caixas` (FK → `lojas.id`)
-4. `vendas_itens` (FK → `vendas_pedidos.id`)
-5. `vendas_pedidos` (FK → `lojas.id`)
-6. `fin_cofre_movimentos` (FK → `fin_cofre.id`)
-7. `fin_cofre` (FK → `lojas.id`)
-8. `estoque_lojas`, `estoque_movimentacoes`, `estoque_transferencias` (`loja_origem_id` e `loja_destino_id`), `estoque_contagens` (FK → `lojas.id`)
-9. `producao_ops`, `chat_conversas`, `shopee_estoque_snapshot` (FK → `lojas.id`)
+1. `pdv_devolucoes` — `venda_id IN (SELECT id FROM pdv_vendas WHERE caixa_id IN (SELECT id FROM pdv_caixas WHERE loja_id = $1))`
+2. `pdv_pagamentos` — mesma subquery de `pdv_devolucoes`
+3. `pdv_itens` — mesma subquery
+4. `pdv_turnos` — `caixa_id IN (SELECT id FROM pdv_caixas WHERE loja_id = $1)`
+5. `pdv_caixa_conferencia` — mesma subquery de `pdv_turnos`
+6. `pdv_caixa_contagem` — mesma subquery
+7. `pdv_suprimentos` — mesma subquery
+8. `pdv_sangrias` — mesma subquery
+9. `pdv_vendas` — mesma subquery
+10. `pdv_caixas` — `loja_id = $1`
+11. `vendas_pagamentos` — `pedido_id IN (SELECT id FROM vendas_pedidos WHERE loja_id = $1)`
+12. `vendas_historico_status` — mesma subquery de `vendas_pagamentos`
+13. `vendas_itens` — mesma subquery
+14. `vendas_pedidos` — `loja_id = $1` (FK `NOT VALID`, ver `core/vendas.py:36`)
+15. `fin_cofre_movimentos` — `cofre_id IN (SELECT id FROM fin_cofre WHERE loja_id = $1)`
+16. `fin_cofre` — `loja_id = $1`
+17. `estoque_lojas`, `estoque_movimentacoes`, `estoque_contagens` — `loja_id = $1` (coluna dual-write aditiva, nullable)
+18. `estoque_transferencias` — `loja_origem_id = $1 OR loja_destino_id = $1`
+19. `producao_bom`, `producao_apontamentos`, `producao_consumo`, `producao_perdas`, `producao_custos` — `op_id IN (SELECT id FROM producao_ops WHERE loja_id = $1)`
+20. `producao_ops` — `loja_id = $1` (FK adicionada via `core/entidades.py`, não no `CREATE TABLE` original)
+21. `chat_conversas` — `loja_id = $1` (filhas `chat_participantes`/`chat_mensagens`/`chat_leituras` já têm `ON DELETE CASCADE` — não precisam de `DELETE` manual)
+22. `shopee_estoque_snapshot` — `loja_id = $1`
+
+**Não é apagado, é desvinculado:** `crm_negociacoes.pedido_id` (nullable, FK → `vendas_pedidos.id`) recebe `UPDATE crm_negociacoes SET pedido_id = NULL WHERE pedido_id IN (SELECT id FROM vendas_pedidos WHERE loja_id = $1)` **antes** do passo 14 — a negociação em si nunca é apagada, só perde a referência ao pedido.
 
 ### Sem FK hoje, mas referenciam `loja_id` (ficam órfãs numa exclusão comum — precisam ser limpas manualmente pra "apagar o histórico mesmo" ficar completo)
 
-- `fin_contas_receber`, `fin_contas_pagar`, `compras_pedidos`, `autom_regras_preco`, `fiscal_notas_fiscais`
+- `fiscal_nfe_itens`, `fiscal_impostos_nota` — `nota_id IN (SELECT id FROM fiscal_notas_fiscais WHERE loja_id = $1)`
+- `fiscal_notas_fiscais` — `loja_id = $1`
+- `fin_contas_receber` — `loja_id = $1`
+- `autom_regras_preco` — `loja_id = $1`
 
-Todas via `DELETE FROM <tabela> WHERE loja_id = $1` dentro da mesma transação, mesmo sem FK forçando isso hoje.
+Todas via `DELETE FROM <tabela> WHERE <where acima>` dentro da mesma transação, mesmo sem FK forçando isso hoje.
+
+**Decisão do usuário sobre `fiscal_notas_fiscais`:** ao contrário da recomendação inicial ("bloquear se a loja emitiu nota fiscal"), o usuário escolheu **"só avisa, deixa passar"** — a tela de prévia mostra a contagem de `fiscal_notas_fiscais` igual a qualquer outra tabela do escopo, sem nenhum bloqueio automático adicional. Cabe ao operador avaliar antes de confirmar.
+
+### Removido do escopo (decisão do usuário — dado centralizado, não por loja)
+
+`compras_pedidos` (+ filhas `compras_itens`, `compras_recebimentos`, `compras_notas_entrada`) e `fin_contas_pagar` **não entram** na cascata: seu `loja_id` é um valor default de "loja principal" (`LOJA_PRINCIPAL_ID`), não um escopo real por loja — apagar por `loja_id` nessas tabelas apagaria compras/contas a pagar da empresa inteira sempre que a loja-alvo for a principal. Usuário escolheu "Remove do escopo (Recomendado)" quando essa diferença foi levantada. Ficam de fora tanto do dry-run de impacto quanto da exclusão real.
 
 ### Referências que NÃO são apagadas — são desvinculadas
 
@@ -49,71 +75,21 @@ Se outra loja tiver `loja_vinculada_id` ou `loja_matriz_id` apontando para a loj
 
 ### Fora de escopo desta feature
 
-- `fiscal_notas_fiscais`, `fin_contas_receber`, `fin_contas_pagar`, `compras_pedidos` não terem FK real declarada para `lojas(id)` é uma lacuna de proteção do sistema como um todo (uma exclusão *comum* bem-sucedida hoje já deixaria essas tabelas órfãs silenciosamente, sem erro nenhum). Corrigir isso adicionando a FK de verdade é melhoria separada, documentada em `docs/DEMANDAS.md`, não faz parte desta feature.
+- `fiscal_notas_fiscais`, `fin_contas_receber` não terem FK real declarada para `lojas(id)` é uma lacuna de proteção do sistema como um todo (uma exclusão *comum* bem-sucedida hoje já deixaria essas tabelas órfãs silenciosamente, sem erro nenhum). Corrigir isso adicionando a FK de verdade é melhoria separada, documentada em `docs/DEMANDAS.md`, não faz parte desta feature.
 - Colunas texto legadas (`estoque_lojas.loja`, `estoque_saldos.loja`, etc — dual-write da era "loja por nome") não são tocadas por esta feature. São resolvidas por nome, não por FK, e o dual-write pra `loja_id` já é decisão de outra frente do projeto.
 - Exclusão em lote (múltiplas lojas de uma vez) não faz parte deste escopo.
 - Backup/export automático dos dados antes de apagar não faz parte deste escopo (usuário confirmou que o dado em questão é lixo/teste, não histórico que precise ser preservado em algum lugar).
+- `compras_pedidos`/`fin_contas_pagar` ficarem órfãos de `loja_id` numa loja excluída (via exclusão comum ou futura) é uma lacuna pré-existente do sistema, documentada em `docs/DEMANDAS.md` — não é resolvida por esta feature porque a coluna não representa escopo real.
 
 ## Backend
 
-### RBAC (`core/rbac.py`)
+**Nota:** o pseudocódigo original desta seção (blueprint `lojas_manage_bp`, `obter()` retornando `{"erro":...}`) não batia com o código real (`routes/lojas_manage.py` usa `lojas_bp`; `core/lojas.py::obter()` retorna `None`, não um dict de erro, quando a loja não existe). O código exato — já corrigido contra o arquivo real — está no plano de implementação, não duplicado aqui: `docs/superpowers/plans/2026-08-09-exclusao-forcada-loja.md`.
 
-Novo insert avulso em `_ensure_tables()`, mesmo padrão de `lojas.ver_todas` (linha 176/203-204):
+Resumo do desenho (sem código, ver plano pra exato):
 
-```python
-await db.execute("INSERT INTO rbac_permissoes (codigo,descricao,modulo,acao) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING",
-                  "lojas.excluir_forcado", "Excluir loja com dado vinculado (irreversivel)", "lojas", "excluir_forcado")
-```
-
-Só o role Admin recebe automaticamente (Admin já herda todas as permissões existentes, `perms=None` na tabela `ROLES_EXTRAS`/seed).
-
-### `core/lojas.py` — duas funções novas
-
-`impacto_exclusao(id_loja: int) -> dict` — só leitura. Roda `SELECT COUNT(*) FROM <tabela> WHERE loja_id = $1` pra cada tabela do escopo (as duas listas acima), devolve `{"loja": {...dict da loja...}, "impacto": {"pdv_caixas": N, "vendas_pedidos": N, ...}, "total_linhas": N}`. Se a loja não existir, `{"erro": "Loja nao encontrada"}`. Se a loja estiver ativa, `{"erro": "Loja precisa estar inativa antes de avaliar exclusao forcada"}`.
-
-`excluir_forcado(id_loja: int, confirmar_nome: str) -> dict` — dentro de uma transação (`async with conn.transaction()`):
-
-1. Busca a loja (`obter(id_loja)`); se não existir, `{"erro": "Loja nao encontrada"}`.
-2. Se `status != 'inativa'`, `{"erro": "Loja precisa estar inativa antes de forcar exclusao"}` — sem tocar em nada.
-3. Se `confirmar_nome != loja["nome"]` (comparação exata), `{"erro": "Nome de confirmacao nao confere"}` — sem tocar em nada.
-4. `UPDATE lojas SET loja_vinculada_id = NULL WHERE loja_vinculada_id = $1`, idem `loja_matriz_id`.
-5. `DELETE FROM <tabela> WHERE loja_id = $1` (ou coluna equivalente pra filhas indiretas, ex. `pdv_vendas.caixa_id IN (SELECT id FROM pdv_caixas WHERE loja_id=$1)`) pra cada tabela do escopo, na ordem listada acima. `db.execute(...)` do asyncpg devolve uma string de status tipo `"DELETE 5"` — a contagem de cada tabela é `int(resultado_execute.split()[-1])`, acumulada num dict `apagado`.
-6. `DELETE FROM lojas WHERE id = $1`.
-7. Se qualquer passo falhar, a transação inteira faz rollback (comportamento padrão de `async with conn.transaction()` em exceção não capturada) — devolve `{"erro": str(e)}`.
-8. Sucesso: `{"ok": True, "apagado": {...contagens...}}`.
-
-### Rotas (`routes/lojas_manage.py`)
-
-```python
-@lojas_manage_bp.route('/manage/<int:id_loja>/impacto-exclusao', methods=['GET'])
-def lojas_impacto_exclusao(id_loja):
-    from core.rbac import requer_permissao
-    @requer_permissao("lojas.excluir_forcado")
-    def _handler():
-        resultado = core.lojas.impacto_exclusao(id_loja)
-        if resultado.get("erro"):
-            return jsonify(resultado), 400
-        return jsonify(resultado)
-    return _handler()
-
-@lojas_manage_bp.route('/manage/<int:id_loja>/excluir-forcado', methods=['POST'])
-def lojas_excluir_forcado(id_loja):
-    from core.rbac import requer_permissao, usuario_atual_da_request
-    from core.seguranca import auditar_exclusao
-    @requer_permissao("lojas.excluir_forcado")
-    def _handler():
-        dados = request.get_json(silent=True) or {}
-        confirmar_nome = dados.get("confirmar_nome", "")
-        dados_antes = core.lojas.obter(id_loja)
-        resultado = core.lojas.excluir_forcado(id_loja, confirmar_nome)
-        if resultado.get("erro"):
-            return jsonify(resultado), 400
-        usuario = usuario_atual_da_request()
-        auditar_exclusao("lojas", "manage-forcado", id_loja,
-                          {**dados_antes, "apagado": resultado.get("apagado", {})})
-        return jsonify(resultado)
-    return _handler()
-```
+- **RBAC (`core/rbac.py`):** novo insert avulso `lojas.excluir_forcado` em `_ensure_tables()`, mesmo padrão de `lojas.ver_todas` — seed inicial (`if count == 0`) **e** fix-up idempotente pra bancos já seedados, ambos concedendo a permissão automaticamente ao role Admin.
+- **`core/lojas.py`:** uma constante `_CASCATA_EXCLUSAO_FORCADA` (lista ordenada de `(tabela, where_clause)`, filhas antes de mães) reaproveitada por `impacto_exclusao(id_loja)` (só leitura, `SELECT COUNT(*)` por tabela) e `excluir_forcado(id_loja, confirmar_nome)` (transação: valida loja/status/nome, desvincula `crm_negociacoes.pedido_id`, apaga cascata, desvincula `loja_vinculada_id`/`loja_matriz_id` de outras lojas, apaga a loja).
+- **Rotas (`routes/lojas_manage.py`):** `GET /api/lojas/manage/<id>/impacto-exclusao` e `POST /api/lojas/manage/<id>/excluir-forcado`, ambas gated só por `@requer_permissao("lojas.excluir_forcado")` (sem `@requer_acesso_loja`), seguindo o estilo de closure `_go()` já usado pelas outras rotas deste blueprint.
 
 Nenhuma das duas rotas usa `@requer_acesso_loja` — exclusão forçada é ação administrativa central (só Admin tem a permissão `lojas.excluir_forcado` de qualquer forma), a restrição por `usuario_lojas` não se aplica aqui.
 
