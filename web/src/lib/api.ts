@@ -79,6 +79,19 @@ import type { Ticket, MensagemTicket, MensagemTicketRaw, Atendente, Notificacao 
 
 export type TipoLoja = "fisica" | "virtual" | "hibrida" | "marketplace";
 
+export interface ImpactoExclusaoForcadaLoja {
+  loja: { id: number; nome: string; status?: string; [key: string]: unknown };
+  impacto: Record<string, number>;
+  negociacoes_crm_desvinculadas: number;
+  total_linhas: number;
+}
+
+export interface ResultadoExclusaoForcada {
+  ok: boolean;
+  apagado: Record<string, number>;
+  negociacoes_crm_desvinculadas: number;
+}
+
 export interface LeadFiltro {
   page?: number;
   pageSize?: 25 | 50 | 100;
@@ -647,6 +660,13 @@ export const api = {
   lojasCriar: (nome: string, tipo?: TipoLoja) => request<{ loja: { id: number; nome: string; tipo?: string } }>("/api/lojas/manage", { method: "POST", body: JSON.stringify({ nome, tipo }) }),
   lojasAtualizar: (id: number, nome: string, shopee_markup_pct?: number, grupos_publicacao?: string, tipo?: TipoLoja) => request<{ success: boolean }>(`/api/lojas/manage/${id}`, { method: "PUT", body: JSON.stringify({ nome, shopee_markup_pct, grupos_publicacao, tipo }) }),
   lojasDeletar: (id: number) => request<{ success: boolean }>(`/api/lojas/manage/${id}`, { method: "DELETE" }),
+  lojasImpactoExclusaoForcada: (id: number) =>
+    request<ImpactoExclusaoForcadaLoja>(`/api/lojas/manage/${id}/impacto-exclusao`),
+  lojasExcluirForcado: (id: number, confirmarNome: string) =>
+    request<ResultadoExclusaoForcada>(`/api/lojas/manage/${id}/excluir-forcado`, {
+      method: "POST",
+      body: JSON.stringify({ confirmar_nome: confirmarNome }),
+    }),
   lojasSyncBling: () => request<{ sync: number; lojas: Array<{ acao: string; id: number; nome: string }> }>("/api/lojas/sync/bling", { method: "POST" }),
   lojasDepositoMap: () => request<{ map: Array<{ loja_id: number; nome: string; deposito_id: number }> }>("/api/lojas/deposito-map"),
 
