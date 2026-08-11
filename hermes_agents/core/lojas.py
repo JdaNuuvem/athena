@@ -455,6 +455,84 @@ def deletar(id_loja: int) -> dict:
         _log_erro("deletar", e)
         return {"erro": str(e)}
 
+# ── Exclusao forcada (irreversivel) ──
+# Cascata completa de tabelas com dado vinculado a uma loja, na ordem
+# correta de dependencia (filhas antes de maes) — reaproveitada por
+# impacto_exclusao() (so' leitura) e excluir_forcado() (apaga de verdade).
+# compras_pedidos/fin_contas_pagar ficam FORA de proposito: seu loja_id e'
+# so' um default de "loja principal" (core/compras.py), nao escopo real por
+# loja — apagar por loja_id nessas tabelas destruiria dado da empresa
+# inteira sempre que a loja-alvo for a principal.
+_CASCATA_EXCLUSAO_FORCADA = [
+    ("pdv_devolucoes", "venda_id IN (SELECT id FROM pdv_vendas WHERE caixa_id IN (SELECT id FROM pdv_caixas WHERE loja_id = $1))"),
+    ("pdv_pagamentos", "venda_id IN (SELECT id FROM pdv_vendas WHERE caixa_id IN (SELECT id FROM pdv_caixas WHERE loja_id = $1))"),
+    ("pdv_itens", "venda_id IN (SELECT id FROM pdv_vendas WHERE caixa_id IN (SELECT id FROM pdv_caixas WHERE loja_id = $1))"),
+    ("pdv_turnos", "caixa_id IN (SELECT id FROM pdv_caixas WHERE loja_id = $1)"),
+    ("pdv_caixa_conferencia", "caixa_id IN (SELECT id FROM pdv_caixas WHERE loja_id = $1)"),
+    ("pdv_caixa_contagem", "caixa_id IN (SELECT id FROM pdv_caixas WHERE loja_id = $1)"),
+    ("pdv_suprimentos", "caixa_id IN (SELECT id FROM pdv_caixas WHERE loja_id = $1)"),
+    ("pdv_sangrias", "caixa_id IN (SELECT id FROM pdv_caixas WHERE loja_id = $1)"),
+    ("pdv_vendas", "caixa_id IN (SELECT id FROM pdv_caixas WHERE loja_id = $1)"),
+    ("pdv_caixas", "loja_id = $1"),
+    ("vendas_pagamentos", "pedido_id IN (SELECT id FROM vendas_pedidos WHERE loja_id = $1)"),
+    ("vendas_historico_status", "pedido_id IN (SELECT id FROM vendas_pedidos WHERE loja_id = $1)"),
+    ("vendas_itens", "pedido_id IN (SELECT id FROM vendas_pedidos WHERE loja_id = $1)"),
+    ("vendas_pedidos", "loja_id = $1"),
+    ("fin_cofre_movimentos", "cofre_id IN (SELECT id FROM fin_cofre WHERE loja_id = $1)"),
+    ("fin_cofre", "loja_id = $1"),
+    ("estoque_lojas", "loja_id = $1"),
+    ("estoque_movimentacoes", "loja_id = $1"),
+    ("estoque_transferencias", "(loja_origem_id = $1 OR loja_destino_id = $1)"),
+    ("estoque_contagens", "loja_id = $1"),
+    ("producao_bom", "op_id IN (SELECT id FROM producao_ops WHERE loja_id = $1)"),
+    ("producao_apontamentos", "op_id IN (SELECT id FROM producao_ops WHERE loja_id = $1)"),
+    ("producao_consumo", "op_id IN (SELECT id FROM producao_ops WHERE loja_id = $1)"),
+    ("producao_perdas", "op_id IN (SELECT id FROM producao_ops WHERE loja_id = $1)"),
+    ("producao_custos", "op_id IN (SELECT id FROM producao_ops WHERE loja_id = $1)"),
+    ("producao_ops", "loja_id = $1"),
+    ("chat_conversas", "loja_id = $1"),
+    ("shopee_estoque_snapshot", "loja_id = $1"),
+    ("fiscal_nfe_itens", "nota_id IN (SELECT id FROM fiscal_notas_fiscais WHERE loja_id = $1)"),
+    ("fiscal_impostos_nota", "nota_id IN (SELECT id FROM fiscal_notas_fiscais WHERE loja_id = $1)"),
+    ("fiscal_notas_fiscais", "loja_id = $1"),
+    ("fin_contas_receber", "loja_id = $1"),
+    ("autom_regras_preco", "loja_id = $1"),
+]
+
+# crm_negociacoes.pedido_id e' nullable (FK -> vendas_pedidos.id) — a
+# negociacao nunca e' apagada, so' perde a referencia ao pedido.
+_WHERE_CRM_NEGOCIACOES_VINCULADAS = "pedido_id IN (SELECT id FROM vendas_pedidos WHERE loja_id = $1)"
+
+
+def impacto_exclusao(id_loja: int) -> dict:
+    """Dry-run de excluir_forcado(): conta quantas linhas seriam apagadas em
+    cada tabela do escopo, sem apagar nada. So' aceita loja ja inativa —
+    mesma trava que excluir_forcado() usa."""
+    _ensure_table()
+    async def _go():
+        db = await get_db()
+        loja_row = await db.fetchrow("SELECT * FROM lojas WHERE id = $1", id_loja)
+        if not loja_row:
+            return {"erro": "Loja nao encontrada"}
+        loja = dict(loja_row)
+        if loja.get("status") != "inativa":
+            return {"erro": "Loja precisa estar inativa antes de avaliar exclusao forcada"}
+        impacto = {}
+        total = 0
+        for tabela, where_clause in _CASCATA_EXCLUSAO_FORCADA:
+            n = await db.fetchval(f"SELECT COUNT(*) FROM {tabela} WHERE {where_clause}", id_loja)
+            impacto[tabela] = n
+            total += n
+        negociacoes = await db.fetchval(
+            f"SELECT COUNT(*) FROM crm_negociacoes WHERE {_WHERE_CRM_NEGOCIACOES_VINCULADAS}", id_loja)
+        return {"loja": loja, "impacto": impacto,
+                "negociacoes_crm_desvinculadas": negociacoes, "total_linhas": total}
+    try:
+        return run_async(_go())
+    except Exception as e:
+        _log_erro("impacto_exclusao", e)
+        return {"erro": str(e)}
+
 # ── Sync Bling ──
 
 def _ensure_bling_id():
