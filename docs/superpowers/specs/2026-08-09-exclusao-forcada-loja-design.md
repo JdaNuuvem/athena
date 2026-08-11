@@ -51,6 +51,11 @@ Ordem respeitando dependência (filhas antes das mães), com a coluna/subquery e
 20. `producao_ops` — `loja_id = $1` (FK adicionada via `core/entidades.py`, não no `CREATE TABLE` original)
 21. `chat_conversas` — `loja_id = $1` (filhas `chat_participantes`/`chat_mensagens`/`chat_leituras` já têm `ON DELETE CASCADE` — não precisam de `DELETE` manual)
 22. `shopee_estoque_snapshot` — `loja_id = $1`
+23. `loja_integracoes` — `loja_id = $1` (`loja_id INT NOT NULL REFERENCES lojas(id) ON DELETE CASCADE`, ver `core/lojas_integracoes.py:28-36`; tem `credenciais JSONB`)
+24. `loja_responsaveis` — `loja_id = $1` (mesmo padrão de FK `ON DELETE CASCADE`, ver `core/lojas_responsaveis.py:22-30`)
+25. `usuario_lojas` — `loja_id = $1` (mesmo padrão de FK `ON DELETE CASCADE`, ver `core/usuario_lojas.py:18-24`)
+
+**Correção pós-review final:** os 3 itens acima (`loja_integracoes`, `loja_responsaveis`, `usuario_lojas`) já eram apagados hoje pelo `ON DELETE CASCADE` no `DELETE FROM lojas` final, mas ficavam ausentes da prévia de impacto e do payload de auditoria — achado do review final da branch, corrigido pra a prévia obrigatória ser honesta sobre tudo que é destruído, sem mudar o que de fato é apagado.
 
 **Não é apagado, é desvinculado:** `crm_negociacoes.pedido_id` (nullable, FK → `vendas_pedidos.id`) recebe `UPDATE crm_negociacoes SET pedido_id = NULL WHERE pedido_id IN (SELECT id FROM vendas_pedidos WHERE loja_id = $1)` **antes** do passo 14 — a negociação em si nunca é apagada, só perde a referência ao pedido.
 
@@ -60,8 +65,11 @@ Ordem respeitando dependência (filhas antes das mães), com a coluna/subquery e
 - `fiscal_notas_fiscais` — `loja_id = $1`
 - `fin_contas_receber` — `loja_id = $1`
 - `autom_regras_preco` — `loja_id = $1`
+- `vendas` — `loja_id = $1` (tabela legada, `loja_id INTEGER` simples sem FK, ver `hermes_agents/sql/schema.sql:138-152` e `hermes_agents/deploy_to_hermes.py:390-404`; sem tabelas filhas)
 
 Todas via `DELETE FROM <tabela> WHERE <where acima>` dentro da mesma transação, mesmo sem FK forçando isso hoje.
+
+**Correção pós-review final:** `vendas` faltava no escopo original — achado do review final da branch. Reapresentado ao usuário (controller), que decidiu explicitamente incluir `vendas` na cascata real de exclusão forçada.
 
 **Decisão do usuário sobre `fiscal_notas_fiscais`:** ao contrário da recomendação inicial ("bloquear se a loja emitiu nota fiscal"), o usuário escolheu **"só avisa, deixa passar"** — a tela de prévia mostra a contagem de `fiscal_notas_fiscais` igual a qualquer outra tabela do escopo, sem nenhum bloqueio automático adicional. Cabe ao operador avaliar antes de confirmar.
 

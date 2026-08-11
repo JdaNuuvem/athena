@@ -497,6 +497,17 @@ _CASCATA_EXCLUSAO_FORCADA = [
     ("fiscal_notas_fiscais", "loja_id = $1"),
     ("fin_contas_receber", "loja_id = $1"),
     ("autom_regras_preco", "loja_id = $1"),
+    # 4 tabelas abaixo adicionadas apos achado do review final da branch:
+    # loja_integracoes/loja_responsaveis/usuario_lojas ja tem ON DELETE CASCADE
+    # (ficavam invisiveis na previa/auditoria mesmo ja sendo apagadas de fato
+    # no DELETE FROM lojas final — inclusao aqui e' so' honestidade do
+    # dry-run/auditoria, nao muda o que e' apagado). "vendas" e' tabela legada
+    # sem FK (loja_id INTEGER simples) — inclusao no escopo real, decisao
+    # explicita do usuario apos pergunta do controller.
+    ("loja_integracoes", "loja_id = $1"),
+    ("loja_responsaveis", "loja_id = $1"),
+    ("usuario_lojas", "loja_id = $1"),
+    ("vendas", "loja_id = $1"),
 ]
 
 # crm_negociacoes.pedido_id e' nullable (FK -> vendas_pedidos.id) — a
@@ -525,7 +536,13 @@ def impacto_exclusao(id_loja: int) -> dict:
             total += n
         negociacoes = await db.fetchval(
             f"SELECT COUNT(*) FROM crm_negociacoes WHERE {_WHERE_CRM_NEGOCIACOES_VINCULADAS}", id_loja)
-        return {"loja": loja, "impacto": impacto,
+        # loja_row completa (acima) so' e' usada internamente pra checar o
+        # status — o dict devolvido pro cliente (jsonify'd direto pela rota
+        # lojas_impacto_exclusao) precisa ser minimo: a linha completa de
+        # "lojas" tem pix_chave/shopee_access_token/shopee_refresh_token, que
+        # nunca podem chegar no browser (achado do review final da branch).
+        loja_minima = {"id": loja["id"], "nome": loja["nome"], "status": loja["status"]}
+        return {"loja": loja_minima, "impacto": impacto,
                 "negociacoes_crm_desvinculadas": negociacoes, "total_linhas": total}
     try:
         return run_async(_go())

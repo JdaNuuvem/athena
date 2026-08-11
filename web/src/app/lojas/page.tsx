@@ -69,15 +69,21 @@ export default function LojasPage() {
     }
   };
 
-  const abrirExclusaoForcada = async () => {
+  const carregarImpactoExclusaoForcada = async () => {
     if (!exclusaoForcada) return;
-    setExclusaoForcada(p => p && { ...p, modalAberto: true, carregandoImpacto: true });
+    setExclusaoForcada(p => p && { ...p, carregandoImpacto: true, erro: "" });
     try {
       const impacto = await api.lojasImpactoExclusaoForcada(exclusaoForcada.lojaId);
       setExclusaoForcada(p => p && { ...p, impacto, carregandoImpacto: false });
     } catch (e) {
       setExclusaoForcada(p => p && { ...p, carregandoImpacto: false, erro: (e as Error).message });
     }
+  };
+
+  const abrirExclusaoForcada = async () => {
+    if (!exclusaoForcada) return;
+    setExclusaoForcada(p => p && { ...p, modalAberto: true });
+    await carregarImpactoExclusaoForcada();
   };
 
   const confirmarExclusaoForcada = async () => {
@@ -260,7 +266,16 @@ export default function LojasPage() {
                 </div>
               </div>
             ) : null}
-            {exclusaoForcada.erro && <p className="text-xs text-red-400 mb-2">{exclusaoForcada.erro}</p>}
+            {exclusaoForcada.erro && (
+              <p className="text-xs text-red-400 mb-2">
+                {exclusaoForcada.erro}
+                {!exclusaoForcada.carregandoImpacto && !exclusaoForcada.impacto && (
+                  <button onClick={carregarImpactoExclusaoForcada} className="ml-2 underline hover:text-red-300">
+                    Tentar novamente
+                  </button>
+                )}
+              </p>
+            )}
             <label className="text-xs text-neutral-400 block mb-1">Digite &quot;{exclusaoForcada.nome}&quot; para confirmar:</label>
             <input
               type="text"
@@ -273,7 +288,7 @@ export default function LojasPage() {
               <button onClick={() => setExclusaoForcada(null)} className="text-xs px-3 py-1.5 rounded-lg text-neutral-400 hover:text-neutral-200">Cancelar</button>
               <button
                 onClick={confirmarExclusaoForcada}
-                disabled={exclusaoForcada.nomeDigitado !== exclusaoForcada.nome || exclusaoForcada.excluindo}
+                disabled={exclusaoForcada.nomeDigitado !== exclusaoForcada.nome || exclusaoForcada.excluindo || !exclusaoForcada.impacto}
                 className="text-xs px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-40 disabled:cursor-not-allowed text-white"
               >{exclusaoForcada.excluindo ? "Excluindo..." : "Excluir permanentemente"}</button>
             </div>

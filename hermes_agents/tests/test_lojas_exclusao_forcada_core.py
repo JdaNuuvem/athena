@@ -81,6 +81,33 @@ class TestExcluirForcado(unittest.TestCase):
         mock_inv1.assert_called_once()
         mock_inv2.assert_called_once()
 
+    def test_cascata_inclui_tabelas_adicionadas_no_review_final(self):
+        """Achado do review final da branch: 4 tabelas faltavam na cascata —
+        loja_integracoes/loja_responsaveis/usuario_lojas (ja tinham ON DELETE
+        CASCADE, mas ficavam invisiveis na previa/auditoria) e "vendas"
+        (tabela legada sem FK, inclusao no escopo real por decisao explicita
+        do usuario). Nao basta confiar na asserção de tamanho baseada na
+        propria constante — este teste confere os nomes de verdade."""
+        conn = _mock_conn(fetchrow_return={"id": 1, "nome": "Loja X", "status": "inativa"},
+                           execute_return="DELETE 1")
+        db = _mock_db_com_conn(conn)
+        with patch("core.lojas.get_db", AsyncMock(return_value=db)):
+            resultado = lojas.excluir_forcado(1, "Loja X")
+        self.assertTrue(resultado.get("ok"))
+        sqls = [c.args[0] for c in conn.execute.call_args_list]
+        self.assertTrue(any(s.startswith("DELETE FROM vendas WHERE") for s in sqls),
+                         "vendas precisa ser apagada na cascata (decisao do usuario)")
+        self.assertTrue(any(s.startswith("DELETE FROM usuario_lojas WHERE") for s in sqls),
+                         "usuario_lojas precisa ser apagada na cascata (honestidade do preview)")
+        self.assertTrue(any(s.startswith("DELETE FROM loja_integracoes WHERE") for s in sqls),
+                         "loja_integracoes precisa ser apagada na cascata (honestidade do preview)")
+        self.assertTrue(any(s.startswith("DELETE FROM loja_responsaveis WHERE") for s in sqls),
+                         "loja_responsaveis precisa ser apagada na cascata (honestidade do preview)")
+        self.assertIn("vendas", resultado["apagado"])
+        self.assertIn("usuario_lojas", resultado["apagado"])
+        self.assertIn("loja_integracoes", resultado["apagado"])
+        self.assertIn("loja_responsaveis", resultado["apagado"])
+
     def test_negociacoes_crm_sao_desvinculadas_nao_apagadas(self):
         conn = _mock_conn(fetchrow_return={"id": 1, "nome": "Loja X", "status": "inativa"},
                            execute_return="UPDATE 4")

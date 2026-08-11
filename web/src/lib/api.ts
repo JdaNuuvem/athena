@@ -656,7 +656,7 @@ export const api = {
   // Lojas
   lojas: (periodo?: number) =>
     request<unknown[]>(`/api/lojas${periodo ? `?periodo=${periodo}` : ""}`),
-  lojasManage: () => request<{ lojas: Array<{ id: number; nome: string; ativa: boolean }> }>("/api/lojas/manage"),
+  lojasManage: () => request<{ lojas: Array<{ id: number; nome: string; ativa: boolean; status?: string }> }>("/api/lojas/manage"),
   lojasCriar: (nome: string, tipo?: TipoLoja) => request<{ loja: { id: number; nome: string; tipo?: string } }>("/api/lojas/manage", { method: "POST", body: JSON.stringify({ nome, tipo }) }),
   lojasAtualizar: (id: number, nome: string, shopee_markup_pct?: number, grupos_publicacao?: string, tipo?: TipoLoja) => request<{ success: boolean }>(`/api/lojas/manage/${id}`, { method: "PUT", body: JSON.stringify({ nome, shopee_markup_pct, grupos_publicacao, tipo }) }),
   lojasDeletar: (id: number) => request<{ success: boolean }>(`/api/lojas/manage/${id}`, { method: "DELETE" }),

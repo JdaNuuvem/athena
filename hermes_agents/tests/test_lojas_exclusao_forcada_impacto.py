@@ -63,14 +63,36 @@ class TestImpactoExclusao(unittest.TestCase):
         self.assertEqual(resultado["impacto"]["vendas_pedidos"], 7)
         self.assertEqual(resultado["total_linhas"], 10)
 
-    def test_loja_devolve_dados_completos_da_loja(self):
+    def test_loja_devolve_apenas_campos_minimos(self):
+        """A rota lojas_impacto_exclusao faz jsonify(resultado) direto pro
+        browser — resultado["loja"] precisa ser so' id/nome/status, nunca a
+        linha completa da tabela (ver test_loja_nao_vaza_campos_sensiveis)."""
         db = AsyncMock()
         db.fetchrow.return_value = {"id": 5, "nome": "Loja Charme", "status": "inativa", "tipo": "fisica"}
         db.fetchval.return_value = 0
         with patch("core.lojas.get_db", AsyncMock(return_value=db)):
             resultado = lojas.impacto_exclusao(5)
-        self.assertEqual(resultado["loja"]["nome"], "Loja Charme")
-        self.assertEqual(resultado["loja"]["id"], 5)
+        self.assertEqual(resultado["loja"], {"id": 5, "nome": "Loja Charme", "status": "inativa"})
+
+    def test_loja_nao_vaza_campos_sensiveis(self):
+        """Achado do review final da branch: impacto_exclusao() fazia SELECT *
+        e devolvia a linha inteira de "lojas" — incluindo pix_chave (nunca
+        deve voltar em texto puro) e os tokens Shopee — pro cliente via
+        jsonify. Mesmo com a linha mockada trazendo esses campos, o dict
+        "loja" devolvido nao pode conte-los."""
+        db = AsyncMock()
+        db.fetchrow.return_value = {
+            "id": 5, "nome": "Loja Charme", "status": "inativa", "tipo": "fisica",
+            "pix_chave": "12345678900", "shopee_access_token": "token-secreto",
+            "shopee_refresh_token": "refresh-secreto",
+        }
+        db.fetchval.return_value = 0
+        with patch("core.lojas.get_db", AsyncMock(return_value=db)):
+            resultado = lojas.impacto_exclusao(5)
+        self.assertNotIn("pix_chave", resultado["loja"])
+        self.assertNotIn("shopee_access_token", resultado["loja"])
+        self.assertNotIn("shopee_refresh_token", resultado["loja"])
+        self.assertEqual(resultado["loja"], {"id": 5, "nome": "Loja Charme", "status": "inativa"})
 
 
 if __name__ == "__main__":
