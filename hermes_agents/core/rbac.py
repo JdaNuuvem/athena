@@ -174,6 +174,7 @@ def _ensure_tables():
             await db.execute("INSERT INTO rbac_permissoes (codigo,descricao,modulo,acao) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING", "pdv.operar", "Operar PDV", "pdv", "operar")
             await db.execute("INSERT INTO rbac_permissoes (codigo,descricao,modulo,acao) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING", "bling.sincronizar", "Sincronizar Bling", "bling", "sincronizar")
             await db.execute("INSERT INTO rbac_permissoes (codigo,descricao,modulo,acao) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING", "lojas.ver_todas", "Ver todas as lojas (ignora restricao de usuario_lojas)", "lojas", "ver_todas")
+            await db.execute("INSERT INTO rbac_permissoes (codigo,descricao,modulo,acao) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING", "lojas.excluir_forcado", "Excluir loja com dado vinculado (irreversivel)", "lojas", "excluir_forcado")
         # Seed roles
         count_r = await db.fetchval("SELECT COUNT(*) FROM rbac_roles")
         if count_r == 0:
@@ -209,6 +210,20 @@ def _ensure_tables():
                                   admin_role["id"], perm_ver_todas["id"])
         except Exception as e:
             log(AGENT, f"Fix-up lojas.ver_todas falhou: {e}")
+
+        # Fix-up idempotente: garante que "lojas.excluir_forcado" exista e
+        # esteja no Admin mesmo em bancos onde o seed de roles ja rodou antes
+        # dela existir — mesmo padrao do fix-up de "lojas.ver_todas" acima.
+        try:
+            await db.execute("INSERT INTO rbac_permissoes (codigo,descricao,modulo,acao) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING",
+                              "lojas.excluir_forcado", "Excluir loja com dado vinculado (irreversivel)", "lojas", "excluir_forcado")
+            admin_role = await db.fetchrow("SELECT id FROM rbac_roles WHERE nome = 'Admin'")
+            perm_excluir_forcado = await db.fetchrow("SELECT id FROM rbac_permissoes WHERE codigo = 'lojas.excluir_forcado'")
+            if admin_role and perm_excluir_forcado:
+                await db.execute("INSERT INTO rbac_role_permissoes (role_id,permissao_id) VALUES ($1,$2) ON CONFLICT DO NOTHING",
+                                  admin_role["id"], perm_excluir_forcado["id"])
+        except Exception as e:
+            log(AGENT, f"Fix-up lojas.excluir_forcado falhou: {e}")
 
         # Fix-up idempotente: garante permissoes novas no role Gerente mesmo em
         # bancos onde o seed de roles ja rodou antes delas existirem

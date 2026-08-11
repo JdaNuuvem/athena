@@ -333,7 +333,7 @@ def listar() -> list:
         # mostrava markup=100 (default do form) e o Salvar sobrescrevia
         # silenciosamente qualquer markup real configurado.
         rows = await db.fetch(
-            "SELECT id, nome, ativa, created_at, bling_id, tipo, "
+            "SELECT id, nome, ativa, status, created_at, bling_id, tipo, "
             "shopee_markup_pct, grupos_publicacao, (shopee_shop_id IS NOT NULL) AS shopee_conectado "
             "FROM lojas ORDER BY id")
         return [dict(r) for r in rows]

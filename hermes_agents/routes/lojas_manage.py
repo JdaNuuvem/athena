@@ -129,6 +129,38 @@ def deletar_loja_manage(id):
     return _go(loja_id=id)
 
 
+@lojas_bp.route("/manage/<int:id>/impacto-exclusao", methods=["GET"])
+def lojas_impacto_exclusao(id):
+    @requer_permissao("lojas.excluir_forcado")
+    def _go():
+        from core.lojas import impacto_exclusao
+        resultado = impacto_exclusao(id)
+        if resultado.get("erro"):
+            return jsonify(resultado), 400
+        return jsonify(resultado)
+    return _go()
+
+
+@lojas_bp.route("/manage/<int:id>/excluir-forcado", methods=["POST"])
+def lojas_excluir_forcado(id):
+    data = request.json or {}
+    confirmar_nome = data.get("confirmar_nome", "")
+
+    @requer_permissao("lojas.excluir_forcado")
+    def _go():
+        from core.lojas import excluir_forcado, obter
+        from core.seguranca import auditar_exclusao
+        dados_antes = obter(id)
+        resultado = excluir_forcado(id, confirmar_nome)
+        if resultado.get("erro"):
+            return jsonify(resultado), 400
+        auditar_exclusao("lojas", "manage-forcado", id,
+                          {**(dados_antes or {}), "apagado": resultado.get("apagado", {}),
+                           "negociacoes_crm_desvinculadas": resultado.get("negociacoes_crm_desvinculadas", 0)})
+        return jsonify(resultado)
+    return _go()
+
+
 @lojas_bp.route("/manage/<int:id>/vinculo-estoque", methods=["PUT"])
 def vincular_estoque_loja(id):
     from core.lojas import vincular_estoque, desvincular_estoque
