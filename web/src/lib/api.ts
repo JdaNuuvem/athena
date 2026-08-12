@@ -259,8 +259,11 @@ export const api = {
     }),
 
   // Shopee (multiloja)
+  // Roda em background no servidor (catalogos grandes estouram o timeout do
+  // proxy se rodar sincrono) - devolve so' a confirmacao de que comecou.
+  // Acompanhe o progresso com shopeeSyncLog(lojaId).
   shopeeSync: (lojaId?: number) =>
-    request<{ total: number; erros: number; detalhes_erros?: string[] }>("/api/shopee/produtos/sincronizar", {
+    request<{ status: "processando" | "ja_processando"; loja_id: number | null }>("/api/shopee/produtos/sincronizar", {
       method: "POST",
       body: JSON.stringify(lojaId ? { loja_id: lojaId } : {}),
     }),
@@ -370,8 +373,8 @@ export const api = {
     request<{ id?: number; nome?: string; error?: string }>(`/api/shopee/lojas/${lojaId}`, { method: "DELETE" }),
   shopeePedidosEstatisticas: (lojaId: number, dias = 90) =>
     request<ShopeePedidosEstatisticas & { error?: string }>(`/api/shopee/pedidos-sincronizados/estatisticas?loja_id=${lojaId}&dias=${dias}`),
-  shopeeSyncLog: () =>
-    request<{ log: ShopeeSyncLogEntry[] }>("/api/shopee/sync-log"),
+  shopeeSyncLog: (lojaId?: number) =>
+    request<{ log: ShopeeSyncLogEntry[] }>(`/api/shopee/sync-log${lojaId ? `?loja_id=${lojaId}` : ""}`),
   shopeePedidos: (lojaId?: number, dias?: number, status?: string) => {
     const q = new URLSearchParams();
     if (lojaId) q.set("loja_id", String(lojaId));
@@ -1133,6 +1136,7 @@ export interface ShopeeSyncLogEntry {
   erro: string | null;
   iniciado_em: string;
   concluido_em: string | null;
+  loja_id: number | null;
 }
 
 export interface ShopeePedido {

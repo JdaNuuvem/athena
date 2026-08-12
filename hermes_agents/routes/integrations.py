@@ -1,9 +1,33 @@
 import os
+import threading
 from flask import Blueprint, request, jsonify
-from core import get_db, run_async
+from core import get_db, run_async, log
 from core.rbac import requer_permissao
 
 integrations_bp = Blueprint("integrations", __name__)
+
+AGENT = "Shopee Sync HTTP"
+
+# Sync completa (produtos + pedidos) pode levar minutos num catalogo grande
+# (paginacao da API Shopee) — muito acima do timeout de proxy do Cloudflare
+# (~100s, HTTP 524). Roda em background por loja_id e devolve na hora; o
+# frontend acompanha via GET /api/shopee/sync-log (shopee_sync_log ja
+# registra 'executando'/'concluido'/'erro' por corrida, ver shopee_sync.py).
+_sync_em_andamento = set()  # loja_id (int) ou "global" (None) -> sync rodando agora
+_sync_lock = threading.Lock()
+
+
+def _shopee_sync_worker(loja_id):
+    from shopee_sync import sync_produtos, sync_pedidos
+    chave = loja_id if loja_id is not None else "global"
+    try:
+        run_async(sync_produtos(loja_id=loja_id))
+        run_async(sync_pedidos(loja_id=loja_id))
+    except Exception as e:
+        log(AGENT, f"Erro na sincronizacao em background (loja_id={loja_id}): {e}")
+    finally:
+        with _sync_lock:
+            _sync_em_andamento.discard(chave)
 
 
 # --- Integration listing ---
@@ -79,15 +103,21 @@ def shopee_sync():
     # chamava sync_produtos(), entao vendas/receita da Shopee nunca eram
     # gravadas em `vendas` e o Painel Consolidado (dashboard) ficava sempre
     # zerado, mesmo com anuncios sincronizados normalmente.
-    from shopee_sync import sync_produtos, sync_pedidos
-    loja_id = (request.json or {}).get("loja_id")
-    resultado = run_async(sync_produtos(loja_id=loja_id))
-    pedidos = run_async(sync_pedidos(loja_id=loja_id))
-    resultado["pedidos_total"] = pedidos.get("total", 0)
-    if pedidos.get("detalhes_erros"):
-        resultado["detalhes_erros"] = (resultado.get("detalhes_erros") or []) + pedidos["detalhes_erros"]
-        resultado["erros"] = resultado.get("erros", 0) + pedidos.get("erros", 0)
-    return jsonify(resultado)
+    #
+    # Roda em background (ver _shopee_sync_worker acima): rodar sincrono
+    # aqui estourava o timeout de proxy do Cloudflare (HTTP 524) em
+    # catalogos grandes — a paginacao da API Shopee sozinha ja passa dos
+    # ~100s permitidos. O frontend acompanha o progresso via
+    # GET /api/shopee/sync-log.
+    loja_id = (request.get_json(silent=True) or {}).get("loja_id")
+    chave = loja_id if loja_id is not None else "global"
+    with _sync_lock:
+        ja_rodando = chave in _sync_em_andamento
+        if not ja_rodando:
+            _sync_em_andamento.add(chave)
+    if not ja_rodando:
+        threading.Thread(target=_shopee_sync_worker, args=(loja_id,), daemon=True).start()
+    return jsonify({"status": "ja_processando" if ja_rodando else "processando", "loja_id": loja_id})
 
 
 @integrations_bp.route("/api/shopee/pedidos/<order_sn>", methods=["GET"])

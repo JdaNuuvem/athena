@@ -505,5 +505,37 @@ class TestAtualizarVinculoPedido(unittest.TestCase):
         self.assertIn("erro", r)
 
 
+class TestStatusUltimoSync(unittest.TestCase):
+    """Regressao: sync agora roda em background por loja (ver
+    routes/integrations.py) - o frontend precisa filtrar o log por loja_id
+    pra acompanhar so' a corrida que ele proprio disparou, nao a mistura de
+    todas as lojas."""
+
+    @patch("shopee_sync.get_db")
+    def test_sem_loja_id_traz_log_de_todas(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = [{"id": 1, "loja_id": 3}, {"id": 2, "loja_id": 4}]
+        mock_get_db.return_value = fake_db
+
+        resultado = shopee_sync.status_ultimo_sync()
+
+        self.assertEqual(len(resultado), 2)
+        query = fake_db.fetch.call_args.args[0]
+        self.assertNotIn("WHERE", query)
+
+    @patch("shopee_sync.get_db")
+    def test_com_loja_id_filtra_na_query(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = [{"id": 1, "loja_id": 3}]
+        mock_get_db.return_value = fake_db
+
+        resultado = shopee_sync.status_ultimo_sync(loja_id=3)
+
+        self.assertEqual(len(resultado), 1)
+        query, params = fake_db.fetch.call_args.args[0], fake_db.fetch.call_args.args[1:]
+        self.assertIn("WHERE loja_id = $1", query)
+        self.assertEqual(params, (3,))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

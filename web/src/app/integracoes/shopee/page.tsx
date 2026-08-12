@@ -99,7 +99,7 @@ function ShopeeIntegrationContent() {
     setMostrarHistorico(proximoEstado);
     if (proximoEstado) {
       try {
-        const r = await api.shopeeSyncLog();
+        const r = await api.shopeeSyncLog(lojaId === "todas" ? undefined : Number(lojaId));
         setSyncLog(r.log || []);
       } catch { setSyncLog([]); }
     }
@@ -159,12 +159,43 @@ function ShopeeIntegrationContent() {
     }
   };
 
+  const aguardar = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  // A sincronizacao roda em background no servidor (catalogos grandes
+  // estouram o timeout do proxy se rodar sincrono, ver commit que trocou
+  // isso) — aqui so' disparamos e ficamos consultando o log ate' as
+  // corridas dessa loja (produtos + pedidos) saírem de "executando".
+  const aguardarConclusao = async (lojaId?: number) => {
+    const MAX_TENTATIVAS = 60; // ~3min (3s * 60)
+    for (let tentativa = 0; tentativa < MAX_TENTATIVAS; tentativa++) {
+      await aguardar(3000);
+      const { log } = await api.shopeeSyncLog(lojaId);
+      const recentes = log.slice(0, 2); // ultima corrida de 'produtos' + 'pedidos'
+      if (recentes.length > 0 && recentes.every((l) => l.status !== "executando")) {
+        return recentes;
+      }
+    }
+    return null; // timeout - segue sem bloquear a tela pra sempre
+  };
+
   const sincronizar = async (lojaId?: number) => {
     setSyncingId(lojaId ?? "novo");
     setMsg(null);
     try {
-      const r = await api.shopeeSync(lojaId);
-      setMsg({ text: `${r.total} itens sincronizados${r.erros ? ` · ${r.erros} erros` : ""}`, ok: true });
+      await api.shopeeSync(lojaId);
+      setMsg({ text: "Sincronização iniciada em segundo plano...", ok: true });
+      const resultado = await aguardarConclusao(lojaId);
+      if (!resultado) {
+        setMsg({ text: "Sincronização ainda em andamento — confira o histórico abaixo em instantes.", ok: true });
+      } else {
+        const produtos = resultado.find((l) => l.tipo === "produtos");
+        const comErro = resultado.some((l) => l.status === "erro");
+        const totalItens = resultado.reduce((soma, l) => soma + (l.itens_processados || 0), 0);
+        setMsg({
+          text: `${totalItens} itens sincronizados${produtos ? ` (${produtos.itens_processados} produtos)` : ""}${comErro ? " · com erros — confira o histórico" : ""}`,
+          ok: !comErro,
+        });
+      }
       carregar();
     } catch (e) {
       setMsg({ text: e instanceof Error ? e.message : "Erro ao sincronizar", ok: false });

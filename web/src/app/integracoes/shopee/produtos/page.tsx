@@ -200,14 +200,28 @@ export default function ShopeeProdutosPage() {
 
   useEffect(() => { if (lojaId) carregar(); }, [lojaId, carregar]);
 
+  // A sincronizacao roda em background no servidor (catalogos grandes
+  // estouram o timeout do proxy se rodar sincrono) — dispara e fica
+  // consultando o log ate' a corrida de 'produtos' dessa loja sair de
+  // "executando".
   const sincronizar = async () => {
     if (!lojaId) return;
     setSincronizando(true);
     setMsg(null);
     setErro(null);
     try {
-      const r = await api.shopeeSync(Number(lojaId));
-      setMsg(`${r.total} produtos sincronizados${r.erros ? ` · ${r.erros} erros` : ""}`);
+      await api.shopeeSync(Number(lojaId));
+      setMsg("Sincronização iniciada em segundo plano...");
+      const MAX_TENTATIVAS = 60; // ~3min (3s * 60)
+      for (let tentativa = 0; tentativa < MAX_TENTATIVAS; tentativa++) {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        const { log } = await api.shopeeSyncLog(Number(lojaId));
+        const produtos = log.find((l) => l.tipo === "produtos");
+        if (produtos && produtos.status !== "executando") {
+          setMsg(`${produtos.itens_processados} produtos sincronizados${produtos.status === "erro" ? " · com erros" : ""}`);
+          break;
+        }
+      }
       await carregar();
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao sincronizar");

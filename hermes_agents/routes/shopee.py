@@ -224,7 +224,8 @@ def shopee_desconectar_loja(loja_id):
 @shopee_bp.route('/sync-log', methods=['GET'])
 def shopee_sync_log():
     from shopee_sync import status_ultimo_sync
-    return jsonify({"log": status_ultimo_sync()})
+    loja_id = request.args.get("loja_id", type=int)
+    return jsonify({"log": status_ultimo_sync(loja_id=loja_id)})
 
 @shopee_bp.route('/produtos-sincronizados', methods=['GET'])
 def shopee_produtos_sincronizados():

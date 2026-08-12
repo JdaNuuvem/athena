@@ -25,6 +25,12 @@ async def _init_tables():
             erro TEXT, iniciado_em TIMESTAMP DEFAULT NOW(), concluido_em TIMESTAMP
         )
     """)
+    # loja_id: qual conta Shopee essa corrida sincronizou (multiloja) — NULL
+    # pra corridas antigas/legadas sem loja especifica. Sem isso o frontend
+    # nao consegue acompanhar o progresso de UMA loja especifica, so' o log
+    # global misturado de todas.
+    try: await db.execute("ALTER TABLE shopee_sync_log ADD COLUMN IF NOT EXISTS loja_id INT")
+    except Exception: pass
     await db.execute("""
         CREATE TABLE IF NOT EXISTS shopee_ads_campaigns (
             id SERIAL PRIMARY KEY, campaign_id VARCHAR(100) UNIQUE,
@@ -131,7 +137,9 @@ async def sync_produtos(loja_id: int = None) -> dict:
     await _init_tables()
     db = await get_db()
     shop_id = get_shopee_config(loja_id).get("shop_id") or ""
-    log_id = await db.fetchval("INSERT INTO shopee_sync_log (tipo, status) VALUES ('produtos', 'executando') RETURNING id")
+    log_id = await db.fetchval(
+        "INSERT INTO shopee_sync_log (tipo, status, loja_id) VALUES ('produtos', 'executando', $1) RETURNING id",
+        loja_id)
     total = 0
     erros = []
     offset = 0
@@ -215,7 +223,9 @@ async def sync_pedidos(dias: int = 30, loja_id: int = None) -> dict:
     listar_pedidos_shopee_detalhado (shopee/orders.py)."""
     await _init_tables()
     db = await get_db()
-    log_id = await db.fetchval("INSERT INTO shopee_sync_log (tipo, status) VALUES ('pedidos', 'executando') RETURNING id")
+    log_id = await db.fetchval(
+        "INSERT INTO shopee_sync_log (tipo, status, loja_id) VALUES ('pedidos', 'executando', $1) RETURNING id",
+        loja_id)
     total = 0
     erros = []
     now = int(time.time())
@@ -324,7 +334,9 @@ def sync_pedidos_shopee(dias: int = 30, loja_id: int = None) -> dict:
         await _init_tables()
         db = await get_db()
         shop_id = get_shopee_config(loja_id).get("shop_id") or ""
-        log_id = await db.fetchval("INSERT INTO shopee_sync_log (tipo, status) VALUES ('pedidos_detalhado', 'executando') RETURNING id")
+        log_id = await db.fetchval(
+            "INSERT INTO shopee_sync_log (tipo, status, loja_id) VALUES ('pedidos_detalhado', 'executando', $1) RETURNING id",
+            loja_id)
         total = 0
         erros = []
         now = int(time.time())
@@ -554,10 +566,14 @@ def listar_produtos_sincronizados(loja_id: int, dias: int = 90) -> list:
         log(AGENT, f"Erro listar_produtos_sincronizados: {e}")
         return []
 
-def status_ultimo_sync() -> dict:
+def status_ultimo_sync(loja_id: int = None) -> dict:
     async def _go():
         db = await get_db()
-        rows = await db.fetch("SELECT * FROM shopee_sync_log ORDER BY id DESC LIMIT 10")
+        if loja_id is not None:
+            rows = await db.fetch(
+                "SELECT * FROM shopee_sync_log WHERE loja_id = $1 ORDER BY id DESC LIMIT 10", loja_id)
+        else:
+            rows = await db.fetch("SELECT * FROM shopee_sync_log ORDER BY id DESC LIMIT 10")
         return [dict(r) for r in rows]
     return run_async(_go())
 
