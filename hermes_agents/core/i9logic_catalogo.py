@@ -1,18 +1,28 @@
-"""Import de catalogo — i9Logic -> Athena (importacao unica, disparo manual).
+"""Import de catalogo — app de bipagem/estoque -> Athena (importacao unica,
+disparo manual).
 
-Puxa o catalogo inteiro (/produtos, global, sem filial — 22.105 produtos
-confirmados na API real) e faz upsert direto em catalogo_produtos por
-sku=codproduto, sem fila de revisao. So' campos com significado direto
-entram (sku, descricao, ean, ncm, unidade, peso) — categoria/marca/
-fabricante ficam de fora porque sao so' codigos numericos internos do
-i9Logic sem endpoint de resolucao (GET /categorias e /marcas retornam 404,
-confirmado). Grava o de-para (tipo='produto') automaticamente no mesmo
-upsert, deixando a Fase 1 (reconciliacao de saldo) pronta pra usar esses
-produtos sem matching manual."""
+Puxa o catalogo inteiro (mesmo catalogo i9Logic, ja cacheado pelo app
+proprio de bipagem/atualizacao de estoque — ver core/estoque_app_client.py)
+e faz upsert direto em catalogo_produtos por sku=codproduto, sem fila de
+revisao. So' campos com significado direto entram (sku, descricao, ean,
+ncm, unidade, peso) — categoria/marca/fabricante ficam de fora porque sao
+so' codigos numericos internos do i9Logic sem endpoint de resolucao (GET
+/categorias e /marcas retornam 404, confirmado). Grava o de-para
+(tipo='produto') automaticamente no mesmo upsert, deixando a Fase 1
+(reconciliacao de saldo) pronta pra usar esses produtos sem matching
+manual.
+
+Antes puxava direto da API i9Logic (paginada, rate-limited a 2.5s/pagina —
+minutos pro catalogo inteiro, sujeito a timeout de proxy). O app de bipagem
+ja mantem esse mesmo catalogo sincronizado e serve tudo numa unica chamada,
+sem rate limit — muito mais rapido e confiavel pra essa importacao unica."""
 from core import get_db, run_async, log
-from core.i9logic import _paginar, I9LogicPaginaError, BASE_URL
+from core.estoque_app_client import fetch_produtos, fetch_estoques, EstoqueAppError
+from core.i9logic import listar_mapeamentos
 
 AGENT = "I9Logic Catalogo"
+
+TAMANHO_LOTE = 200  # produtos por transacao/conexao no upsert em lote
 
 
 async def _upsert_produto_async(conn, produto: dict) -> dict:
@@ -89,22 +99,85 @@ def sincronizar_catalogo_i9logic() -> dict:
     """Importacao unica do catalogo inteiro — disparo manual (nao entra no
     scheduler). Idempotente: rodar de novo do zero so' reprocessa (upsert por
     sku), nao duplica."""
-    if not BASE_URL:
-        return {"erro": "I9LOGIC_BASE_URL nao configurado - configure antes de importar"}
-    log(AGENT, "Iniciando import de catalogo i9Logic")
-    importados = {"count": 0}
-    erros_registro = []
-
-    def _on_pagina(pagina_registros):
-        count, erros = _upsert_pagina(pagina_registros)
-        importados["count"] += count
-        erros_registro.extend(erros)
-
+    log(AGENT, "Iniciando import de catalogo (app de bipagem/estoque)")
     try:
-        _paginar("produtos", {}, on_pagina=_on_pagina)
-    except I9LogicPaginaError as e:
-        log(AGENT, f"Import de catalogo falhou na pagina {e.pagina}: {importados['count']} importados ate a falha, {len(erros_registro)} erros")
-        return {"erro": str(e), "pagina_falhou": e.pagina,
-                "importados_ate_agora": importados["count"], "erros_registro": erros_registro}
-    log(AGENT, f"Import de catalogo concluido: {importados['count']} importados, {len(erros_registro)} erros")
-    return {"ok": True, "importados": importados["count"], "erros_registro": erros_registro}
+        produtos = fetch_produtos()
+    except EstoqueAppError as e:
+        log(AGENT, f"Import de catalogo falhou ao buscar produtos: {e}")
+        return {"erro": str(e)}
+    importados = 0
+    erros_registro = []
+    for inicio in range(0, len(produtos), TAMANHO_LOTE):
+        lote = produtos[inicio:inicio + TAMANHO_LOTE]
+        count, erros = _upsert_pagina(lote)
+        importados += count
+        erros_registro.extend(erros)
+    log(AGENT, f"Import de catalogo concluido: {importados} importados, {len(erros_registro)} erros")
+    return {"ok": True, "importados": importados, "total_recebidos": len(produtos), "erros_registro": erros_registro}
+
+
+# ── Estoque por loja fisica (a partir do mesmo cache) ──
+
+def _mapa_produto_i9logic_para_sku(produtos: list) -> dict:
+    """{idproduto_i9logic: sku} a partir do proprio payload de produtos —
+    mais barato que reconsultar de_para_i9logic produto a produto."""
+    return {p["id"]: str(p.get("codproduto", "")).strip()
+            for p in produtos if p.get("id") is not None and str(p.get("codproduto", "")).strip()}
+
+
+async def _upsert_estoque_loja_async(conn, sku: str, loja: str, quantidade: float) -> None:
+    await conn.execute("""
+        INSERT INTO estoque_lojas (sku, loja, quantidade, data_atualizacao)
+        VALUES ($1, $2, $3, NOW())
+        ON CONFLICT (sku, loja) DO UPDATE SET quantidade=$3, data_atualizacao=NOW()
+    """, sku, loja, quantidade)
+
+
+def sincronizar_estoque_lojas_fisicas() -> dict:
+    """Popula estoque_lojas (usado pela listagem /api/produtos) para toda
+    loja fisica que ja tem de-para de filial cadastrado (tipo='filial' em
+    de_para_i9logic) — sem esse de-para nao ha' como saber qual filial do
+    cache corresponde a qual loja Athena, entao essa loja fica de fora
+    (reportada em `sem_mapeamento`). Usa tipoestoque=1 (fisico), o mesmo
+    criterio que a reconciliacao (core/i9logic.py) trata como saldo de
+    prateleira; tipoestoque=2 (contabil) nunca vira saldo aqui."""
+    try:
+        produtos = fetch_produtos()
+        estoques = fetch_estoques()
+    except EstoqueAppError as e:
+        return {"erro": str(e)}
+    sku_por_idproduto = _mapa_produto_i9logic_para_sku(produtos)
+    filiais_mapeadas = listar_mapeamentos("filial")
+    if not filiais_mapeadas:
+        return {"erro": "nenhuma filial i9Logic mapeada em de_para_i9logic ainda "
+                         "(cadastre em /api/integrations/i9logic/depara antes)"}
+
+    async def _go():
+        db = await get_db()
+        atualizados, sem_sku = 0, 0
+        resultado_por_loja = {}
+        async with db.acquire() as conn:
+            for m in filiais_mapeadas:
+                filial_id = int(m["id_i9logic"])
+                loja = m["codigo_athena"]
+                itens_filial = [e for e in estoques
+                                 if e.get("filial") == filial_id and e.get("tipoestoque") == 1]
+                gravados_loja = 0
+                async with conn.transaction():
+                    for item in itens_filial:
+                        sku = sku_por_idproduto.get(item.get("idproduto"))
+                        if not sku:
+                            sem_sku += 1
+                            continue
+                        await _upsert_estoque_loja_async(conn, sku, loja, float(item.get("qtd") or 0))
+                        gravados_loja += 1
+                atualizados += gravados_loja
+                resultado_por_loja[loja] = gravados_loja
+        return atualizados, sem_sku, resultado_por_loja
+    try:
+        atualizados, sem_sku, resultado_por_loja = run_async(_go())
+    except Exception as e:
+        return {"erro": str(e)}
+    log(AGENT, f"Estoque fisico sincronizado: {atualizados} linhas, {sem_sku} sem sku mapeado")
+    return {"ok": True, "atualizados": atualizados, "sem_sku_mapeado": sem_sku,
+            "por_loja": resultado_por_loja}

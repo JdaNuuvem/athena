@@ -15,7 +15,7 @@ patcher = patch("asyncpg.create_pool", side_effect=_mp)
 patcher.start()
 
 import core.i9logic_catalogo as catalogo_i9logic
-from core.i9logic import I9LogicPaginaError
+from core.estoque_app_client import EstoqueAppError
 
 
 def _fake_db_com_conn(conn):
@@ -249,70 +249,51 @@ class TestUpsertPagina(unittest.TestCase):
 
 
 class TestSincronizarCatalogo(unittest.TestCase):
-    def test_sem_base_url_retorna_erro(self):
-        with patch("core.i9logic_catalogo.BASE_URL", ""):
+    def test_falha_ao_buscar_produtos_retorna_erro(self):
+        with patch("core.i9logic_catalogo.fetch_produtos", side_effect=EstoqueAppError("produtos", "timeout")):
             resultado = catalogo_i9logic.sincronizar_catalogo_i9logic()
         self.assertIn("erro", resultado)
 
-    def test_agrega_resultados_de_paginas(self):
-        """Testa que sincronizar_catalogo_i9logic agrega importados e erros de multiplas paginas"""
-        def _fake_paginar(endpoint, params, on_pagina=None):
-            # Simula 2 paginas
-            if on_pagina:
-                on_pagina([
-                    {"id": 1, "codproduto": "P1", "ativo": "1", "emlinha": "1"},
-                    {"id": 2, "codproduto": "P2", "ativo": "1", "emlinha": "1"},
-                ])
-                on_pagina([
-                    {"id": 3, "codproduto": "P3", "ativo": "1", "emlinha": "1"},
-                ])
-            return []
+    def test_agrega_resultados_em_lotes(self):
+        """3 produtos com TAMANHO_LOTE=2 vira 2 lotes (2 + 1) - confirma que
+        os resultados de cada lote sao somados, nao sobrescritos."""
+        produtos = [
+            {"id": 1, "codproduto": "P1", "ativo": "1", "emlinha": "1"},
+            {"id": 2, "codproduto": "P2", "ativo": "1", "emlinha": "1"},
+            {"id": 3, "codproduto": "P3", "ativo": "1", "emlinha": "1"},
+        ]
 
         def _fake_upsert_pagina(pagina):
-            # Simula sucesso/erro
-            if len(pagina) == 2:
-                return 2, []
-            else:
-                return 1, []
+            return len(pagina), []
 
-        with patch("core.i9logic_catalogo.BASE_URL", "https://fake"), \
-             patch("core.i9logic_catalogo._paginar", side_effect=_fake_paginar), \
+        with patch("core.i9logic_catalogo.fetch_produtos", return_value=produtos), \
+             patch("core.i9logic_catalogo.TAMANHO_LOTE", 2), \
              patch("core.i9logic_catalogo._upsert_pagina", side_effect=_fake_upsert_pagina):
             resultado = catalogo_i9logic.sincronizar_catalogo_i9logic()
 
         self.assertEqual(resultado["ok"], True)
         self.assertEqual(resultado["importados"], 3)
+        self.assertEqual(resultado["total_recebidos"], 3)
         self.assertEqual(len(resultado["erros_registro"]), 0)
 
-    def test_falha_de_pagina_retorna_progresso_parcial(self):
-        """Testa que falha de pagina retorna progresso parcial"""
-        def _fake_paginar(endpoint, params, on_pagina=None):
-            if on_pagina:
-                on_pagina([{"id": 1, "codproduto": "P1", "ativo": "1", "emlinha": "1"}])
-            raise I9LogicPaginaError(2, Exception("timeout"))
+    def test_erros_de_lote_ficam_no_registro_mas_nao_abortam(self):
+        produtos = [{"id": 1, "codproduto": "P1"}, {"id": 2, "codproduto": "P2"}]
 
         def _fake_upsert_pagina(pagina):
-            return 1, []
+            return 1, [{"codproduto": "P2", "erro": "falhou"}]
 
-        with patch("core.i9logic_catalogo.BASE_URL", "https://fake"), \
-             patch("core.i9logic_catalogo._paginar", side_effect=_fake_paginar), \
+        with patch("core.i9logic_catalogo.fetch_produtos", return_value=produtos), \
              patch("core.i9logic_catalogo._upsert_pagina", side_effect=_fake_upsert_pagina):
             resultado = catalogo_i9logic.sincronizar_catalogo_i9logic()
 
-        self.assertIn("erro", resultado)
-        self.assertEqual(resultado["pagina_falhou"], 2)
-        self.assertEqual(resultado["importados_ate_agora"], 1)
+        self.assertEqual(resultado["ok"], True)
+        self.assertEqual(len(resultado["erros_registro"]), 1)
 
     def test_sucesso_loga_inicio_e_conclusao(self):
-        """Achado 3 (revisao final): sincronizar_catalogo_i9logic nao pode
-        rodar em silencio - sem log nenhum, uma falha/lentidao no meio do
-        import (22k+ produtos) fica invisivel nos logs do agente ate' o fim."""
-        def _fake_paginar(endpoint, params, on_pagina=None):
-            if on_pagina:
-                on_pagina([{"id": 1, "codproduto": "P1", "ativo": "1", "emlinha": "1"}])
-            return []
-        with patch("core.i9logic_catalogo.BASE_URL", "https://fake"), \
-             patch("core.i9logic_catalogo._paginar", side_effect=_fake_paginar), \
+        """sincronizar_catalogo_i9logic nao pode rodar em silencio - sem log
+        nenhum, uma falha/lentidao no meio do import fica invisivel nos logs
+        do agente ate' o fim."""
+        with patch("core.i9logic_catalogo.fetch_produtos", return_value=[{"id": 1, "codproduto": "P1"}]), \
              patch("core.i9logic_catalogo._upsert_pagina", return_value=(1, [])), \
              patch("core.i9logic_catalogo.log") as mock_log:
             catalogo_i9logic.sincronizar_catalogo_i9logic()
@@ -321,21 +302,82 @@ class TestSincronizarCatalogo(unittest.TestCase):
         self.assertTrue(any("Iniciando" in m for m in mensagens))
         self.assertTrue(any("concluido" in m for m in mensagens))
 
-    def test_falha_de_pagina_loga_progresso_parcial(self):
-        """Achado 3: a falha tambem precisa deixar rastro no log, com a mesma
-        info de progresso parcial que ja vai na resposta (pagina/contagem)."""
-        def _fake_paginar(endpoint, params, on_pagina=None):
-            if on_pagina:
-                on_pagina([{"id": 1, "codproduto": "P1", "ativo": "1", "emlinha": "1"}])
-            raise I9LogicPaginaError(2, Exception("timeout"))
-        with patch("core.i9logic_catalogo.BASE_URL", "https://fake"), \
-             patch("core.i9logic_catalogo._paginar", side_effect=_fake_paginar), \
-             patch("core.i9logic_catalogo._upsert_pagina", return_value=(1, [])), \
+    def test_falha_ao_buscar_loga_erro(self):
+        with patch("core.i9logic_catalogo.fetch_produtos", side_effect=EstoqueAppError("produtos", "timeout")), \
              patch("core.i9logic_catalogo.log") as mock_log:
             catalogo_i9logic.sincronizar_catalogo_i9logic()
         mensagens = [c.args[1] for c in mock_log.call_args_list]
-        self.assertTrue(any("Iniciando" in m for m in mensagens))
-        self.assertTrue(any("falhou na pagina" in m for m in mensagens))
+        self.assertTrue(any("falhou ao buscar produtos" in m for m in mensagens))
+
+
+class TestSincronizarEstoqueLojasFisicas(unittest.TestCase):
+    def test_falha_ao_buscar_retorna_erro(self):
+        with patch("core.i9logic_catalogo.fetch_produtos", side_effect=EstoqueAppError("produtos", "timeout")):
+            resultado = catalogo_i9logic.sincronizar_estoque_lojas_fisicas()
+        self.assertIn("erro", resultado)
+
+    def test_sem_filial_mapeada_retorna_erro_claro(self):
+        with patch("core.i9logic_catalogo.fetch_produtos", return_value=[]), \
+             patch("core.i9logic_catalogo.fetch_estoques", return_value=[]), \
+             patch("core.i9logic_catalogo.listar_mapeamentos", return_value=[]):
+            resultado = catalogo_i9logic.sincronizar_estoque_lojas_fisicas()
+        self.assertIn("erro", resultado)
+        self.assertIn("nenhuma filial", resultado["erro"])
+
+    def test_grava_apenas_estoque_fisico_da_filial_mapeada(self):
+        """tipoestoque=2 (contabil) e itens de filial nao mapeada devem ser
+        ignorados - so' tipoestoque=1 da filial com de-para conta."""
+        produtos = [{"id": 10, "codproduto": "SKU-A"}, {"id": 20, "codproduto": "SKU-B"}]
+        estoques = [
+            {"filial": 69, "idproduto": 10, "qtd": 5, "tipoestoque": 1},
+            {"filial": 69, "idproduto": 10, "qtd": 999, "tipoestoque": 2},  # contabil, ignorado
+            {"filial": 999, "idproduto": 20, "qtd": 7, "tipoestoque": 1},  # filial sem mapeamento
+        ]
+        mapeamentos = [{"id_i9logic": "69", "codigo_athena": "Loja Centro"}]
+        gravados = []
+
+        async def _execute(query, *args):
+            gravados.append(args)
+            return "OK"
+
+        class TxMock:
+            async def __aenter__(self): return self
+            async def __aexit__(self, *a): return None
+
+        conn = AsyncMock()
+        conn.transaction = MagicMock(return_value=TxMock())
+        conn.execute = _execute
+
+        with patch("core.i9logic_catalogo.fetch_produtos", return_value=produtos), \
+             patch("core.i9logic_catalogo.fetch_estoques", return_value=estoques), \
+             patch("core.i9logic_catalogo.listar_mapeamentos", return_value=mapeamentos), \
+             patch("core.i9logic_catalogo.get_db", return_value=_fake_db_com_conn(conn)):
+            resultado = catalogo_i9logic.sincronizar_estoque_lojas_fisicas()
+
+        self.assertEqual(resultado["ok"], True)
+        self.assertEqual(resultado["atualizados"], 1)
+        self.assertEqual(gravados, [("SKU-A", "Loja Centro", 5.0)])
+
+    def test_item_sem_sku_mapeado_e_contado_mas_nao_grava(self):
+        produtos = []  # nenhum produto conhecido -> idproduto 10 nao resolve sku
+        estoques = [{"filial": 69, "idproduto": 10, "qtd": 5, "tipoestoque": 1}]
+        mapeamentos = [{"id_i9logic": "69", "codigo_athena": "Loja Centro"}]
+
+        class TxMock:
+            async def __aenter__(self): return self
+            async def __aexit__(self, *a): return None
+
+        conn = AsyncMock()
+        conn.transaction = MagicMock(return_value=TxMock())
+
+        with patch("core.i9logic_catalogo.fetch_produtos", return_value=produtos), \
+             patch("core.i9logic_catalogo.fetch_estoques", return_value=estoques), \
+             patch("core.i9logic_catalogo.listar_mapeamentos", return_value=mapeamentos), \
+             patch("core.i9logic_catalogo.get_db", return_value=_fake_db_com_conn(conn)):
+            resultado = catalogo_i9logic.sincronizar_estoque_lojas_fisicas()
+
+        self.assertEqual(resultado["atualizados"], 0)
+        self.assertEqual(resultado["sem_sku_mapeado"], 1)
 
 
 if __name__ == "__main__":

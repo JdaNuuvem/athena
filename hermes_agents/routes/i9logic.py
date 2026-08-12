@@ -7,7 +7,7 @@ from core.i9logic import (
     aplicar_ajuste_divergencia, comparar_com_athena, seed_inicial,
     estoque_fisico_por_loja,
 )
-from core.i9logic_catalogo import sincronizar_catalogo_i9logic
+from core.i9logic_catalogo import sincronizar_catalogo_i9logic, sincronizar_estoque_lojas_fisicas
 from core.i9logic_vendas import sincronizar_pedidos_i9logic
 from core.lojas import obter as obter_loja
 
@@ -206,6 +206,18 @@ def i9logic_importar_produtos():
     @requer_permissao("produtos.editar")
     def _go():
         return jsonify(sincronizar_catalogo_i9logic())
+    return _go()
+
+
+@i9logic_bp.route("/estoque-lojas/importar", methods=["POST"])
+def i9logic_importar_estoque_lojas():
+    """Popula estoque_lojas (usado pela listagem /api/produtos filtrada por
+    loja) para toda loja fisica ja mapeada em de_para_i9logic. Disparo manual
+    - rode depois de /produtos/importar (o catalogo precisa existir primeiro
+    pra listagem por loja fazer sentido)."""
+    @requer_permissao("produtos.editar")
+    def _go():
+        return jsonify(sincronizar_estoque_lojas_fisicas())
     return _go()
 
 
