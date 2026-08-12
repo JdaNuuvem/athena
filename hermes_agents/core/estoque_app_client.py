@@ -1,13 +1,11 @@
 """Client HTTP para o app proprio de bipagem/atualizacao de estoque (fonte
-real dos dados fisicos das lojas — o mesmo catalogo que a i9Logic serve, ja
-paginado e cacheado por aquele app). Os endpoints /api/cache/* la sao
-publicos (sem autenticacao), entao aqui so' fazemos GET direto — nao ha'
-login/token envolvido.
+real dos dados fisicos das lojas — mesmo catalogo que a i9Logic serve, ja
+com a contagem fisica da bipagem mesclada por produto/filial).
 
-Usado no lugar da paginacao direta contra a API i9Logic (core/i9logic.py):
-aquela paginacao respeita rate limit (2.5s/pagina) e pra 22k+ produtos leva
-minutos, sujeito a timeout do proxy. O app de bipagem ja mantem esse mesmo
-catalogo sincronizado e serve tudo numa unica chamada."""
+/api/external/produtos-existentes exige autenticacao via header X-API-Key
+(ESTOQUE_APP_API_KEY) - diferente do endpoint de cache antigo, publico. A
+chave nunca fica hardcoded aqui: so' env var (ou core.config como fallback,
+mesmo padrao das outras integracoes)."""
 import os
 import requests
 
@@ -19,6 +17,13 @@ BASE_URL = (os.environ.get("ESTOQUE_APP_BASE_URL")
 TIMEOUT_SEGUNDOS = 60
 
 
+def _api_key() -> str:
+    if os.environ.get("ESTOQUE_APP_API_KEY"):
+        return os.environ["ESTOQUE_APP_API_KEY"]
+    from core.config import get_config
+    return get_config("estoque_app", "api_key") or ""
+
+
 class EstoqueAppError(Exception):
     def __init__(self, entidade: str, causa):
         self.entidade = entidade
@@ -26,33 +31,24 @@ class EstoqueAppError(Exception):
         super().__init__(f"falha ao buscar '{entidade}' do app de estoque: {causa}")
 
 
-def _fetch_cache(entidade: str) -> list:
+def fetch_produtos_existentes(filial_id: int = None) -> list:
+    """Produtos ja bipados (catalogo + contagem fisica mesclada de todas as
+    sessoes da loja, nao so' hoje). filial_id=None traz de todas as lojas
+    que ja tem alguma sessao de bipagem registrada. qtdContada vem None pro
+    produto que so' foi escaneado mas ainda nao teve quantidade digitada -
+    quem consome isso NAO pode tratar None como zero."""
+    api_key = _api_key()
+    if not api_key:
+        raise EstoqueAppError("produtos-existentes", "ESTOQUE_APP_API_KEY nao configurada")
+    params = {"filialId": filial_id} if filial_id is not None else {}
     try:
-        resp = requests.get(f"{BASE_URL}/api/cache/{entidade}", timeout=TIMEOUT_SEGUNDOS)
+        resp = requests.get(
+            f"{BASE_URL}/api/external/produtos-existentes",
+            headers={"X-API-Key": api_key}, params=params, timeout=TIMEOUT_SEGUNDOS)
         resp.raise_for_status()
         body = resp.json()
     except Exception as e:
-        raise EstoqueAppError(entidade, e)
+        raise EstoqueAppError("produtos-existentes", e)
     if not body.get("ok"):
-        raise EstoqueAppError(entidade, body.get("error", "resposta sem ok=true"))
-    return body.get("data", [])
-
-
-def status() -> dict:
-    """Contadores do cache remoto (ready/loading/counts) — usado pra checar
-    se vale a pena puxar antes de disparar uma importacao pesada."""
-    resp = requests.get(f"{BASE_URL}/api/cache/status", timeout=TIMEOUT_SEGUNDOS)
-    resp.raise_for_status()
-    return resp.json()
-
-
-def fetch_produtos() -> list:
-    return _fetch_cache("produtos")
-
-
-def fetch_estoques() -> list:
-    return _fetch_cache("estoques")
-
-
-def fetch_filiais() -> list:
-    return _fetch_cache("filiais")
+        raise EstoqueAppError("produtos-existentes", body.get("error", "resposta sem ok=true"))
+    return body.get("produtos", [])
