@@ -251,6 +251,7 @@ from routes.chat import chat_bp
 from routes.oauth_provider import oauth_provider_bp
 from routes.chat_ws import init_sock
 from routes.i9logic import i9logic_bp
+from routes.produtos_bipador import produtos_bipador_bp
 app.register_blueprint(bling_bp)
 app.register_blueprint(integrations_bp)
 app.register_blueprint(webhook_bp)
@@ -289,6 +290,7 @@ app.register_blueprint(bi_bp)
 app.register_blueprint(chat_bp)
 app.register_blueprint(oauth_provider_bp)
 app.register_blueprint(i9logic_bp)
+app.register_blueprint(produtos_bipador_bp)
 init_sock(app)
 
 # ponytail: importar aqui garante que catalogo_produtos (SSOT) exista antes de

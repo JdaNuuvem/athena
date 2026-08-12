@@ -1,26 +1,25 @@
-"""Import de catalogo — app de bipagem/estoque -> Athena (importacao unica,
-disparo manual).
+"""Import de catalogo — app proprio de bipagem/atualizacao de estoque
+(core/estoque_app_client.py) -> Athena (importacao unica, disparo manual).
+NAO fala com a API i9Logic — a unica fonte de dados aqui e' o app da
+empresa em http://ipu9fzz363muaape6dklfnpb.177.7.45.242.sslip.io (endpoints
+/api/cache/* publicos, sem autenticacao).
 
-Puxa o catalogo inteiro (mesmo catalogo i9Logic, ja cacheado pelo app
-proprio de bipagem/atualizacao de estoque — ver core/estoque_app_client.py)
-e faz upsert direto em catalogo_produtos por sku=codproduto, sem fila de
+Faz upsert direto em catalogo_produtos por sku=codproduto, sem fila de
 revisao. So' campos com significado direto entram (sku, descricao, ean,
-ncm, unidade, peso) — categoria/marca/fabricante ficam de fora porque sao
-so' codigos numericos internos do i9Logic sem endpoint de resolucao (GET
-/categorias e /marcas retornam 404, confirmado). Grava o de-para
-(tipo='produto') automaticamente no mesmo upsert, deixando a Fase 1
-(reconciliacao de saldo) pronta pra usar esses produtos sem matching
-manual.
-
-Antes puxava direto da API i9Logic (paginada, rate-limited a 2.5s/pagina —
-minutos pro catalogo inteiro, sujeito a timeout de proxy). O app de bipagem
-ja mantem esse mesmo catalogo sincronizado e serve tudo numa unica chamada,
-sem rate limit — muito mais rapido e confiavel pra essa importacao unica."""
+ncm, unidade, peso) — categoria/marca/fabricante ficam de fora porque no
+catalogo de origem sao so' codigos numericos sem tabela de resolucao
+disponivel. Grava o de-para (tabela de_para_i9logic, tipo='produto')
+automaticamente no mesmo upsert — essa tabela e' compartilhada com a
+reconciliacao de saldo fisico x contabil (core/i9logic.py, que essa sim
+fala com a API i9Logic de verdade para outra finalidade: comparar saldo
+declarado vs contado). Reaproveitar o de-para aqui deixa aquela
+reconciliacao pronta pra usar os produtos importados por este modulo sem
+matching manual - os ids sao do mesmo catalogo de origem em ambos os casos."""
 from core import get_db, run_async, log
 from core.estoque_app_client import fetch_produtos, fetch_estoques, EstoqueAppError
 from core.i9logic import listar_mapeamentos
 
-AGENT = "I9Logic Catalogo"
+AGENT = "Produtos Bipador"
 
 TAMANHO_LOTE = 200  # produtos por transacao/conexao no upsert em lote
 
@@ -95,7 +94,7 @@ def _upsert_pagina(pagina_registros: list) -> tuple:
         return 0, [{"codproduto": None, "erro": f"falha na pagina inteira: {e}"}]
 
 
-def sincronizar_catalogo_i9logic() -> dict:
+def sincronizar_catalogo_bipador() -> dict:
     """Importacao unica do catalogo inteiro — disparo manual (nao entra no
     scheduler). Idempotente: rodar de novo do zero so' reprocessa (upsert por
     sku), nao duplica."""
@@ -118,7 +117,7 @@ def sincronizar_catalogo_i9logic() -> dict:
 
 # ── Estoque por loja fisica (a partir do mesmo cache) ──
 
-def _mapa_produto_i9logic_para_sku(produtos: list) -> dict:
+def _mapa_produto_bipador_para_sku(produtos: list) -> dict:
     """{idproduto_i9logic: sku} a partir do proprio payload de produtos —
     mais barato que reconsultar de_para_i9logic produto a produto."""
     return {p["id"]: str(p.get("codproduto", "")).strip()
@@ -146,7 +145,7 @@ def sincronizar_estoque_lojas_fisicas() -> dict:
         estoques = fetch_estoques()
     except EstoqueAppError as e:
         return {"erro": str(e)}
-    sku_por_idproduto = _mapa_produto_i9logic_para_sku(produtos)
+    sku_por_idproduto = _mapa_produto_bipador_para_sku(produtos)
     filiais_mapeadas = listar_mapeamentos("filial")
     if not filiais_mapeadas:
         return {"erro": "nenhuma filial i9Logic mapeada em de_para_i9logic ainda "

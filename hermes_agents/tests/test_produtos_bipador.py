@@ -1,4 +1,4 @@
-"""Testes de integracao — import de catalogo i9Logic -> catalogo_produtos."""
+"""Testes de integracao — import de catalogo do app de bipagem/estoque -> catalogo_produtos."""
 import sys, os, unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from unittest.mock import patch, AsyncMock, MagicMock
@@ -14,7 +14,7 @@ async def _mp(*a, **kw):
 patcher = patch("asyncpg.create_pool", side_effect=_mp)
 patcher.start()
 
-import core.i9logic_catalogo as catalogo_i9logic
+import core.produtos_bipador as bipador
 from core.estoque_app_client import EstoqueAppError
 
 
@@ -28,7 +28,7 @@ def _fake_db_com_conn(conn):
 
 class TestUpsertProduto(unittest.TestCase):
     def test_codproduto_vazio_retorna_erro(self):
-        resultado = catalogo_i9logic._upsert_produto({"id": 1, "codproduto": "  "})
+        resultado = bipador._upsert_produto({"id": 1, "codproduto": "  "})
         self.assertIn("erro", resultado)
 
     def test_grava_de_para_automatico_junto_com_upsert(self):
@@ -52,8 +52,8 @@ class TestUpsertProduto(unittest.TestCase):
         conn.fetchrow = _fetchrow
         conn.execute = _execute
 
-        with patch("core.i9logic_catalogo.get_db", return_value=_fake_db_com_conn(conn)):
-            resultado = catalogo_i9logic._upsert_produto(
+        with patch("core.produtos_bipador.get_db", return_value=_fake_db_com_conn(conn)):
+            resultado = bipador._upsert_produto(
                 {"id": 99, "codproduto": "SKU-99", "descricao": "Teste", "ean": "123",
                  "ncm": "0000", "unidademedida": "UN", "peso": 1})
 
@@ -106,9 +106,9 @@ class TestUpsertProduto(unittest.TestCase):
         conn.fetchrow = _fetchrow
         conn.execute = _execute
 
-        with patch("core.i9logic_catalogo.get_db", return_value=_fake_db_com_conn(conn)):
+        with patch("core.produtos_bipador.get_db", return_value=_fake_db_com_conn(conn)):
             # produto do i9Logic SEM descricao/ean/ncm/peso - so' codproduto e id
-            resultado = catalogo_i9logic._upsert_produto({"id": 99, "codproduto": "SKU-99"})
+            resultado = bipador._upsert_produto({"id": 99, "codproduto": "SKU-99"})
 
         self.assertEqual(resultado["descricao"], "Descricao Antiga do Bling")
         self.assertEqual(resultado["ean"], "7890000000000")
@@ -139,8 +139,8 @@ class TestUpsertProduto(unittest.TestCase):
         conn.fetchrow = _fetchrow
         conn.execute = _execute
 
-        with patch("core.i9logic_catalogo.get_db", return_value=_fake_db_com_conn(conn)):
-            resultado = catalogo_i9logic._upsert_produto(
+        with patch("core.produtos_bipador.get_db", return_value=_fake_db_com_conn(conn)):
+            resultado = bipador._upsert_produto(
                 {"id": 99, "codproduto": "SKU-99", "descricao": "Descricao Nova do i9Logic"})
 
         self.assertEqual(resultado["descricao"], "Descricao Nova do i9Logic")
@@ -178,9 +178,9 @@ class TestUpsertPagina(unittest.TestCase):
         conn = AsyncMock()
         conn.transaction = MagicMock(return_value=TxMock())
 
-        with patch("core.i9logic_catalogo._upsert_produto_async", side_effect=_upsert_mock), \
-             patch("core.i9logic_catalogo.get_db", return_value=_fake_db_com_conn(conn)):
-            importados, erros = catalogo_i9logic._upsert_pagina(pagina)
+        with patch("core.produtos_bipador._upsert_produto_async", side_effect=_upsert_mock), \
+             patch("core.produtos_bipador.get_db", return_value=_fake_db_com_conn(conn)):
+            importados, erros = bipador._upsert_pagina(pagina)
 
         self.assertEqual(chamadas_upsert, ["ATIVO1"])
         self.assertEqual(importados, 1)
@@ -208,9 +208,9 @@ class TestUpsertPagina(unittest.TestCase):
         conn = AsyncMock()
         conn.transaction = MagicMock(return_value=TxMock())
 
-        with patch("core.i9logic_catalogo._upsert_produto_async", side_effect=_upsert_mock), \
-             patch("core.i9logic_catalogo.get_db", return_value=_fake_db_com_conn(conn)):
-            importados, erros = catalogo_i9logic._upsert_pagina(pagina)
+        with patch("core.produtos_bipador._upsert_produto_async", side_effect=_upsert_mock), \
+             patch("core.produtos_bipador.get_db", return_value=_fake_db_com_conn(conn)):
+            importados, erros = bipador._upsert_pagina(pagina)
 
         self.assertEqual(importados, 1)
         self.assertEqual(len(erros), 1)
@@ -240,7 +240,7 @@ class TestUpsertPagina(unittest.TestCase):
         conn.execute = _execute
 
         import asyncio
-        result = asyncio.run(catalogo_i9logic._upsert_produto_async(conn,
+        result = asyncio.run(bipador._upsert_produto_async(conn,
             {"id": 99, "codproduto": "SKU-99", "descricao": "Teste"}))
 
         self.assertEqual(result["sku"], "SKU-99")
@@ -250,8 +250,8 @@ class TestUpsertPagina(unittest.TestCase):
 
 class TestSincronizarCatalogo(unittest.TestCase):
     def test_falha_ao_buscar_produtos_retorna_erro(self):
-        with patch("core.i9logic_catalogo.fetch_produtos", side_effect=EstoqueAppError("produtos", "timeout")):
-            resultado = catalogo_i9logic.sincronizar_catalogo_i9logic()
+        with patch("core.produtos_bipador.fetch_produtos", side_effect=EstoqueAppError("produtos", "timeout")):
+            resultado = bipador.sincronizar_catalogo_bipador()
         self.assertIn("erro", resultado)
 
     def test_agrega_resultados_em_lotes(self):
@@ -266,10 +266,10 @@ class TestSincronizarCatalogo(unittest.TestCase):
         def _fake_upsert_pagina(pagina):
             return len(pagina), []
 
-        with patch("core.i9logic_catalogo.fetch_produtos", return_value=produtos), \
-             patch("core.i9logic_catalogo.TAMANHO_LOTE", 2), \
-             patch("core.i9logic_catalogo._upsert_pagina", side_effect=_fake_upsert_pagina):
-            resultado = catalogo_i9logic.sincronizar_catalogo_i9logic()
+        with patch("core.produtos_bipador.fetch_produtos", return_value=produtos), \
+             patch("core.produtos_bipador.TAMANHO_LOTE", 2), \
+             patch("core.produtos_bipador._upsert_pagina", side_effect=_fake_upsert_pagina):
+            resultado = bipador.sincronizar_catalogo_bipador()
 
         self.assertEqual(resultado["ok"], True)
         self.assertEqual(resultado["importados"], 3)
@@ -282,45 +282,45 @@ class TestSincronizarCatalogo(unittest.TestCase):
         def _fake_upsert_pagina(pagina):
             return 1, [{"codproduto": "P2", "erro": "falhou"}]
 
-        with patch("core.i9logic_catalogo.fetch_produtos", return_value=produtos), \
-             patch("core.i9logic_catalogo._upsert_pagina", side_effect=_fake_upsert_pagina):
-            resultado = catalogo_i9logic.sincronizar_catalogo_i9logic()
+        with patch("core.produtos_bipador.fetch_produtos", return_value=produtos), \
+             patch("core.produtos_bipador._upsert_pagina", side_effect=_fake_upsert_pagina):
+            resultado = bipador.sincronizar_catalogo_bipador()
 
         self.assertEqual(resultado["ok"], True)
         self.assertEqual(len(resultado["erros_registro"]), 1)
 
     def test_sucesso_loga_inicio_e_conclusao(self):
-        """sincronizar_catalogo_i9logic nao pode rodar em silencio - sem log
+        """sincronizar_catalogo_bipador nao pode rodar em silencio - sem log
         nenhum, uma falha/lentidao no meio do import fica invisivel nos logs
         do agente ate' o fim."""
-        with patch("core.i9logic_catalogo.fetch_produtos", return_value=[{"id": 1, "codproduto": "P1"}]), \
-             patch("core.i9logic_catalogo._upsert_pagina", return_value=(1, [])), \
-             patch("core.i9logic_catalogo.log") as mock_log:
-            catalogo_i9logic.sincronizar_catalogo_i9logic()
+        with patch("core.produtos_bipador.fetch_produtos", return_value=[{"id": 1, "codproduto": "P1"}]), \
+             patch("core.produtos_bipador._upsert_pagina", return_value=(1, [])), \
+             patch("core.produtos_bipador.log") as mock_log:
+            bipador.sincronizar_catalogo_bipador()
         self.assertGreaterEqual(mock_log.call_count, 2)
         mensagens = [c.args[1] for c in mock_log.call_args_list]
         self.assertTrue(any("Iniciando" in m for m in mensagens))
         self.assertTrue(any("concluido" in m for m in mensagens))
 
     def test_falha_ao_buscar_loga_erro(self):
-        with patch("core.i9logic_catalogo.fetch_produtos", side_effect=EstoqueAppError("produtos", "timeout")), \
-             patch("core.i9logic_catalogo.log") as mock_log:
-            catalogo_i9logic.sincronizar_catalogo_i9logic()
+        with patch("core.produtos_bipador.fetch_produtos", side_effect=EstoqueAppError("produtos", "timeout")), \
+             patch("core.produtos_bipador.log") as mock_log:
+            bipador.sincronizar_catalogo_bipador()
         mensagens = [c.args[1] for c in mock_log.call_args_list]
         self.assertTrue(any("falhou ao buscar produtos" in m for m in mensagens))
 
 
 class TestSincronizarEstoqueLojasFisicas(unittest.TestCase):
     def test_falha_ao_buscar_retorna_erro(self):
-        with patch("core.i9logic_catalogo.fetch_produtos", side_effect=EstoqueAppError("produtos", "timeout")):
-            resultado = catalogo_i9logic.sincronizar_estoque_lojas_fisicas()
+        with patch("core.produtos_bipador.fetch_produtos", side_effect=EstoqueAppError("produtos", "timeout")):
+            resultado = bipador.sincronizar_estoque_lojas_fisicas()
         self.assertIn("erro", resultado)
 
     def test_sem_filial_mapeada_retorna_erro_claro(self):
-        with patch("core.i9logic_catalogo.fetch_produtos", return_value=[]), \
-             patch("core.i9logic_catalogo.fetch_estoques", return_value=[]), \
-             patch("core.i9logic_catalogo.listar_mapeamentos", return_value=[]):
-            resultado = catalogo_i9logic.sincronizar_estoque_lojas_fisicas()
+        with patch("core.produtos_bipador.fetch_produtos", return_value=[]), \
+             patch("core.produtos_bipador.fetch_estoques", return_value=[]), \
+             patch("core.produtos_bipador.listar_mapeamentos", return_value=[]):
+            resultado = bipador.sincronizar_estoque_lojas_fisicas()
         self.assertIn("erro", resultado)
         self.assertIn("nenhuma filial", resultado["erro"])
 
@@ -348,11 +348,11 @@ class TestSincronizarEstoqueLojasFisicas(unittest.TestCase):
         conn.transaction = MagicMock(return_value=TxMock())
         conn.execute = _execute
 
-        with patch("core.i9logic_catalogo.fetch_produtos", return_value=produtos), \
-             patch("core.i9logic_catalogo.fetch_estoques", return_value=estoques), \
-             patch("core.i9logic_catalogo.listar_mapeamentos", return_value=mapeamentos), \
-             patch("core.i9logic_catalogo.get_db", return_value=_fake_db_com_conn(conn)):
-            resultado = catalogo_i9logic.sincronizar_estoque_lojas_fisicas()
+        with patch("core.produtos_bipador.fetch_produtos", return_value=produtos), \
+             patch("core.produtos_bipador.fetch_estoques", return_value=estoques), \
+             patch("core.produtos_bipador.listar_mapeamentos", return_value=mapeamentos), \
+             patch("core.produtos_bipador.get_db", return_value=_fake_db_com_conn(conn)):
+            resultado = bipador.sincronizar_estoque_lojas_fisicas()
 
         self.assertEqual(resultado["ok"], True)
         self.assertEqual(resultado["atualizados"], 1)
@@ -370,11 +370,11 @@ class TestSincronizarEstoqueLojasFisicas(unittest.TestCase):
         conn = AsyncMock()
         conn.transaction = MagicMock(return_value=TxMock())
 
-        with patch("core.i9logic_catalogo.fetch_produtos", return_value=produtos), \
-             patch("core.i9logic_catalogo.fetch_estoques", return_value=estoques), \
-             patch("core.i9logic_catalogo.listar_mapeamentos", return_value=mapeamentos), \
-             patch("core.i9logic_catalogo.get_db", return_value=_fake_db_com_conn(conn)):
-            resultado = catalogo_i9logic.sincronizar_estoque_lojas_fisicas()
+        with patch("core.produtos_bipador.fetch_produtos", return_value=produtos), \
+             patch("core.produtos_bipador.fetch_estoques", return_value=estoques), \
+             patch("core.produtos_bipador.listar_mapeamentos", return_value=mapeamentos), \
+             patch("core.produtos_bipador.get_db", return_value=_fake_db_com_conn(conn)):
+            resultado = bipador.sincronizar_estoque_lojas_fisicas()
 
         self.assertEqual(resultado["atualizados"], 0)
         self.assertEqual(resultado["sem_sku_mapeado"], 1)
