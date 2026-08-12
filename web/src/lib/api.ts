@@ -155,7 +155,7 @@ export interface MovimentoDiarioResp {
 export const api = {
   // Auth
   login: (email: string, password: string) =>
-    request<{ token: string; refreshToken: string; expiresIn: number; user: { id: string; name: string; role: string }; permissions: string[] }>("/api/auth/login", {
+    request<{ token: string; role: string; name: string; email?: string; user_id?: number | null; permissoes: string[] }>("/api/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     }),

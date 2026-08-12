@@ -19,7 +19,7 @@ export default function LoginPage() {
     setError("");
     try {
       const res = await api.login(email, password);
-      login(res.token, res.user, res.permissions);
+      login(res.token, { id: String(res.user_id ?? "0"), name: res.name, role: res.role }, res.permissoes);
       router.push("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao autenticar");

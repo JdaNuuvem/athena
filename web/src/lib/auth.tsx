@@ -18,7 +18,7 @@ const AuthContext = createContext<AuthContextType>({
   login: () => {}, logout: () => {},
 });
 
-const fetchMe = (): Promise<{ id: string; name: string; role: string; roles: string[]; permissions: string[] } | null> => {
+const fetchMe = (): Promise<{ id: string; name: string; role: string; permissoes: string[] } | null> => {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
   if (!token) return Promise.resolve(null);
   return fetch("/api/me", { headers: { Authorization: `Bearer ${token}` } })
@@ -26,6 +26,7 @@ const fetchMe = (): Promise<{ id: string; name: string; role: string; roles: str
       if (r.status === 401) { handleUnauthorized(); return null; }
       return r.ok ? r.json() : null;
     })
+    .then(d => d ? { id: String(d.user_id ?? "0"), name: d.name, role: d.role, permissoes: d.permissoes || [] } : null)
     .catch(() => null);
 };
 
@@ -37,8 +38,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     fetchMe().then(d => {
       if (d) {
-        setUser({ id: d.id, name: d.name, role: d.role, roles: d.roles });
-        setPermissions(d.permissions || []);
+        setUser({ id: d.id, name: d.name, role: d.role });
+        setPermissions(d.permissoes || []);
       }
     }).finally(() => setLoading(false));
   }, []);

@@ -63,7 +63,7 @@ function ItemCard({ rank, titulo, subtitulo, children }: { rank: number; titulo:
   );
 }
 
-export default function RankingProdutosModal({ onClose, lojaId }: { onClose: () => void; lojaId?: string }) {
+export default function RankingProdutosModal({ onClose, lojaId, inline }: { onClose?: () => void; lojaId?: string; inline?: boolean }) {
   const [dias, setDias] = useState(30);
   const [categoria, setCategoria] = useState<Categoria>("vendas");
   const [aba, setAba] = useState<Aba>("vendidos");
@@ -154,12 +154,8 @@ export default function RankingProdutosModal({ onClose, lojaId }: { onClose: () 
     (categoria === "estoque" && aba === "parado" && listaParado.length === 0) ||
     (categoria === "estoque" && aba === "ruptura" && listaRuptura.length === 0);
 
-  return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div
-        className="instrument-enter instrument w-full max-w-2xl max-h-[85vh] overflow-y-auto p-5"
-        onClick={(e) => e.stopPropagation()}
-      >
+  const conteudo = (
+    <>
         <div className="flex items-start justify-between mb-4">
           <div>
             <h2 className="text-sm font-medium" style={{ color: "var(--ink-100)" }}>Ranking de produtos</h2>
@@ -167,9 +163,11 @@ export default function RankingProdutosModal({ onClose, lojaId }: { onClose: () 
               Todos os canais — Shopee (virtual) e i9Logic (física) — últimos {dias} dias
             </p>
           </div>
-          <button onClick={onClose} style={{ color: "var(--ink-500)" }} aria-label="Fechar">
-            <Icon name="close" size={16} />
-          </button>
+          {!inline && onClose && (
+            <button onClick={onClose} style={{ color: "var(--ink-500)" }} aria-label="Fechar">
+              <Icon name="close" size={16} />
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-2 mb-3 flex-wrap">
@@ -296,6 +294,20 @@ export default function RankingProdutosModal({ onClose, lojaId }: { onClose: () 
               ))}
           </div>
         )}
+    </>
+  );
+
+  if (inline) {
+    return <section className="instrument p-4">{conteudo}</section>;
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div
+        className="instrument-enter instrument w-full max-w-2xl max-h-[85vh] overflow-y-auto p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {conteudo}
       </div>
     </div>
   );

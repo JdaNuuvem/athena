@@ -92,7 +92,6 @@ const NAV_GROUPS: NavGroup[] = [
         ],
       },
       { href: "/crm", label: "CRM", icon: "crm" },
-      { href: "/atendimento", label: "Atendimento", icon: "atendimento" },
       { href: "/chat", label: "Chat", icon: "atendimento" },
     ],
   },

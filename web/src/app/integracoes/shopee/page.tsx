@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import type { ShopeeSyncLogEntry } from "@/lib/api";
 import Icon from "@/app/_components/Icon";
+import { useStore } from "@/lib/store-context";
 
 interface LojaShopee {
   id: number;
@@ -53,6 +54,7 @@ function ResultadoAutorizacao() {
 }
 
 function ShopeeIntegrationContent() {
+  const { lojaId } = useStore();
   const [lojasShopee, setLojasShopee] = useState<LojaShopee[]>([]);
   const [lojasDisponiveis, setLojasDisponiveis] = useState<LojaSimples[]>([]);
   const [loading, setLoading] = useState(true);
@@ -84,6 +86,13 @@ function ShopeeIntegrationContent() {
   }, []);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  // Ambiente especifico selecionado no header: trava o alvo da conexao
+  // nessa loja, em vez de deixar escolher qualquer uma (evita vincular a
+  // Shopee errada por engano dentro de um ambiente que nao e' "Todas").
+  useEffect(() => {
+    setLojaParaConectar(lojaId === "todas" ? "" : lojaId);
+  }, [lojaId]);
 
   const carregarHistorico = async () => {
     const proximoEstado = !mostrarHistorico;
@@ -201,7 +210,16 @@ function ShopeeIntegrationContent() {
     }
   };
 
-  const lojasSemShopee = lojasDisponiveis.filter(l => !lojasShopee.some(s => s.id === l.id));
+  // "todas" mostra a visao consolidada de gestao; com um ambiente
+  // especifico selecionado no header, so' a vinculacao dessa loja aparece —
+  // ver relato: vinculacao de outra loja ficava visivel ao trocar de ambiente.
+  const lojasShopeeFiltradas = lojaId === "todas"
+    ? lojasShopee
+    : lojasShopee.filter(l => String(l.id) === lojaId);
+  const lojasDisponiveisFiltradas = lojaId === "todas"
+    ? lojasDisponiveis
+    : lojasDisponiveis.filter(l => String(l.id) === lojaId);
+  const lojasSemShopee = lojasDisponiveisFiltradas.filter(l => !lojasShopee.some(s => s.id === l.id));
 
   return (
     <div className="p-6 space-y-6 max-w-3xl">
@@ -243,11 +261,13 @@ function ShopeeIntegrationContent() {
         <h2 className="text-sm font-medium text-neutral-300">Lojas Conectadas</h2>
         {loading ? (
           <p className="text-xs text-neutral-500">Carregando...</p>
-        ) : lojasShopee.length === 0 ? (
-          <p className="text-xs text-neutral-500">Nenhuma loja Shopee conectada ainda.</p>
+        ) : lojasShopeeFiltradas.length === 0 ? (
+          <p className="text-xs text-neutral-500">
+            {lojaId === "todas" ? "Nenhuma loja Shopee conectada ainda." : "Este ambiente ainda nao tem uma conta Shopee vinculada."}
+          </p>
         ) : (
           <div className="space-y-2">
-            {lojasShopee.map((l) => {
+            {lojasShopeeFiltradas.map((l) => {
               const expiraEm = l.shopee_token_expira_em ? new Date(l.shopee_token_expira_em) : null;
               const tokenValido = l.tem_token && expiraEm !== null && expiraEm.getTime() > Date.now();
               return (
@@ -329,30 +349,36 @@ function ShopeeIntegrationContent() {
         )}
       </div>
 
-      <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 space-y-3">
-        <h2 className="text-sm font-medium text-neutral-300">Conectar Nova Loja</h2>
-        <p className="text-xs text-neutral-500">
-          Vincule a autorização a uma das suas lojas cadastradas (opcional) ou conecte sem vincular.
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={lojaParaConectar}
-            onChange={(e) => setLojaParaConectar(e.target.value)}
-            className="bg-neutral-800 border border-neutral-700 rounded-lg px-2 py-1.5 text-xs text-neutral-200"
-          >
-            <option value="">Sem vincular a uma loja específica</option>
-            {lojasSemShopee.map((l) => (
-              <option key={l.id} value={l.id}>{l.nome}</option>
-            ))}
-          </select>
-          <button
-            onClick={conectarNovaLoja}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm px-4 py-2 rounded-lg transition-colors"
-          >
-            Conectar Loja Shopee
-          </button>
+      {(lojaId === "todas" || lojasShopeeFiltradas.length === 0) && (
+        <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 space-y-3">
+          <h2 className="text-sm font-medium text-neutral-300">Conectar Nova Loja</h2>
+          <p className="text-xs text-neutral-500">
+            {lojaId === "todas"
+              ? "Vincule a autorização a uma das suas lojas cadastradas (opcional) ou conecte sem vincular."
+              : `A autorização será vinculada ao ambiente atual (${lojasDisponiveis.find(l => String(l.id) === lojaId)?.nome ?? lojaId}).`}
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            {lojaId === "todas" && (
+              <select
+                value={lojaParaConectar}
+                onChange={(e) => setLojaParaConectar(e.target.value)}
+                className="bg-neutral-800 border border-neutral-700 rounded-lg px-2 py-1.5 text-xs text-neutral-200"
+              >
+                <option value="">Sem vincular a uma loja específica</option>
+                {lojasSemShopee.map((l) => (
+                  <option key={l.id} value={l.id}>{l.nome}</option>
+                ))}
+              </select>
+            )}
+            <button
+              onClick={conectarNovaLoja}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm px-4 py-2 rounded-lg transition-colors"
+            >
+              Conectar Loja Shopee
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4">
         <button
