@@ -187,7 +187,13 @@ def shopee_conectar_loja(loja_id):
     @requer_acesso_loja
     def _handler(loja_id):
         from shopee import get_auth_url
-        sandbox = (request.json or {}).get("sandbox", False) if request.is_json else False
+        # get_json(silent=True): request.json/get_json(silent=False) levanta
+        # 400 automatico do Werkzeug quando o corpo vem vazio mas o cliente
+        # ainda manda Content-Type: application/json (caso do frontend, que
+        # seta esse header em todo POST/PUT/DELETE mesmo sem body) - silent=True
+        # devolve None nesse caso em vez de abortar a resposta antes da rota rodar.
+        corpo = request.get_json(silent=True) or {}
+        sandbox = corpo.get("sandbox", False)
         url = get_auth_url(sandbox=sandbox, loja_id=loja_id)
         if not url:
             return jsonify({"error": "Partner ID nao configurado"}), 400

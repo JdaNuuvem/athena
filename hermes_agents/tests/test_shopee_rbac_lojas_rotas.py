@@ -79,6 +79,22 @@ class TestShopeeRotasComRestricaoDeLoja(unittest.TestCase):
 
     @patch("core.rbac.verificar_token_sessao", return_value={"user_id": 7, "email": "a@b.com", "role": "Vendedor"})
     @patch("core.rbac_lojas.lojas_permitidas", return_value=[3, 4])
+    @patch("shopee.get_auth_url", return_value="https://exemplo/auth")
+    def test_conectar_sem_body_mas_com_content_type_json_nao_da_400(self, mock_auth, mock_permitidas, mock_verif):
+        """Regressao: o frontend manda Content-Type: application/json em todo
+        POST/PUT/DELETE mesmo sem body (ver web/src/lib/api.ts) - request.json
+        (get_json(silent=False)) levanta 400 automatico do Werkzeug num corpo
+        vazio, ANTES do handler rodar. Reportado em producao: POST
+        /api/shopee/lojas/<id>/conectar sempre devolvia 400, mesmo com Shopee
+        configurada e loja valida."""
+        r = self.client.post(
+            "/api/shopee/lojas/3/conectar", headers=self.comum,
+            data="", content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 200)
+
+    @patch("core.rbac.verificar_token_sessao", return_value={"user_id": 7, "email": "a@b.com", "role": "Vendedor"})
+    @patch("core.rbac_lojas.lojas_permitidas", return_value=[3, 4])
     def test_rota_empilhada_com_requer_permissao_bloqueia_por_loja_antes(self, mock_permitidas, mock_verif):
         """requer_acesso_loja fica por fora de requer_permissao — bloqueia
         403 de loja mesmo sem chegar a checar a permissao de acao."""
