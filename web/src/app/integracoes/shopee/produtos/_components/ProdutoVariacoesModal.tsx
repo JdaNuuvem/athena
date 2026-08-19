@@ -146,6 +146,7 @@ export default function ProdutoVariacoesModal({
                   <th className="text-left px-4 py-3 font-medium">SKU</th>
                   <th className="text-left px-4 py-3 font-medium">Título</th>
                   <th className="text-right px-4 py-3 font-medium">Preço</th>
+                  <th className="text-right px-4 py-3 font-medium">Preço de custo</th>
                   <th className="text-left px-4 py-3 font-medium">Status</th>
                   <th className="text-center px-6 py-3 font-medium">Editar</th>
                 </tr>
@@ -160,6 +161,13 @@ export default function ProdutoVariacoesModal({
                     <td className="px-4 py-3 text-neutral-300 max-w-md truncate" title={v.titulo}>{v.titulo}</td>
                     <td className="px-4 py-3 text-right numeric text-neutral-300">
                       R$ {Number(v.preco || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-4 py-3 text-right numeric">
+                      {v.preco_custo != null ? (
+                        <span className="text-neutral-400">R$ {Number(v.preco_custo).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      ) : (
+                        <span className="text-neutral-600 text-xs">não cadastrado</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`text-xs px-2 py-0.5 rounded-full border capitalize ${statusPillClasses(v.status)}`}>{v.status}</span>

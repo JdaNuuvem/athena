@@ -546,7 +546,8 @@ def listar_produtos_sincronizados(loja_id: int, dias: int = 90) -> list:
         rows = await db.fetch("""
             SELECT a.sku, a.titulo, a.preco, a.estoque, a.status, a.anuncio_id, a.ultima_atualizacao,
                    COALESCE(a.imagem_url, c.imagem_url) AS imagem_url,
-                   COALESCE(vendas.qtd_vendida, 0) AS qtd_vendida
+                   COALESCE(vendas.qtd_vendida, 0) AS qtd_vendida,
+                   c.preco_custo AS preco_custo
             FROM anuncios a
             LEFT JOIN catalogo_produtos c ON c.sku = a.sku
             LEFT JOIN LATERAL (

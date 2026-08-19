@@ -1130,6 +1130,7 @@ export interface ShopeeProdutoSincronizado {
   imagem_url?: string | null;
   ultima_atualizacao: string | null;
   qtd_vendida: number;
+  preco_custo: number | null;
 }
 
 export interface EstoqueRapidoLoja {

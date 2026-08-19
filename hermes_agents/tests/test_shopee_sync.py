@@ -340,6 +340,27 @@ class TestListarProdutosSincronizados(unittest.TestCase):
         r = shopee_sync.listar_produtos_sincronizados(999)
         self.assertEqual(r, [])
 
+    @patch("shopee_sync.get_shopee_config")
+    @patch("shopee_sync.get_db")
+    def test_lista_produtos_inclui_preco_de_custo_do_catalogo(self, mock_get_db, mock_cfg):
+        """A tela /integracoes/shopee/produtos so' mostrava preco de venda —
+        precisa do preco de custo (catalogo_produtos.preco_custo, ja' joinado
+        na query via `c`) pra dar pra calcular margem na propria lista."""
+        mock_cfg.return_value = {"shop_id": "1782908877"}
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = [
+            {"sku": "SKU-1", "titulo": "Produto Teste", "preco": 49.9, "estoque": 25,
+             "status": "normal", "anuncio_id": "111", "ultima_atualizacao": None,
+             "preco_custo": 12.5},
+        ]
+        mock_get_db.return_value = fake_db
+
+        r = shopee_sync.listar_produtos_sincronizados(7)
+
+        self.assertEqual(r[0]["preco_custo"], 12.5)
+        query = fake_db.fetch.call_args.args[0]
+        self.assertIn("c.preco_custo", query)
+
 
 class TestSyncPedidosShopee(unittest.TestCase):
     """sync_pedidos_shopee grava pedido completo (cabecalho + itens) na tabela

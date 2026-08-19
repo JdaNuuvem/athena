@@ -266,6 +266,13 @@ export default function ShopeeProdutosPage() {
             )}
           </td>
           <td className="px-4 py-3 text-right text-neutral-300 numeric">R$ {Number(p.preco || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          <td className="px-4 py-3 text-right numeric">
+            {p.preco_custo != null ? (
+              <span className="text-neutral-400">R$ {Number(p.preco_custo).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            ) : (
+              <span className="text-neutral-600 text-xs" title="Preço de custo não cadastrado no catálogo">não cadastrado</span>
+            )}
+          </td>
           <td className="px-4 py-3 text-right numeric font-medium">
             <span className={Number(p.estoque) <= 0 ? "text-red-400" : Number(p.estoque) < 10 ? "text-amber-400" : "text-emerald-400"}>
               {Number(p.estoque)}
@@ -344,6 +351,9 @@ export default function ShopeeProdutosPage() {
           </div>
           <div className="text-right shrink-0">
             <p className="numeric text-sm text-neutral-300">R$ {Number(p.preco || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            <p className="numeric text-[11px] text-neutral-500">
+              Custo: {p.preco_custo != null ? `R$ ${Number(p.preco_custo).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "não cadastrado"}
+            </p>
             <p className={`numeric text-xs font-medium ${estoqueTextColor(Number(p.estoque))}`}>{Number(p.estoque)} un</p>
           </div>
           <span className={`text-xs px-2 py-0.5 rounded-full border capitalize shrink-0 ${statusPillClasses(p.status)}`}>{p.status}</span>
@@ -524,6 +534,7 @@ export default function ShopeeProdutosPage() {
                       <th className="text-left px-4 py-3 font-medium">SKU</th>
                       <th className="text-left px-4 py-3 font-medium">Título</th>
                       <th className="text-right px-4 py-3 font-medium">Preço</th>
+                      <th className="text-right px-4 py-3 font-medium">Preço de custo</th>
                       <th className="text-right px-4 py-3 font-medium">Estoque</th>
                       <th className="text-left px-4 py-3 font-medium">Status</th>
                       <th className="text-center px-4 py-3 font-medium">Editar</th>
@@ -552,6 +563,7 @@ export default function ShopeeProdutosPage() {
                               </span>
                             </span>
                           </td>
+                          <td className="px-4 py-3 text-right text-neutral-600 numeric text-xs">—</td>
                           <td className="px-4 py-3 text-right text-neutral-600 numeric text-xs">—</td>
                           <td className="px-4 py-3 text-right numeric font-medium text-xs">
                             <span className={estoqueTotal <= 0 ? "text-red-400" : "text-neutral-400"}>{estoqueTotal} total</span>
