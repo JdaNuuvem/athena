@@ -80,12 +80,6 @@ function QuickActionCard({ label, value, tone, href, tooltip }: { label: string;
   return href ? <Link href={href} className="block">{content}</Link> : content;
 }
 
-function diasAte(iso: string | null): number | null {
-  if (!iso) return null;
-  const diff = new Date(iso).getTime() - Date.now();
-  return Math.ceil(diff / (1000 * 60 * 60 * 24));
-}
-
 function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; name: string }>; label?: string }) {
   if (!active || !payload?.length) return null;
   return (
@@ -297,11 +291,6 @@ export default function ShopeeDashboardPage() {
   const syncComErro = !!syncUltimo?.erro || syncUltimo?.status === "erro";
   const syncExecutando = syncUltimo?.status === "executando";
 
-  const lojasComTokenExpirando = lojas.filter((l) => {
-    const d = diasAte(l.shopee_token_expira_em);
-    return d !== null && d <= 7;
-  });
-
   const chartData = serieDiaria.map((p) => ({ ...p, diaLabel: p.dia.slice(8, 10) + "/" + p.dia.slice(5, 7) }));
 
   const alertas: Array<{ texto: string; tone: "red" | "amber" }> = [];
@@ -309,10 +298,6 @@ export default function ShopeeDashboardPage() {
   if (totalPunicoesAtivas > 0) alertas.push({ texto: `${totalPunicoesAtivas} punição${totalPunicoesAtivas === 1 ? "" : "ões"} ativa${totalPunicoesAtivas === 1 ? "" : "s"} na conta`, tone: "red" });
   if (totalAnunciosBanidos > 0) alertas.push({ texto: `${totalAnunciosBanidos} anúncio${totalAnunciosBanidos === 1 ? "" : "s"} banido${totalAnunciosBanidos === 1 ? "" : "s"}`, tone: "red" });
   if (syncComErro) alertas.push({ texto: `Última sincronização com erro${syncUltimo?.erro ? `: ${syncUltimo.erro}` : ""}`, tone: "red" });
-  lojasComTokenExpirando.forEach((l) => {
-    const d = diasAte(l.shopee_token_expira_em);
-    alertas.push({ texto: `Token de "${l.nome}" ${d !== null && d <= 0 ? "expirado" : `expira em ${d}d`}`, tone: "amber" });
-  });
   if (totalAnunciosComProblema > 0) alertas.push({ texto: `${totalAnunciosComProblema} anúncio${totalAnunciosComProblema === 1 ? "" : "s"} sinalizado${totalAnunciosComProblema === 1 ? "" : "s"} pela Shopee`, tone: "amber" });
   if (totalPontosPenalidade > 0) alertas.push({ texto: `${totalPontosPenalidade} ponto${totalPontosPenalidade === 1 ? "" : "s"} de penalidade no trimestre`, tone: "amber" });
 
@@ -646,7 +631,6 @@ export default function ShopeeDashboardPage() {
               const s = saude[l.loja_id];
               const rating = s?.performance?.overall_performance?.rating;
               const ratingMeta = rating ? RATING_META[rating] : null;
-              const tokenDias = diasAte(l.shopee_token_expira_em);
               return (
                 <div key={l.loja_id} className="instrument-hover bg-neutral-900 border border-neutral-800 rounded-lg p-4 space-y-2">
                   <div className="flex items-center justify-between">
@@ -682,11 +666,6 @@ export default function ShopeeDashboardPage() {
                       )}
                       {!!s?.pontosPenalidade && (
                         <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-950/40 text-amber-400 font-medium">{s.pontosPenalidade} pts penalidade</span>
-                      )}
-                      {tokenDias !== null && tokenDias <= 7 && (
-                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${tokenDias <= 0 ? "bg-red-950/40 text-red-400" : "bg-amber-950/40 text-amber-400"}`}>
-                          {tokenDias <= 0 ? "Token expirado" : `Token expira em ${tokenDias}d`}
-                        </span>
                       )}
                     </div>
                     <span className="text-sm text-emerald-400 numeric font-medium">{fmtBRL(l.receita)}</span>
