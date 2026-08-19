@@ -108,6 +108,25 @@ class TestExcluirForcado(unittest.TestCase):
         self.assertIn("loja_integracoes", resultado["apagado"])
         self.assertIn("loja_responsaveis", resultado["apagado"])
 
+    def test_garante_coluna_pedido_id_antes_de_usar_crm_negociacoes(self):
+        """Achado real: crm_negociacoes.pedido_id so' era criado sob demanda
+        dentro de ao_converter_negociacao() (core/entidades.py) — se nenhuma
+        negociacao jamais foi convertida em producao, a coluna nao existia, e
+        excluir_forcado() estourava "column pedido_id does not exist" ao
+        tentar excluir uma loja Shopee. O ALTER TABLE IF NOT EXISTS precisa
+        rodar ANTES do UPDATE que usa a coluna, dentro da mesma transacao."""
+        conn = _mock_conn(fetchrow_return={"id": 1, "nome": "Loja X", "status": "inativa"},
+                           execute_return="UPDATE 0")
+        db = _mock_db_com_conn(conn)
+        with patch("core.lojas.get_db", AsyncMock(return_value=db)):
+            resultado = lojas.excluir_forcado(1, "Loja X")
+        self.assertTrue(resultado.get("ok"))
+        sqls = [c.args[0] for c in conn.execute.call_args_list]
+        idx_alter = next(i for i, s in enumerate(sqls)
+                          if "ALTER TABLE crm_negociacoes ADD COLUMN IF NOT EXISTS pedido_id" in s)
+        idx_update = next(i for i, s in enumerate(sqls) if s.startswith("UPDATE crm_negociacoes SET pedido_id"))
+        self.assertLess(idx_alter, idx_update, "ALTER precisa rodar antes do UPDATE que usa a coluna")
+
     def test_negociacoes_crm_sao_desvinculadas_nao_apagadas(self):
         conn = _mock_conn(fetchrow_return={"id": 1, "nome": "Loja X", "status": "inativa"},
                            execute_return="UPDATE 4")

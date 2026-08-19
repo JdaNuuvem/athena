@@ -63,6 +63,19 @@ class TestImpactoExclusao(unittest.TestCase):
         self.assertEqual(resultado["impacto"]["vendas_pedidos"], 7)
         self.assertEqual(resultado["total_linhas"], 10)
 
+    def test_garante_coluna_pedido_id_antes_de_contar_negociacoes(self):
+        """Mesmo achado real de test_lojas_exclusao_forcada_core.py — o dry-run
+        tambem le crm_negociacoes.pedido_id, entao precisa do mesmo ALTER
+        defensivo antes de contar."""
+        db = AsyncMock()
+        db.fetchrow.return_value = {"id": 1, "nome": "Loja Teste", "status": "inativa"}
+        db.fetchval.return_value = 0
+        with patch("core.lojas.get_db", AsyncMock(return_value=db)):
+            lojas.impacto_exclusao(1)
+        alter_calls = [c.args[0] for c in db.execute.call_args_list
+                       if "ALTER TABLE crm_negociacoes ADD COLUMN IF NOT EXISTS pedido_id" in c.args[0]]
+        self.assertEqual(len(alter_calls), 1)
+
     def test_loja_devolve_apenas_campos_minimos(self):
         """A rota lojas_impacto_exclusao faz jsonify(resultado) direto pro
         browser — resultado["loja"] precisa ser so' id/nome/status, nunca a

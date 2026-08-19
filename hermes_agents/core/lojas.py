@@ -514,6 +514,19 @@ _CASCATA_EXCLUSAO_FORCADA = [
 # negociacao nunca e' apagada, so' perde a referencia ao pedido.
 _WHERE_CRM_NEGOCIACOES_VINCULADAS = "pedido_id IN (SELECT id FROM vendas_pedidos WHERE loja_id = $1)"
 
+async def _garantir_coluna_crm_negociacoes_pedido_id(conn) -> None:
+    """core/crm.py cria a coluna no boot, mas modulos sao importados sob
+    demanda (nenhum import top-level de core.crm/core.vendas na app) — se
+    exclusao-forcada for a primeira rota do processo a tocar crm_negociacoes,
+    a coluna pode ainda nao existir. Defensivo aqui = nao depende de ordem de
+    import (achado real: "column pedido_id does not exist" ao tentar excluir
+    uma loja Shopee, mesma causa de ao_converter_negociacao() precisar do
+    mesmo ALTER antes de usar a coluna)."""
+    try:
+        await conn.execute("ALTER TABLE crm_negociacoes ADD COLUMN IF NOT EXISTS pedido_id INT REFERENCES vendas_pedidos(id)")
+    except Exception as e:
+        _log_erro("_garantir_coluna_crm_negociacoes_pedido_id", e)
+
 
 def impacto_exclusao(id_loja: int) -> dict:
     """Dry-run de excluir_forcado(): conta quantas linhas seriam apagadas em
@@ -534,6 +547,7 @@ def impacto_exclusao(id_loja: int) -> dict:
             n = await db.fetchval(f"SELECT COUNT(*) FROM {tabela} WHERE {where_clause}", id_loja)
             impacto[tabela] = n
             total += n
+        await _garantir_coluna_crm_negociacoes_pedido_id(db)
         negociacoes = await db.fetchval(
             f"SELECT COUNT(*) FROM crm_negociacoes WHERE {_WHERE_CRM_NEGOCIACOES_VINCULADAS}", id_loja)
         # loja_row completa (acima) so' e' usada internamente pra checar o
@@ -570,6 +584,7 @@ def excluir_forcado(id_loja: int, confirmar_nome: str) -> dict:
                     return {"erro": "Loja precisa estar inativa antes de forcar exclusao"}
                 if confirmar_nome != loja["nome"]:
                     return {"erro": "Nome de confirmacao nao confere"}
+                await _garantir_coluna_crm_negociacoes_pedido_id(conn)
                 r = await conn.execute(
                     f"UPDATE crm_negociacoes SET pedido_id = NULL WHERE {_WHERE_CRM_NEGOCIACOES_VINCULADAS}", id_loja)
                 negociacoes_desvinculadas = int(r.split()[-1])

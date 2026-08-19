@@ -77,6 +77,14 @@ def _ensure_tables():
                 observacoes TEXT, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW()
             )
         """)
+        # pedido_id (FK -> vendas_pedidos, nullable) so' era criado sob demanda
+        # dentro de ao_converter_negociacao() — se nenhuma negociacao jamais foi
+        # convertida em producao, a coluna nunca existia, e qualquer outro lugar
+        # que assume ela existir (ex: core/lojas.py::excluir_forcado, que
+        # desvincula negociacoes antes de apagar a loja) estourava "column
+        # pedido_id does not exist". Movido pra boot, igual as demais colunas.
+        try: await db.execute("ALTER TABLE crm_negociacoes ADD COLUMN IF NOT EXISTS pedido_id INT REFERENCES vendas_pedidos(id)")
+        except Exception as e: log(AGENT, f"Erro ALTER crm_negociacoes.pedido_id: {e}")
         await db.execute("""
             CREATE TABLE IF NOT EXISTS crm_atividades (
                 id SERIAL PRIMARY KEY, tipo VARCHAR(30) NOT NULL,
