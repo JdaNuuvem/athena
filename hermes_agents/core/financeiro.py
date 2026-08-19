@@ -169,16 +169,14 @@ def _ensure_tables():
             try: await db.execute(f"ALTER TABLE {_tabela} ADD COLUMN IF NOT EXISTS origem VARCHAR(30) DEFAULT 'manual'")
             except Exception: pass
 
-        count = await db.fetchval("SELECT COUNT(*) FROM fin_dre")
-        if count == 0:
-            mes = hoje()[:7]
-            await db.execute(f"""INSERT INTO fin_dre (mes, descricao, valor, tipo, categoria) VALUES
-                ('{mes}', 'Receita de Vendas', 150000, 'receita', 'Vendas'),
-                ('{mes}', 'Receita de Serviços', 45000, 'receita', 'Serviços'),
-                ('{mes}', 'CMV', -90000, 'despesa', 'Custos'),
-                ('{mes}', 'Salários', -35000, 'despesa', 'Pessoal'),
-                ('{mes}', 'Aluguel', -5000, 'despesa', 'Custos Fixos'),
-                ('{mes}', 'Marketing', -8000, 'despesa', 'Marketing')""")
+        # ponytail: fin_dre tinha seed de demonstracao aqui (Receita de Vendas
+        # 150000, Salarios -35000, Aluguel -5000, Marketing -8000, etc) —
+        # numero ficticio que aparecia como se fosse despesa/receita real na
+        # tela de DRE (core/relatorios.py::dre) e no resumo financeiro
+        # enquanto ninguem lancasse despesa de verdade via CRUD de fin_dre.
+        # Removido, mesmo racional do ponytail acima (linha ~136-141) que ja
+        # tinha tirado a seed fake de fluxo_caixa/contas_receber/contas_pagar
+        # — sem seed, a tabela fica vazia ate o primeiro lancamento real.
     try:
         run_async(_go())
     except Exception as e:

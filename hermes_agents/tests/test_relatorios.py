@@ -14,6 +14,57 @@ class TestRelatorios(unittest.TestCase):
     def test_lucro_return_keys(self):r=rel.lucro_margem(30);self.assertIn("lucro",r);self.assertIn("margem_pct",r)
     def test_estoque_return_keys(self):r=rel.estoque();self.assertIn("total_itens",r);self.assertIn("ruptura",r)
     def test_dre_return_keys(self):r=rel.dre(30);self.assertIn("receita_bruta",r);self.assertIn("lucro_bruto",r)
+
+    @patch("core.relatorios.get_db")
+    def test_dre_cmv_rateia_por_loja_em_vez_de_repassar_o_total_da_empresa(self, mock_get_db):
+        """Achado real: cmv nao filtrava por loja nenhuma — chamar dre(30,
+        loja_id=X) e dre(30, loja_id=Y) devolvia o MESMO cmv (custo de
+        producao TOTAL da empresa) pras duas lojas, so' a receita variava.
+        Agora aloca proporcional a participacao da loja na receita geral —
+        mesmo padrao ja usado em core/repositories_postgres.py::
+        listar_receita_por_loja."""
+        fake_db = AsyncMock()
+        # ordem das chamadas dentro de _go(): receita da loja (bling), receita
+        # da loja (pdv), cmv total, receita geral (bling), receita geral (pdv), despesas
+        fake_db.fetchval.side_effect = [2000.0, 0.0, 1000.0, 8000.0, 0.0, 0.0]
+        mock_get_db.return_value = fake_db
+
+        r = rel.dre(30, loja_id=5)
+
+        # loja tem 2000 de receita, empresa toda tem 8000 -> loja e' 25% da receita
+        # -> cmv da loja = 25% de 1000 = 250
+        self.assertEqual(r["cmv"], 250.0)
+        self.assertEqual(r["receita_bruta"], 2000.0)
+        self.assertEqual(r["lucro_bruto"], 1750.0)
+
+    @patch("core.relatorios.get_db")
+    def test_dre_sem_loja_id_cmv_e_o_total_sem_rateio(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetchval.side_effect = [8000.0, 0.0, 1000.0, 0.0]
+        mock_get_db.return_value = fake_db
+
+        r = rel.dre(30)
+
+        self.assertEqual(r["cmv"], 1000.0)
+        self.assertEqual(r["lucro_bruto"], 7000.0)
+
+    @patch("core.relatorios.get_db")
+    def test_dre_nao_deduz_mais_percentual_chumbado_de_contas_a_pagar(self, mock_get_db):
+        """Achado real: `lb = receita - cmv - (cp_val * 0.7)` deduzia 70% de
+        TODAS as contas a pagar pendentes do periodo, sem nenhuma base
+        documentada (fin_contas_pagar nao tem categoria pra distinguir custo
+        de mercadoria de qualquer outra despesa). Removido — lucro_bruto
+        agora e' so' receita menos cmv."""
+        fake_db = AsyncMock()
+        fake_db.fetchval.side_effect = [10000.0, 0.0, 2000.0, 0.0]
+        mock_get_db.return_value = fake_db
+
+        r = rel.dre(30)
+
+        self.assertEqual(r["lucro_bruto"], 8000.0)
+        sqls = [c.args[0] for c in fake_db.fetchval.call_args_list]
+        self.assertFalse(any("fin_contas_pagar" in sql for sql in sqls),
+                          "dre() nao deveria mais consultar fin_contas_pagar")
     def test_fluxo_caixa_keys(self):r=rel.fluxo_caixa(30);self.assertIn("entradas",r);self.assertIn("saidas",r);self.assertIn("saldo",r)
     def test_ticket_medio(self):
         try:

@@ -42,7 +42,11 @@ export default function RegrasPrecoPage() {
   const [resultadoAplicacao, setResultadoAplicacao] = useState<AplicacaoResultado | null>(null);
   const [erroAplicacao, setErroAplicacao] = useState("");
 
-  const lojasShopee = lojas.filter(l => l.shopee_shop_id || l.tipo === "virtual");
+  // core/lojas.py::listar() (GET /api/lojas/manage) devolve `shopee_conectado`
+  // (boolean calculado de shopee_shop_id IS NOT NULL), nunca `shopee_shop_id`
+  // em si — o filtro antigo usava um campo que a API nunca retorna, entao
+  // lojas fisicas com Shopee conectada de verdade sumiam do seletor.
+  const lojasShopee = lojas.filter(l => l.shopee_conectado || l.tipo === "virtual");
 
   const carregar = () => {
     fetch("/api/automacoes/regras_preco").then(r => r.json()).then(d => setRegras(d.data || [])).finally(() => setLoading(false));

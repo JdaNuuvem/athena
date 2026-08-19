@@ -232,6 +232,14 @@ def ticket_medio(dias=30, loja_id=None):
 # ── 7. DRE ──
 
 def dre(dias=30, loja_id=None):
+    """CMV (producao_custos) nao tem coluna loja_id — fabrica unica, sem
+    conceito de loja (mesma limitacao documentada em
+    core/repositories_postgres.py::listar_receita_por_loja). Sem loja_id,
+    mostra o CMV total da empresa contra a receita total (correto). Com
+    loja_id, aloca o CMV total proporcionalmente pela participacao daquela
+    loja na receita da empresa inteira no periodo — estimativa, nao
+    rastreio real por loja, mas evita o bug antigo de devolver o MESMO cmv
+    (o total da empresa) pra qualquer loja consultada."""
     loja_bl = _loja_where_bling(loja_id)
     loja_pdv = _loja_where_pdv(loja_id)
     async def _go():
@@ -239,9 +247,15 @@ def dre(dias=30, loja_id=None):
         receita = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND status != 'cancelado'{loja_bl}", dias)
         receita_pdv = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM pdv_vendas venda WHERE DATE(data) >= CURRENT_DATE - $1::int{loja_pdv}", dias)
         receita_total = float((receita or 0) + (receita_pdv or 0))
-        cmv = float(await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM producao_custos WHERE data >= CURRENT_DATE - $1::int", dias) or 0)
-        cp_val = float(await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_contas_pagar WHERE vencimento >= CURRENT_DATE - $1::int AND status='pendente'", dias) or 0)
-        lb = receita_total - cmv - (cp_val * 0.7)
+        cmv_total = float(await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM producao_custos WHERE data >= CURRENT_DATE - $1::int", dias) or 0)
+        if loja_id:
+            receita_geral_bl = await db.fetchval("SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND status != 'cancelado'", dias)
+            receita_geral_pdv = await db.fetchval("SELECT COALESCE(SUM(total),0) FROM pdv_vendas WHERE DATE(data) >= CURRENT_DATE - $1::int", dias)
+            receita_geral = float((receita_geral_bl or 0) + (receita_geral_pdv or 0))
+            cmv = round(cmv_total * receita_total / receita_geral, 2) if receita_geral > 0 else 0.0
+        else:
+            cmv = cmv_total
+        lb = receita_total - cmv
         despesas = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_dre WHERE mes >= to_char(CURRENT_DATE - $1::int, 'YYYY-MM') AND tipo='despesa'", dias)
         return {"receita_bruta": receita_total, "cmv": cmv, "lucro_bruto": round(lb, 2), "despesas": float(despesas or 0), "margem_bruta_pct": round(lb/max(receita_total,1)*100,1), "periodo_dias": dias}
     try: return run_async(_go())

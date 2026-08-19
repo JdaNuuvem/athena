@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any
 from .base import RegraPrecoStrategy
 
 class SazonalStrategy(RegraPrecoStrategy):
-    def aplicar(self, sku: str, loja_id: Optional[int], db) -> Optional[Dict[str, Any]]:
+    async def aplicar(self, sku: str, loja_id: Optional[int], db) -> Optional[Dict[str, Any]]:
         hoje = date.today()
         ini = self.regra.get("data_inicio")
         fim = self.regra.get("data_fim")

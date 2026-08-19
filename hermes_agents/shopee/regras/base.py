@@ -16,8 +16,14 @@ class RegraPrecoStrategy(ABC):
         self.prioridade = regra.get("prioridade", 0)
 
     @abstractmethod
-    def aplicar(self, sku: str, loja_id: Optional[int], db) -> Optional[Dict[str, Any]]:
-        """Retorna {'tipo': 'desconto'|'markup', 'ajuste_pct': float, 'nome': str} ou None se nao se aplica."""
+    async def aplicar(self, sku: str, loja_id: Optional[int], db) -> Optional[Dict[str, Any]]:
+        """Retorna {'tipo': 'desconto'|'markup', 'ajuste_pct': float, 'nome': str} ou None se nao se aplica.
+
+        async porque core/automacoes.py::aplicar_regras_preco() sempre faz
+        `await strategy.aplicar(...)` — uma implementacao sincrona (`def`)
+        estoura TypeError na hora do await, engolido pelo except generico da
+        chamadora (achado real: manual.py e sazonal.py tinham `def` e as
+        regras Manual/Sazonal nunca aplicavam nada, silenciosamente)."""
 
     def _desconto(self) -> Optional[Dict[str, Any]]:
         pct = self.regra.get("desconto_pct", 0)

@@ -178,6 +178,49 @@ class TestRegrasPreco(unittest.TestCase):
         self.assertEqual(len(r["regras_aplicadas"]), 2)
 
 
+class TestRegrasPrecoStrategyReal(unittest.TestCase):
+    """Diferente de TestRegrasPreco acima (que mocka core.automacoes.run_async
+    por inteiro, nunca exercitando o SQL nem as classes Strategy de verdade) —
+    aqui so' o get_db e' mockado, entao o dispatch real (criar_estrategia +
+    await strategy.aplicar(...)) roda de verdade. Achado real: manual.py e
+    sazonal.py tinham `def aplicar` sincrono enquanto core/automacoes.py
+    sempre faz `await strategy.aplicar(...)` — TypeError engolido pelo
+    except generico, regra nunca aplicava, preco ficava intacto e a UI
+    mostrava "sem mudanca" como se estivesse tudo certo."""
+
+    def _fake_db_com_regra(self, regra: dict):
+        fake_db = AsyncMock()
+        fake_db.fetch = AsyncMock(return_value=[regra])
+        return fake_db
+
+    @patch("core.automacoes.get_db")
+    def test_regra_manual_aplica_desconto_de_verdade(self, mock_get_db):
+        regra = {"tipo": "manual", "nome": "Desconto Manual", "prioridade": 0,
+                  "desconto_pct": 10, "markup_ajuste_pct": 0}
+        mock_get_db.return_value = self._fake_db_com_regra(regra)
+
+        r = aut.aplicar_regras_preco("SKU1", 100.0)
+
+        self.assertNotIn("erro", r, f"aplicar_regras_preco engoliu uma excecao: {r.get('erro')}")
+        self.assertEqual(r["preco_final"], 90.0)
+        self.assertEqual(len(r["regras_aplicadas"]), 1)
+
+    @patch("core.automacoes.get_db")
+    def test_regra_sazonal_dentro_do_periodo_aplica_desconto_de_verdade(self, mock_get_db):
+        from datetime import date, timedelta
+        hoje = date.today()
+        regra = {"tipo": "sazonal", "nome": "Black Friday", "prioridade": 0,
+                  "desconto_pct": 15, "markup_ajuste_pct": 0,
+                  "data_inicio": hoje - timedelta(days=1), "data_fim": hoje + timedelta(days=1)}
+        mock_get_db.return_value = self._fake_db_com_regra(regra)
+
+        r = aut.aplicar_regras_preco("SKU1", 100.0)
+
+        self.assertNotIn("erro", r, f"aplicar_regras_preco engoliu uma excecao: {r.get('erro')}")
+        self.assertEqual(r["preco_final"], 85.0)
+        self.assertEqual(len(r["regras_aplicadas"]), 1)
+
+
 class TestDispararWebhooks(unittest.TestCase):
     """Fase 2 — Webhook dispatcher."""
 
