@@ -299,7 +299,17 @@ def shopee_sincronizar_pedidos_detalhado():
 def shopee_dashboard_consolidado():
     from core.lojas import listar_lojas_shopee
     dias = request.args.get("dias", 30, type=int)
+    loja_id = request.args.get("loja_id", type=int)
     lojas = listar_lojas_shopee()
+    if loja_id:
+        lojas = [l for l in lojas if l["id"] == loja_id]
+    # Filtro condicional de loja (mesmo padrao de athena_bridge.py::kpi_overview) —
+    # aplicado nas queries que hoje agregam TODAS as lojas Shopee juntas, pra que
+    # a pagina /integracoes/shopee/dashboard mostre so' a loja selecionada quando
+    # loja_id e' passado.
+    loja_sql = " AND loja_id = %s" if loja_id else ""
+    loja_sql_vp = " AND vp.loja_id = %s" if loja_id else ""
+    loja_args = (loja_id,) if loja_id else ()
     try:
         conn = _db_sync(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         resultado = []
@@ -383,37 +393,37 @@ def shopee_dashboard_consolidado():
                 "ticket_medio_hoje": round(receita_hoje / pedidos_hoje, 2) if pedidos_hoje else 0.0,
             })
 
-        cur.execute("""
+        cur.execute(f"""
             SELECT data AS dia, COALESCE(SUM(total),0) AS receita, COUNT(*) AS pedidos
             FROM vendas_pedidos
-            WHERE marketplace = 'shopee' AND data >= CURRENT_DATE - %s AND status != 'cancelado'
+            WHERE marketplace = 'shopee' AND data >= CURRENT_DATE - %s AND status != 'cancelado'{loja_sql}
             GROUP BY data ORDER BY data
-        """, (dias,))
+        """, (dias,) + loja_args)
         serie_diaria = [{"dia": r["dia"].isoformat(), "receita": float(r["receita"] or 0), "pedidos": int(r["pedidos"] or 0)} for r in (cur.fetchall() or [])]
 
-        cur.execute("""
+        cur.execute(f"""
             SELECT vi.sku, COALESCE(c.descricao, vi.sku) AS descricao,
                    SUM(vi.quantidade) AS quantidade, SUM(vi.valor_total) AS receita
             FROM vendas_itens vi
             JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
             LEFT JOIN catalogo_produtos c ON c.sku = vi.sku
-            WHERE vp.marketplace = 'shopee' AND vp.data = CURRENT_DATE AND vp.status != 'cancelado'
+            WHERE vp.marketplace = 'shopee' AND vp.data = CURRENT_DATE AND vp.status != 'cancelado'{loja_sql_vp}
             GROUP BY vi.sku, c.descricao ORDER BY quantidade DESC LIMIT 8
-        """)
+        """, loja_args)
         top_produtos_hoje = [{"sku": r["sku"], "descricao": r["descricao"], "quantidade": int(r["quantidade"] or 0), "receita": float(r["receita"] or 0)} for r in (cur.fetchall() or [])]
 
-        cur.execute("""
+        cur.execute(f"""
             SELECT vi.sku, COALESCE(c.descricao, vi.sku) AS descricao, SUM(vi.quantidade) AS vendidos,
                    COALESCE(e.estoque_total, 0) AS estoque_atual, c.estoque_minimo
             FROM vendas_itens vi
             JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
             JOIN catalogo_produtos c ON c.sku = vi.sku
             LEFT JOIN (SELECT sku, SUM(quantidade) AS estoque_total FROM estoque_lojas GROUP BY sku) e ON e.sku = vi.sku
-            WHERE vp.marketplace = 'shopee' AND vp.data >= CURRENT_DATE - %s AND vp.status != 'cancelado' AND c.estoque_minimo IS NOT NULL
+            WHERE vp.marketplace = 'shopee' AND vp.data >= CURRENT_DATE - %s AND vp.status != 'cancelado' AND c.estoque_minimo IS NOT NULL{loja_sql_vp}
             GROUP BY vi.sku, c.descricao, e.estoque_total, c.estoque_minimo
             HAVING COALESCE(e.estoque_total, 0) <= c.estoque_minimo
             ORDER BY SUM(vi.quantidade) DESC LIMIT 10
-        """, (dias,))
+        """, (dias,) + loja_args)
         def _dias_ate_ruptura(vendidos, estoque_atual, dias):
             if vendidos <= 0:
                 return None
@@ -450,43 +460,43 @@ def shopee_dashboard_consolidado():
         # core/relatorios.py so' por uma constante.
         SHOPEE_COMISSAO_PCT = 12
 
-        cur.execute("""
+        cur.execute(f"""
             SELECT COALESCE(SUM(vi.valor_total),0) AS receita,
                    COALESCE(SUM(vi.quantidade * COALESCE(c.preco_custo,0)),0) AS custo
             FROM vendas_itens vi
             JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
             LEFT JOIN catalogo_produtos c ON c.sku = vi.sku
-            WHERE vp.marketplace = 'shopee' AND vp.data >= CURRENT_DATE - %s AND vp.status != 'cancelado'
-        """, (dias,))
+            WHERE vp.marketplace = 'shopee' AND vp.data >= CURRENT_DATE - %s AND vp.status != 'cancelado'{loja_sql_vp}
+        """, (dias,) + loja_args)
         lucro_row = cur.fetchone() or {}
         receita_periodo = float(lucro_row.get("receita") or 0)
         custo_periodo = float(lucro_row.get("custo") or 0)
         lucro_periodo = round(receita_periodo - (receita_periodo * SHOPEE_COMISSAO_PCT / 100.0) - custo_periodo, 2)
 
-        cur.execute("""
+        cur.execute(f"""
             SELECT COALESCE(SUM(total),0) AS receita
             FROM vendas_pedidos
-            WHERE marketplace = 'shopee' AND data >= CURRENT_DATE - (%s * 2) AND data < CURRENT_DATE - %s AND status != 'cancelado'
-        """, (dias, dias))
+            WHERE marketplace = 'shopee' AND data >= CURRENT_DATE - (%s * 2) AND data < CURRENT_DATE - %s AND status != 'cancelado'{loja_sql}
+        """, (dias, dias) + loja_args)
         anterior_row = cur.fetchone() or {}
-        cur.execute("""
+        cur.execute(f"""
             SELECT COALESCE(SUM(vi.quantidade),0) AS unidades
             FROM vendas_itens vi JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
-            WHERE vp.marketplace = 'shopee' AND vp.data >= CURRENT_DATE - (%s * 2) AND vp.data < CURRENT_DATE - %s AND vp.status != 'cancelado'
-        """, (dias, dias))
+            WHERE vp.marketplace = 'shopee' AND vp.data >= CURRENT_DATE - (%s * 2) AND vp.data < CURRENT_DATE - %s AND vp.status != 'cancelado'{loja_sql_vp}
+        """, (dias, dias) + loja_args)
         anterior_itens_row = cur.fetchone() or {}
         periodo_anterior = {"receita": float(anterior_row.get("receita") or 0), "unidades": int(anterior_itens_row.get("unidades") or 0)}
 
-        cur.execute("""
+        cur.execute(f"""
             SELECT COALESCE(SUM(total),0) AS receita, COUNT(*) AS pedidos
-            FROM vendas_pedidos WHERE marketplace = 'shopee' AND data = CURRENT_DATE - 1 AND status != 'cancelado'
-        """)
+            FROM vendas_pedidos WHERE marketplace = 'shopee' AND data = CURRENT_DATE - 1 AND status != 'cancelado'{loja_sql}
+        """, loja_args)
         ontem_row = cur.fetchone() or {}
-        cur.execute("""
+        cur.execute(f"""
             SELECT COALESCE(SUM(vi.quantidade),0) AS unidades
             FROM vendas_itens vi JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
-            WHERE vp.marketplace = 'shopee' AND vp.data = CURRENT_DATE - 1 AND vp.status != 'cancelado'
-        """)
+            WHERE vp.marketplace = 'shopee' AND vp.data = CURRENT_DATE - 1 AND vp.status != 'cancelado'{loja_sql_vp}
+        """, loja_args)
         ontem_itens_row = cur.fetchone() or {}
         ontem_row = {**ontem_row, **ontem_itens_row}
         vendido_ontem = {
@@ -516,39 +526,45 @@ def shopee_dashboard_consolidado():
 
         hoje = date.today()
         dias_no_mes = calendar.monthrange(hoje.year, hoje.month)[1]
-        cur.execute("""
+        cur.execute(f"""
             SELECT COALESCE(SUM(total),0) AS receita
             FROM vendas_pedidos
-            WHERE marketplace = 'shopee' AND data >= DATE_TRUNC('month', CURRENT_DATE)::date AND status != 'cancelado'
-        """)
+            WHERE marketplace = 'shopee' AND data >= DATE_TRUNC('month', CURRENT_DATE)::date AND status != 'cancelado'{loja_sql}
+        """, loja_args)
         receita_mes = float((cur.fetchone() or {}).get("receita") or 0)
         projecao_mes = round(receita_mes / hoje.day * dias_no_mes, 2) if hoje.day > 0 else 0.0
 
-        cur.execute("""
+        cur.execute(f"""
             SELECT vi.sku, COALESCE(c.descricao, vi.sku) AS descricao, SUM(vi.quantidade) AS quantidade,
                    SUM(vi.valor_total) AS receita,
                    SUM(vi.valor_total) - SUM(vi.valor_total * %s / 100.0) - SUM(vi.quantidade * COALESCE(c.preco_custo,0)) AS lucro
             FROM vendas_itens vi
             JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
             LEFT JOIN catalogo_produtos c ON c.sku = vi.sku
-            WHERE vp.marketplace = 'shopee' AND vp.data >= CURRENT_DATE - %s AND vp.status != 'cancelado'
+            WHERE vp.marketplace = 'shopee' AND vp.data >= CURRENT_DATE - %s AND vp.status != 'cancelado'{loja_sql_vp}
             GROUP BY vi.sku, c.descricao ORDER BY receita DESC LIMIT 15
-        """, (SHOPEE_COMISSAO_PCT, dias))
+        """, (SHOPEE_COMISSAO_PCT, dias) + loja_args)
         ranking_periodo = [{
             "sku": r["sku"], "descricao": r["descricao"], "quantidade": int(r["quantidade"] or 0),
             "receita": float(r["receita"] or 0), "lucro": round(float(r["lucro"] or 0), 2),
         } for r in (cur.fetchall() or [])]
 
-        cur.execute("""
+        # Filtro de loja aqui precisa entrar em dois lugares: em `anuncios`
+        # (que so' tem shop_id, nao loja_id — usa os shop_ids ja filtrados
+        # pela loja acima) e na subquery correlacionada sobre vendas_pedidos
+        # (que tem loja_id de verdade).
+        anuncios_shop_sql = " AND a.shop_id = ANY(%s)" if loja_id else ""
+        anuncios_shop_args = (shop_ids,) if loja_id else ()
+        cur.execute(f"""
             SELECT a.sku, a.titulo, a.preco, a.estoque
             FROM anuncios a
-            WHERE a.marketplace = 'shopee' AND a.status = 'normal' AND a.estoque > 0
+            WHERE a.marketplace = 'shopee' AND a.status = 'normal' AND a.estoque > 0{anuncios_shop_sql}
               AND NOT EXISTS (
                 SELECT 1 FROM vendas_itens vi JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
-                WHERE vi.sku = a.sku AND vp.marketplace = 'shopee' AND vp.data >= CURRENT_DATE - %s AND vp.status != 'cancelado'
+                WHERE vi.sku = a.sku AND vp.marketplace = 'shopee' AND vp.data >= CURRENT_DATE - %s AND vp.status != 'cancelado'{loja_sql_vp}
               )
             ORDER BY a.estoque DESC LIMIT 15
-        """, (dias,))
+        """, anuncios_shop_args + (dias,) + loja_args)
         produtos_parados = [{"sku": r["sku"], "titulo": r["titulo"], "preco": float(r["preco"] or 0), "estoque": int(r["estoque"] or 0)} for r in (cur.fetchall() or [])]
 
         cur.close(); conn.close()

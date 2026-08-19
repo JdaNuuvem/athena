@@ -5,6 +5,7 @@ import Link from "next/link";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { api } from "@/lib/api";
 import { useTheme, chartAxisColors } from "@/lib/theme-context";
+import { useStore } from "@/lib/store-context";
 import type {
   ShopeeDashboardLoja, ShopeeSerieDiariaPonto, ShopeeTopProdutoHoje, ShopeeEstoqueRisco,
   ShopeeShopPerformance, ShopeeFunilFulfillment, ShopeeAdsPerformanceRow, ShopeeAdsInsight, ShopeeSyncLogEntry,
@@ -129,6 +130,7 @@ function StatCard({ label, value, tone = "neutral", tooltip }: { label: string; 
 export default function ShopeeDashboardPage() {
   const { theme } = useTheme();
   const { grid: gridColor, axis: axisColor } = chartAxisColors(theme);
+  const { lojaId } = useStore();
   const [lojas, setLojas] = useState<ShopeeDashboardLoja[]>([]);
   const [serieDiaria, setSerieDiaria] = useState<ShopeeSerieDiariaPonto[]>([]);
   const [topProdutosHoje, setTopProdutosHoje] = useState<ShopeeTopProdutoHoje[]>([]);
@@ -159,10 +161,30 @@ export default function ShopeeDashboardPage() {
   const [, setTick] = useState(0);
 
   const carregar = useCallback(async () => {
+    if (lojaId === "todas") {
+      // Ao contrario de /dashboard (o unico lugar do sistema com visao
+      // "todas as lojas"), esta pagina sempre mostra UMA loja Shopee por
+      // vez — sem loja selecionada nao chama a API nem mostra agregado.
+      setLoading(false);
+      setErro(null);
+      setLojas([]);
+      setSerieDiaria([]);
+      setTopProdutosHoje([]);
+      setEstoqueRisco([]);
+      setFunil({ total: 0, sem_bling: 0, sem_nota: 0, nao_despachado: 0 });
+      setLucroPeriodo(0);
+      setPeriodoAnterior({ receita: 0, unidades: 0 });
+      setVendidoOntem({ receita: 0, unidades: 0, pedidos: 0 });
+      setCancelamentos({ total: 0, cancelados: 0, devolucao: 0, taxa_cancelamento_pct: 0, taxa_devolucao_pct: 0 });
+      setProjecaoMes(0);
+      setRankingPeriodo([]);
+      setProdutosParados([]);
+      return;
+    }
     setLoading(true);
     setErro(null);
     try {
-      const r = await api.shopeeDashboard(dias);
+      const r = await api.shopeeDashboard(dias, lojaId);
       if (r.error) setErro(r.error);
       setLojas(r.lojas || []);
       setSerieDiaria(r.serie_diaria || []);
@@ -182,7 +204,7 @@ export default function ShopeeDashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [dias, dataInicio, dataFim]);
+  }, [dias, dataInicio, dataFim, lojaId]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -302,6 +324,16 @@ export default function ShopeeDashboardPage() {
         <p className="text-xs text-neutral-500 mt-0.5">Visão geral das lojas Shopee conectadas.</p>
       </div>
 
+      {lojaId === "todas" ? (
+        <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-8 text-center text-neutral-500 text-sm">
+          Selecione uma loja no topo da página para ver o painel Shopee dela.
+          <p className="text-xs text-neutral-600 mt-1">
+            Este painel mostra dados de uma loja Shopee por vez — o consolidado de todas as lojas fica no{" "}
+            <Link href="/dashboard" className="text-indigo-400 hover:text-indigo-300 transition-colors">dashboard principal</Link>.
+          </p>
+        </div>
+      ) : (
+        <>
       {!loading && lojas.length === 0 && !erro && (
         <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-6 text-center text-neutral-500 text-sm">
           Nenhuma loja Shopee conectada ainda.
@@ -690,6 +722,8 @@ export default function ShopeeDashboardPage() {
               );
             })}
           </div>
+        </>
+      )}
         </>
       )}
 

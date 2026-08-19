@@ -87,9 +87,14 @@ class TestShopeeDashboardFonteDeVendas(unittest.TestCase):
         self.client = app.test_client()
         self.headers = {"Authorization": f"Bearer {USER_TOKEN}"}
 
-    def _rodar(self, responder_one=None, responder_all=None, dias=None):
+    def _rodar(self, responder_one=None, responder_all=None, dias=None, loja_id=None):
         cursor = _FakeCursor(responder_one, responder_all)
-        qs = f"?dias={dias}" if dias else ""
+        params_qs = []
+        if dias:
+            params_qs.append(f"dias={dias}")
+        if loja_id:
+            params_qs.append(f"loja_id={loja_id}")
+        qs = f"?{'&'.join(params_qs)}" if params_qs else ""
         with patch("routes.shopee._db_sync", return_value=_FakeConn(cursor)), \
              patch("core.lojas.listar_lojas_shopee", return_value=_UMA_LOJA):
             r = self.client.get(f"/api/shopee/dashboard{qs}", headers=self.headers)
@@ -153,6 +158,50 @@ class TestShopeeDashboardFonteDeVendas(unittest.TestCase):
         self.assertEqual(len(serie_sql), 1)
         sql, params = next((s, p) for s, p in cursor.executed if s in serie_sql)
         self.assertIn(7, params)
+
+    def test_loja_id_filtra_serie_diaria_e_top_produtos(self):
+        """Quando loja_id e' passado na query string, as queries agregadas
+        (que hoje somam TODAS as lojas Shopee) precisam ganhar o filtro de
+        loja e o param correspondente — pra pagina /integracoes/shopee/dashboard
+        mostrar so' a loja selecionada, nao um agregado."""
+        r, cursor = self._rodar(loja_id=7)
+        self.assertEqual(r.status_code, 200)
+
+        serie_sql, serie_params = next(
+            (s, p) for s, p in cursor.executed if "GROUP BY data" in s and "vendas_pedidos" in s)
+        self.assertIn("AND loja_id = %s", serie_sql)
+        self.assertIn(7, serie_params)
+
+        top_sql, top_params = next(
+            (s, p) for s, p in cursor.executed if "vendas_itens" in s and "CURRENT_DATE" in s and "LIMIT 8" in s)
+        self.assertIn("AND vp.loja_id = %s", top_sql)
+        self.assertIn(7, top_params)
+
+    def test_loja_id_filtra_produtos_parados_anuncios_e_subquery(self):
+        """produtos_parados usa `anuncios` (que so' tem shop_id, nao loja_id)
+        + uma subquery correlacionada em vendas_pedidos (que tem loja_id de
+        verdade) — o filtro de loja precisa entrar nos dois lugares."""
+        r, cursor = self._rodar(loja_id=7)
+        self.assertEqual(r.status_code, 200)
+
+        parados_sql, parados_params = next(
+            (s, p) for s, p in cursor.executed if "FROM anuncios a" in s and "NOT EXISTS" in s)
+        self.assertIn("AND a.shop_id = ANY(%s)", parados_sql)
+        self.assertIn("AND vp.loja_id = %s", parados_sql)
+        self.assertIn(["SHOP7"], parados_params)
+        self.assertIn(7, parados_params)
+
+    def test_sem_loja_id_nao_filtra_nenhuma_query_agregada(self):
+        """Sem loja_id na query string, o comportamento deve ficar identico
+        ao de antes: nenhuma query agregada ganha filtro de loja extra."""
+        r, cursor = self._rodar()
+        self.assertEqual(r.status_code, 200)
+        serie_sql, _ = next(
+            (s, p) for s, p in cursor.executed if "GROUP BY data" in s and "vendas_pedidos" in s)
+        self.assertNotIn("AND loja_id = %s", serie_sql)
+        parados_sql, _ = next(
+            (s, p) for s, p in cursor.executed if "FROM anuncios a" in s and "NOT EXISTS" in s)
+        self.assertNotIn("a.shop_id = ANY(%s)", parados_sql)
 
     def test_erro_de_query_nao_quebra_a_rota(self):
         def responder_one(sql, params):

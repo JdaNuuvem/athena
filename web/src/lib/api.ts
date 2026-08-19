@@ -393,13 +393,13 @@ export const api = {
     if (status) q.set("status", status);
     return request<{ pedidos: ShopeePedido[]; error?: string }>(`/api/shopee/pedidos?${q}`);
   },
-  shopeeDashboard: (dias?: number) =>
+  shopeeDashboard: (dias?: number, lojaId?: string) =>
     request<{
       lojas: ShopeeDashboardLoja[]; dias: number; serie_diaria: ShopeeSerieDiariaPonto[]; top_produtos_hoje: ShopeeTopProdutoHoje[];
       estoque_risco: ShopeeEstoqueRisco[]; funil_fulfillment: ShopeeFunilFulfillment; lucro_periodo: number;
       periodo_anterior: ShopeePeriodoAnterior; vendido_ontem: ShopeeVendidoOntem; cancelamentos: ShopeeCancelamentos; projecao_mes: number;
       ranking_periodo: ShopeeRankingPeriodoItem[]; produtos_parados: ShopeeProdutoParado[]; error?: string;
-    }>(`/api/shopee/dashboard${dias ? `?dias=${dias}` : ""}`),
+    }>(`/api/shopee/dashboard${dias ? `?dias=${dias}` : ""}${lojaId && lojaId !== "todas" ? `${dias ? "&" : "?"}loja_id=${lojaId}` : ""}`),
   shopeePedidosSincronizados: (lojaId: number, opts?: { status?: string; busca?: string; pagina?: number }) => {
     const q = new URLSearchParams({ loja_id: String(lojaId) });
     if (opts?.status) q.set("status", opts.status);
