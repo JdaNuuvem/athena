@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { estoqueLojas, estoqueAtualizar } from "@/lib/api";
+import { api, estoqueLojas, estoqueAtualizar } from "@/lib/api";
 import type { LojaInfo } from "@/lib/store-context";
+import { dividirPorDemanda } from "@/lib/estoqueDivisao";
 
 interface EstoqueMultiLojaModalProps {
   sku: string;
@@ -24,6 +25,10 @@ export default function EstoqueMultiLojaModal({ sku, nome, lojas, onClose, onSuc
   const [salvando, setSalvando] = useState(false);
   const [status, setStatus] = useState<Record<string, SaveStatus>>({});
   const [concluido, setConcluido] = useState(false);
+  const [totalDistribuir, setTotalDistribuir] = useState("");
+  const [modoDistribuicao, setModoDistribuicao] = useState<"substituir" | "somar">("substituir");
+  const [calculandoDemanda, setCalculandoDemanda] = useState(false);
+  const [erroDemanda, setErroDemanda] = useState<string | null>(null);
 
   useEffect(() => {
     let ativo = true;
@@ -54,6 +59,36 @@ export default function EstoqueMultiLojaModal({ sku, nome, lojas, onClose, onSuc
     selecionadas.forEach(nomeLoja => { iniciais[nomeLoja] = String(estoqueAtualPorLoja[nomeLoja] ?? 0); });
     setValores(iniciais);
     setEtapa("edicao");
+  };
+
+  const handleDividirPorDemanda = async () => {
+    const total = Number(totalDistribuir);
+    if (!Number.isFinite(total) || total <= 0) return;
+    setErroDemanda(null);
+    setCalculandoDemanda(true);
+    try {
+      const r = await api.relatorioDemandaPorLoja(sku, 30);
+      const demandaPorNome: Record<string, number> = {};
+      (r.itens || []).forEach((i) => { demandaPorNome[i.loja_nome] = i.quantidade; });
+      const nomesLojas = Array.from(selecionadas);
+      const resultado = dividirPorDemanda(
+        total,
+        nomesLojas.map((nome) => ({ chave: nome, demanda: demandaPorNome[nome] ?? 0 })),
+        1
+      );
+      setValores((prev) => {
+        const next = { ...prev };
+        nomesLojas.forEach((nome) => {
+          const base = modoDistribuicao === "somar" ? (Number(prev[nome]) || estoqueAtualPorLoja[nome] || 0) : 0;
+          next[nome] = String(base + (resultado[nome] ?? 0));
+        });
+        return next;
+      });
+    } catch (e) {
+      setErroDemanda(e instanceof Error ? e.message : "Erro ao calcular demanda por loja");
+    } finally {
+      setCalculandoDemanda(false);
+    }
   };
 
   const handleSalvar = async () => {
@@ -138,6 +173,42 @@ export default function EstoqueMultiLojaModal({ sku, nome, lojas, onClose, onSuc
           </div>
         ) : (
           <div className="space-y-3">
+            {!concluido && (
+              <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-3 space-y-2">
+                <p className="text-xs text-neutral-500 uppercase tracking-wider">Dividir por demanda</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="Total a distribuir"
+                    value={totalDistribuir}
+                    onChange={(e) => setTotalDistribuir(e.target.value)}
+                    disabled={calculandoDemanda || salvando}
+                    className="w-36 bg-neutral-800 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-200 numeric disabled:opacity-60"
+                  />
+                  <select
+                    value={modoDistribuicao}
+                    onChange={(e) => setModoDistribuicao(e.target.value as "substituir" | "somar")}
+                    disabled={calculandoDemanda || salvando}
+                    className="bg-neutral-800 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-300 disabled:opacity-60"
+                  >
+                    <option value="substituir">Substituir estoque</option>
+                    <option value="somar">Somar ao atual</option>
+                  </select>
+                  <button
+                    onClick={handleDividirPorDemanda}
+                    disabled={calculandoDemanda || salvando || !totalDistribuir}
+                    className="bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-neutral-200 text-xs px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    {calculandoDemanda ? "Calculando..." : "Dividir por demanda"}
+                  </button>
+                </div>
+                <p className="text-[11px] text-neutral-600">
+                  Rateia proporcional as unidades vendidas de cada loja nos últimos 30 dias (piso de 1 unidade pra loja sem venda no período).
+                </p>
+                {erroDemanda && <p className="text-xs text-red-400">{erroDemanda}</p>}
+              </div>
+            )}
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-neutral-800 text-neutral-500 text-xs uppercase">

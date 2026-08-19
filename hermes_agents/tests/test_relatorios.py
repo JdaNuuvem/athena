@@ -415,4 +415,46 @@ class TestRelatorios(unittest.TestCase):
         di = hoje - timedelta(days=30)
         self.assertEqual(fake_db.fetch.call_args.args[1:], (di, hoje, None))
 
+    @patch("core.relatorios.get_db")
+    def test_demanda_por_loja_soma_bling_shopee_e_pdv_por_loja(self, mock_get_db):
+        """Divisao de estoque por demanda (feature de rateio entre lojas)
+        precisa somar venda do mesmo SKU em Bling/Shopee (vendas_itens) E PDV
+        fisico (pdv_itens) quando caem na mesma loja — canais diferentes, loja
+        igual, a demanda real da loja e' a soma dos dois."""
+        fake_db = AsyncMock()
+        fake_db.fetch.side_effect = [
+            [{"loja_id": 1, "quantidade": 12}, {"loja_id": 2, "quantidade": 3}],  # vendas_itens/vendas_pedidos
+            [{"loja_id": 1, "quantidade": 5}],  # pdv_itens/pdv_vendas/pdv_caixas
+            [{"id": 1, "nome": "Loja Fisica"}, {"id": 2, "nome": "Loja Shopee"}],  # lojas
+        ]
+        mock_get_db.return_value = fake_db
+
+        itens = rel.demanda_por_loja("SKU-X", 30)
+
+        self.assertEqual(itens[0], {"loja_id": 1, "loja_nome": "Loja Fisica", "quantidade": 17.0})
+        self.assertEqual(itens[1], {"loja_id": 2, "loja_nome": "Loja Shopee", "quantidade": 3.0})
+
+    @patch("core.relatorios.get_db")
+    def test_demanda_por_loja_sem_vendas_retorna_vazio(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetch.side_effect = [[], [], []]
+        mock_get_db.return_value = fake_db
+
+        self.assertEqual(rel.demanda_por_loja("SKU-SEM-VENDA", 30), [])
+
+    @patch("core.relatorios.get_db")
+    def test_demanda_por_loja_ordena_por_quantidade_desc(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetch.side_effect = [
+            [{"loja_id": 1, "quantidade": 2}, {"loja_id": 2, "quantidade": 9}],
+            [],
+            [{"id": 1, "nome": "A"}, {"id": 2, "nome": "B"}],
+        ]
+        mock_get_db.return_value = fake_db
+
+        itens = rel.demanda_por_loja("SKU-Y", 30)
+
+        self.assertEqual([i["loja_id"] for i in itens], [2, 1])
+
+
 if __name__=="__main__":unittest.main(verbosity=2)

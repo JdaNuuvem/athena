@@ -230,6 +230,13 @@ class TestRelatoriosEndpoints(unittest.TestCase):
     def test_ranking_produtos(self):
         self._assert_200_json(self.client.get("/api/relatorios/ranking-produtos?dias=30", headers=self.headers), "ranking-produtos")
 
+    def test_demanda_por_loja(self):
+        self._assert_200_json(self.client.get("/api/relatorios/demanda-por-loja?sku=SKU-1&dias=30", headers=self.headers), "demanda-por-loja")
+
+    def test_demanda_por_loja_sem_sku_da_400(self):
+        r = self.client.get("/api/relatorios/demanda-por-loja?dias=30", headers=self.headers)
+        self.assertEqual(r.status_code, 400)
+
     # 403 e' esperado nos 5 testes _com_loja_id abaixo: agora que essas rotas
     # levam @requer_acesso_loja (fix do review final da branch filtro por
     # loja), USER_TOKEN (user_id=1, sem role no RBAC mockado — fetchrow

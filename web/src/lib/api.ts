@@ -745,6 +745,8 @@ export const api = {
     request<Record<string, unknown>>(`/api/relatorios/clientes?${periodoQs(dias, dataInicio, dataFim)}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
   relatorioRankingProdutos: (dias: number, lojaId?: string, dataInicio?: string, dataFim?: string) =>
     request<{ itens: RankingProdutoItem[]; periodo_dias: number }>(`/api/relatorios/ranking-produtos?${periodoQs(dias, dataInicio, dataFim)}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
+  relatorioDemandaPorLoja: (sku: string, dias = 30) =>
+    request<{ itens: DemandaLojaItem[] }>(`/api/relatorios/demanda-por-loja?sku=${encodeURIComponent(sku)}&dias=${dias}`),
   relatorioEstoqueParado: (dias: number, limite = 15, lojaId?: string, dataInicio?: string, dataFim?: string) =>
     request<EstoqueParadoItem[]>(`/api/relatorios/estoque-parado?${periodoQs(dias, dataInicio, dataFim)}&limite=${limite}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
   relatorioProdutosTendencia: (dias: number, lojaId?: string, dataInicio?: string, dataFim?: string) =>
@@ -2230,6 +2232,12 @@ export interface RankingProdutoItem {
   custo_cadastrado: boolean;
   atributo: string | null;
   produto_pai: string | null;
+}
+
+export interface DemandaLojaItem {
+  loja_id: number;
+  loja_nome: string;
+  quantidade: number;
 }
 
 export interface EstoqueParadoItem {

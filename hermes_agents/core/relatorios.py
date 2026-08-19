@@ -618,6 +618,50 @@ def fiscal_resumo(dias=30):
     try: return run_async(_go())
     except Exception as e: return {"nfs_periodo":0,"valor_periodo":0,"periodo_dias":dias}
 
+# ── 21b. Demanda por loja (rateio de estoque entre lojas) ──
+# Unidades vendidas de UM sku, quebradas por loja — usado pra dividir um lote
+# de estoque (ex: "tenho 50 unidades, quero mandar mais pra quem vende mais")
+# proporcional a demanda real de cada loja em vez de igualmente ou no chute.
+
+def demanda_por_loja(sku: str, dias: int = 30, data_inicio=None, data_fim=None) -> list:
+    """Soma vendas de `sku` por loja no periodo, cruzando Bling/Shopee
+    (vendas_itens/vendas_pedidos) e PDV fisico (pdv_itens/pdv_vendas/
+    pdv_caixas — mesmo padrao de join usado em vendas_por_loja() acima).
+    Retorna so' lojas com demanda > 0, ordenado da maior pra menor."""
+    di, df, _ = _periodo(dias, data_inicio, data_fim)
+    async def _go():
+        db = await get_db()
+        bling = await db.fetch("""
+            SELECT vp.loja_id AS loja_id, SUM(vi.quantidade) AS quantidade
+            FROM vendas_itens vi JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
+            WHERE vi.sku = $1 AND vp.data >= $2::date AND vp.data < ($3::date + 1)
+              AND vp.status != 'cancelado' AND vp.loja_id IS NOT NULL
+            GROUP BY vp.loja_id
+        """, sku, di, df)
+        pdv = await db.fetch("""
+            SELECT c.loja_id AS loja_id, SUM(pi.quantidade) AS quantidade
+            FROM pdv_itens pi JOIN pdv_vendas pv ON pv.id = pi.venda_id
+                JOIN pdv_caixas c ON c.id = pv.caixa_id
+            WHERE pi.produto_codigo = $1 AND DATE(pv.data) >= $2::date AND DATE(pv.data) <= $3::date
+              AND pv.status != 'cancelada' AND c.loja_id IS NOT NULL
+            GROUP BY c.loja_id
+        """, sku, di, df)
+        por_loja = {}
+        for r in list(bling) + list(pdv):
+            lid = r["loja_id"]
+            por_loja[lid] = por_loja.get(lid, 0.0) + float(r["quantidade"] or 0)
+        if not por_loja:
+            return []
+        lojas_rows = await db.fetch("SELECT id, nome FROM lojas WHERE id = ANY($1::int[])", list(por_loja.keys()))
+        nomes = {r["id"]: r["nome"] for r in lojas_rows}
+        itens = [{"loja_id": lid, "loja_nome": nomes.get(lid, str(lid)), "quantidade": qtd} for lid, qtd in por_loja.items()]
+        itens.sort(key=lambda i: i["quantidade"], reverse=True)
+        return itens
+    try: return run_async(_go())
+    except Exception as e:
+        log(AGENT, f"Erro demanda_por_loja: {e}")
+        return []
+
 # ── 22. Vendas por Loja (grade dias x lojas) ──
 # Equivalente da planilha VENDAS MES LOJAS.xlsx — mesma base de dados de
 # vendas() (_union_vendas), so' que quebrada por loja e agregada num

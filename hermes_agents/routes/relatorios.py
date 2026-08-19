@@ -198,6 +198,17 @@ def rel_ranking_produtos():
     return _handler()
 
 
+@relatorios_bp.route("/demanda-por-loja", methods=["GET"])
+def rel_demanda_por_loja():
+    from core.relatorios import demanda_por_loja
+    sku = request.args.get("sku", "")
+    if not sku:
+        return jsonify({"erro": "sku obrigatorio"}), 400
+    dias = request.args.get("dias", 30, type=int)
+    data_inicio, data_fim = _periodo_args()
+    return jsonify({"itens": demanda_por_loja(sku, dias, data_inicio, data_fim)})
+
+
 @relatorios_bp.route("/estoque-parado", methods=["GET"])
 def rel_estoque_parado():
     from core.rbac import requer_acesso_loja
