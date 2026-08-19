@@ -3,9 +3,20 @@
 import { useState, useEffect, useCallback } from "react";
 import { api, type EstoqueDiscrepanciaLoja, type EstoqueDiscrepanciaOperador } from "@/lib/api";
 import DivergenciaSaldo from "./_components/DivergenciaSaldo";
+import DateRangePicker from "@/app/_components/DateRangePicker";
+
+function fmtDataIso(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
 
 export default function DiscrepanciasEstoquePage() {
-  const [dias, setDias] = useState(30);
+  const [dataFim, setDataFim] = useState(() => fmtDataIso(new Date()));
+  const [dataInicio, setDataInicio] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return fmtDataIso(d);
+  });
+  const dias = Math.max(1, Math.round((new Date(dataFim).getTime() - new Date(dataInicio).getTime()) / 86400000) + 1);
   const [porLoja, setPorLoja] = useState<EstoqueDiscrepanciaLoja[]>([]);
   const [porOperador, setPorOperador] = useState<EstoqueDiscrepanciaOperador[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,12 +46,14 @@ export default function DiscrepanciasEstoquePage() {
             Agrega saídas grandes aprovadas, transferências com discrepância e faltas em contagem cíclica — não substitui investigação, aponta onde olhar.
           </p>
         </div>
-        <select value={dias} onChange={e => setDias(Number(e.target.value))}
-          className="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-1.5 text-sm text-neutral-300">
-          <option value={7}>Últimos 7 dias</option>
-          <option value={30}>Últimos 30 dias</option>
-          <option value={90}>Últimos 90 dias</option>
-        </select>
+        <DateRangePicker
+          dataInicio={dataInicio}
+          dataFim={dataFim}
+          onChange={(inicio, fim) => {
+            setDataInicio(inicio);
+            setDataFim(fim);
+          }}
+        />
       </div>
 
       {erro && <div className="text-red-400 text-sm bg-red-950/40 border border-red-900/50 rounded-lg px-4 py-3">{erro}</div>}

@@ -194,13 +194,20 @@ export default function DashboardPage() {
       {dash.topProdutos.length > 0 && (
         <section className="instrument p-4">
           <h2 className="text-[10px] uppercase tracking-[0.12em] mb-3" style={{ color: "var(--ink-500)" }}>Top produtos</h2>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={dash.topProdutos.slice(0, 8)} layout="vertical" margin={{ left: 120 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--panel-border)" />
+          <ResponsiveContainer width="100%" height={dash.topProdutos.slice(0, 8).length * 36 + 20}>
+            <BarChart data={dash.topProdutos.slice(0, 8)} layout="vertical" margin={{ left: 8, right: 16 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--panel-border)" horizontal={false} />
               <XAxis type="number" stroke="var(--ink-700)" tick={{ fontSize: 10, fill: "var(--ink-700)" }} tickFormatter={(v) => fmtBRL(v)} />
-              <YAxis type="category" dataKey="nome" stroke="var(--ink-700)" tick={{ fontSize: 10, fill: "var(--ink-700)" }} width={120} />
+              <YAxis
+                type="category"
+                dataKey="nome"
+                stroke="var(--ink-700)"
+                tick={{ fontSize: 10, fill: "var(--ink-700)" }}
+                width={160}
+                tickFormatter={(nome) => (nome.length > 22 ? `${nome.slice(0, 21)}…` : nome)}
+              />
               <Tooltip content={<ChartTooltip />} />
-              <Bar dataKey="valor" radius={[0, 3, 3, 0]}>
+              <Bar dataKey="valor" radius={[0, 3, 3, 0]} barSize={18}>
                 {dash.topProdutos.map((e, i) => <Cell key={i} fill={margemColor(e.margem)} />)}
               </Bar>
             </BarChart>

@@ -1,9 +1,42 @@
 """Relatorios Core — 20 reports unificando Bling + PDV + Compras + Produção."""
 import os
+from datetime import date, timedelta
 from core import get_db, run_async, log, hoje
 from core.lojas import loja_efetiva, _log_erro
 
 AGENT = "Relatorios Core"
+
+# ── Helper: range de datas real (data_inicio/data_fim) vs legado (dias) ──
+
+def _periodo(dias=30, data_inicio=None, data_fim=None):
+    """Resolve o periodo do relatorio. Se data_inicio/data_fim forem passados
+    (string 'YYYY-MM-DD' ou date), usa o range EXATO escolhido pelo usuario —
+    sem isso, filtros tipo 'CURRENT_DATE - N' sempre ancoram em hoje, entao
+    escolher um range que nao termina hoje (ex: dia 1 a 8 do mes passado)
+    dava resultado errado. Sem data_inicio/data_fim, mantem o comportamento
+    legado: data_fim=hoje, data_inicio=hoje-dias.
+
+    Retorna (di: date, df: date, dias_equiv: int) — dias_equiv e' o tamanho
+    da janela em dias, usado por quem precisa comparar com periodo anterior
+    de mesmo tamanho (ex: produtos_tendencia)."""
+    def _parse(d):
+        if d is None or d == "":
+            return None
+        if isinstance(d, str):
+            return date.fromisoformat(d)
+        return d
+    di = _parse(data_inicio)
+    df = _parse(data_fim)
+    if di or df:
+        df = df or date.today()
+        dias_base = max(int(dias or 1), 1)
+        di = di or (df - timedelta(days=dias_base - 1))
+        dias_equiv = (df - di).days + 1
+        return di, df, max(dias_equiv, 1)
+    dias_base = max(int(dias or 1), 1)
+    df = date.today()
+    di = df - timedelta(days=dias_base)
+    return di, df, dias_base
 
 # ── Helper: UNION vendas Bling + PDV ──
 
@@ -35,25 +68,32 @@ def _loja_where_estoque(loja_id):
         _log_erro("relatorios._loja_where_estoque: resolver_loja_efetiva", e)
     return f" AND e.loja = (SELECT nome FROM lojas WHERE id = {int(loja_id)})"
 
-def _union_vendas(dias: int, loja_id=None):
+def _union_vendas(dias: int, loja_id=None, data_inicio=None, data_fim=None):
     """Retorna total, qtd, e diarias unindo vendas_pedidos + pdv_vendas.
 
     dias=1 e' tratado como "so' hoje" (filtro CURRENT_DATE, sem subtracao).
     O padrao generico "CURRENT_DATE - N" inclui o dia corrente MAIS N dias
     anteriores — com N=1 isso somaria hoje + ontem inteiro, dobrando o
     valor do card "Vendas hoje" (unico chamador que usa dias=1; todo o
-    resto do modulo usa 30/60/90 e continua com o comportamento generico)."""
-    janela = 0 if dias <= 1 else dias
+    resto do modulo usa 30/60/90 e continua com o comportamento generico).
+    Esse atalho so' se aplica no modo legado (sem data_inicio/data_fim)."""
+    usa_range = bool(data_inicio or data_fim)
+    if usa_range:
+        di, df, _ = _periodo(dias, data_inicio, data_fim)
+    else:
+        janela = 0 if dias <= 1 else dias
+        df = date.today()
+        di = df - timedelta(days=janela)
     loja_bl = _loja_where_bling(loja_id)
     loja_pdv = _loja_where_pdv(loja_id)
     async def _go():
         db = await get_db()
-        total_bling = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND status != 'cancelado'{loja_bl}", janela)
-        total_pdv = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM pdv_vendas venda WHERE DATE(data) >= CURRENT_DATE - $1::int{loja_pdv}", janela)
-        qtd_bling = await db.fetchval(f"SELECT COUNT(*) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int{loja_bl}", janela)
-        qtd_pdv = await db.fetchval(f"SELECT COUNT(*) FROM pdv_vendas venda WHERE DATE(data) >= CURRENT_DATE - $1::int{loja_pdv}", janela)
-        diarias_bling = await db.fetch(f"SELECT DATE(data) as dia, COUNT(*) as qtd, SUM(total) as valor FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND status != 'cancelado'{loja_bl} GROUP BY DATE(data)", janela)
-        diarias_pdv = await db.fetch(f"SELECT DATE(data) as dia, COUNT(*) as qtd, SUM(total) as valor FROM pdv_vendas venda WHERE DATE(data) >= CURRENT_DATE - $1::int{loja_pdv} GROUP BY DATE(data)", janela)
+        total_bling = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE data >= $1::date AND data < ($2::date + 1) AND status != 'cancelado'{loja_bl}", di, df)
+        total_pdv = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM pdv_vendas venda WHERE DATE(data) >= $1::date AND DATE(data) <= $2::date{loja_pdv}", di, df)
+        qtd_bling = await db.fetchval(f"SELECT COUNT(*) FROM vendas_pedidos WHERE data >= $1::date AND data < ($2::date + 1){loja_bl}", di, df)
+        qtd_pdv = await db.fetchval(f"SELECT COUNT(*) FROM pdv_vendas venda WHERE DATE(data) >= $1::date AND DATE(data) <= $2::date{loja_pdv}", di, df)
+        diarias_bling = await db.fetch(f"SELECT DATE(data) as dia, COUNT(*) as qtd, SUM(total) as valor FROM vendas_pedidos WHERE data >= $1::date AND data < ($2::date + 1) AND status != 'cancelado'{loja_bl} GROUP BY DATE(data)", di, df)
+        diarias_pdv = await db.fetch(f"SELECT DATE(data) as dia, COUNT(*) as qtd, SUM(total) as valor FROM pdv_vendas venda WHERE DATE(data) >= $1::date AND DATE(data) <= $2::date{loja_pdv} GROUP BY DATE(data)", di, df)
         return {
             "total": float((total_bling or 0) + (total_pdv or 0)),
             "quantidade": (qtd_bling or 0) + (qtd_pdv or 0),
@@ -65,8 +105,8 @@ def _union_vendas(dias: int, loja_id=None):
 
 # ── 1. Vendas ──
 
-def vendas(dias=30, loja_id=None):
-    r = _union_vendas(dias, loja_id)
+def vendas(dias=30, loja_id=None, data_inicio=None, data_fim=None):
+    r = _union_vendas(dias, loja_id, data_inicio, data_fim)
     # Consolida por dia (Bling + PDV podem ambos vender no mesmo dia — sem
     # isso a lista tinha ate' 2 pontos por dia, e nenhuma das duas queries em
     # _union_vendas tem ORDER BY, entao o grafico de vendas do Dashboard saia
@@ -120,20 +160,21 @@ def estoque(loja_id=None):
 
 # ── 4. Clientes ──
 
-def clientes(dias=90, loja_id=None):
+def clientes(dias=90, loja_id=None, data_inicio=None, data_fim=None):
     # ponytail: cad_clientes nao tem loja_id — "cliente desta loja" so' existe via
     # JOIN com vendas_pedidos.loja_id (cliente que comprou dessa loja).
+    di, df, dias_equiv = _periodo(dias, data_inicio, data_fim)
     async def _go():
         db = await get_db()
         if loja_id:
             total = await db.fetchval("SELECT COUNT(DISTINCT v.cliente_id) FROM vendas_pedidos v WHERE v.loja_id = $1 AND v.cliente_id IS NOT NULL", loja_id)
-            novos = await db.fetchval("SELECT COUNT(DISTINCT c.id) FROM cad_clientes c JOIN vendas_pedidos v ON v.cliente_id = c.id WHERE v.loja_id = $1 AND c.created_at >= CURRENT_DATE - $2::int", loja_id, dias)
+            novos = await db.fetchval("SELECT COUNT(DISTINCT c.id) FROM cad_clientes c JOIN vendas_pedidos v ON v.cliente_id = c.id WHERE v.loja_id = $1 AND c.created_at >= $2::date AND c.created_at < ($3::date + 1)", loja_id, di, df)
             top = await db.fetch("SELECT c.nome as cliente, COUNT(v.id) as compras, COALESCE(SUM(v.total),0) as valor FROM cad_clientes c JOIN vendas_pedidos v ON v.cliente_id = c.id AND v.status != 'cancelado' AND v.loja_id = $1 GROUP BY c.id, c.nome ORDER BY valor DESC LIMIT 10", loja_id)
         else:
             total = await db.fetchval("SELECT COUNT(*) FROM cad_clientes")
-            novos = await db.fetchval("SELECT COUNT(*) FROM cad_clientes WHERE created_at >= CURRENT_DATE - $1::int", dias)
+            novos = await db.fetchval("SELECT COUNT(*) FROM cad_clientes WHERE created_at >= $1::date AND created_at < ($2::date + 1)", di, df)
             top = await db.fetch("SELECT c.nome as cliente, COUNT(v.id) as compras, COALESCE(SUM(v.total),0) as valor FROM cad_clientes c LEFT JOIN vendas_pedidos v ON v.cliente_id = c.id AND v.status != 'cancelado' GROUP BY c.id, c.nome ORDER BY valor DESC LIMIT 10")
-        return {"total": total or 0, "novos": novos or 0, "top": [dict(r) for r in (top or [])], "periodo_dias": dias}
+        return {"total": total or 0, "novos": novos or 0, "top": [dict(r) for r in (top or [])], "periodo_dias": dias_equiv}
     try: return run_async(_go())
     except Exception as e: return {"total":0,"novos":0,"top":[],"periodo_dias":dias}
 
@@ -176,19 +217,20 @@ def dre(dias=30, loja_id=None):
 
 # ── 8. Fluxo de Caixa ──
 
-def fluxo_caixa(dias=30, loja_id=None):
+def fluxo_caixa(dias=30, loja_id=None, data_inicio=None, data_fim=None):
     loja_bl = _loja_where_bling(loja_id)
     loja_pdv = _loja_where_pdv(loja_id)
+    di, df, dias_equiv = _periodo(dias, data_inicio, data_fim)
     async def _go():
         db = await get_db()
-        entradas_bl = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND status IN ('faturado','concluido'){loja_bl}", dias)
-        entradas_pdv = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM pdv_vendas venda WHERE DATE(data) >= CURRENT_DATE - $1::int{loja_pdv}", dias)
-        cr_recebido = await db.fetchval(f"SELECT COALESCE(SUM(valor),0) FROM fin_contas_receber WHERE data_recebimento >= CURRENT_DATE - $1::int AND status='pago'{loja_bl}", dias)
+        entradas_bl = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE data >= $1::date AND data < ($2::date + 1) AND status IN ('faturado','concluido'){loja_bl}", di, df)
+        entradas_pdv = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM pdv_vendas venda WHERE DATE(data) >= $1::date AND DATE(data) <= $2::date{loja_pdv}", di, df)
+        cr_recebido = await db.fetchval(f"SELECT COALESCE(SUM(valor),0) FROM fin_contas_receber WHERE data_recebimento >= $1::date AND data_recebimento <= $2::date AND status='pago'{loja_bl}", di, df)
         entradas = float((entradas_bl or 0) + (entradas_pdv or 0) + (cr_recebido or 0))
-        saidas_cp = await db.fetchval(f"SELECT COALESCE(SUM(valor),0) FROM fin_contas_pagar WHERE data_pagamento >= CURRENT_DATE - $1::int AND status='pago'{loja_bl}", dias)
-        saidas_comp = await db.fetchval(f"SELECT COALESCE(SUM(valor_total),0) FROM compras_pedidos WHERE data_emissao >= CURRENT_DATE - $1::int{loja_bl}", dias)
+        saidas_cp = await db.fetchval(f"SELECT COALESCE(SUM(valor),0) FROM fin_contas_pagar WHERE data_pagamento >= $1::date AND data_pagamento <= $2::date AND status='pago'{loja_bl}", di, df)
+        saidas_comp = await db.fetchval(f"SELECT COALESCE(SUM(valor_total),0) FROM compras_pedidos WHERE data_emissao >= $1::date AND data_emissao <= $2::date{loja_bl}", di, df)
         saidas = float((saidas_cp or 0) + (saidas_comp or 0))
-        return {"entradas": entradas, "saidas": saidas, "saldo": round(entradas - saidas, 2), "periodo_dias": dias}
+        return {"entradas": entradas, "saidas": saidas, "saldo": round(entradas - saidas, 2), "periodo_dias": dias_equiv}
     try: return run_async(_go())
     except Exception as e: return {"entradas":0,"saidas":0,"saldo":0,"periodo_dias":dias}
 
@@ -337,14 +379,15 @@ def rupturas():
 
 # ── 17. Curva ABC ──
 
-def curvas(dias=90, loja_id=None):
+def curvas(dias=90, loja_id=None, data_inicio=None, data_fim=None):
+    di, df, _ = _periodo(dias, data_inicio, data_fim)
     async def _go():
         db = await get_db()
         rows = await db.fetch("""SELECT vi.sku, vi.descricao, SUM(vi.valor_total) as valor_total, SUM(vi.quantidade) as qtd
             FROM vendas_itens vi JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
-            WHERE vp.data >= CURRENT_DATE - $1::int AND vp.status != 'cancelado'
-              AND ($2::int IS NULL OR vp.loja_id = $2)
-            GROUP BY vi.sku, vi.descricao ORDER BY valor_total DESC LIMIT 30""", dias, loja_id)
+            WHERE vp.data >= $1::date AND vp.data < ($2::date + 1) AND vp.status != 'cancelado'
+              AND ($3::int IS NULL OR vp.loja_id = $3)
+            GROUP BY vi.sku, vi.descricao ORDER BY valor_total DESC LIMIT 30""", di, df, loja_id)
         items = [dict(r) for r in (rows or [])]
         for it in items:
             it["valor_total"] = float(it.get("valor_total", 0) or 0)
@@ -377,7 +420,7 @@ def produtos(dias=30):
 
 SHOPEE_COMISSAO_PCT = 12  # mesma taxa default de shopee/pricing.calcular_margem_produto
 
-def ranking_produtos(dias=30, loja_id=None):
+def ranking_produtos(dias=30, loja_id=None, data_inicio=None, data_fim=None):
     """Lucro/vendas por SKU somando Bling+marketplaces (vendas_itens/vendas_pedidos,
     mesma fonte unificada de produtos()/curvas() acima) e PDV loja fisica
     (pdv_itens/pdv_vendas, canal direto sem sync). Comissao de marketplace so'
@@ -390,6 +433,7 @@ def ranking_produtos(dias=30, loja_id=None):
     grava loja_id resolvido no sync (shop_id->loja), i9Logic idem
     (filial->loja) — filtrar por loja_id ja' separa Shopee de i9Logic sem
     precisar checar tipo de loja em lugar nenhum."""
+    di, df, _ = _periodo(dias, data_inicio, data_fim)
     async def _go():
         db = await get_db()
         vendas_rows = await db.fetch(f"""
@@ -401,18 +445,18 @@ def ranking_produtos(dias=30, loja_id=None):
                        COALESCE(vp.marketplace, 'bling') AS canal,
                        CASE WHEN vp.total > 0 THEN vi.valor_total / vp.total * COALESCE(vp.frete, 0) ELSE 0 END AS frete_alocado
                 FROM vendas_itens vi JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
-                WHERE vp.data >= CURRENT_DATE - $1::int AND vp.status != 'cancelado'
-                  AND ($2::int IS NULL OR vp.loja_id = $2)
+                WHERE vp.data >= $1::date AND vp.data < ($2::date + 1) AND vp.status != 'cancelado'
+                  AND ($3::int IS NULL OR vp.loja_id = $3)
                 -- branch PDV intencionalmente sem filtro de loja: tabela morta (0 linhas em producao)
                 UNION ALL
                 SELECT pi.produto_codigo AS sku, pi.quantidade AS quantidade, pi.valor_total AS valor_total,
                        'pdv' AS canal, 0 AS frete_alocado
                 FROM pdv_itens pi JOIN pdv_vendas pv ON pv.id = pi.venda_id
-                WHERE pv.data >= CURRENT_DATE - $1::int AND pv.status != 'cancelada'
+                WHERE pv.data >= $1::date AND pv.data < ($2::date + 1) AND pv.status != 'cancelada'
             ) unificado
             WHERE sku IS NOT NULL AND sku != ''
             GROUP BY sku
-        """, dias, loja_id)
+        """, di, df, loja_id)
         if not vendas_rows:
             return []
         skus = [r["sku"] for r in vendas_rows]
@@ -450,24 +494,30 @@ def ranking_produtos(dias=30, loja_id=None):
 
 # ── 18c. Tendencia e risco de ruptura por produto ──
 
-def produtos_tendencia(dias=30, loja_id=None):
+def produtos_tendencia(dias=30, loja_id=None, data_inicio=None, data_fim=None):
     """Crescimento de vendas por SKU: periodo atual vs periodo anterior de
     mesmo tamanho. anterior=0 com atual>0 vira crescimento_pct=None (produto
     novo/reativado, sem base de comparacao pra inventar percentual) — mesma
-    filosofia anti-numero-fabricado de core/bi.py::_variacao()."""
+    filosofia anti-numero-fabricado de core/bi.py::_variacao().
+
+    Com data_inicio/data_fim explicitos, o periodo "atual" e' o range exato
+    escolhido e o "anterior" e' a janela imediatamente anterior de mesmo
+    tamanho (ex: atual=01/08-08/08 -> anterior=24/07-31/07)."""
+    di, df, dias_equiv = _periodo(dias, data_inicio, data_fim)
+    di_anterior = di - timedelta(days=dias_equiv)
     async def _go():
         db = await get_db()
         rows = await db.fetch(f"""
             SELECT vi.sku,
                    MAX(vi.descricao) AS descricao,
-                   SUM(CASE WHEN vp.data >= CURRENT_DATE - $1::int THEN vi.quantidade ELSE 0 END) AS qtd_atual,
-                   SUM(CASE WHEN vp.data < CURRENT_DATE - $1::int THEN vi.quantidade ELSE 0 END) AS qtd_anterior
+                   SUM(CASE WHEN vp.data >= $1::date THEN vi.quantidade ELSE 0 END) AS qtd_atual,
+                   SUM(CASE WHEN vp.data < $1::date THEN vi.quantidade ELSE 0 END) AS qtd_anterior
             FROM vendas_itens vi JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
-            WHERE vp.data >= CURRENT_DATE - $1::int * 2 AND vp.status != 'cancelado'
+            WHERE vp.data >= $3::date AND vp.data < ($2::date + 1) AND vp.status != 'cancelado'
               AND vi.sku IS NOT NULL AND vi.sku != ''
-              AND ($2::int IS NULL OR vp.loja_id = $2)
+              AND ($4::int IS NULL OR vp.loja_id = $4)
             GROUP BY vi.sku
-        """, dias, loja_id)
+        """, di, df, di_anterior, loja_id)
         return [dict(r) for r in (rows or [])]
     try:
         linhas = run_async(_go())
@@ -489,23 +539,24 @@ def produtos_tendencia(dias=30, loja_id=None):
     return resultado
 
 
-def risco_ruptura(dias=30, loja_id=None):
+def risco_ruptura(dias=30, loja_id=None, data_inicio=None, data_fim=None):
     """Produtos vendendo bem MAS com estoque acabando — velocidade de venda
     alta, estoque baixo. Diferente de 'parado' (zero venda) e de rupturas()
     (zero estoque, ja consumada) — aqui e' o alerta ANTES de zerar."""
     dias = max(1, int(dias or 30))
+    di, df, dias_equiv = _periodo(dias, data_inicio, data_fim)
     async def _go():
         db = await get_db()
         rows = await db.fetch(f"""
             SELECT vi.sku, MAX(vi.descricao) AS descricao, SUM(vi.quantidade) AS qtd_vendida,
                    (SELECT COALESCE(SUM(e.quantidade), 0) FROM estoque_lojas e
-                    WHERE e.sku = vi.sku AND ($2::int IS NULL OR e.loja_id = $2)) AS estoque_atual
+                    WHERE e.sku = vi.sku AND ($3::int IS NULL OR e.loja_id = $3)) AS estoque_atual
             FROM vendas_itens vi JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
-            WHERE vp.data >= CURRENT_DATE - $1::int AND vp.status != 'cancelado'
+            WHERE vp.data >= $1::date AND vp.data < ($2::date + 1) AND vp.status != 'cancelado'
               AND vi.sku IS NOT NULL AND vi.sku != ''
-              AND ($2::int IS NULL OR vp.loja_id = $2)
+              AND ($3::int IS NULL OR vp.loja_id = $3)
             GROUP BY vi.sku
-        """, dias, loja_id)
+        """, di, df, loja_id)
         return [dict(r) for r in (rows or [])]
     try:
         linhas = run_async(_go())
@@ -516,7 +567,7 @@ def risco_ruptura(dias=30, loja_id=None):
     for r in linhas:
         qtd_vendida = float(r["qtd_vendida"] or 0)
         estoque_atual = float(r["estoque_atual"] or 0)
-        velocidade_diaria = qtd_vendida / dias
+        velocidade_diaria = qtd_vendida / dias_equiv
         if velocidade_diaria <= 0 or estoque_atual <= 0:
             continue
         resultado.append({

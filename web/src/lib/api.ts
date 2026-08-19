@@ -29,6 +29,17 @@ export async function lojasMidiaUpload(id: number, tipo: string, file: File): Pr
   return res.json();
 }
 
+// Monta a query string de periodo pros relatorios: prefere data_inicio/data_fim
+// (range real escolhido no DateRangePicker) e sempre manda `dias` tambem como
+// fallback pra quem/o que ainda depender dele (compat com uso legado).
+function periodoQs(dias: number, dataInicio?: string, dataFim?: string): string {
+  const q = new URLSearchParams();
+  q.set("dias", String(dias));
+  if (dataInicio) q.set("data_inicio", dataInicio);
+  if (dataFim) q.set("data_fim", dataFim);
+  return q.toString();
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
   const headers: Record<string, string> = {};
@@ -724,24 +735,24 @@ export const api = {
   },
 
   // Relatorios
-  relatorioVendas: (dias: number, lojaId?: string) =>
-    request<Record<string, unknown>>(`/api/relatorios/vendas?dias=${dias}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
+  relatorioVendas: (dias: number, lojaId?: string, dataInicio?: string, dataFim?: string) =>
+    request<Record<string, unknown>>(`/api/relatorios/vendas?${periodoQs(dias, dataInicio, dataFim)}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
   relatorioEstoque: (lojaId?: string) =>
     request<Record<string, unknown>>(`/api/relatorios/estoque${lojaId && lojaId !== "todas" ? `?loja_id=${lojaId}` : ""}`),
-  relatorioFluxoCaixa: (dias: number, lojaId?: string) =>
-    request<Record<string, unknown>>(`/api/relatorios/fluxo-caixa?dias=${dias}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
-  relatorioClientes: (dias: number, lojaId?: string) =>
-    request<Record<string, unknown>>(`/api/relatorios/clientes?dias=${dias}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
-  relatorioRankingProdutos: (dias: number, lojaId?: string) =>
-    request<{ itens: RankingProdutoItem[]; periodo_dias: number }>(`/api/relatorios/ranking-produtos?dias=${dias}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
-  relatorioEstoqueParado: (dias: number, limite = 15, lojaId?: string) =>
-    request<EstoqueParadoItem[]>(`/api/relatorios/estoque-parado?dias=${dias}&limite=${limite}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
-  relatorioProdutosTendencia: (dias: number, lojaId?: string) =>
-    request<ProdutoTendenciaItem[]>(`/api/relatorios/produtos-tendencia?dias=${dias}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
-  relatorioRiscoRuptura: (dias: number, lojaId?: string) =>
-    request<RiscoRupturaItem[]>(`/api/relatorios/risco-ruptura?dias=${dias}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
-  relatorioCurvas: (dias: number, lojaId?: string) =>
-    request<CurvaAbcResponse>(`/api/relatorios/curvas?dias=${dias}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
+  relatorioFluxoCaixa: (dias: number, lojaId?: string, dataInicio?: string, dataFim?: string) =>
+    request<Record<string, unknown>>(`/api/relatorios/fluxo-caixa?${periodoQs(dias, dataInicio, dataFim)}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
+  relatorioClientes: (dias: number, lojaId?: string, dataInicio?: string, dataFim?: string) =>
+    request<Record<string, unknown>>(`/api/relatorios/clientes?${periodoQs(dias, dataInicio, dataFim)}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
+  relatorioRankingProdutos: (dias: number, lojaId?: string, dataInicio?: string, dataFim?: string) =>
+    request<{ itens: RankingProdutoItem[]; periodo_dias: number }>(`/api/relatorios/ranking-produtos?${periodoQs(dias, dataInicio, dataFim)}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
+  relatorioEstoqueParado: (dias: number, limite = 15, lojaId?: string, dataInicio?: string, dataFim?: string) =>
+    request<EstoqueParadoItem[]>(`/api/relatorios/estoque-parado?${periodoQs(dias, dataInicio, dataFim)}&limite=${limite}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
+  relatorioProdutosTendencia: (dias: number, lojaId?: string, dataInicio?: string, dataFim?: string) =>
+    request<ProdutoTendenciaItem[]>(`/api/relatorios/produtos-tendencia?${periodoQs(dias, dataInicio, dataFim)}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
+  relatorioRiscoRuptura: (dias: number, lojaId?: string, dataInicio?: string, dataFim?: string) =>
+    request<RiscoRupturaItem[]>(`/api/relatorios/risco-ruptura?${periodoQs(dias, dataInicio, dataFim)}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
+  relatorioCurvas: (dias: number, lojaId?: string, dataInicio?: string, dataFim?: string) =>
+    request<CurvaAbcResponse>(`/api/relatorios/curvas?${periodoQs(dias, dataInicio, dataFim)}${lojaId && lojaId !== "todas" ? `&loja_id=${lojaId}` : ""}`),
   relatorioDrePorLoja: (dias: number, lojaId?: number) =>
     request<{ data: DreLoja[] }>(`/api/relatorios/dre-por-loja?dias=${dias}${lojaId ? `&loja_id=${lojaId}` : ""}`),
 

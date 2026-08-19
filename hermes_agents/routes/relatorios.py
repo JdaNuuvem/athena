@@ -3,6 +3,16 @@ from flask import Blueprint, request, jsonify
 relatorios_bp = Blueprint("relatorios", __name__, url_prefix="/api/relatorios")
 
 
+def _periodo_args():
+    """Le data_inicio/data_fim (YYYY-MM-DD) da query string, se presentes.
+    Quem chama continua mandando `dias` tambem (fallback legado) — as
+    funcoes core em core/relatorios.py/core/bi.py resolvem o range real via
+    _periodo(), preferindo data_inicio/data_fim quando fornecidos."""
+    data_inicio = request.args.get("data_inicio") or None
+    data_fim = request.args.get("data_fim") or None
+    return data_inicio, data_fim
+
+
 @relatorios_bp.route("/vendas", methods=["GET"])
 def rel_vendas():
     from core.rbac import requer_acesso_loja
@@ -11,7 +21,8 @@ def rel_vendas():
         from core.relatorios import vendas
         dias = request.args.get("dias", 30, type=int)
         loja_id = request.args.get("loja_id", type=int) or request.args.get("loja", type=int)
-        return jsonify(vendas(dias, loja_id))
+        data_inicio, data_fim = _periodo_args()
+        return jsonify(vendas(dias, loja_id, data_inicio, data_fim))
     return _handler()
 
 
@@ -46,7 +57,8 @@ def rel_clientes():
         from core.relatorios import clientes
         dias = request.args.get("dias", 90, type=int)
         loja_id = request.args.get("loja_id", type=int) or request.args.get("loja", type=int)
-        return jsonify(clientes(dias, loja_id))
+        data_inicio, data_fim = _periodo_args()
+        return jsonify(clientes(dias, loja_id, data_inicio, data_fim))
     return _handler()
 
 
@@ -70,7 +82,8 @@ def rel_fluxo():
         from core.relatorios import fluxo_caixa
         dias = request.args.get("dias", 30, type=int)
         loja_id = request.args.get("loja_id", type=int) or request.args.get("loja", type=int)
-        return jsonify(fluxo_caixa(dias, loja_id))
+        data_inicio, data_fim = _periodo_args()
+        return jsonify(fluxo_caixa(dias, loja_id, data_inicio, data_fim))
     return _handler()
 
 
@@ -159,7 +172,8 @@ def rel_curvas():
         from core.relatorios import curvas
         dias = request.args.get("dias", 90, type=int)
         loja_id = request.args.get("loja_id", type=int)
-        return jsonify(curvas(dias, loja_id))
+        data_inicio, data_fim = _periodo_args()
+        return jsonify(curvas(dias, loja_id, data_inicio, data_fim))
     return _handler()
 
 
@@ -175,10 +189,12 @@ def rel_ranking_produtos():
     from core.rbac import requer_acesso_loja
     @requer_acesso_loja
     def _handler():
-        from core.relatorios import ranking_produtos
+        from core.relatorios import ranking_produtos, _periodo
         dias = request.args.get("dias", 30, type=int)
         loja_id = request.args.get("loja_id", type=int)
-        return jsonify({"itens": ranking_produtos(dias, loja_id), "periodo_dias": dias})
+        data_inicio, data_fim = _periodo_args()
+        _, _, dias_equiv = _periodo(dias, data_inicio, data_fim)
+        return jsonify({"itens": ranking_produtos(dias, loja_id, data_inicio, data_fim), "periodo_dias": dias_equiv})
     return _handler()
 
 
@@ -191,7 +207,8 @@ def rel_estoque_parado():
         dias = request.args.get("dias", 60, type=int)
         limite = request.args.get("limite", 15, type=int)
         loja_id = request.args.get("loja_id", type=int)
-        return jsonify(estoque_parado(dias, limite, loja_id))
+        data_inicio, data_fim = _periodo_args()
+        return jsonify(estoque_parado(dias, limite, loja_id, data_inicio, data_fim))
     return _handler()
 
 
@@ -203,7 +220,8 @@ def rel_produtos_tendencia():
         from core.relatorios import produtos_tendencia
         dias = request.args.get("dias", 30, type=int)
         loja_id = request.args.get("loja_id", type=int)
-        return jsonify(produtos_tendencia(dias, loja_id))
+        data_inicio, data_fim = _periodo_args()
+        return jsonify(produtos_tendencia(dias, loja_id, data_inicio, data_fim))
     return _handler()
 
 
@@ -215,7 +233,8 @@ def rel_risco_ruptura():
         from core.relatorios import risco_ruptura
         dias = request.args.get("dias", 30, type=int)
         loja_id = request.args.get("loja_id", type=int)
-        return jsonify(risco_ruptura(dias, loja_id))
+        data_inicio, data_fim = _periodo_args()
+        return jsonify(risco_ruptura(dias, loja_id, data_inicio, data_fim))
     return _handler()
 
 

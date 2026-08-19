@@ -1,6 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import DateRangePicker from "@/app/_components/DateRangePicker";
+
+function fmtDataIso(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
 
 interface QuebraCaixa {
   id: number;
@@ -15,7 +20,13 @@ interface QuebraCaixa {
 }
 
 export default function QuebraCaixaPage() {
-  const [dias, setDias] = useState(90);
+  const [dataFim, setDataFim] = useState(() => fmtDataIso(new Date()));
+  const [dataInicio, setDataInicio] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 90);
+    return fmtDataIso(d);
+  });
+  const dias = Math.max(1, Math.round((new Date(dataFim).getTime() - new Date(dataInicio).getTime()) / 86400000) + 1);
   const [operador, setOperador] = useState("");
   const [quebras, setQuebras] = useState<QuebraCaixa[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,12 +69,14 @@ export default function QuebraCaixaPage() {
             placeholder="Filtrar por operador"
             className="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-1.5 text-xs text-neutral-300"
           />
-          <select value={dias} onChange={e => setDias(Number(e.target.value))}
-            className="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-1.5 text-sm text-neutral-300">
-            <option value={30}>Últimos 30 dias</option>
-            <option value={90}>Últimos 90 dias</option>
-            <option value={365}>Último ano</option>
-          </select>
+          <DateRangePicker
+            dataInicio={dataInicio}
+            dataFim={dataFim}
+            onChange={(inicio, fim) => {
+              setDataInicio(inicio);
+              setDataFim(fim);
+            }}
+          />
         </div>
       </div>
 

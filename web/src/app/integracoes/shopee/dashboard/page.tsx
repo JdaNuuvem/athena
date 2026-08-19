@@ -12,6 +12,11 @@ import type {
 } from "@/lib/api";
 import Icon from "@/app/_components/Icon";
 import RankingProdutosModal from "@/app/_components/RankingProdutosModal";
+import DateRangePicker from "@/app/_components/DateRangePicker";
+
+function fmtDataIso(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
 
 const fmtBRL = (v: number) => "R$ " + Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -136,7 +141,13 @@ export default function ShopeeDashboardPage() {
   const [projecaoMes, setProjecaoMes] = useState(0);
   const [rankingPeriodo, setRankingPeriodo] = useState<ShopeeRankingPeriodoItem[]>([]);
   const [produtosParados, setProdutosParados] = useState<ShopeeProdutoParado[]>([]);
-  const [dias, setDias] = useState(30);
+  const [dataFim, setDataFim] = useState(() => fmtDataIso(new Date()));
+  const [dataInicio, setDataInicio] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return fmtDataIso(d);
+  });
+  const dias = Math.max(1, Math.round((new Date(dataFim).getTime() - new Date(dataInicio).getTime()) / 86400000) + 1);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [showRanking, setShowRanking] = useState(false);
@@ -171,7 +182,7 @@ export default function ShopeeDashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [dias]);
+  }, [dias, dataInicio, dataFim]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -370,15 +381,14 @@ export default function ShopeeDashboardPage() {
       )}
 
       <div className="flex items-center gap-2">
-        <select
-          value={dias}
-          onChange={(e) => setDias(Number(e.target.value))}
-          className="bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-neutral-200"
-        >
-          <option value={7}>Últimos 7 dias</option>
-          <option value={30}>Últimos 30 dias</option>
-          <option value={90}>Últimos 90 dias</option>
-        </select>
+        <DateRangePicker
+          dataInicio={dataInicio}
+          dataFim={dataFim}
+          onChange={(inicio, fim) => {
+            setDataInicio(inicio);
+            setDataFim(fim);
+          }}
+        />
         <button
           onClick={carregar}
           disabled={loading}

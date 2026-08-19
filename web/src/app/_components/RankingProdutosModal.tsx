@@ -9,6 +9,7 @@ import TabBar from "./TabBar";
 import LoadingState from "./LoadingState";
 import ErrorAlert from "./ErrorAlert";
 import Icon from "./Icon";
+import DateRangePicker from "./DateRangePicker";
 
 type Categoria = "vendas" | "lucratividade" | "estoque";
 type Aba =
@@ -63,8 +64,21 @@ function ItemCard({ rank, titulo, subtitulo, children }: { rank: number; titulo:
   );
 }
 
+function fmtData(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
 export default function RankingProdutosModal({ onClose, lojaId, inline }: { onClose?: () => void; lojaId?: string; inline?: boolean }) {
-  const [dias, setDias] = useState(30);
+  const [dataFim, setDataFim] = useState(() => fmtData(new Date()));
+  const [dataInicio, setDataInicio] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return fmtData(d);
+  });
+  const dias = useMemo(() => {
+    const ms = new Date(dataFim).getTime() - new Date(dataInicio).getTime();
+    return Math.max(1, Math.round(ms / 86400000) + 1);
+  }, [dataInicio, dataFim]);
   const [categoria, setCategoria] = useState<Categoria>("vendas");
   const [aba, setAba] = useState<Aba>("vendidos");
   const [loading, setLoading] = useState(true);
@@ -82,22 +96,22 @@ export default function RankingProdutosModal({ onClose, lojaId, inline }: { onCl
     const tarefas: Promise<unknown>[] =
       categoria === "vendas"
         ? [
-            api.relatorioRankingProdutos(dias, lojaId).then((r) => setRanking(r.itens || [])),
-            api.relatorioProdutosTendencia(dias, lojaId).then(setTendencia),
+            api.relatorioRankingProdutos(dias, lojaId, dataInicio, dataFim).then((r) => setRanking(r.itens || [])),
+            api.relatorioProdutosTendencia(dias, lojaId, dataInicio, dataFim).then(setTendencia),
           ]
         : categoria === "lucratividade"
         ? [
-            api.relatorioRankingProdutos(dias, lojaId).then((r) => setRanking(r.itens || [])),
-            api.relatorioCurvas(dias, lojaId).then((r) => setAbc(r.itens || [])),
+            api.relatorioRankingProdutos(dias, lojaId, dataInicio, dataFim).then((r) => setRanking(r.itens || [])),
+            api.relatorioCurvas(dias, lojaId, dataInicio, dataFim).then((r) => setAbc(r.itens || [])),
           ]
         : [
-            api.relatorioEstoqueParado(dias, 15, lojaId).then(setParado),
-            api.relatorioRiscoRuptura(dias, lojaId).then(setRuptura),
+            api.relatorioEstoqueParado(dias, 15, lojaId, dataInicio, dataFim).then(setParado),
+            api.relatorioRiscoRuptura(dias, lojaId, dataInicio, dataFim).then(setRuptura),
           ];
     Promise.all(tarefas)
       .catch((e) => setErro(e instanceof Error ? e.message : "Erro ao carregar ranking"))
       .finally(() => setLoading(false));
-  }, [categoria, dias, lojaId]);
+  }, [categoria, dias, lojaId, dataInicio, dataFim]);
 
   const trocarCategoria = (novaCategoria: string) => {
     const cat = novaCategoria as Categoria;
@@ -172,15 +186,16 @@ export default function RankingProdutosModal({ onClose, lojaId, inline }: { onCl
 
         <div className="flex items-center gap-2 mb-3 flex-wrap">
           <TabBar tabs={CATEGORIAS} active={categoria} onChange={trocarCategoria} />
-          <select
-            value={dias}
-            onChange={(e) => setDias(Number(e.target.value))}
-            className="text-xs rounded-lg px-2 py-1.5 ml-auto bg-neutral-800 border border-neutral-700 text-neutral-300"
-          >
-            <option value={7}>7 dias</option>
-            <option value={30}>30 dias</option>
-            <option value={90}>90 dias</option>
-          </select>
+          <div className="ml-auto">
+            <DateRangePicker
+              dataInicio={dataInicio}
+              dataFim={dataFim}
+              onChange={(inicio, fim) => {
+                setDataInicio(inicio);
+                setDataFim(fim);
+              }}
+            />
+          </div>
         </div>
 
         <div className="mb-4">

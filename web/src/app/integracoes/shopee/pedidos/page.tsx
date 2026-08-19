@@ -9,6 +9,11 @@ import type { ShopeePedidoSincronizado, ShopeePedidosEstatisticas } from "@/lib/
 import Icon from "@/app/_components/Icon";
 import PainelFulfillment from "./_components/PainelFulfillment";
 import MapaBrasilPedidos from "./_components/MapaBrasilPedidos";
+import DateRangePicker from "@/app/_components/DateRangePicker";
+
+function fmtDataIso(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
 
 interface LojaShopee {
   id: number;
@@ -103,7 +108,16 @@ export default function ShopeePedidosPage() {
   const [pagina, setPagina] = useState(1);
   const [diasSync, setDiasSync] = useState(30);
   const [sincronizando, setSincronizando] = useState(false);
-  const [diasEstatisticas, setDiasEstatisticas] = useState(90);
+  const [dataFimEstatisticas, setDataFimEstatisticas] = useState(() => fmtDataIso(new Date()));
+  const [dataInicioEstatisticas, setDataInicioEstatisticas] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 90);
+    return fmtDataIso(d);
+  });
+  const diasEstatisticas = Math.max(
+    1,
+    Math.round((new Date(dataFimEstatisticas).getTime() - new Date(dataInicioEstatisticas).getTime()) / 86400000) + 1
+  );
   const [estatisticas, setEstatisticas] = useState<ShopeePedidosEstatisticas | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -155,7 +169,7 @@ export default function ShopeePedidosPage() {
     api.shopeePedidosEstatisticas(Number(lojaId), diasEstatisticas)
       .then((r) => setEstatisticas(r.error ? null : r))
       .catch(() => setEstatisticas(null));
-  }, [lojaId, diasEstatisticas]);
+  }, [lojaId, diasEstatisticas, dataInicioEstatisticas, dataFimEstatisticas]);
 
   const sincronizar = async () => {
     if (!lojaId) return;
@@ -226,15 +240,14 @@ export default function ShopeePedidosPage() {
           <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4">
             <div className="flex items-center justify-between mb-3">
               <p className="text-xs text-neutral-500 uppercase tracking-wider">Onde estão os pedidos</p>
-              <select
-                value={diasEstatisticas}
-                onChange={(e) => setDiasEstatisticas(Number(e.target.value))}
-                className="bg-neutral-800 border border-neutral-700 rounded-lg px-2 py-1 text-xs text-neutral-200"
-              >
-                <option value={30}>Últimos 30 dias</option>
-                <option value={90}>Últimos 90 dias</option>
-                <option value={180}>Últimos 180 dias</option>
-              </select>
+              <DateRangePicker
+                dataInicio={dataInicioEstatisticas}
+                dataFim={dataFimEstatisticas}
+                onChange={(inicio, fim) => {
+                  setDataInicioEstatisticas(inicio);
+                  setDataFimEstatisticas(fim);
+                }}
+              />
             </div>
             {estatisticas?.enderecos_mascarados ? (
               <p className="text-sm text-center py-6 text-neutral-500">
