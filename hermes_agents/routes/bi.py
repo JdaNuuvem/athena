@@ -75,5 +75,17 @@ def bi_acoes_mes():
 @requer_permissao("bi.ver")
 def bi_lojas():
     from core.relatorios import dre_por_loja
+    from core.rbac import usuario_atual_da_request
+    from core.rbac_lojas import lojas_permitidas
     dias = request.args.get("dias", 30, type=int)
-    return jsonify(dre_por_loja(dias))
+    resultado = dre_por_loja(dias)
+    # Achado real (auditoria do modulo BI): essa rota so' checava a
+    # permissao generica bi.ver, sem filtrar por loja — um usuario
+    # restrito a lojas especificas via usuario_lojas via receita/lucro de
+    # TODAS as lojas ativas aqui, mesmo bug ja corrigido antes na rota
+    # irma /api/relatorios/dre-por-loja (mesma funcao core, ver
+    # routes/relatorios.py::rel_dre_por_loja).
+    permitidas = lojas_permitidas(usuario_atual_da_request().get("user_id"))
+    if permitidas is not None:
+        resultado = [r for r in resultado if r["loja_id"] in permitidas]
+    return jsonify(resultado)
