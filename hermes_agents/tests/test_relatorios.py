@@ -1,6 +1,7 @@
 """Testes unitarios — Relatorios (vendas, lucro, estoque, DRE, fluxo caixa)."""
 import sys,os,unittest
 sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from datetime import date, timedelta
 from unittest.mock import patch,MagicMock,AsyncMock
 # Mock DB
 async def _mock_create_pool(*a,**kw):m=AsyncMock();m.acquire.return_value=AsyncMock(__aenter__=AsyncMock(return_value=AsyncMock(fetch=AsyncMock(return_value=[]),fetchrow=AsyncMock(return_value=None),fetchval=AsyncMock(return_value=0),execute=AsyncMock(return_value="OK"))),__aexit__=AsyncMock(return_value=None));return m
@@ -101,6 +102,44 @@ class TestRelatorios(unittest.TestCase):
         self.assertEqual(rel.ranking_produtos(30), [])
 
     @patch("core.relatorios.get_db")
+    def test_ranking_produtos_inclui_atributo_e_nome_do_produto_pai(self, mock_get_db):
+        """sku_pai/atributo vem da hierarquia Bling (ver bling_erp.py) — o
+        ranking precisa expor os 2 pra UI distinguir 'Camiseta - Tamanho P'
+        de 'Camiseta - Tamanho M' como variacoes do mesmo produto base, em
+        vez de 2 linhas soltas sem relacao aparente."""
+        fake_db = AsyncMock()
+        fake_db.fetch.side_effect = [
+            [{"sku": "SKU-FILHO", "quantidade": 3, "receita": 90.0, "comissao": 0.0, "frete": 0.0}],
+            [{"sku": "SKU-FILHO", "descricao": "Camiseta - Tamanho P", "preco_custo": 10.0,
+              "sku_pai": "SKU-PAI", "atributo": "Tamanho P"}],
+            [{"sku": "SKU-PAI", "descricao": "Camiseta"}],
+        ]
+        mock_get_db.return_value = fake_db
+
+        item = rel.ranking_produtos(30)[0]
+
+        self.assertEqual(item["atributo"], "Tamanho P")
+        self.assertEqual(item["produto_pai"], "Camiseta")
+
+    @patch("core.relatorios.get_db")
+    def test_ranking_produtos_sem_sku_pai_nao_consulta_produto_pai(self, mock_get_db):
+        """Produto simples (sem hierarquia, ex: SKU direto Shopee) nao deve
+        disparar a query extra de nome do pai — so' 2 fetches (vendas + custo)."""
+        fake_db = AsyncMock()
+        fake_db.fetch.side_effect = [
+            [{"sku": "SKU-A", "quantidade": 3, "receita": 90.0, "comissao": 0.0, "frete": 0.0}],
+            [{"sku": "SKU-A", "descricao": "Produto simples", "preco_custo": 10.0,
+              "sku_pai": None, "atributo": None}],
+        ]
+        mock_get_db.return_value = fake_db
+
+        item = rel.ranking_produtos(30)[0]
+
+        self.assertIsNone(item["atributo"])
+        self.assertIsNone(item["produto_pai"])
+        self.assertEqual(fake_db.fetch.call_count, 2)
+
+    @patch("core.relatorios.get_db")
     def test_vendas_hoje_dias_1_nao_inclui_ontem(self, mock_get_db):
         """Card "Vendas hoje" chama vendas(1, ...) esperando so' o dia
         corrente. O padrao generico da funcao (CURRENT_DATE - $1::int) usado
@@ -115,12 +154,13 @@ class TestRelatorios(unittest.TestCase):
 
         rel.vendas(1)
 
+        hoje = date.today()
         for call in fake_db.fetchval.call_args_list:
             params = call.args[1:]
-            self.assertEqual(params, (0,), f"esperava filtro CURRENT_DATE - 0, achou {params} em {call.args[0]!r}")
+            self.assertEqual(params, (hoje, hoje), f"esperava filtro so' hoje, achou {params} em {call.args[0]!r}")
         for call in fake_db.fetch.call_args_list:
             params = call.args[1:]
-            self.assertEqual(params, (0,), f"esperava filtro CURRENT_DATE - 0, achou {params} em {call.args[0]!r}")
+            self.assertEqual(params, (hoje, hoje), f"esperava filtro so' hoje, achou {params} em {call.args[0]!r}")
 
     @patch("core.relatorios.get_db")
     def test_vendas_30_dias_comportamento_inalterado(self, mock_get_db):
@@ -133,10 +173,12 @@ class TestRelatorios(unittest.TestCase):
 
         rel.vendas(30)
 
+        hoje = date.today()
+        di = hoje - timedelta(days=30)
         for call in fake_db.fetchval.call_args_list:
-            self.assertEqual(call.args[1:], (30,))
+            self.assertEqual(call.args[1:], (di, hoje))
         for call in fake_db.fetch.call_args_list:
-            self.assertEqual(call.args[1:], (30,))
+            self.assertEqual(call.args[1:], (di, hoje))
 
     @patch("core.relatorios.get_db")
     def test_produtos_tendencia_calcula_crescimento(self, mock_get_db):
@@ -278,8 +320,10 @@ class TestRelatorios(unittest.TestCase):
 
         rel.ranking_produtos(30, loja_id=5)
 
+        hoje = date.today()
+        di = hoje - timedelta(days=30)
         primeira_query_params = fake_db.fetch.call_args_list[0].args[1:]
-        self.assertEqual(primeira_query_params, (30, 5))
+        self.assertEqual(primeira_query_params, (di, hoje, 5))
 
     @patch("core.relatorios.get_db")
     def test_ranking_produtos_sem_loja_id_mantem_comportamento_atual(self, mock_get_db):
@@ -292,8 +336,10 @@ class TestRelatorios(unittest.TestCase):
 
         rel.ranking_produtos(30)
 
+        hoje = date.today()
+        di = hoje - timedelta(days=30)
         primeira_query_params = fake_db.fetch.call_args_list[0].args[1:]
-        self.assertEqual(primeira_query_params, (30, None))
+        self.assertEqual(primeira_query_params, (di, hoje, None))
 
     @patch("core.relatorios.get_db")
     def test_curvas_repassa_loja_id_pra_query(self, mock_get_db):
@@ -303,7 +349,9 @@ class TestRelatorios(unittest.TestCase):
 
         rel.curvas(90, loja_id=3)
 
-        self.assertEqual(fake_db.fetch.call_args.args[1:], (90, 3))
+        hoje = date.today()
+        di = hoje - timedelta(days=90)
+        self.assertEqual(fake_db.fetch.call_args.args[1:], (di, hoje, 3))
 
     @patch("core.relatorios.get_db")
     def test_curvas_sem_loja_id_mantem_comportamento_atual(self, mock_get_db):
@@ -313,7 +361,9 @@ class TestRelatorios(unittest.TestCase):
 
         rel.curvas(90)
 
-        self.assertEqual(fake_db.fetch.call_args.args[1:], (90, None))
+        hoje = date.today()
+        di = hoje - timedelta(days=90)
+        self.assertEqual(fake_db.fetch.call_args.args[1:], (di, hoje, None))
 
     @patch("core.relatorios.get_db")
     def test_produtos_tendencia_repassa_loja_id_pra_query(self, mock_get_db):
@@ -323,7 +373,10 @@ class TestRelatorios(unittest.TestCase):
 
         rel.produtos_tendencia(30, loja_id=8)
 
-        self.assertEqual(fake_db.fetch.call_args.args[1:], (30, 8))
+        hoje = date.today()
+        di = hoje - timedelta(days=30)
+        di_anterior = di - timedelta(days=30)
+        self.assertEqual(fake_db.fetch.call_args.args[1:], (di, hoje, di_anterior, 8))
 
     @patch("core.relatorios.get_db")
     def test_produtos_tendencia_sem_loja_id_mantem_comportamento_atual(self, mock_get_db):
@@ -333,7 +386,10 @@ class TestRelatorios(unittest.TestCase):
 
         rel.produtos_tendencia(30)
 
-        self.assertEqual(fake_db.fetch.call_args.args[1:], (30, None))
+        hoje = date.today()
+        di = hoje - timedelta(days=30)
+        di_anterior = di - timedelta(days=30)
+        self.assertEqual(fake_db.fetch.call_args.args[1:], (di, hoje, di_anterior, None))
 
     @patch("core.relatorios.get_db")
     def test_risco_ruptura_repassa_loja_id_pra_query(self, mock_get_db):
@@ -343,7 +399,9 @@ class TestRelatorios(unittest.TestCase):
 
         rel.risco_ruptura(30, loja_id=2)
 
-        self.assertEqual(fake_db.fetch.call_args.args[1:], (30, 2))
+        hoje = date.today()
+        di = hoje - timedelta(days=30)
+        self.assertEqual(fake_db.fetch.call_args.args[1:], (di, hoje, 2))
 
     @patch("core.relatorios.get_db")
     def test_risco_ruptura_sem_loja_id_mantem_comportamento_atual(self, mock_get_db):
@@ -353,6 +411,8 @@ class TestRelatorios(unittest.TestCase):
 
         rel.risco_ruptura(30)
 
-        self.assertEqual(fake_db.fetch.call_args.args[1:], (30, None))
+        hoje = date.today()
+        di = hoje - timedelta(days=30)
+        self.assertEqual(fake_db.fetch.call_args.args[1:], (di, hoje, None))
 
 if __name__=="__main__":unittest.main(verbosity=2)

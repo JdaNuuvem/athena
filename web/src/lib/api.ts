@@ -2228,6 +2228,8 @@ export interface RankingProdutoItem {
   lucro: number;
   margem_pct: number;
   custo_cadastrado: boolean;
+  atributo: string | null;
+  produto_pai: string | null;
 }
 
 export interface EstoqueParadoItem {

@@ -48,7 +48,7 @@ function fmtBRL(v: number) {
   return "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function ItemCard({ rank, titulo, subtitulo, children }: { rank: number; titulo: string; subtitulo: React.ReactNode; children: React.ReactNode }) {
+function ItemCard({ rank, titulo, subtitulo, children }: { rank: number; titulo: React.ReactNode; subtitulo: React.ReactNode; children: React.ReactNode }) {
   return (
     <div
       className="instrument-hover flex items-center gap-3 px-3 py-2 rounded-lg"
@@ -56,12 +56,33 @@ function ItemCard({ rank, titulo, subtitulo, children }: { rank: number; titulo:
     >
       <span className="numeric text-xs w-5 text-right shrink-0" style={{ color: "var(--ink-700)" }}>{rank}</span>
       <div className="flex-1 min-w-0">
-        <p className="text-sm truncate" style={{ color: "var(--ink-100)" }}>{titulo}</p>
+        <p className="text-sm truncate flex items-center gap-1.5" style={{ color: "var(--ink-100)" }}>{titulo}</p>
         <p className="font-mono text-xs" style={{ color: "var(--ink-500)" }}>{subtitulo}</p>
       </div>
       <div className="text-right shrink-0">{children}</div>
     </div>
   );
+}
+
+// Produtos com hierarquia pai/variacao (sync Bling — ver core/relatorios.py::ranking_produtos)
+// mostram o nome base + um badge com a variacao vendida, pra dar pra comparar
+// quais variacoes do mesmo produto vendem mais. Sem hierarquia (ex: SKU
+// Shopee direto), cai na descricao completa como sempre foi.
+function TituloProduto({ item }: { item: { descricao: string; produto_pai?: string | null; atributo?: string | null } }) {
+  if (item.produto_pai && item.atributo) {
+    return (
+      <>
+        <span className="truncate" title={item.descricao}>{item.produto_pai}</span>
+        <span
+          className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+          style={{ background: "var(--panel-border)", color: "var(--ink-500)" }}
+        >
+          {item.atributo}
+        </span>
+      </>
+    );
+  }
+  return <span className="truncate">{item.descricao}</span>;
 }
 
 function fmtData(d: Date): string {
@@ -219,7 +240,7 @@ export default function RankingProdutosModal({ onClose, lojaId, inline }: { onCl
                 <ItemCard
                   key={item.sku}
                   rank={i + 1}
-                  titulo={item.descricao}
+                  titulo={<TituloProduto item={item} />}
                   subtitulo={
                     <>
                       {item.sku} · {item.quantidade} un
@@ -259,7 +280,7 @@ export default function RankingProdutosModal({ onClose, lojaId, inline }: { onCl
                 <ItemCard
                   key={item.sku}
                   rank={i + 1}
-                  titulo={item.descricao}
+                  titulo={<TituloProduto item={item} />}
                   subtitulo={
                     <>
                       {item.sku} · {item.quantidade} un

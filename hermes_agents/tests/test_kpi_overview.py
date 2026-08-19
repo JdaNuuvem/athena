@@ -191,8 +191,8 @@ class TestKpiOverviewTopSkus(unittest.TestCase):
         r = self._rodar()
         data = r.get_json()
         # ordenado por receita desc — SKU-B (300) antes de SKU-A (100)
-        self.assertEqual(data["top_skus"][0], {"sku": "SKU-B", "nome": "Produto B", "valor": 300.0, "margem": 40.0})
-        self.assertEqual(data["top_skus"][1], {"sku": "SKU-A", "nome": "Produto A", "valor": 100.0, "margem": 20.0})
+        self.assertEqual(data["top_skus"][0], {"sku": "SKU-B", "nome": "Produto B", "valor": 300.0, "margem": 40.0, "atributo": None, "produto_pai": None})
+        self.assertEqual(data["top_skus"][1], {"sku": "SKU-A", "nome": "Produto A", "valor": 100.0, "margem": 20.0, "atributo": None, "produto_pai": None})
 
     @patch("core.relatorios.ranking_produtos")
     def test_limita_a_10_itens(self, mock_ranking):

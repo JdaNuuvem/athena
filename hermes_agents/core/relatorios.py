@@ -461,9 +461,21 @@ def ranking_produtos(dias=30, loja_id=None, data_inicio=None, data_fim=None):
             return []
         skus = [r["sku"] for r in vendas_rows]
         custo_rows = await db.fetch(
-            "SELECT sku, descricao, COALESCE(preco_custo, 0) AS preco_custo FROM catalogo_produtos WHERE sku = ANY($1::text[])",
+            "SELECT sku, descricao, COALESCE(preco_custo, 0) AS preco_custo, sku_pai, atributo FROM catalogo_produtos WHERE sku = ANY($1::text[])",
             skus)
         custos = {r["sku"]: r for r in custo_rows}
+        # Hierarquia pai/filho vem do sync Bling (ver bling_erp.py) — sku_pai
+        # aponta pro SKU do produto base, atributo e' o nome da variacao
+        # (ex: "Tamanho P"). So' cobre produtos sincronizados via Bling; SKUs
+        # Shopee direto ainda nao tem essa hierarquia estruturada, ficam sem
+        # produto_pai/atributo (fallback: item aparece como produto simples).
+        skus_pai = {r["sku_pai"] for r in custo_rows if r.get("sku_pai")}
+        nomes_pai = {}
+        if skus_pai:
+            pai_rows = await db.fetch(
+                "SELECT sku, descricao FROM catalogo_produtos WHERE sku = ANY($1::text[])",
+                list(skus_pai))
+            nomes_pai = {r["sku"]: r["descricao"] for r in pai_rows}
         itens = []
         for r in vendas_rows:
             sku = r["sku"]
@@ -475,6 +487,7 @@ def ranking_produtos(dias=30, loja_id=None, data_inicio=None, data_fim=None):
             comissao = round(float(r["comissao"] or 0), 2)
             frete = round(float(r["frete"] or 0), 2)
             lucro = round(receita - custo_total - comissao - frete, 2)
+            sku_pai = info.get("sku_pai")
             itens.append({
                 "sku": sku,
                 "descricao": info.get("descricao") or sku,
@@ -486,6 +499,8 @@ def ranking_produtos(dias=30, loja_id=None, data_inicio=None, data_fim=None):
                 "lucro": lucro,
                 "margem_pct": round((lucro / receita * 100) if receita > 0 else 0, 1),
                 "custo_cadastrado": custo_unit > 0,
+                "atributo": info.get("atributo"),
+                "produto_pai": nomes_pai.get(sku_pai) if sku_pai else None,
             })
         return itens
     try: return run_async(_go())

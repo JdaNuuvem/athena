@@ -2041,7 +2041,8 @@ def kpi_overview():
             ranking = ranking_produtos(periodo, loja_id or None)
             top10 = sorted(ranking, key=lambda r: r.get("receita", 0), reverse=True)[:10]
             top_skus = [
-                {"sku": r["sku"], "nome": r["descricao"], "valor": r["receita"], "margem": r["margem_pct"]}
+                {"sku": r["sku"], "nome": r["descricao"], "valor": r["receita"], "margem": r["margem_pct"],
+                 "atributo": r.get("atributo"), "produto_pai": r.get("produto_pai")}
                 for r in top10
             ]
         except Exception:

@@ -60,7 +60,7 @@ interface DashboardData {
   estoqueCritico: number; estoqueTotal: number;
   fluxoCaixa: number; clientesNovos: number; clientesTotal: number;
   vendasHoje: number; vendasQtd: number;
-  topProdutos: { nome: string; valor: number; margem: number }[];
+  topProdutos: { nome: string; valor: number; margem: number; atributo?: string | null; produto_pai?: string | null }[];
   alertas: { tipo: string; mensagem: string; data: string }[];
 }
 
@@ -191,29 +191,40 @@ export default function DashboardPage() {
         </section>
       </div>
 
-      {dash.topProdutos.length > 0 && (
-        <section className="instrument p-4">
-          <h2 className="text-[10px] uppercase tracking-[0.12em] mb-3" style={{ color: "var(--ink-500)" }}>Top produtos</h2>
-          <ResponsiveContainer width="100%" height={dash.topProdutos.slice(0, 8).length * 36 + 20}>
-            <BarChart data={dash.topProdutos.slice(0, 8)} layout="vertical" margin={{ left: 8, right: 16 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--panel-border)" horizontal={false} />
-              <XAxis type="number" stroke="var(--ink-700)" tick={{ fontSize: 10, fill: "var(--ink-700)" }} tickFormatter={(v) => fmtBRL(v)} />
-              <YAxis
-                type="category"
-                dataKey="nome"
-                stroke="var(--ink-700)"
-                tick={{ fontSize: 10, fill: "var(--ink-700)" }}
-                width={160}
-                tickFormatter={(nome) => (nome.length > 22 ? `${nome.slice(0, 21)}…` : nome)}
-              />
-              <Tooltip content={<ChartTooltip />} />
-              <Bar dataKey="valor" radius={[0, 3, 3, 0]} barSize={18}>
-                {dash.topProdutos.map((e, i) => <Cell key={i} fill={margemColor(e.margem)} />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </section>
-      )}
+      {dash.topProdutos.length > 0 && (() => {
+        // produto_pai/atributo vem da hierarquia Bling (ver
+        // core/relatorios.py::ranking_produtos) — "nome" sozinho as vezes e'
+        // so' a descricao completa do SKU (ex: "Camiseta - Tamanho P"), dificil
+        // de comparar visualmente com as outras variacoes do mesmo produto.
+        // Quando a hierarquia existe, mostra "Produto base · Variação".
+        const dadosGrafico = dash.topProdutos.slice(0, 8).map((p) => ({
+          ...p,
+          rotulo: p.produto_pai && p.atributo ? `${p.produto_pai} · ${p.atributo}` : p.nome,
+        }));
+        return (
+          <section className="instrument p-4">
+            <h2 className="text-[10px] uppercase tracking-[0.12em] mb-3" style={{ color: "var(--ink-500)" }}>Top produtos</h2>
+            <ResponsiveContainer width="100%" height={dadosGrafico.length * 36 + 20}>
+              <BarChart data={dadosGrafico} layout="vertical" margin={{ left: 8, right: 16 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--panel-border)" horizontal={false} />
+                <XAxis type="number" stroke="var(--ink-700)" tick={{ fontSize: 10, fill: "var(--ink-700)" }} tickFormatter={(v) => fmtBRL(v)} />
+                <YAxis
+                  type="category"
+                  dataKey="rotulo"
+                  stroke="var(--ink-700)"
+                  tick={{ fontSize: 10, fill: "var(--ink-700)" }}
+                  width={160}
+                  tickFormatter={(rotulo) => (rotulo.length > 22 ? `${rotulo.slice(0, 21)}…` : rotulo)}
+                />
+                <Tooltip content={<ChartTooltip />} />
+                <Bar dataKey="valor" radius={[0, 3, 3, 0]} barSize={18}>
+                  {dadosGrafico.map((e, i) => <Cell key={i} fill={margemColor(e.margem)} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </section>
+        );
+      })()}
 
       <RankingProdutosModal lojaId={lojaId} inline />
 
