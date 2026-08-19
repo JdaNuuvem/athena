@@ -152,21 +152,22 @@ def vendas(dias=30, loja_id=None, data_inicio=None, data_fim=None, loja_ids=None
 
 # ── 2. Lucro e Margem ──
 
-def lucro_margem(dias=30, loja_id=None):
+def lucro_margem(dias=30, loja_id=None, data_inicio=None, data_fim=None):
+    di, df, dias_equiv = _periodo(dias, data_inicio, data_fim)
     loja_bl = _loja_where_bling(loja_id)
     loja_pdv = _loja_where_pdv(loja_id)
     async def _go():
         db = await get_db()
-        receita = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND status != 'cancelado'{loja_bl}", dias)
-        receita_pdv = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM pdv_vendas venda WHERE DATE(data) >= CURRENT_DATE - $1::int{loja_pdv}", dias)
+        receita = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE data >= $1::date AND data < ($2::date + 1) AND status != 'cancelado'{loja_bl}", di, df)
+        receita_pdv = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM pdv_vendas venda WHERE DATE(data) >= $1::date AND DATE(data) <= $2::date{loja_pdv}", di, df)
         receita_total = float((receita or 0) + (receita_pdv or 0))
-        custos_prod = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM producao_custos WHERE data >= CURRENT_DATE - $1::int", dias)
-        compras_val = await db.fetchval("SELECT COALESCE(SUM(valor_total),0) FROM compras_pedidos WHERE data_emissao >= CURRENT_DATE - $1::int AND status != 'cancelado'", dias)
+        custos_prod = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM producao_custos WHERE data >= $1::date AND data < ($2::date + 1)", di, df)
+        compras_val = await db.fetchval("SELECT COALESCE(SUM(valor_total),0) FROM compras_pedidos WHERE data_emissao >= $1::date AND data_emissao < ($2::date + 1) AND status != 'cancelado'", di, df)
         cp_val = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_contas_pagar WHERE origem='bling' AND status='pendente'")
         custos = float((custos_prod or 0) + (compras_val or 0) + (cp_val or 0))
         lucro = receita_total - custos
         margem = round((lucro / max(receita_total, 1)) * 100, 1)
-        return {"receita": receita_total, "custos": custos, "lucro": round(lucro,2), "margem_pct": margem, "periodo_dias": dias}
+        return {"receita": receita_total, "custos": custos, "lucro": round(lucro,2), "margem_pct": margem, "periodo_dias": dias_equiv}
     try: return run_async(_go())
     except Exception as e: return {"receita":0,"custos":0,"lucro":0,"margem_pct":0,"periodo_dias":dias}
 
@@ -231,7 +232,7 @@ def ticket_medio(dias=30, loja_id=None):
 
 # ── 7. DRE ──
 
-def dre(dias=30, loja_id=None):
+def dre(dias=30, loja_id=None, data_inicio=None, data_fim=None):
     """CMV (producao_custos) nao tem coluna loja_id — fabrica unica, sem
     conceito de loja (mesma limitacao documentada em
     core/repositories_postgres.py::listar_receita_por_loja). Sem loja_id,
@@ -239,25 +240,31 @@ def dre(dias=30, loja_id=None):
     loja_id, aloca o CMV total proporcionalmente pela participacao daquela
     loja na receita da empresa inteira no periodo — estimativa, nao
     rastreio real por loja, mas evita o bug antigo de devolver o MESMO cmv
-    (o total da empresa) pra qualquer loja consultada."""
+    (o total da empresa) pra qualquer loja consultada.
+
+    data_inicio/data_fim (opcionais): range explicito em vez de "ultimos N
+    dias a partir de hoje" — usado por core/bi.py::indicadores() pra
+    comparar o periodo atual com o anterior de mesmo tamanho (tendencia
+    real dos indicadores, ver _periodo() para o racional geral)."""
+    di, df, dias_equiv = _periodo(dias, data_inicio, data_fim)
     loja_bl = _loja_where_bling(loja_id)
     loja_pdv = _loja_where_pdv(loja_id)
     async def _go():
         db = await get_db()
-        receita = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND status != 'cancelado'{loja_bl}", dias)
-        receita_pdv = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM pdv_vendas venda WHERE DATE(data) >= CURRENT_DATE - $1::int{loja_pdv}", dias)
+        receita = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE data >= $1::date AND data < ($2::date + 1) AND status != 'cancelado'{loja_bl}", di, df)
+        receita_pdv = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM pdv_vendas venda WHERE DATE(data) >= $1::date AND DATE(data) <= $2::date{loja_pdv}", di, df)
         receita_total = float((receita or 0) + (receita_pdv or 0))
-        cmv_total = float(await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM producao_custos WHERE data >= CURRENT_DATE - $1::int", dias) or 0)
+        cmv_total = float(await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM producao_custos WHERE data >= $1::date AND data < ($2::date + 1)", di, df) or 0)
         if loja_id:
-            receita_geral_bl = await db.fetchval("SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE data >= CURRENT_DATE - $1::int AND status != 'cancelado'", dias)
-            receita_geral_pdv = await db.fetchval("SELECT COALESCE(SUM(total),0) FROM pdv_vendas WHERE DATE(data) >= CURRENT_DATE - $1::int", dias)
+            receita_geral_bl = await db.fetchval("SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE data >= $1::date AND data < ($2::date + 1) AND status != 'cancelado'", di, df)
+            receita_geral_pdv = await db.fetchval("SELECT COALESCE(SUM(total),0) FROM pdv_vendas WHERE DATE(data) >= $1::date AND DATE(data) <= $2::date", di, df)
             receita_geral = float((receita_geral_bl or 0) + (receita_geral_pdv or 0))
             cmv = round(cmv_total * receita_total / receita_geral, 2) if receita_geral > 0 else 0.0
         else:
             cmv = cmv_total
         lb = receita_total - cmv
-        despesas = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_dre WHERE mes >= to_char(CURRENT_DATE - $1::int, 'YYYY-MM') AND tipo='despesa'", dias)
-        return {"receita_bruta": receita_total, "cmv": cmv, "lucro_bruto": round(lb, 2), "despesas": float(despesas or 0), "margem_bruta_pct": round(lb/max(receita_total,1)*100,1), "periodo_dias": dias}
+        despesas = await db.fetchval("SELECT COALESCE(SUM(valor),0) FROM fin_dre WHERE mes >= to_char($1::date, 'YYYY-MM') AND mes <= to_char($2::date, 'YYYY-MM') AND tipo='despesa'", di, df)
+        return {"receita_bruta": receita_total, "cmv": cmv, "lucro_bruto": round(lb, 2), "despesas": float(despesas or 0), "margem_bruta_pct": round(lb/max(receita_total,1)*100,1), "periodo_dias": dias_equiv}
     try: return run_async(_go())
     except Exception as e: return {"receita_bruta":0,"cmv":0,"lucro_bruto":0,"despesas":0,"margem_bruta_pct":0,"periodo_dias":dias}
 

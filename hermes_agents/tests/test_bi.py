@@ -44,8 +44,9 @@ class TestDashboard(unittest.TestCase):
         self.assertEqual(kpis["Receita (mês)"]["value"], "R$ 15.000,00")
         self.assertEqual(kpis["Ticket Médio"]["value"], "R$ 750,00")
         self.assertEqual(kpis["Margem Média"]["value"], "66.7%")
-        # ROI nao e' calculavel com o dado disponivel — nao pode virar numero inventado.
-        self.assertEqual(kpis["ROI"]["value"], "--")
+        # ROI nao e' calculavel com o dado disponivel (sem Ativo/Passivo
+        # rastreado) — omitido em vez de virar card sempre morto ("--").
+        self.assertNotIn("ROI", kpis)
 
 
 class TestVendasDiarias(unittest.TestCase):
@@ -75,15 +76,28 @@ class TestVendasCategorias(unittest.TestCase):
         self.assertEqual(produto1["margem"], 50.0)
 
 
+def _r_indicadores(giro_atual=None, giro_anterior=None, prazo_receb_atual=None, prazo_receb_anterior=None,
+                    prazo_pagto_atual=None, prazo_pagto_anterior=None, crescimento=None):
+    """Monta o dict que core.bi.indicadores()._go() devolve — usado pra
+    mockar core.bi.run_async por inteiro nos testes abaixo (o shape mudou
+    de tupla pra dict quando indicadores() passou a calcular o periodo
+    anterior de cada metrica, pra dar pra ter tendencia real)."""
+    return {
+        "giro_atual": giro_atual, "giro_anterior": giro_anterior,
+        "prazo_receb_atual": prazo_receb_atual, "prazo_receb_anterior": prazo_receb_anterior,
+        "prazo_pagto_atual": prazo_pagto_atual, "prazo_pagto_anterior": prazo_pagto_anterior,
+        "crescimento": crescimento,
+        "di_anterior": date(2026, 1, 1), "df_anterior": date(2026, 3, 31),
+    }
+
+
 class TestIndicadores(unittest.TestCase):
     def test_omite_indicador_quando_dado_nao_existe(self):
         """giro de estoque sem estoque cadastrado (estoque_valor=0) deve ser
         omitido, nunca virar um numero fabricado (ex: divisao por zero)."""
         with patch("core.relatorios.dre", return_value={"margem_bruta_pct": 40.0}), \
              patch("core.relatorios.lucro_margem", return_value={"margem_pct": 12.0}), \
-             patch("core.bi.run_async", return_value=(
-                 {"margem_bruta_pct": 40.0}, None, None, None, None,
-             )):
+             patch("core.bi.run_async", return_value=_r_indicadores()):
             resultado = bi.indicadores()
         ids = {i["id"] for i in resultado}
         self.assertIn("margem-bruta", ids)
@@ -94,9 +108,8 @@ class TestIndicadores(unittest.TestCase):
     def test_calcula_giro_de_estoque_quando_ha_dado(self):
         with patch("core.relatorios.dre", return_value={"margem_bruta_pct": 40.0}), \
              patch("core.relatorios.lucro_margem", return_value={"margem_pct": 12.0}), \
-             patch("core.bi.run_async", return_value=(
-                 {"margem_bruta_pct": 40.0}, 8.5, 20, 35, 5.0,
-             )):
+             patch("core.bi.run_async", return_value=_r_indicadores(
+                 giro_atual=8.5, prazo_receb_atual=20, prazo_pagto_atual=35, crescimento=5.0)):
             resultado = bi.indicadores()
         giro = next(i for i in resultado if i["id"] == "giro-estoque")
         self.assertEqual(giro["valor"], 8.5)
@@ -106,17 +119,49 @@ class TestIndicadores(unittest.TestCase):
         ser status good, 50 dias (> 45) deve ser status danger."""
         with patch("core.relatorios.dre", return_value={"margem_bruta_pct": 40.0}), \
              patch("core.relatorios.lucro_margem", return_value={"margem_pct": 12.0}), \
-             patch("core.bi.run_async", return_value=({"margem_bruta_pct": 40.0}, None, 20, None, None)):
+             patch("core.bi.run_async", return_value=_r_indicadores(prazo_receb_atual=20)):
             resultado = bi.indicadores()
         prazo = next(i for i in resultado if i["id"] == "prazo-medio-receb")
         self.assertEqual(prazo["status"], "good")
 
         with patch("core.relatorios.dre", return_value={"margem_bruta_pct": 40.0}), \
              patch("core.relatorios.lucro_margem", return_value={"margem_pct": 12.0}), \
-             patch("core.bi.run_async", return_value=({"margem_bruta_pct": 40.0}, None, 50, None, None)):
+             patch("core.bi.run_async", return_value=_r_indicadores(prazo_receb_atual=50)):
             resultado = bi.indicadores()
         prazo = next(i for i in resultado if i["id"] == "prazo-medio-receb")
         self.assertEqual(prazo["status"], "danger")
+
+    def test_tendencia_real_calculada_a_partir_do_periodo_anterior(self):
+        """Achado real (auditoria do modulo BI): tendencia/tendenciaValor
+        eram hardcoded pra "stable"/0 em TODO indicador, sempre — a seta
+        de tendencia na UI nunca mudava de direcao. Agora compara com o
+        periodo anterior de mesmo tamanho."""
+        with patch("core.relatorios.dre", side_effect=[
+                {"margem_bruta_pct": 50.0}, {"margem_bruta_pct": 40.0}]), \
+             patch("core.relatorios.lucro_margem", return_value={"margem_pct": 12.0}), \
+             patch("core.bi.run_async", return_value=_r_indicadores(
+                 giro_atual=8.0, giro_anterior=10.0, prazo_receb_atual=20, crescimento=5.0)):
+            resultado = bi.indicadores()
+        margem = next(i for i in resultado if i["id"] == "margem-bruta")
+        self.assertEqual(margem["tendencia"], "up")
+        self.assertEqual(margem["tendenciaValor"], 25.0)  # (50-40)/40*100
+
+        giro = next(i for i in resultado if i["id"] == "giro-estoque")
+        self.assertEqual(giro["tendencia"], "down")
+        self.assertEqual(giro["tendenciaValor"], -20.0)  # (8-10)/10*100
+
+    def test_sem_periodo_anterior_pra_comparar_fica_stable(self):
+        """Indicador novo (sem historico no periodo anterior) nao pode
+        virar uma queda de -100% fabricada — mesma filosofia anti-numero-
+        inventado ja usada em _variacao()."""
+        with patch("core.relatorios.dre", side_effect=[
+                {"margem_bruta_pct": 40.0}, {"margem_bruta_pct": None}]), \
+             patch("core.relatorios.lucro_margem", return_value={"margem_pct": 12.0}), \
+             patch("core.bi.run_async", return_value=_r_indicadores()):
+            resultado = bi.indicadores()
+        margem = next(i for i in resultado if i["id"] == "margem-bruta")
+        self.assertEqual(margem["tendencia"], "stable")
+        self.assertEqual(margem["tendenciaValor"], 0.0)
 
 
 class TestForecast(unittest.TestCase):

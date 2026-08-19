@@ -38,7 +38,15 @@ export default function IndicadoresPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {indicadores.map(ind => (
+        {indicadores.map(ind => {
+          // Barra normalizada contra a meta real (limiteBom) em vez do
+          // "valor/2" arbitrario de antes. Sem meta (limiteBom=0, ex:
+          // prazo de pagamento — indicador so' informativo) fica cheia.
+          const progressoPct = ind.limiteBom <= 0 ? 100
+            : ind.menorEMelhor
+              ? Math.min((ind.limiteBom / Math.max(ind.valor, 0.01)) * 100, 100)
+              : Math.min((ind.valor / ind.limiteBom) * 100, 100);
+          return (
           <div key={ind.id} className="bg-neutral-800 border border-neutral-700 rounded-lg p-4 space-y-2">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-medium text-neutral-300">{ind.nome}</h3>
@@ -65,11 +73,12 @@ export default function IndicadoresPage() {
                   ind.status === "good" ? "bg-emerald-500" :
                   ind.status === "warning" ? "bg-amber-500" : "bg-red-500"
                 }`}
-                style={{ width: `${Math.min(ind.valor / 2, 100)}%` }}
+                style={{ width: `${progressoPct}%` }}
               />
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

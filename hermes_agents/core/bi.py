@@ -106,12 +106,15 @@ def dashboard() -> dict:
         log(AGENT, f"Erro churn dashboard: {e}")
         churn = None
 
+    # ROI omitido: exigiria Ativo/Passivo/Patrimonio Liquido, que o sistema
+    # nao rastreia — card sempre "--" e' pior que nao mostrar (mesmo
+    # racional ja aplicado em indicadores(): omitir em vez de fabricar/
+    # deixar morto, achado real da auditoria do modulo BI).
     return {"kpis": [
         {"label": "Receita (mês)", "value": _fmt_brl(v["total"]), "color": "text-emerald-400", "variacao": var_receita},
         {"label": "Ticket Médio", "value": _fmt_brl(t["ticket_medio"]), "color": "text-blue-400", "variacao": var_ticket},
         {"label": "Margem Média", "value": _fmt_pct(d["margem_bruta_pct"]), "color": "text-purple-400"},
         {"label": "Previsão (próx. mês)", "value": _fmt_brl(p["previsao_30d"]), "color": "text-indigo-400"},
-        {"label": "ROI", "value": "--", "color": "text-neutral-500"},
         {"label": "Churn (30d)", "value": (f"{churn}%" if churn is not None else "--"),
          "color": "text-red-400" if (churn or 0) > 20 else "text-emerald-400"},
     ]}
@@ -200,28 +203,63 @@ def vendas_categorias(dias: int = 30, limite_produtos: int = 5) -> list:
 # So' os que dao pra calcular com dado real (sem balanco patrimonial nao da'
 # pra ter liquidez/ROE/ROI/endividamento — ficariam inventados).
 
+def _tendencia(atual, anterior):
+    """Direcao + variacao percentual entre o valor atual de um indicador e o
+    do periodo anterior de mesmo tamanho — mesmo racional de _variacao()
+    (linha ~29), so' que devolve (direcao, valor) pro shape que
+    TrendIndicator.tsx espera ({"up"|"down"|"stable"}, float). None quando
+    nao ha' base de comparacao (evita "queda de -100%" fabricada)."""
+    if atual is None or anterior is None or anterior == 0:
+        return "stable", 0.0
+    pct = round((atual - anterior) / abs(anterior) * 100, 1)
+    if pct > 0.05:
+        return "up", pct
+    if pct < -0.05:
+        return "down", pct
+    return "stable", pct
+
+
 def indicadores() -> list:
-    from core.relatorios import dre as rel_dre, lucro_margem as rel_lucro
+    from datetime import timedelta
+    from core.relatorios import dre as rel_dre, lucro_margem as rel_lucro, _periodo
+
+    async def _metricas_periodo(db, di, df):
+        """Custos de producao+compras e prazos medios pro range [di, df] —
+        chamada duas vezes (periodo atual e anterior) pra dar pra comparar
+        e calcular tendencia real, em vez do "stable"/0 fixo que a UI
+        sempre mostrava antes (achado real da auditoria do modulo BI)."""
+        custos = float((await db.fetchval(
+            "SELECT COALESCE(SUM(valor_total),0) FROM compras_pedidos WHERE data_emissao >= $1::date AND data_emissao < ($2::date + 1) AND status != 'cancelado'", di, df
+        )) or 0) + float((await db.fetchval(
+            "SELECT COALESCE(SUM(valor),0) FROM producao_custos WHERE data >= $1::date AND data < ($2::date + 1)", di, df
+        )) or 0)
+        prazo_receb = await db.fetchval(
+            "SELECT AVG(vencimento - created_at::date) FROM fin_contas_receber WHERE created_at >= $1::date AND created_at < ($2::date + 1)", di, df
+        )
+        prazo_pagto = await db.fetchval(
+            "SELECT AVG(vencimento - created_at::date) FROM fin_contas_pagar WHERE created_at >= $1::date AND created_at < ($2::date + 1)", di, df
+        )
+        return custos, prazo_receb, prazo_pagto
 
     async def _go():
         db = await get_db()
-        d90 = rel_dre(90)
-        custos_periodo = float((await db.fetchval(
-            "SELECT COALESCE(SUM(valor_total),0) FROM compras_pedidos WHERE data_emissao >= CURRENT_DATE - 90"
-        )) or 0) + float((await db.fetchval(
-            "SELECT COALESCE(SUM(valor),0) FROM producao_custos WHERE data >= CURRENT_DATE - 90"
-        )) or 0)
+        # estoque_valor e' o saldo ATUAL (o sistema nao guarda historico de
+        # saldo) — giro do periodo anterior reusa esse mesmo saldo como
+        # denominador, entao a comparacao isola a variacao de CUSTO/COMPRA,
+        # nao de estoque. Aproximacao razoavel pra 90 dias, documentada.
         estoque_valor = float((await db.fetchval(
             "SELECT COALESCE(SUM(e.quantidade * COALESCE(c.preco_custo,0)),0) FROM estoque_lojas e JOIN catalogo_produtos c ON c.sku = e.sku"
         )) or 0)
-        giro = round((custos_periodo * (365 / 90)) / estoque_valor, 1) if estoque_valor else None
 
-        prazo_receb = await db.fetchval(
-            "SELECT AVG(vencimento - created_at::date) FROM fin_contas_receber WHERE created_at >= NOW() - INTERVAL '90 days'"
-        )
-        prazo_pagto = await db.fetchval(
-            "SELECT AVG(vencimento - created_at::date) FROM fin_contas_pagar WHERE created_at >= NOW() - INTERVAL '90 days'"
-        )
+        di_atual, df_atual, dias_equiv = _periodo(90)
+        di_anterior = di_atual - timedelta(days=dias_equiv)
+        df_anterior = di_atual - timedelta(days=1)
+
+        custos_atual, prazo_receb_atual, prazo_pagto_atual = await _metricas_periodo(db, di_atual, df_atual)
+        custos_anterior, prazo_receb_anterior, prazo_pagto_anterior = await _metricas_periodo(db, di_anterior, df_anterior)
+
+        giro_atual = round((custos_atual * (365 / dias_equiv)) / estoque_valor, 1) if estoque_valor else None
+        giro_anterior = round((custos_anterior * (365 / dias_equiv)) / estoque_valor, 1) if estoque_valor and custos_anterior else None
 
         receita_atual = await db.fetchval("""
             SELECT COALESCE(SUM(total),0) FROM (
@@ -237,16 +275,27 @@ def indicadores() -> list:
         """)
         crescimento = round((float(receita_atual or 0) - float(receita_anterior or 0)) / float(receita_anterior) * 100, 1) if receita_anterior else None
 
-        return d90, giro, prazo_receb, prazo_pagto, crescimento
+        return {
+            "giro_atual": giro_atual, "giro_anterior": giro_anterior,
+            "prazo_receb_atual": float(prazo_receb_atual) if prazo_receb_atual is not None else None,
+            "prazo_receb_anterior": float(prazo_receb_anterior) if prazo_receb_anterior is not None else None,
+            "prazo_pagto_atual": float(prazo_pagto_atual) if prazo_pagto_atual is not None else None,
+            "prazo_pagto_anterior": float(prazo_pagto_anterior) if prazo_pagto_anterior is not None else None,
+            "crescimento": crescimento,
+            "di_anterior": di_anterior, "df_anterior": df_anterior,
+        }
     try:
-        d90, giro, prazo_receb, prazo_pagto, crescimento = run_async(_go())
+        r = run_async(_go())
     except Exception as e:
         log(AGENT, f"Erro indicadores: {e}")
         return []
 
+    d90 = rel_dre(90)
+    d90_anterior = rel_dre(90, data_inicio=r["di_anterior"], data_fim=r["df_anterior"])
     lm = rel_lucro(90)
+    lm_anterior = rel_lucro(90, data_inicio=r["di_anterior"], data_fim=r["df_anterior"])
 
-    def _linha(id_, nome, valor, unidade, referencia, limite_bom, limite_atencao=None, menor_e_melhor=False):
+    def _linha(id_, nome, valor, unidade, referencia, limite_bom, limite_atencao=None, menor_e_melhor=False, tendencia=("stable", 0.0)):
         if valor is None:
             return None
         if menor_e_melhor:
@@ -254,17 +303,37 @@ def indicadores() -> list:
         else:
             status = "good" if valor >= limite_bom else ("warning" if limite_atencao is None or valor >= limite_atencao else "danger")
         return {"id": id_, "nome": nome, "valor": round(valor, 1), "unidade": unidade,
-                "tendencia": "stable", "tendenciaValor": 0, "referencia": referencia, "status": status}
+                "tendencia": tendencia[0], "tendenciaValor": tendencia[1], "referencia": referencia, "status": status,
+                "limiteBom": limite_bom, "menorEMelhor": menor_e_melhor}
 
+    # Limiares bom/atencao abaixo sao benchmarks classicos de varejo/gestao
+    # financeira (nao vem de config nem sao especificos do negocio do
+    # usuario — documentado aqui pra nao parecer numero chutado):
+    # - Margem bruta > 45%: faixa saudavel comum em varejo com producao
+    #   propria (cobre CMV + margem de manobra pra despesas operacionais).
+    # - Margem liquida > 15%: benchmark geral de rentabilidade liquida
+    #   considerada solida na maioria dos setores de varejo/e-commerce.
+    # - Giro de estoque > 6x/ano (~a cada 60 dias): referencia padrao de
+    #   varejo saudavel; abaixo de 3x/ano costuma indicar capital parado.
+    # - Prazo de recebimento < 30 dias: ciclo de conversao de caixa curto;
+    #   acima de 45 dias tensiona capital de giro.
     linhas = [
-        _linha("margem-bruta", "Margem Bruta", d90.get("margem_bruta_pct"), "%", "> 45%", 45, 30),
-        _linha("margem-liquida", "Margem Líquida (aprox.)", lm.get("margem_pct"), "%", "> 15%", 15, 5),
-        _linha("giro-estoque", "Giro de Estoque", giro, "x/ano", "> 6.0", 6, 3),
-        _linha("prazo-medio-receb", "Prazo Médio de Recebimento", float(prazo_receb) if prazo_receb is not None else None,
-               "dias", "< 30 dias", 30, 45, menor_e_melhor=True),
-        _linha("prazo-medio-pagto", "Prazo Médio de Pagamento", float(prazo_pagto) if prazo_pagto is not None else None,
-               "dias", "informativo — maior prazo ajuda o caixa", 0),
-        _linha("crescimento-receita", "Crescimento de Receita (30d vs. 30d anteriores)", crescimento, "%", "> 0%", 0, -10),
+        _linha("margem-bruta", "Margem Bruta", d90.get("margem_bruta_pct"), "%", "> 45%", 45, 30,
+               tendencia=_tendencia(d90.get("margem_bruta_pct"), d90_anterior.get("margem_bruta_pct"))),
+        _linha("margem-liquida", "Margem Líquida (aprox.)", lm.get("margem_pct"), "%", "> 15%", 15, 5,
+               tendencia=_tendencia(lm.get("margem_pct"), lm_anterior.get("margem_pct"))),
+        _linha("giro-estoque", "Giro de Estoque", r["giro_atual"], "x/ano", "> 6.0", 6, 3,
+               tendencia=_tendencia(r["giro_atual"], r["giro_anterior"])),
+        _linha("prazo-medio-receb", "Prazo Médio de Recebimento", r["prazo_receb_atual"],
+               "dias", "< 30 dias", 30, 45, menor_e_melhor=True,
+               tendencia=_tendencia(r["prazo_receb_atual"], r["prazo_receb_anterior"])),
+        _linha("prazo-medio-pagto", "Prazo Médio de Pagamento", r["prazo_pagto_atual"],
+               "dias", "informativo — maior prazo ajuda o caixa", 0,
+               tendencia=_tendencia(r["prazo_pagto_atual"], r["prazo_pagto_anterior"])),
+        # crescimento-receita ja' e', ele mesmo, uma comparacao 30d vs 30d
+        # anteriores — "tendencia da tendencia" ficaria confuso, mantido
+        # sem seta (mesmo comportamento de antes so' pra este item).
+        _linha("crescimento-receita", "Crescimento de Receita (30d vs. 30d anteriores)", r["crescimento"], "%", "> 0%", 0, -10),
     ]
     return [l for l in linhas if l is not None]
 

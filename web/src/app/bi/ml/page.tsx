@@ -38,7 +38,7 @@ export default function MLPage() {
       <div className="flex items-center justify-between gap-3">
         <PageHeader title="Machine Learning" subtitle="Detecção de anomalias, segmentação RFM e recomendações por co-ocorrência real" />
         <ExportButtons
-          columns={["Tipo", "Descrição", "Confiança", "Receita Estimada", "Ação"]}
+          columns={["Tipo", "Descrição", "Comprados Juntos (%)", "Receita Estimada", "Ação"]}
           rows={recomendacoes.map(r => [r.tipo, r.descricao, `${r.confianca}%`, formatCurrency(r.receitaEstimada), r.acao])}
           filename="bi-ml-recomendacoes" title="Recomendações ML"
         />
@@ -97,7 +97,11 @@ export default function MLPage() {
                     rec.tipo === "upsell" ? "bg-emerald-900/30 text-emerald-400" :
                     "bg-amber-900/30 text-amber-400"
                   }`}>{rec.tipo}</span>
-                  <span className="text-[10px] text-neutral-500">Confiança: {rec.confianca}%</span>
+                  {/* "confianca" e' P(B comprado | A comprado) — frequencia real de
+                      compra conjunta (core/bi.py::ml_recomendacoes), nao saida de
+                      modelo de ML treinado. Rotulo evita sugerir uma precisao/
+                      sofisticacao que a feature nao tem. */}
+                  <span className="text-[10px] text-neutral-500">Comprados juntos: {rec.confianca}% das vezes</span>
                 </div>
                 <p className="text-sm text-neutral-200">{rec.descricao}</p>
                 <div className="flex items-center justify-between text-xs">

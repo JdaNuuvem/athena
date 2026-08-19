@@ -44,6 +44,8 @@ export interface IndicadorFinanceiro {
   tendenciaValor: number;
   referencia: string;
   status: "good" | "warning" | "danger";
+  limiteBom: number;
+  menorEMelhor: boolean;
 }
 
 export interface ForecastDataPoint {
