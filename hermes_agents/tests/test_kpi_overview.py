@@ -224,5 +224,54 @@ class TestKpiOverviewTopSkus(unittest.TestCase):
         mock_ranking.assert_called_once_with(30, 7)
 
 
+class TestKpiOverviewTipoLoja(unittest.TestCase):
+    """?tipo_loja=virtual agrega todas as lojas daquele tipo (aba "Virtuais"
+    do dashboard) — tem prioridade sobre loja_id singular quando ambos
+    vierem na query string (ver dashboard/page.tsx)."""
+
+    def setUp(self):
+        self.client = app.test_client()
+        self.headers = {"Authorization": f"Bearer {USER_TOKEN}"}
+
+    def _cursor_padrao(self):
+        return _FakeCursor(fetchone_values=[
+            {"v": 100.0}, {"v": 50.0}, {"v": 2}, {"v": 1},
+            {"v": 0}, {"v": 0}, {"v": 0}, {"v": 0},
+        ], fetchall_values=[[]])
+
+    @patch("core.lojas.listar_ids_por_tipo", return_value=[10, 11])
+    def test_tipo_loja_usa_any_e_ignora_loja_id_singular(self, mock_listar):
+        cursor = self._cursor_padrao()
+        with patch("athena_bridge._db_sync", return_value=_FakeConn(cursor)):
+            r = self.client.get("/api/kpi/overview?loja_id=999&tipo_loja=virtual", headers=self.headers)
+        self.assertEqual(r.status_code, 200)
+        mock_listar.assert_called_once_with("virtual")
+        sql_vp, params_vp = cursor.executed[0]
+        self.assertIn("ANY(%s)", sql_vp)
+        self.assertIn([10, 11], params_vp)
+        self.assertNotIn(999, params_vp)
+
+    @patch("core.relatorios.ranking_produtos")
+    @patch("core.lojas.listar_ids_por_tipo", return_value=[10, 11])
+    def test_tipo_loja_repassa_loja_ids_pro_ranking_produtos(self, mock_listar, mock_ranking):
+        mock_ranking.return_value = []
+        cursor = self._cursor_padrao()
+        with patch("athena_bridge._db_sync", return_value=_FakeConn(cursor)):
+            self.client.get("/api/kpi/overview?tipo_loja=virtual", headers=self.headers)
+        mock_ranking.assert_called_once_with(30, loja_ids=[10, 11])
+
+    def test_sem_tipo_loja_modo_legado_continua_igual(self):
+        """Sem tipo_loja, o comportamento com loja_id singular precisa ficar
+        identico ao anterior (ja coberto por TestKpiOverviewFonteDeVendas,
+        reforcado aqui explicitamente pro contraste com o teste acima)."""
+        cursor = self._cursor_padrao()
+        with patch("athena_bridge._db_sync", return_value=_FakeConn(cursor)):
+            r = self.client.get("/api/kpi/overview?loja_id=7", headers=self.headers)
+        self.assertEqual(r.status_code, 200)
+        sql_vp, params_vp = cursor.executed[0]
+        self.assertIn("loja_id=%s", sql_vp)
+        self.assertIn(7, params_vp)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

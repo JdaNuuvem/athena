@@ -5,6 +5,13 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { api, type KPIOverview, type Agent } from "@/lib/api";
 import { useStore } from "@/lib/store-context";
 import RankingProdutosModal from "@/app/_components/RankingProdutosModal";
+import TabBar from "@/app/_components/TabBar";
+
+type Aba = "geral" | "virtuais";
+const ABAS_DASHBOARD = [
+  { key: "geral", label: "Geral" },
+  { key: "virtuais", label: "Virtuais" },
+];
 
 const fmtBRL = (v: number) => "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
 
@@ -66,21 +73,29 @@ interface DashboardData {
 
 export default function DashboardPage() {
   const { lojaId } = useStore();
+  const [aba, setAba] = useState<Aba>("geral");
   const [kpi, setKpi] = useState<KPIOverview | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [dash, setDash] = useState<DashboardData>({ vendasDia: 0, vendasMes: 0, vendasMesChart: [], estoqueCritico: 0, estoqueTotal: 0, fluxoCaixa: 0, clientesNovos: 0, clientesTotal: 0, vendasHoje: 0, vendasQtd: 0, topProdutos: [], alertas: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Aba "Geral" respeita o seletor global de loja (lojaId — especifica ou
+  // "todas") normalmente. Aba "Virtuais" ignora lojaId e agrega todas as
+  // lojas do tipo "virtual" (Shopee) de uma vez via tipo_loja — mesmos
+  // componentes/secoes da pagina, so' com o conjunto de lojas trocado.
+  const tipoLojaFiltro = aba === "virtuais" ? "virtual" : undefined;
+  const lojaIdFiltro = aba === "virtuais" ? undefined : lojaId;
+
   useEffect(() => {
     Promise.all([
-      api.kpiOverview(30, lojaId),
+      api.kpiOverview(30, lojaIdFiltro, tipoLojaFiltro),
       api.agentsList(),
-      api.relatorioVendas(1, lojaId),
-      api.relatorioVendas(30, lojaId),
-      api.relatorioEstoque(lojaId),
-      api.relatorioFluxoCaixa(30, lojaId),
-      api.relatorioClientes(30, lojaId),
+      api.relatorioVendas(1, lojaIdFiltro, undefined, undefined, tipoLojaFiltro),
+      api.relatorioVendas(30, lojaIdFiltro, undefined, undefined, tipoLojaFiltro),
+      api.relatorioEstoque(lojaIdFiltro, tipoLojaFiltro),
+      api.relatorioFluxoCaixa(30, lojaIdFiltro, undefined, undefined, tipoLojaFiltro),
+      api.relatorioClientes(30, lojaIdFiltro, undefined, undefined, tipoLojaFiltro),
     ]).then(([k, a, r1, r30, est, fc, cli]: [
       Record<string, unknown>, { agents: Agent[] }, Record<string, unknown>, Record<string, unknown>,
       Record<string, unknown>, Record<string, unknown>, Record<string, unknown>,
@@ -104,7 +119,7 @@ export default function DashboardPage() {
       });
     }).catch((e: unknown) => setError(e instanceof Error ? e.message : "Erro ao carregar"))
       .finally(() => setLoading(false));
-  }, [lojaId]);
+  }, [lojaId, aba]);
 
   if (loading) {
     return (
@@ -118,12 +133,19 @@ export default function DashboardPage() {
   return (
     <div className="p-6 space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-[13px] font-semibold uppercase tracking-[0.14em]" style={{ color: "var(--ink-500)" }}>Painel de Operação</h1>
+        <div>
+          <h1 className="text-[13px] font-semibold uppercase tracking-[0.14em]" style={{ color: "var(--ink-500)" }}>Painel de Operação</h1>
+          {aba === "virtuais" && (
+            <p className="text-[11px] mt-0.5" style={{ color: "var(--ink-700)" }}>Todas as lojas virtuais</p>
+          )}
+        </div>
         <div className="flex items-center gap-1.5 text-[11px]" style={{ color: "var(--ink-700)" }}>
           <span aria-hidden className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--status-ok)" }} />
           Sistema operando
         </div>
       </div>
+
+      <TabBar tabs={ABAS_DASHBOARD} active={aba} onChange={(k) => setAba(k as Aba)} />
 
       {error && (
         <div className="instrument px-4 py-3 text-sm" style={{ borderColor: "var(--status-crit)", color: "var(--status-crit)" }}>
@@ -226,7 +248,7 @@ export default function DashboardPage() {
         );
       })()}
 
-      <RankingProdutosModal lojaId={lojaId} inline />
+      <RankingProdutosModal lojaId={lojaIdFiltro} tipoLoja={tipoLojaFiltro} inline />
 
       {dash.alertas.length > 0 && (
         <section>

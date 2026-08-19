@@ -40,21 +40,49 @@ def _periodo(dias=30, data_inicio=None, data_fim=None):
 
 # ── Helper: UNION vendas Bling + PDV ──
 
-def _loja_where_bling(loja_id, prefix=""):
-    """WHERE clause suffix for vendas_pedidos filtered by loja_id. Sem alias por
-    padrao — nenhuma das queries que usam isso aliasa vendas_pedidos; um prefixo
+def _loja_where_bling(loja_id, prefix="", loja_ids=None):
+    """WHERE clause suffix for vendas_pedidos filtered by loja_id (ou loja_ids,
+    lista — tem prioridade sobre loja_id quando ambos vierem, usado pro modo
+    "todas as lojas virtuais/fisicas" do dashboard). Sem alias por padrao —
+    nenhuma das queries que usam isso aliasa vendas_pedidos; um prefixo
     default "v." gerava UndefinedTableError (mascarado pelo except generico,
     devolvendo zero) toda vez que um loja_id era passado."""
     p = f"{prefix}." if prefix else ""
+    if loja_ids is not None:
+        ids = ",".join(str(int(i)) for i in loja_ids)
+        return f" AND {p}loja_id = ANY(ARRAY[{ids}]::int[])" if ids else " AND FALSE"
     return f" AND {p}loja_id = {int(loja_id)}" if loja_id else ""
 
-def _loja_where_pdv(loja_id):
-    """WHERE clause suffix for pdv_vendas filtered by loja_id via pdv_caixas."""
+def _loja_where_pdv(loja_id, loja_ids=None):
+    """WHERE clause suffix for pdv_vendas filtered by loja_id via pdv_caixas.
+    loja_ids (lista) tem prioridade sobre loja_id quando ambos vierem."""
+    if loja_ids is not None:
+        ids = ",".join(str(int(i)) for i in loja_ids)
+        return f" AND venda.caixa_id IN (SELECT id FROM pdv_caixas WHERE loja_id = ANY(ARRAY[{ids}]::int[]))" if ids else " AND FALSE"
     if not loja_id: return ""
     return f" AND venda.caixa_id IN (SELECT id FROM pdv_caixas WHERE loja_id = {int(loja_id)})"
 
-def _loja_where_estoque(loja_id):
-    """WHERE clause suffix for estoque_lojas, maps loja_id -> loja nome efetivo (resolve vinculo)."""
+def _loja_where_estoque(loja_id, loja_ids=None):
+    """WHERE clause suffix for estoque_lojas, maps loja_id -> loja nome efetivo
+    (resolve vinculo). loja_ids (lista) resolve cada id pro nome efetivo e
+    filtra por IN (...) — tem prioridade sobre loja_id quando ambos vierem."""
+    if loja_ids is not None:
+        nomes = []
+        for lid in loja_ids:
+            try:
+                nome_efetivo = loja_efetiva(str(lid))
+                if isinstance(nome_efetivo, str) and nome_efetivo and not nome_efetivo.isdigit():
+                    nomes.append(nome_efetivo.replace("'", "''"))
+                else:
+                    _log_erro(
+                        "relatorios._loja_where_estoque: resolver_loja_efetiva (loja_ids)",
+                        ValueError(f"loja_id {lid} -> nao resolveu para um nome valido: {nome_efetivo!r}"))
+            except Exception as e:
+                _log_erro("relatorios._loja_where_estoque: resolver_loja_efetiva (loja_ids)", e)
+        if not nomes:
+            return " AND FALSE"
+        lista = ",".join(f"'{n}'" for n in nomes)
+        return f" AND e.loja IN ({lista})"
     if not loja_id: return ""
     try:
         nome_efetivo = loja_efetiva(str(loja_id))
@@ -68,7 +96,7 @@ def _loja_where_estoque(loja_id):
         _log_erro("relatorios._loja_where_estoque: resolver_loja_efetiva", e)
     return f" AND e.loja = (SELECT nome FROM lojas WHERE id = {int(loja_id)})"
 
-def _union_vendas(dias: int, loja_id=None, data_inicio=None, data_fim=None):
+def _union_vendas(dias: int, loja_id=None, data_inicio=None, data_fim=None, loja_ids=None):
     """Retorna total, qtd, e diarias unindo vendas_pedidos + pdv_vendas.
 
     dias=1 e' tratado como "so' hoje" (filtro CURRENT_DATE, sem subtracao).
@@ -84,8 +112,8 @@ def _union_vendas(dias: int, loja_id=None, data_inicio=None, data_fim=None):
         janela = 0 if dias <= 1 else dias
         df = date.today()
         di = df - timedelta(days=janela)
-    loja_bl = _loja_where_bling(loja_id)
-    loja_pdv = _loja_where_pdv(loja_id)
+    loja_bl = _loja_where_bling(loja_id, loja_ids=loja_ids)
+    loja_pdv = _loja_where_pdv(loja_id, loja_ids=loja_ids)
     async def _go():
         db = await get_db()
         total_bling = await db.fetchval(f"SELECT COALESCE(SUM(total),0) FROM vendas_pedidos WHERE data >= $1::date AND data < ($2::date + 1) AND status != 'cancelado'{loja_bl}", di, df)
@@ -105,8 +133,8 @@ def _union_vendas(dias: int, loja_id=None, data_inicio=None, data_fim=None):
 
 # ── 1. Vendas ──
 
-def vendas(dias=30, loja_id=None, data_inicio=None, data_fim=None):
-    r = _union_vendas(dias, loja_id, data_inicio, data_fim)
+def vendas(dias=30, loja_id=None, data_inicio=None, data_fim=None, loja_ids=None):
+    r = _union_vendas(dias, loja_id, data_inicio, data_fim, loja_ids=loja_ids)
     # Consolida por dia (Bling + PDV podem ambos vender no mesmo dia — sem
     # isso a lista tinha ate' 2 pontos por dia, e nenhuma das duas queries em
     # _union_vendas tem ORDER BY, entao o grafico de vendas do Dashboard saia
@@ -144,11 +172,11 @@ def lucro_margem(dias=30, loja_id=None):
 
 # ── 3. Estoque ──
 
-def estoque(loja_id=None):
-    loja_sql = _loja_where_estoque(loja_id)
+def estoque(loja_id=None, loja_ids=None):
+    loja_sql = _loja_where_estoque(loja_id, loja_ids=loja_ids)
     async def _go():
         db = await get_db()
-        if loja_id:
+        if loja_id or loja_ids is not None:
             total = await db.fetchval(f"SELECT COUNT(DISTINCT e.sku) FROM estoque_lojas e WHERE e.quantidade > 0{loja_sql}")
         else:
             total = await db.fetchval("SELECT COUNT(*) FROM catalogo_produtos")
@@ -160,13 +188,17 @@ def estoque(loja_id=None):
 
 # ── 4. Clientes ──
 
-def clientes(dias=90, loja_id=None, data_inicio=None, data_fim=None):
+def clientes(dias=90, loja_id=None, data_inicio=None, data_fim=None, loja_ids=None):
     # ponytail: cad_clientes nao tem loja_id — "cliente desta loja" so' existe via
     # JOIN com vendas_pedidos.loja_id (cliente que comprou dessa loja).
     di, df, dias_equiv = _periodo(dias, data_inicio, data_fim)
     async def _go():
         db = await get_db()
-        if loja_id:
+        if loja_ids is not None:
+            total = await db.fetchval("SELECT COUNT(DISTINCT v.cliente_id) FROM vendas_pedidos v WHERE v.loja_id = ANY($1::int[]) AND v.cliente_id IS NOT NULL", loja_ids)
+            novos = await db.fetchval("SELECT COUNT(DISTINCT c.id) FROM cad_clientes c JOIN vendas_pedidos v ON v.cliente_id = c.id WHERE v.loja_id = ANY($1::int[]) AND c.created_at >= $2::date AND c.created_at < ($3::date + 1)", loja_ids, di, df)
+            top = await db.fetch("SELECT c.nome as cliente, COUNT(v.id) as compras, COALESCE(SUM(v.total),0) as valor FROM cad_clientes c JOIN vendas_pedidos v ON v.cliente_id = c.id AND v.status != 'cancelado' AND v.loja_id = ANY($1::int[]) GROUP BY c.id, c.nome ORDER BY valor DESC LIMIT 10", loja_ids)
+        elif loja_id:
             total = await db.fetchval("SELECT COUNT(DISTINCT v.cliente_id) FROM vendas_pedidos v WHERE v.loja_id = $1 AND v.cliente_id IS NOT NULL", loja_id)
             novos = await db.fetchval("SELECT COUNT(DISTINCT c.id) FROM cad_clientes c JOIN vendas_pedidos v ON v.cliente_id = c.id WHERE v.loja_id = $1 AND c.created_at >= $2::date AND c.created_at < ($3::date + 1)", loja_id, di, df)
             top = await db.fetch("SELECT c.nome as cliente, COUNT(v.id) as compras, COALESCE(SUM(v.total),0) as valor FROM cad_clientes c JOIN vendas_pedidos v ON v.cliente_id = c.id AND v.status != 'cancelado' AND v.loja_id = $1 GROUP BY c.id, c.nome ORDER BY valor DESC LIMIT 10", loja_id)
@@ -217,9 +249,9 @@ def dre(dias=30, loja_id=None):
 
 # ── 8. Fluxo de Caixa ──
 
-def fluxo_caixa(dias=30, loja_id=None, data_inicio=None, data_fim=None):
-    loja_bl = _loja_where_bling(loja_id)
-    loja_pdv = _loja_where_pdv(loja_id)
+def fluxo_caixa(dias=30, loja_id=None, data_inicio=None, data_fim=None, loja_ids=None):
+    loja_bl = _loja_where_bling(loja_id, loja_ids=loja_ids)
+    loja_pdv = _loja_where_pdv(loja_id, loja_ids=loja_ids)
     di, df, dias_equiv = _periodo(dias, data_inicio, data_fim)
     async def _go():
         db = await get_db()
@@ -379,15 +411,21 @@ def rupturas():
 
 # ── 17. Curva ABC ──
 
-def curvas(dias=90, loja_id=None, data_inicio=None, data_fim=None):
+def curvas(dias=90, loja_id=None, data_inicio=None, data_fim=None, loja_ids=None):
     di, df, _ = _periodo(dias, data_inicio, data_fim)
+    if loja_ids is not None:
+        loja_filtro_sql = "AND vp.loja_id = ANY($3::int[])"
+        loja_filtro_val = list(loja_ids)
+    else:
+        loja_filtro_sql = "AND ($3::int IS NULL OR vp.loja_id = $3)"
+        loja_filtro_val = loja_id
     async def _go():
         db = await get_db()
-        rows = await db.fetch("""SELECT vi.sku, vi.descricao, SUM(vi.valor_total) as valor_total, SUM(vi.quantidade) as qtd
+        rows = await db.fetch(f"""SELECT vi.sku, vi.descricao, SUM(vi.valor_total) as valor_total, SUM(vi.quantidade) as qtd
             FROM vendas_itens vi JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
             WHERE vp.data >= $1::date AND vp.data < ($2::date + 1) AND vp.status != 'cancelado'
-              AND ($3::int IS NULL OR vp.loja_id = $3)
-            GROUP BY vi.sku, vi.descricao ORDER BY valor_total DESC LIMIT 30""", di, df, loja_id)
+              {loja_filtro_sql}
+            GROUP BY vi.sku, vi.descricao ORDER BY valor_total DESC LIMIT 30""", di, df, loja_filtro_val)
         items = [dict(r) for r in (rows or [])]
         for it in items:
             it["valor_total"] = float(it.get("valor_total", 0) or 0)
@@ -420,7 +458,7 @@ def produtos(dias=30):
 
 SHOPEE_COMISSAO_PCT = 12  # mesma taxa default de shopee/pricing.calcular_margem_produto
 
-def ranking_produtos(dias=30, loja_id=None, data_inicio=None, data_fim=None):
+def ranking_produtos(dias=30, loja_id=None, data_inicio=None, data_fim=None, loja_ids=None):
     """Lucro/vendas por SKU somando Bling+marketplaces (vendas_itens/vendas_pedidos,
     mesma fonte unificada de produtos()/curvas() acima) e PDV loja fisica
     (pdv_itens/pdv_vendas, canal direto sem sync). Comissao de marketplace so'
@@ -429,11 +467,20 @@ def ranking_produtos(dias=30, loja_id=None, data_inicio=None, data_fim=None):
     de taxa cadastrada por canal — nao inventa numero. PDV e' de fato sem
     comissao (venda direta), entao 0 ali e' o valor correto, nao uma lacuna.
 
-    loja_id opcional: filtra so' os pedidos daquela loja. Bling/Shopee ja
-    grava loja_id resolvido no sync (shop_id->loja), i9Logic idem
-    (filial->loja) — filtrar por loja_id ja' separa Shopee de i9Logic sem
-    precisar checar tipo de loja em lugar nenhum."""
+    loja_id opcional: filtra so' os pedidos daquela loja. loja_ids (lista)
+    tem prioridade sobre loja_id quando ambos vierem — usado pro modo "todas
+    as lojas virtuais/fisicas" do dashboard (ver kpi_overview em
+    athena_bridge.py). Bling/Shopee ja grava loja_id resolvido no sync
+    (shop_id->loja), i9Logic idem (filial->loja) — filtrar por loja_id ja'
+    separa Shopee de i9Logic sem precisar checar tipo de loja em lugar
+    nenhum."""
     di, df, _ = _periodo(dias, data_inicio, data_fim)
+    if loja_ids is not None:
+        loja_filtro_sql = "AND vp.loja_id = ANY($3::int[])"
+        loja_filtro_val = list(loja_ids)
+    else:
+        loja_filtro_sql = "AND ($3::int IS NULL OR vp.loja_id = $3)"
+        loja_filtro_val = loja_id
     async def _go():
         db = await get_db()
         vendas_rows = await db.fetch(f"""
@@ -446,7 +493,7 @@ def ranking_produtos(dias=30, loja_id=None, data_inicio=None, data_fim=None):
                        CASE WHEN vp.total > 0 THEN vi.valor_total / vp.total * COALESCE(vp.frete, 0) ELSE 0 END AS frete_alocado
                 FROM vendas_itens vi JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
                 WHERE vp.data >= $1::date AND vp.data < ($2::date + 1) AND vp.status != 'cancelado'
-                  AND ($3::int IS NULL OR vp.loja_id = $3)
+                  {loja_filtro_sql}
                 -- branch PDV intencionalmente sem filtro de loja: tabela morta (0 linhas em producao)
                 UNION ALL
                 SELECT pi.produto_codigo AS sku, pi.quantidade AS quantidade, pi.valor_total AS valor_total,
@@ -456,7 +503,7 @@ def ranking_produtos(dias=30, loja_id=None, data_inicio=None, data_fim=None):
             ) unificado
             WHERE sku IS NOT NULL AND sku != ''
             GROUP BY sku
-        """, di, df, loja_id)
+        """, di, df, loja_filtro_val)
         if not vendas_rows:
             return []
         skus = [r["sku"] for r in vendas_rows]
@@ -509,7 +556,7 @@ def ranking_produtos(dias=30, loja_id=None, data_inicio=None, data_fim=None):
 
 # ── 18c. Tendencia e risco de ruptura por produto ──
 
-def produtos_tendencia(dias=30, loja_id=None, data_inicio=None, data_fim=None):
+def produtos_tendencia(dias=30, loja_id=None, data_inicio=None, data_fim=None, loja_ids=None):
     """Crescimento de vendas por SKU: periodo atual vs periodo anterior de
     mesmo tamanho. anterior=0 com atual>0 vira crescimento_pct=None (produto
     novo/reativado, sem base de comparacao pra inventar percentual) — mesma
@@ -520,6 +567,12 @@ def produtos_tendencia(dias=30, loja_id=None, data_inicio=None, data_fim=None):
     tamanho (ex: atual=01/08-08/08 -> anterior=24/07-31/07)."""
     di, df, dias_equiv = _periodo(dias, data_inicio, data_fim)
     di_anterior = di - timedelta(days=dias_equiv)
+    if loja_ids is not None:
+        loja_filtro_sql = "AND vp.loja_id = ANY($4::int[])"
+        loja_filtro_val = list(loja_ids)
+    else:
+        loja_filtro_sql = "AND ($4::int IS NULL OR vp.loja_id = $4)"
+        loja_filtro_val = loja_id
     async def _go():
         db = await get_db()
         rows = await db.fetch(f"""
@@ -530,9 +583,9 @@ def produtos_tendencia(dias=30, loja_id=None, data_inicio=None, data_fim=None):
             FROM vendas_itens vi JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
             WHERE vp.data >= $3::date AND vp.data < ($2::date + 1) AND vp.status != 'cancelado'
               AND vi.sku IS NOT NULL AND vi.sku != ''
-              AND ($4::int IS NULL OR vp.loja_id = $4)
+              {loja_filtro_sql}
             GROUP BY vi.sku
-        """, di, df, di_anterior, loja_id)
+        """, di, df, di_anterior, loja_filtro_val)
         return [dict(r) for r in (rows or [])]
     try:
         linhas = run_async(_go())
@@ -554,24 +607,32 @@ def produtos_tendencia(dias=30, loja_id=None, data_inicio=None, data_fim=None):
     return resultado
 
 
-def risco_ruptura(dias=30, loja_id=None, data_inicio=None, data_fim=None):
+def risco_ruptura(dias=30, loja_id=None, data_inicio=None, data_fim=None, loja_ids=None):
     """Produtos vendendo bem MAS com estoque acabando — velocidade de venda
     alta, estoque baixo. Diferente de 'parado' (zero venda) e de rupturas()
     (zero estoque, ja consumada) — aqui e' o alerta ANTES de zerar."""
     dias = max(1, int(dias or 30))
     di, df, dias_equiv = _periodo(dias, data_inicio, data_fim)
+    if loja_ids is not None:
+        loja_filtro_sql = "vp.loja_id = ANY($3::int[])"
+        loja_filtro_sql_estoque = "e.loja_id = ANY($3::int[])"
+        loja_filtro_val = list(loja_ids)
+    else:
+        loja_filtro_sql = "($3::int IS NULL OR vp.loja_id = $3)"
+        loja_filtro_sql_estoque = "($3::int IS NULL OR e.loja_id = $3)"
+        loja_filtro_val = loja_id
     async def _go():
         db = await get_db()
         rows = await db.fetch(f"""
             SELECT vi.sku, MAX(vi.descricao) AS descricao, SUM(vi.quantidade) AS qtd_vendida,
                    (SELECT COALESCE(SUM(e.quantidade), 0) FROM estoque_lojas e
-                    WHERE e.sku = vi.sku AND ($3::int IS NULL OR e.loja_id = $3)) AS estoque_atual
+                    WHERE e.sku = vi.sku AND {loja_filtro_sql_estoque}) AS estoque_atual
             FROM vendas_itens vi JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
             WHERE vp.data >= $1::date AND vp.data < ($2::date + 1) AND vp.status != 'cancelado'
               AND vi.sku IS NOT NULL AND vi.sku != ''
-              AND ($3::int IS NULL OR vp.loja_id = $3)
+              AND {loja_filtro_sql}
             GROUP BY vi.sku
-        """, di, df, loja_id)
+        """, di, df, loja_filtro_val)
         return [dict(r) for r in (rows or [])]
     try:
         linhas = run_async(_go())

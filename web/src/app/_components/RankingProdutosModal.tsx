@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { api } from "@/lib/api";
 import type {
-  RankingProdutoItem, ProdutoTendenciaItem, CurvaAbcItem, EstoqueParadoItem, RiscoRupturaItem,
+  RankingProdutoItem, ProdutoTendenciaItem, CurvaAbcItem, EstoqueParadoItem, RiscoRupturaItem, TipoLoja,
 } from "@/lib/api";
 import TabBar from "./TabBar";
 import LoadingState from "./LoadingState";
@@ -89,7 +89,7 @@ function fmtData(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-export default function RankingProdutosModal({ onClose, lojaId, inline }: { onClose?: () => void; lojaId?: string; inline?: boolean }) {
+export default function RankingProdutosModal({ onClose, lojaId, inline, tipoLoja }: { onClose?: () => void; lojaId?: string; inline?: boolean; tipoLoja?: TipoLoja }) {
   const [dataFim, setDataFim] = useState(() => fmtData(new Date()));
   const [dataInicio, setDataInicio] = useState(() => {
     const d = new Date();
@@ -117,22 +117,22 @@ export default function RankingProdutosModal({ onClose, lojaId, inline }: { onCl
     const tarefas: Promise<unknown>[] =
       categoria === "vendas"
         ? [
-            api.relatorioRankingProdutos(dias, lojaId, dataInicio, dataFim).then((r) => setRanking(r.itens || [])),
-            api.relatorioProdutosTendencia(dias, lojaId, dataInicio, dataFim).then(setTendencia),
+            api.relatorioRankingProdutos(dias, lojaId, dataInicio, dataFim, tipoLoja).then((r) => setRanking(r.itens || [])),
+            api.relatorioProdutosTendencia(dias, lojaId, dataInicio, dataFim, tipoLoja).then(setTendencia),
           ]
         : categoria === "lucratividade"
         ? [
-            api.relatorioRankingProdutos(dias, lojaId, dataInicio, dataFim).then((r) => setRanking(r.itens || [])),
-            api.relatorioCurvas(dias, lojaId, dataInicio, dataFim).then((r) => setAbc(r.itens || [])),
+            api.relatorioRankingProdutos(dias, lojaId, dataInicio, dataFim, tipoLoja).then((r) => setRanking(r.itens || [])),
+            api.relatorioCurvas(dias, lojaId, dataInicio, dataFim, tipoLoja).then((r) => setAbc(r.itens || [])),
           ]
         : [
-            api.relatorioEstoqueParado(dias, 15, lojaId, dataInicio, dataFim).then(setParado),
-            api.relatorioRiscoRuptura(dias, lojaId, dataInicio, dataFim).then(setRuptura),
+            api.relatorioEstoqueParado(dias, 15, lojaId, dataInicio, dataFim, tipoLoja).then(setParado),
+            api.relatorioRiscoRuptura(dias, lojaId, dataInicio, dataFim, tipoLoja).then(setRuptura),
           ];
     Promise.all(tarefas)
       .catch((e) => setErro(e instanceof Error ? e.message : "Erro ao carregar ranking"))
       .finally(() => setLoading(false));
-  }, [categoria, dias, lojaId, dataInicio, dataFim]);
+  }, [categoria, dias, lojaId, dataInicio, dataFim, tipoLoja]);
 
   const trocarCategoria = (novaCategoria: string) => {
     const cat = novaCategoria as Categoria;

@@ -456,5 +456,152 @@ class TestRelatorios(unittest.TestCase):
 
         self.assertEqual([i["loja_id"] for i in itens], [2, 1])
 
+    # ── loja_ids (lista) — modo "todas as lojas de um tipo" do dashboard ──
+    # (aba "Virtuais": agrega todas as lojas virtuais em vez de uma so' ou
+    # todas — ver routes/relatorios.py::_resolver_loja_ids)
+
+    def test_vendas_loja_ids_repassa_pro_union_vendas(self):
+        with patch("core.relatorios._union_vendas") as mock_union:
+            mock_union.return_value = {"total": 0, "quantidade": 0, "diarias_bling": [], "diarias_pdv": []}
+            rel.vendas(30, loja_ids=[1, 2])
+            mock_union.assert_called_once_with(30, None, None, None, loja_ids=[1, 2])
+
+    def test_loja_ids_lista_vazia_filtra_pra_nada_em_vez_de_ignorar_filtro(self):
+        """loja_ids=[] (ex: tipo_loja='virtual' sem nenhuma loja virtual ativa)
+        precisa filtrar pra ZERO resultados — nao pode cair silenciosamente
+        no modo "sem filtro" (loja_ids e' falsy em Python, entao um `if
+        loja_ids:` ingenuo trata [] igual a None). Distingue via `is not
+        None`, nao truthiness."""
+        self.assertEqual(rel._loja_where_bling(None, loja_ids=[]), " AND FALSE")
+        self.assertEqual(rel._loja_where_pdv(None, loja_ids=[]), " AND FALSE")
+        self.assertEqual(rel._loja_where_estoque(None, loja_ids=[]), " AND FALSE")
+
+    @patch("core.relatorios.get_db")
+    def test_ranking_produtos_loja_ids_vazia_nao_cai_no_modo_legado(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = []
+        mock_get_db.return_value = fake_db
+
+        self.assertEqual(rel.ranking_produtos(30, loja_id=999, loja_ids=[]), [])
+
+        primeira_chamada = fake_db.fetch.call_args_list[0]
+        self.assertIn("= ANY($3::int[])", primeira_chamada.args[0])
+        self.assertEqual(primeira_chamada.args[3], [])
+
+    @patch("core.relatorios.get_db")
+    def test_estoque_loja_ids_resolve_nomes_e_usa_in(self, mock_get_db):
+        """loja_ids tem prioridade sobre loja_id quando ambos vierem — cada id
+        e' resolvido pro nome efetivo (mesma logica de loja_id unico) e o
+        filtro vira um IN (...) em vez de igualdade."""
+        fake_db = AsyncMock()
+        fake_db.fetchval.side_effect = [5, 1, 0]  # total, baixo_estoque, ruptura
+        mock_get_db.return_value = fake_db
+        with patch("core.relatorios.loja_efetiva", side_effect=lambda s: {"1": "Loja Um", "2": "Loja Dois"}[s]):
+            r = rel.estoque(loja_id=999, loja_ids=[1, 2])
+
+        self.assertEqual(r["total_itens"], 5)
+        sql_total = fake_db.fetchval.call_args_list[0].args[0]
+        self.assertIn("e.loja IN ('Loja Um','Loja Dois')", sql_total)
+        self.assertNotIn("999", sql_total)
+
+    @patch("core.relatorios.get_db")
+    def test_clientes_loja_ids_usa_any_em_vez_de_igualdade(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetchval.side_effect = [3, 1]
+        fake_db.fetch.return_value = []
+        mock_get_db.return_value = fake_db
+
+        r = rel.clientes(30, loja_id=999, loja_ids=[5, 6])
+
+        self.assertEqual(r["total"], 3)
+        sql_total, arg_total = fake_db.fetchval.call_args_list[0].args[0], fake_db.fetchval.call_args_list[0].args[1]
+        self.assertIn("ANY($1::int[])", sql_total)
+        self.assertEqual(arg_total, [5, 6])
+
+    @patch("core.relatorios.get_db")
+    def test_fluxo_caixa_loja_ids_usa_any(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetchval.return_value = 0
+        mock_get_db.return_value = fake_db
+
+        rel.fluxo_caixa(30, loja_id=999, loja_ids=[5, 6])
+
+        sqls = [call.args[0] for call in fake_db.fetchval.call_args_list]
+        self.assertTrue(any("ANY(ARRAY[5,6]::int[])" in sql for sql in sqls))
+        self.assertFalse(any("loja_id = 999" in sql for sql in sqls))
+
+    @patch("core.relatorios.get_db")
+    def test_ranking_produtos_loja_ids_usa_any_em_vez_de_loja_id_unico(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetch.side_effect = [
+            [{"sku": "SKU-A", "quantidade": 10, "receita": 1000.0, "comissao": 0.0, "frete": 0.0}],
+            [{"sku": "SKU-A", "descricao": "Produto A", "preco_custo": 30.0}],
+        ]
+        mock_get_db.return_value = fake_db
+
+        itens = rel.ranking_produtos(30, loja_id=999, loja_ids=[1, 2, 3])
+
+        self.assertEqual(len(itens), 1)
+        primeira_chamada = fake_db.fetch.call_args_list[0]
+        self.assertIn("= ANY($3::int[])", primeira_chamada.args[0])
+        self.assertEqual(primeira_chamada.args[3], [1, 2, 3])
+
+    @patch("core.relatorios.get_db")
+    def test_ranking_produtos_sem_loja_ids_mantem_modo_legado(self, mock_get_db):
+        """Sem loja_ids (so' loja_id singular ou nenhum), a query continua
+        exatamente como antes — modo legado nao pode quebrar."""
+        fake_db = AsyncMock()
+        fake_db.fetch.side_effect = [
+            [{"sku": "SKU-A", "quantidade": 10, "receita": 1000.0, "comissao": 0.0, "frete": 0.0}],
+            [{"sku": "SKU-A", "descricao": "Produto A", "preco_custo": 30.0}],
+        ]
+        mock_get_db.return_value = fake_db
+
+        rel.ranking_produtos(30, loja_id=7)
+
+        primeira_chamada = fake_db.fetch.call_args_list[0]
+        self.assertIn("($3::int IS NULL OR vp.loja_id = $3)", primeira_chamada.args[0])
+        self.assertEqual(primeira_chamada.args[3], 7)
+
+    @patch("core.relatorios.get_db")
+    def test_curvas_loja_ids_usa_any_em_vez_de_loja_id_unico(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = []
+        mock_get_db.return_value = fake_db
+
+        rel.curvas(90, loja_id=999, loja_ids=[1, 2])
+
+        sql, args = fake_db.fetch.call_args.args[0], fake_db.fetch.call_args.args[1:]
+        self.assertIn("vp.loja_id = ANY($3::int[])", sql)
+        self.assertEqual(args[-1], [1, 2])
+
+    @patch("core.relatorios.get_db")
+    def test_produtos_tendencia_loja_ids_usa_any_em_vez_de_loja_id_unico(self, mock_get_db):
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = []
+        mock_get_db.return_value = fake_db
+
+        rel.produtos_tendencia(30, loja_id=999, loja_ids=[1, 2])
+
+        sql, args = fake_db.fetch.call_args.args[0], fake_db.fetch.call_args.args[1:]
+        self.assertIn("vp.loja_id = ANY($4::int[])", sql)
+        self.assertEqual(args[-1], [1, 2])
+
+    @patch("core.relatorios.get_db")
+    def test_risco_ruptura_loja_ids_usa_any_nos_dois_lugares(self, mock_get_db):
+        """risco_ruptura filtra loja em DOIS pontos da query (venda e saldo de
+        estoque) — os dois precisam trocar pra ANY(...) junto, senao a
+        subquery de estoque continua olhando pra todas as lojas."""
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = []
+        mock_get_db.return_value = fake_db
+
+        rel.risco_ruptura(30, loja_id=999, loja_ids=[1, 2])
+
+        sql, args = fake_db.fetch.call_args.args[0], fake_db.fetch.call_args.args[1:]
+        self.assertIn("vp.loja_id = ANY($3::int[])", sql)
+        self.assertIn("e.loja_id = ANY($3::int[])", sql)
+        self.assertEqual(args[-1], [1, 2])
+
 
 if __name__=="__main__":unittest.main(verbosity=2)

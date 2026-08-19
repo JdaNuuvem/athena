@@ -111,5 +111,60 @@ class TestRankingProdutosRotaComRestricaoDeLoja(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
 
 
+class TestTipoLojaAgregaTodasAsLojasDoTipo(unittest.TestCase):
+    """?tipo_loja=X (ex: "virtual") resolve pra lista de loja_ids daquele
+    tipo e tem prioridade sobre loja_id singular — usado pela aba "Virtuais"
+    do dashboard pra agregar todas as lojas Shopee de uma vez (ver
+    routes/relatorios.py::_resolver_loja_ids)."""
+
+    def setUp(self):
+        self.client = _app()
+        self.master = {"Authorization": "Bearer " + _TEST_TOKEN}
+
+    @patch("core.lojas.listar_ids_por_tipo", return_value=[10, 11])
+    @patch("core.relatorios.vendas", return_value={"total": 0, "quantidade": 0, "diarias": [], "periodo_dias": 30})
+    def test_tipo_loja_resolve_ids_e_ignora_loja_id_singular_em_vendas(self, mock_vendas, mock_listar):
+        r = self.client.get("/api/relatorios/vendas?loja_id=999&tipo_loja=virtual", headers=self.master)
+        self.assertEqual(r.status_code, 200)
+        mock_listar.assert_called_once_with("virtual")
+        _, kwargs = mock_vendas.call_args
+        self.assertEqual(kwargs.get("loja_ids"), [10, 11])
+
+    @patch("core.lojas.listar_ids_por_tipo", return_value=[10, 11])
+    @patch("core.relatorios.estoque", return_value={"total_itens": 0, "baixo_estoque": 0, "ruptura": 0})
+    def test_tipo_loja_em_estoque(self, mock_estoque, mock_listar):
+        r = self.client.get("/api/relatorios/estoque?tipo_loja=virtual", headers=self.master)
+        self.assertEqual(r.status_code, 200)
+        _, kwargs = mock_estoque.call_args
+        self.assertEqual(kwargs.get("loja_ids"), [10, 11])
+
+    @patch("core.lojas.listar_ids_por_tipo", return_value=[10, 11])
+    @patch("core.relatorios.clientes", return_value={"total": 0, "novos": 0, "top": [], "periodo_dias": 30})
+    def test_tipo_loja_em_clientes(self, mock_clientes, mock_listar):
+        r = self.client.get("/api/relatorios/clientes?tipo_loja=virtual", headers=self.master)
+        self.assertEqual(r.status_code, 200)
+        _, kwargs = mock_clientes.call_args
+        self.assertEqual(kwargs.get("loja_ids"), [10, 11])
+
+    @patch("core.lojas.listar_ids_por_tipo", return_value=[10, 11])
+    @patch("core.relatorios.fluxo_caixa", return_value={"entradas": 0, "saidas": 0, "saldo": 0, "periodo_dias": 30})
+    def test_tipo_loja_em_fluxo_caixa(self, mock_fluxo, mock_listar):
+        r = self.client.get("/api/relatorios/fluxo-caixa?tipo_loja=virtual", headers=self.master)
+        self.assertEqual(r.status_code, 200)
+        _, kwargs = mock_fluxo.call_args
+        self.assertEqual(kwargs.get("loja_ids"), [10, 11])
+
+    def test_sem_tipo_loja_modo_legado_nao_muda(self):
+        """Sem tipo_loja na query, loja_ids nao pode ser passado — o modo
+        legado (loja_id unico) precisa continuar identico ao comportamento
+        anterior a essa feature."""
+        with patch("core.relatorios.vendas", return_value={"total": 0, "quantidade": 0, "diarias": [], "periodo_dias": 30}) as mock_vendas:
+            r = self.client.get("/api/relatorios/vendas?loja_id=7", headers=self.master)
+            self.assertEqual(r.status_code, 200)
+            args, kwargs = mock_vendas.call_args
+            self.assertEqual(args[1], 7)
+            self.assertIsNone(kwargs.get("loja_ids"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

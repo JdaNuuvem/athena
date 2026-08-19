@@ -658,6 +658,19 @@ def listar_lojas_shopee() -> list:
     try: return run_async(_go())
     except Exception as e: _log_erro("listar_lojas_shopee", e); return []
 
+def listar_ids_por_tipo(tipo: str) -> list:
+    """IDs de lojas ativas de um `tipo` (ex: 'virtual', 'fisica' — ver
+    ALTER TABLE lojas ADD COLUMN tipo acima). Usado pelo dashboard pra
+    agregar todas as lojas virtuais (Shopee) de uma vez, ignorando o
+    seletor de loja unica (ver routes/relatorios.py::_resolver_loja_ids)."""
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch("SELECT id FROM lojas WHERE tipo = $1 AND ativa = TRUE", tipo)
+        return [r["id"] for r in rows]
+    try: return run_async(_go())
+    except Exception as e: _log_erro("listar_ids_por_tipo", e); return []
+
+
 def obter_credenciais_shopee(loja_id: int) -> dict:
     async def _go():
         db = await get_db()

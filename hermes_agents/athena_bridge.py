@@ -1991,9 +1991,26 @@ def kpi_overview():
         conn = _db_sync(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         periodo = request.args.get("periodo", 30, type=int)
         loja_id = request.args.get("loja_id", type=int)
-        loja_sql = " AND loja_id=%s" if loja_id else ""
-        loja_args = (loja_id,) if loja_id else ()
-        loja_sql_pdv = " AND venda.caixa_id IN (SELECT id FROM pdv_caixas WHERE loja_id=%s)" if loja_id else ""
+        tipo_loja = request.args.get("tipo_loja")
+        # tipo_loja (ex: "virtual") tem prioridade sobre loja_id quando ambos
+        # vierem — modo "todas as lojas virtuais" do dashboard, ignora o
+        # seletor de loja unica (ver aba "Virtuais" em dashboard/page.tsx).
+        loja_ids = None
+        if tipo_loja:
+            from core.lojas import listar_ids_por_tipo
+            loja_ids = listar_ids_por_tipo(tipo_loja)
+        if loja_ids is not None:
+            loja_sql = " AND loja_id = ANY(%s)"
+            loja_args = (loja_ids,)
+            loja_sql_pdv = " AND venda.caixa_id IN (SELECT id FROM pdv_caixas WHERE loja_id = ANY(%s))"
+        elif loja_id:
+            loja_sql = " AND loja_id=%s"
+            loja_args = (loja_id,)
+            loja_sql_pdv = " AND venda.caixa_id IN (SELECT id FROM pdv_caixas WHERE loja_id=%s)"
+        else:
+            loja_sql = ""
+            loja_args = ()
+            loja_sql_pdv = ""
         def f(v,d=0): return float(v) if v is not None else d
         try:
             # receita_total/total_pedidos vinham da tabela 'vendas', que so'
@@ -2038,7 +2055,7 @@ def kpi_overview():
             # Shopee/i9Logic ja gravam loja_id certo no sync, filtrar aqui
             # separa loja virtual de fisica sem checar tipo em lugar nenhum.
             from core.relatorios import ranking_produtos
-            ranking = ranking_produtos(periodo, loja_id or None)
+            ranking = ranking_produtos(periodo, loja_ids=loja_ids) if loja_ids is not None else ranking_produtos(periodo, loja_id or None)
             top10 = sorted(ranking, key=lambda r: r.get("receita", 0), reverse=True)[:10]
             top_skus = [
                 {"sku": r["sku"], "nome": r["descricao"], "valor": r["receita"], "margem": r["margem_pct"],

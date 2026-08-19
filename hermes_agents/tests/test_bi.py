@@ -170,7 +170,9 @@ class TestEstoqueParado(unittest.TestCase):
 
         bi.estoque_parado(60, 10, loja_id=4)
 
-        self.assertEqual(fake_db.fetch.call_args.args[1:], (60, 4))
+        hoje = date.today()
+        di = hoje - timedelta(days=60)
+        self.assertEqual(fake_db.fetch.call_args.args[1:], (di, hoje, 4))
 
     @patch("core.bi.get_db")
     def test_estoque_parado_sem_loja_id_mantem_comportamento_atual(self, mock_get_db):
@@ -180,7 +182,25 @@ class TestEstoqueParado(unittest.TestCase):
 
         bi.estoque_parado(60, 10)
 
-        self.assertEqual(fake_db.fetch.call_args.args[1:], (60, None))
+        hoje = date.today()
+        di = hoje - timedelta(days=60)
+        self.assertEqual(fake_db.fetch.call_args.args[1:], (di, hoje, None))
+
+    @patch("core.bi.get_db")
+    def test_estoque_parado_loja_ids_usa_any_em_vez_de_loja_id_unico(self, mock_get_db):
+        """loja_ids (ex: tipo_loja='virtual' no dashboard) tem prioridade
+        sobre loja_id — filtra por ANY(...) tanto no saldo de estoque quanto
+        na subquery de venda, ignorando loja_id singular quando ambos vierem."""
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = []
+        mock_get_db.return_value = fake_db
+
+        bi.estoque_parado(60, 10, loja_id=999, loja_ids=[1, 2, 3])
+
+        sql, args = fake_db.fetch.call_args.args[0], fake_db.fetch.call_args.args[1:]
+        self.assertIn("e.loja_id = ANY($3::int[])", sql)
+        self.assertIn("p.loja_id = ANY($3::int[])", sql)
+        self.assertEqual(args[-1], [1, 2, 3])
 
 
 if __name__ == "__main__":

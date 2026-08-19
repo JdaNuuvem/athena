@@ -490,16 +490,26 @@ def ml_recomendacoes(dias: int = 90, minimo_ocorrencias: int = 3) -> list:
 
 # ── Capital parado em estoque ──
 
-def estoque_parado(dias: int = 60, limite: int = 10, loja_id: int = None, data_inicio=None, data_fim=None) -> list:
+def estoque_parado(dias: int = 60, limite: int = 10, loja_id: int = None, data_inicio=None, data_fim=None, loja_ids=None) -> list:
     """Produtos com saldo em estoque mas sem nenhuma venda nos ultimos `dias` —
     capital imobilizado parado, calculado cruzando saldo real (estoque_lojas)
     com historico real de venda (vendas_itens/pdv_itens), nada estimado.
 
     Com data_inicio/data_fim explicitos, "sem venda" e' avaliado dentro desse
     range exato em vez de "ultimos N dias a partir de hoje" (veja
-    core/relatorios.py::_periodo para o racional)."""
+    core/relatorios.py::_periodo para o racional). loja_ids (lista) tem
+    prioridade sobre loja_id quando ambos vierem (modo "todas as lojas
+    virtuais/fisicas" do dashboard)."""
     from core.relatorios import _periodo
     di, df, dias_equiv = _periodo(dias, data_inicio, data_fim)
+    if loja_ids is not None:
+        loja_filtro_estoque = "e.loja_id = ANY($3::int[])"
+        loja_filtro_pedidos = "p.loja_id = ANY($3::int[])"
+        loja_filtro_val = list(loja_ids)
+    else:
+        loja_filtro_estoque = "($3::int IS NULL OR e.loja_id = $3)"
+        loja_filtro_pedidos = "($3::int IS NULL OR p.loja_id = $3)"
+        loja_filtro_val = loja_id
     async def _go():
         db = await get_db()
         rows = await db.fetch(f"""
@@ -507,18 +517,18 @@ def estoque_parado(dias: int = 60, limite: int = 10, loja_id: int = None, data_i
             FROM estoque_lojas e
             JOIN catalogo_produtos c ON c.sku = e.sku
             WHERE e.quantidade > 0
-              AND ($3::int IS NULL OR e.loja_id = $3)
+              AND {loja_filtro_estoque}
               AND e.sku NOT IN (
                   SELECT DISTINCT i.sku FROM vendas_itens i JOIN vendas_pedidos p ON p.id = i.pedido_id
                   WHERE p.data >= $1::date AND p.data < ($2::date + 1) AND p.status != 'cancelado' AND i.sku IS NOT NULL
-                    AND ($3::int IS NULL OR p.loja_id = $3)
+                    AND {loja_filtro_pedidos}
                   -- branch PDV intencionalmente sem filtro de loja: tabela morta (0 linhas em producao)
                   UNION
                   SELECT DISTINCT i.produto_codigo FROM pdv_itens i JOIN pdv_vendas v ON v.id = i.venda_id
                   WHERE DATE(v.data) >= $1::date AND DATE(v.data) <= $2::date AND i.produto_codigo IS NOT NULL
               )
             GROUP BY e.sku
-        """, di, df, loja_id)
+        """, di, df, loja_filtro_val)
         return [dict(r) for r in rows]
     try:
         linhas = run_async(_go())

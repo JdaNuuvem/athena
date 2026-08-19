@@ -13,6 +13,19 @@ def _periodo_args():
     return data_inicio, data_fim
 
 
+def _resolver_loja_ids(tipo_loja):
+    """Le `tipo_loja` (ex: "virtual") da query string, se presente, e resolve
+    pra lista de ids de lojas ativas daquele tipo — usado pelo dashboard pra
+    agregar "todas as lojas virtuais" de uma vez, ignorando o loja_id unico
+    do seletor global (tipo_loja tem prioridade sobre loja_id quando ambos
+    vierem). Sem tipo_loja na request, devolve None — sinal pro modo legado
+    (filtro por loja_id unico, comportamento identico ao anterior)."""
+    if not tipo_loja:
+        return None
+    from core.lojas import listar_ids_por_tipo
+    return listar_ids_por_tipo(tipo_loja)
+
+
 @relatorios_bp.route("/vendas", methods=["GET"])
 def rel_vendas():
     from core.rbac import requer_acesso_loja
@@ -22,7 +35,8 @@ def rel_vendas():
         dias = request.args.get("dias", 30, type=int)
         loja_id = request.args.get("loja_id", type=int) or request.args.get("loja", type=int)
         data_inicio, data_fim = _periodo_args()
-        return jsonify(vendas(dias, loja_id, data_inicio, data_fim))
+        loja_ids = _resolver_loja_ids(request.args.get("tipo_loja"))
+        return jsonify(vendas(dias, loja_id, data_inicio, data_fim, loja_ids=loja_ids))
     return _handler()
 
 
@@ -45,7 +59,8 @@ def rel_estoque():
     def _handler():
         from core.relatorios import estoque
         loja_id = request.args.get("loja_id", type=int) or request.args.get("loja", type=int)
-        return jsonify(estoque(loja_id))
+        loja_ids = _resolver_loja_ids(request.args.get("tipo_loja"))
+        return jsonify(estoque(loja_id, loja_ids=loja_ids))
     return _handler()
 
 
@@ -58,7 +73,8 @@ def rel_clientes():
         dias = request.args.get("dias", 90, type=int)
         loja_id = request.args.get("loja_id", type=int) or request.args.get("loja", type=int)
         data_inicio, data_fim = _periodo_args()
-        return jsonify(clientes(dias, loja_id, data_inicio, data_fim))
+        loja_ids = _resolver_loja_ids(request.args.get("tipo_loja"))
+        return jsonify(clientes(dias, loja_id, data_inicio, data_fim, loja_ids=loja_ids))
     return _handler()
 
 
@@ -83,7 +99,8 @@ def rel_fluxo():
         dias = request.args.get("dias", 30, type=int)
         loja_id = request.args.get("loja_id", type=int) or request.args.get("loja", type=int)
         data_inicio, data_fim = _periodo_args()
-        return jsonify(fluxo_caixa(dias, loja_id, data_inicio, data_fim))
+        loja_ids = _resolver_loja_ids(request.args.get("tipo_loja"))
+        return jsonify(fluxo_caixa(dias, loja_id, data_inicio, data_fim, loja_ids=loja_ids))
     return _handler()
 
 
@@ -173,7 +190,8 @@ def rel_curvas():
         dias = request.args.get("dias", 90, type=int)
         loja_id = request.args.get("loja_id", type=int)
         data_inicio, data_fim = _periodo_args()
-        return jsonify(curvas(dias, loja_id, data_inicio, data_fim))
+        loja_ids = _resolver_loja_ids(request.args.get("tipo_loja"))
+        return jsonify(curvas(dias, loja_id, data_inicio, data_fim, loja_ids=loja_ids))
     return _handler()
 
 
@@ -193,8 +211,9 @@ def rel_ranking_produtos():
         dias = request.args.get("dias", 30, type=int)
         loja_id = request.args.get("loja_id", type=int)
         data_inicio, data_fim = _periodo_args()
+        loja_ids = _resolver_loja_ids(request.args.get("tipo_loja"))
         _, _, dias_equiv = _periodo(dias, data_inicio, data_fim)
-        return jsonify({"itens": ranking_produtos(dias, loja_id, data_inicio, data_fim), "periodo_dias": dias_equiv})
+        return jsonify({"itens": ranking_produtos(dias, loja_id, data_inicio, data_fim, loja_ids=loja_ids), "periodo_dias": dias_equiv})
     return _handler()
 
 
@@ -219,7 +238,8 @@ def rel_estoque_parado():
         limite = request.args.get("limite", 15, type=int)
         loja_id = request.args.get("loja_id", type=int)
         data_inicio, data_fim = _periodo_args()
-        return jsonify(estoque_parado(dias, limite, loja_id, data_inicio, data_fim))
+        loja_ids = _resolver_loja_ids(request.args.get("tipo_loja"))
+        return jsonify(estoque_parado(dias, limite, loja_id, data_inicio, data_fim, loja_ids=loja_ids))
     return _handler()
 
 
@@ -232,7 +252,8 @@ def rel_produtos_tendencia():
         dias = request.args.get("dias", 30, type=int)
         loja_id = request.args.get("loja_id", type=int)
         data_inicio, data_fim = _periodo_args()
-        return jsonify(produtos_tendencia(dias, loja_id, data_inicio, data_fim))
+        loja_ids = _resolver_loja_ids(request.args.get("tipo_loja"))
+        return jsonify(produtos_tendencia(dias, loja_id, data_inicio, data_fim, loja_ids=loja_ids))
     return _handler()
 
 
@@ -245,7 +266,8 @@ def rel_risco_ruptura():
         dias = request.args.get("dias", 30, type=int)
         loja_id = request.args.get("loja_id", type=int)
         data_inicio, data_fim = _periodo_args()
-        return jsonify(risco_ruptura(dias, loja_id, data_inicio, data_fim))
+        loja_ids = _resolver_loja_ids(request.args.get("tipo_loja"))
+        return jsonify(risco_ruptura(dias, loja_id, data_inicio, data_fim, loja_ids=loja_ids))
     return _handler()
 
 
