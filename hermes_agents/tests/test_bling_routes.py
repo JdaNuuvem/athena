@@ -97,5 +97,31 @@ class TestBlingFlaskRoutes(unittest.TestCase):
             mock_fn.assert_called_once()
 
 
+class TestBlingRotasRemovidas(unittest.TestCase):
+    """Confirma que as rotas duplicadas removidas nao respondem mais."""
+
+    @classmethod
+    def setUpClass(cls):
+        from flask import Flask
+        from routes.integrations import bling_bp
+        app = Flask(__name__)
+        app.config["TESTING"] = True
+        app.register_blueprint(bling_bp)
+        cls.client = app.test_client()
+
+    def test_rota_antiga_sync_products_nao_existe(self):
+        rv = self.client.post("/api/bling/sync/products")
+        self.assertEqual(rv.status_code, 404)
+
+    def test_rota_antiga_sync_orders_nao_existe(self):
+        rv = self.client.post("/api/bling/sync/orders")
+        self.assertEqual(rv.status_code, 404)
+
+    def test_rota_nova_produtos_sincronizar_existe(self):
+        with patch("routes.integrations.sincronizar_produtos", return_value={"sincronizados": 0, "erros": []}):
+            rv = self.client.post("/api/bling/produtos/sincronizar")
+            self.assertEqual(rv.status_code, 200)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
