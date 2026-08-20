@@ -251,7 +251,7 @@ export const api = {
   // Bling
   blingStatus: () => request<{ autenticado: boolean; client_id_setado: boolean; auth_url: string }>("/api/bling/status"),
   blingSync: () => request<{ produtos: { sincronizados: number; erro?: string }; pedidos: { sincronizados: number; erro?: string } }>("/api/bling/sync", { method: "POST" }),
-  blingSyncProducts: () => request<{ count: number; errors: string[] }>("/api/bling/sync/products", { method: "POST" }),
+  blingSyncProducts: () => request<{ sincronizados: number; pais_resolvidos: number; erros: string[] }>("/api/bling/produtos/sincronizar", { method: "POST" }),
   blingSyncOrders: () => request<{ count: number; errors: string[] }>("/api/bling/sync/orders", { method: "POST" }),
   blingSyncInvoices: () => request<{ count: number; errors: string[] }>("/api/bling/sync/invoices", { method: "POST" }),
   blingSyncReceivables: () => request<{ count: number; errors: string[] }>("/api/bling/sync/receivables", { method: "POST" }),
