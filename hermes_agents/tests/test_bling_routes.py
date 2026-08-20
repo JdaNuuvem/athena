@@ -130,6 +130,34 @@ class TestBlingFlaskRoutes(unittest.TestCase):
         rv = self.client.get("/api/bling/plano-contas")
         self.assertEqual(rv.status_code, 200)
 
+    def test_situacoes_listar_route(self):
+        rv = self.client.get("/api/bling/situacoes")
+        self.assertEqual(rv.status_code, 200)
+
+    def test_situacoes_sincronizar_route(self):
+        with patch("routes.integrations.sincronizar_situacoes_bling", return_value={"sync": 3}) as mock_sync:
+            rv = self.client.post("/api/bling/situacoes/sincronizar")
+            self.assertEqual(rv.status_code, 200)
+            mock_sync.assert_called_once()
+
+    def test_situacoes_criar_route(self):
+        with patch("routes.integrations.criar_situacao", return_value={"data": {"id": 99}}) as mock_criar:
+            rv = self.client.post("/api/bling/situacoes", json={"nome": "Em Análise", "cor": "0000FF"})
+            self.assertEqual(rv.status_code, 200)
+            mock_criar.assert_called_once_with({"nome": "Em Análise", "cor": "0000FF"})
+
+    def test_situacoes_atualizar_route(self):
+        with patch("routes.integrations.atualizar_situacao", return_value={"data": {}}) as mock_atualizar:
+            rv = self.client.put("/api/bling/situacoes/42", json={"nome": "Pago"})
+            self.assertEqual(rv.status_code, 200)
+            mock_atualizar.assert_called_once_with(42, {"nome": "Pago"})
+
+    def test_situacoes_deletar_route(self):
+        with patch("routes.integrations.deletar_situacao", return_value={}) as mock_deletar:
+            rv = self.client.delete("/api/bling/situacoes/42")
+            self.assertEqual(rv.status_code, 200)
+            mock_deletar.assert_called_once_with(42)
+
 
 class TestBlingRotasRemovidas(unittest.TestCase):
     """Confirma que as rotas duplicadas removidas nao respondem mais.

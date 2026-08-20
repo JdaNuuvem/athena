@@ -550,6 +550,18 @@ def sincronizar_canais_bling(pagina: int = 1, limite: int = 100) -> dict:
         return {"error": str(e)}
 
 
+async def ensure_bling_situacoes_table(db):
+    """CREATE TABLE IF NOT EXISTS de bling_situacoes — usado tanto pelo sync
+    (POST /situacoes/sincronizar) quanto pela leitura (GET /situacoes), mesmo
+    padrao de ensure_bling_canais_table: garante a tabela sob demanda antes do
+    SELECT, evitando "relation bling_situacoes does not exist" (500) numa
+    instalacao nova / banco que nunca rodou o sync de situacoes."""
+    await db.execute("""CREATE TABLE IF NOT EXISTS bling_situacoes (
+        id SERIAL PRIMARY KEY, bling_id BIGINT UNIQUE, nome VARCHAR(200),
+        cor VARCHAR(20), modulo VARCHAR(50), created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW())""")
+
+
 def sincronizar_situacoes_bling(pagina: int = 1, limite: int = 100) -> dict:
     """Sync de situacoes (status customizados) cadastradas no Bling, usadas como
     filtro/referencia nas telas de Pedidos de Venda, Pedidos de Compra e Notas Fiscais."""
@@ -565,10 +577,7 @@ def sincronizar_situacoes_bling(pagina: int = 1, limite: int = 100) -> dict:
 
     async def _go():
         db = await get_db()
-        await db.execute("""CREATE TABLE IF NOT EXISTS bling_situacoes (
-            id SERIAL PRIMARY KEY, bling_id BIGINT UNIQUE, nome VARCHAR(200),
-            cor VARCHAR(20), modulo VARCHAR(50), created_at TIMESTAMP DEFAULT NOW(),
-            updated_at TIMESTAMP DEFAULT NOW())""")
+        await ensure_bling_situacoes_table(db)
         total = 0
         for situacao in dados:
             try:

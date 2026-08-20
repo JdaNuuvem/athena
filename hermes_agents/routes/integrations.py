@@ -521,6 +521,8 @@ from bling_erp import (
     listar_webhooks, criar_webhook, deletar_webhook, registrar_webhook,
     listar_notificacoes, confirmar_leitura_notificacao,
     sincronizar_canais_bling, ensure_bling_canais_table,
+    sincronizar_situacoes_bling, ensure_bling_situacoes_table,
+    criar_situacao, atualizar_situacao, deletar_situacao,
 )
 from core.vendas import sincronizar_pedidos_bling
 from core.financeiro import sincronizar_plano_contas_bling
@@ -675,6 +677,42 @@ def api_canais():
 @bling_bp.route("/canais/sincronizar", methods=["POST"])
 def api_sincronizar_canais():
     return jsonify(sincronizar_canais_bling())
+
+
+@bling_bp.route("/situacoes")
+def api_situacoes():
+    async def _go():
+        db = await get_db()
+        await ensure_bling_situacoes_table(db)
+        rows = await db.fetch("SELECT id, bling_id, nome, cor, modulo FROM bling_situacoes ORDER BY nome")
+        return [dict(r) for r in rows]
+    try:
+        return jsonify(run_async(_go()))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@bling_bp.route("/situacoes/sincronizar", methods=["POST"])
+def api_sincronizar_situacoes():
+    return jsonify(sincronizar_situacoes_bling())
+
+
+@bling_bp.route("/situacoes", methods=["POST"])
+def api_criar_situacao():
+    dados = request.get_json(silent=True) or {}
+    return jsonify(criar_situacao(dados))
+
+
+@bling_bp.route("/situacoes/<int:id_situacao>", methods=["PUT"])
+def api_atualizar_situacao(id_situacao):
+    dados = request.get_json(silent=True) or {}
+    return jsonify(atualizar_situacao(id_situacao, dados))
+
+
+@bling_bp.route("/situacoes/<int:id_situacao>", methods=["DELETE"])
+def api_deletar_situacao(id_situacao):
+    return jsonify(deletar_situacao(id_situacao))
+
 
 @bling_bp.route("/plano-contas")
 def api_plano_contas():
