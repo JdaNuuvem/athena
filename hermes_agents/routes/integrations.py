@@ -520,6 +520,7 @@ from bling_erp import (
     resumo_vendas, sincronizar_produtos,
     listar_webhooks, criar_webhook, deletar_webhook, registrar_webhook,
     listar_notificacoes, confirmar_leitura_notificacao,
+    sincronizar_canais_bling,
 )
 from core.vendas import sincronizar_pedidos_bling
 
@@ -652,6 +653,22 @@ def api_categorias():
 @bling_bp.route("/categorias/<int:id_categoria>")
 def api_categoria_detalhe(id_categoria):
     return jsonify(get_categoria(id_categoria))
+
+@bling_bp.route("/canais")
+def api_canais():
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch("SELECT id, bling_id, nome, situacao FROM bling_canais ORDER BY nome")
+        return [dict(r) for r in rows]
+    try:
+        return jsonify(run_async(_go()))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@bling_bp.route("/canais/sincronizar", methods=["POST"])
+def api_sincronizar_canais():
+    return jsonify(sincronizar_canais_bling())
 
 @bling_bp.route("/vendas/<int:id_pedido>")
 def api_pedido_detalhe(id_pedido):

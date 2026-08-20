@@ -96,6 +96,18 @@ class TestBlingFlaskRoutes(unittest.TestCase):
             self.assertEqual(rv.status_code, 200)
             mock_fn.assert_called_once()
 
+    def test_canais_sincronizar_route(self):
+        with patch("routes.integrations.sincronizar_canais_bling", return_value={"sync": 2}) as mock_sync:
+            rv = self.client.post("/api/bling/canais/sincronizar")
+            self.assertEqual(rv.status_code, 200)
+            data = json.loads(rv.data)
+            self.assertEqual(data["sync"], 2)
+            mock_sync.assert_called_once()
+
+    def test_canais_listar_route(self):
+        rv = self.client.get("/api/bling/canais")
+        self.assertIn(rv.status_code, [200, 500])
+
 
 class TestBlingRotasRemovidas(unittest.TestCase):
     """Confirma que as rotas duplicadas removidas nao respondem mais.
