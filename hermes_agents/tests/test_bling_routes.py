@@ -16,7 +16,7 @@ fake_conn.__aenter__ = AsyncMock(return_value=fake_conn)
 fake_conn.__aexit__ = AsyncMock(return_value=None)
 fake_pool.acquire.return_value = fake_conn
 
-patcher = patch("asyncpg.create_pool", return_value=fake_pool)
+patcher = patch("asyncpg.create_pool", new_callable=AsyncMock, return_value=fake_pool)
 patcher.start()
 
 from routes.integrations import bling_bp
@@ -81,6 +81,14 @@ class TestBlingFlaskRoutes(unittest.TestCase):
         self.assertEqual(rv.status_code, 200)
         data = json.loads(rv.data)
         self.assertIn("bling", data)
+
+    def test_vendas_sincronizar_route_calls_ssot_function(self):
+        with patch("routes.integrations.sincronizar_pedidos_bling", return_value={"sync": 3, "erros": []}) as mock_sync:
+            rv = self.client.post("/api/bling/vendas/sincronizar", json={"pagina": 2, "limite": 50})
+            self.assertEqual(rv.status_code, 200)
+            data = json.loads(rv.data)
+            self.assertEqual(data["sync"], 3)
+            mock_sync.assert_called_once_with(pagina=2, limite=50)
 
 
 if __name__ == "__main__":

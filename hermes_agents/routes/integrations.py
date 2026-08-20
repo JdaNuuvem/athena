@@ -669,7 +669,8 @@ def faturar_venda(id_pedido):
 @integrations_bp.route("/api/integracoes/migrar-tudo", methods=["POST"])
 def migrar_tudo():
     """Orquestra todas as migracoes Bling → SSOT em paralelo."""
-    from bling_erp import sincronizar_produtos, sincronizar_pedidos
+    from bling_erp import sincronizar_produtos
+    from core.vendas import sincronizar_pedidos_bling
     from core.entidades import vincular_cliente_por_documento, migrar_fornecedores_compras
     from core.fiscal import sincronizar_contas_receber_bling, sincronizar_contas_pagar_bling
     import concurrent.futures
@@ -690,7 +691,7 @@ def migrar_tudo():
     # Produtos
     resultados["produtos"] = seguro(sincronizar_produtos, "produtos")
     # Vendas
-    resultados["vendas"] = seguro(lambda: sincronizar_pedidos(pagina=1, limite=100), "vendas")
+    resultados["vendas"] = seguro(lambda: sincronizar_pedidos_bling(pagina=1, limite=100), "vendas")
     # Clientes
     r_c = seguro(vincular_cliente_por_documento, "clientes", "vendas_pedidos", 0)
     r_f = seguro(vincular_cliente_por_documento, "clientes_fiscal", "fiscal_notas_fiscais", 0)
@@ -763,10 +764,11 @@ from bling_erp import (
     get_nfe_detail, get_nfe_xml,
     listar_contatos, get_contato, listar_categorias, get_categoria,
     get_pedido_detalhe, listar_contas_pagar, listar_formas_pagamento,
-    resumo_vendas, sincronizar_produtos, sincronizar_pedidos,
+    resumo_vendas, sincronizar_produtos,
     listar_webhooks, criar_webhook, deletar_webhook,
     listar_notificacoes, confirmar_leitura_notificacao,
 )
+from core.vendas import sincronizar_pedidos_bling
 
 bling_bp = Blueprint("bling_api", __name__, url_prefix="/api/bling")
 
@@ -864,10 +866,9 @@ def api_pedidos():
 @bling_bp.route("/vendas/sincronizar", methods=["POST"])
 def api_sincronizar_pedidos():
     dados = request.get_json(silent=True) or {}
-    return jsonify(sincronizar_pedidos(
-        loja_id=dados.get("loja_id"),
+    return jsonify(sincronizar_pedidos_bling(
         pagina=dados.get("pagina", 1),
-        limite=dados.get("limite", 100)
+        limite=dados.get("limite", 100),
     ))
 
 
