@@ -171,6 +171,16 @@ def listar_categorias(pagina: int = 1, limite: int = 100) -> dict:
 def get_categoria(id_categoria: int) -> dict:
     return _request(f"categorias/produtos/{id_categoria}")
 
+# ── Lojas / Canais de Venda ──
+
+def listar_lojas(pagina: int = 1, limite: int = 100) -> dict:
+    return _request("lojas", {"pagina": pagina, "limite": limite})
+
+# ── Contas Contábeis (Plano de Contas) ──
+
+def listar_contas_contabeis(pagina: int = 1, limite: int = 100) -> dict:
+    return _request("contas/contabeis", {"pagina": pagina, "limite": limite})
+
 # ── Detalhe do Pedido (com itens, frete, parcelas) ──
 
 def get_pedido_detalhe(id_pedido: int) -> dict:

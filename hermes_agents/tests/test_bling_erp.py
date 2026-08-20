@@ -153,6 +153,40 @@ class TestBuscarPedidoPorNumeroLoja(unittest.TestCase):
         self.assertEqual(mock_req.call_count, 2)
 
 
+class TestListarLojas(unittest.TestCase):
+    """Listagem de lojas/canais de venda do Bling."""
+    def setUp(self): bling._TOKEN["access"] = "mock"
+
+    @patch("bling_erp._request")
+    def test_listar_lojas_chama_endpoint_correto(self, mock_request):
+        mock_request.return_value = {"data": []}
+        bling.listar_lojas(pagina=2, limite=50)
+        mock_request.assert_called_once_with("lojas", {"pagina": 2, "limite": 50})
+
+    @patch("bling_erp._request", return_value={"data": [{"id": 1, "nome": "Loja 1"}]})
+    def test_listar_lojas_retorna_resposta(self, mock_request):
+        r = bling.listar_lojas()
+        self.assertIn("data", r)
+        self.assertEqual(r["data"][0]["id"], 1)
+
+
+class TestListarContasContabeis(unittest.TestCase):
+    """Listagem de contas contábeis (plano de contas) do Bling."""
+    def setUp(self): bling._TOKEN["access"] = "mock"
+
+    @patch("bling_erp._request")
+    def test_listar_contas_contabeis_chama_endpoint_correto(self, mock_request):
+        mock_request.return_value = {"data": []}
+        bling.listar_contas_contabeis(pagina=1, limite=100)
+        mock_request.assert_called_once_with("contas/contabeis", {"pagina": 1, "limite": 100})
+
+    @patch("bling_erp._request", return_value={"data": [{"id": 1, "nome": "1.1.01 - Caixa"}]})
+    def test_listar_contas_contabeis_retorna_resposta(self, mock_request):
+        r = bling.listar_contas_contabeis()
+        self.assertIn("data", r)
+        self.assertEqual(r["data"][0]["nome"], "1.1.01 - Caixa")
+
+
 if __name__=="__main__": unittest.main(verbosity=2)
 
 patcher.stop()
