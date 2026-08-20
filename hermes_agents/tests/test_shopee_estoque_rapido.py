@@ -42,7 +42,7 @@ class TestListarGridEstoqueRapido(unittest.TestCase):
         fake_db = AsyncMock()
         fake_db.fetch.side_effect = [
             [{"sku": "SKU1", "nome": "Produto 1"}],                      # sku_rows
-            [{"sku": "SKU1", "shop_id": "222"}],                         # pares (so' tem anuncio na loja 2)
+            [{"sku": "SKU1", "shop_id": "222", "estoque": 0}],           # pares (so' tem anuncio na loja 2)
             [{"sku": "SKU1", "loja": "Loja Fisica X", "quantidade": 25}],  # saldos
         ]
         mock_get_db.return_value = fake_db
@@ -70,6 +70,53 @@ class TestListarGridEstoqueRapido(unittest.TestCase):
     @patch("shopee.estoque_rapido._loja_efetiva_async", new_callable=AsyncMock)
     @patch("shopee.estoque_rapido.listar_lojas_shopee")
     @patch("shopee.estoque_rapido.get_db")
+    def test_sem_saldo_local_usa_estoque_ja_sincronizado_da_shopee(self, mock_get_db, mock_lojas, mock_efetiva):
+        """Achado real: a grade de /estoque/rapido sempre mostrava 0 pra
+        qualquer SKU/loja sem registro em estoque_lojas (cadastro manual do
+        Athena), mesmo quando a Shopee ja tinha reportado o estoque real via
+        sync_produtos (coluna anuncios.estoque, mesmo dado que aparece em
+        /integracoes/shopee/produtos). Agora usa esse valor como estoque
+        inicial em vez de 0 fabricado."""
+        mock_lojas.return_value = [{"id": 1, "nome": "Loja A", "shopee_shop_id": "111", "shopee_shop_name": "Shop A"}]
+        mock_efetiva.side_effect = lambda nome: nome
+
+        fake_db = AsyncMock()
+        fake_db.fetch.side_effect = [
+            [{"sku": "SKU1", "nome": "Produto 1"}],                          # sku_rows
+            [{"sku": "SKU1", "shop_id": "111", "estoque": 42}],              # pares (com estoque da Shopee)
+            [],                                                              # saldos: nenhum registro em estoque_lojas
+        ]
+        mock_get_db.return_value = fake_db
+
+        r = estoque_rapido.listar_grid_estoque_rapido(skus=["SKU1"])
+
+        self.assertEqual(r["produtos"][0]["estoque"], {1: 42.0})
+
+    @patch("shopee.estoque_rapido._loja_efetiva_async", new_callable=AsyncMock)
+    @patch("shopee.estoque_rapido.listar_lojas_shopee")
+    @patch("shopee.estoque_rapido.get_db")
+    def test_com_saldo_local_ignora_estoque_da_shopee(self, mock_get_db, mock_lojas, mock_efetiva):
+        """Saldo em estoque_lojas (ajustado manualmente/via ledger) e' a fonte
+        de verdade quando existe — o fallback da Shopee so' entra na ausencia
+        dele, nao sobrescreve um saldo ja gerenciado pelo Athena."""
+        mock_lojas.return_value = [{"id": 1, "nome": "Loja A", "shopee_shop_id": "111", "shopee_shop_name": "Shop A"}]
+        mock_efetiva.side_effect = lambda nome: nome
+
+        fake_db = AsyncMock()
+        fake_db.fetch.side_effect = [
+            [{"sku": "SKU1", "nome": "Produto 1"}],
+            [{"sku": "SKU1", "shop_id": "111", "estoque": 42}],
+            [{"sku": "SKU1", "loja": "Loja A", "quantidade": 7}],
+        ]
+        mock_get_db.return_value = fake_db
+
+        r = estoque_rapido.listar_grid_estoque_rapido(skus=["SKU1"])
+
+        self.assertEqual(r["produtos"][0]["estoque"], {1: 7.0})
+
+    @patch("shopee.estoque_rapido._loja_efetiva_async", new_callable=AsyncMock)
+    @patch("shopee.estoque_rapido.listar_lojas_shopee")
+    @patch("shopee.estoque_rapido.get_db")
     def test_busca_com_paginacao_usa_fetchval_para_total(self, mock_get_db, mock_lojas, mock_efetiva):
         mock_lojas.return_value = [{"id": 1, "nome": "Loja A", "shopee_shop_id": "111", "shopee_shop_name": "Shop A"}]
         mock_efetiva.side_effect = lambda nome: nome
@@ -78,7 +125,7 @@ class TestListarGridEstoqueRapido(unittest.TestCase):
         fake_db.fetchval.return_value = 1
         fake_db.fetch.side_effect = [
             [{"sku": "SKU1", "nome": "Produto 1"}],                # sku_rows (pagina)
-            [{"sku": "SKU1", "shop_id": "111"}],                   # pares
+            [{"sku": "SKU1", "shop_id": "111", "estoque": 0}],     # pares
             [{"sku": "SKU1", "loja": "Loja A", "quantidade": 5}],  # saldos
         ]
         mock_get_db.return_value = fake_db

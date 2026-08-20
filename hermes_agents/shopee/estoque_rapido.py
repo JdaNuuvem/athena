@@ -57,9 +57,15 @@ def listar_grid_estoque_rapido(busca: str = "", pagina: int = 1, por_pagina: int
             return {"lojas": lojas_out, "produtos": [], "total": total}
 
         pares = await db.fetch(
-            "SELECT sku, shop_id FROM anuncios WHERE marketplace = 'shopee' "
+            "SELECT sku, shop_id, estoque FROM anuncios WHERE marketplace = 'shopee' "
             "AND sku = ANY($1) AND shop_id = ANY($2)", skus_pagina, shop_ids)
         pares_set = {(p["sku"], p["shop_id"]) for p in pares}
+        # anuncios.estoque = ultimo valor que a Shopee reportou pro anuncio
+        # (sync_produtos ja mantem isso atualizado). Usado como fallback
+        # quando o SKU/loja nunca teve saldo lancado em estoque_lojas —
+        # achado real: a grade sempre mostrava 0 nesse caso, mesmo com a
+        # Shopee ja tendo estoque real cadastrado.
+        anuncio_estoque_map = {(p["sku"], p["shop_id"]): float(p["estoque"] or 0) for p in pares}
 
         nomes_efetivos = {l["id"]: await _loja_efetiva_async(l["nome"]) for l in lojas}
         nomes_unicos = list(set(nomes_efetivos.values()))
@@ -78,7 +84,10 @@ def listar_grid_estoque_rapido(busca: str = "", pagina: int = 1, por_pagina: int
                     estoque[l["id"]] = None
                 else:
                     nome_efetivo = nomes_efetivos[l["id"]]
-                    estoque[l["id"]] = saldo_map.get((r["sku"], nome_efetivo), 0.0)
+                    saldo = saldo_map.get((r["sku"], nome_efetivo))
+                    if saldo is None:
+                        saldo = anuncio_estoque_map.get((r["sku"], l["shopee_shop_id"]), 0.0)
+                    estoque[l["id"]] = saldo
             produtos.append({"sku": r["sku"], "nome": r["nome"] or r["sku"], "estoque": estoque})
 
         return {"lojas": lojas_out, "produtos": produtos, "total": total}
