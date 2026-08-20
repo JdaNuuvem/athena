@@ -488,9 +488,10 @@ Expected: todos PASS.
 Este passo não é código — é uma ação operacional necessária após o deploy: como o endpoint
 `/webhook/bling/pedido` deixa de existir, se ele estiver de fato cadastrado no painel do Bling
 como callback ativo, os webhooks vão parar de chegar até que alguém chame
-`POST /api/bling/webhook/registrar` (rota existente, `routes/integrations.py:279-283`) para
-registrar `/webhook/bling` como novo callback. Deixar anotado no PR/commit para o usuário
-confirmar isso após o deploy.
+`POST /api/bling/webhook/registrar` (rota em `bling_bp`, `routes/integrations.py:733-742` —
+recriada na revisão final após a Task 5 ter removido, sem substituto, a rota equivalente que
+existia em `integrations_bp`) para registrar `/webhook/bling` como novo callback. Deixar
+anotado no PR/commit para o usuário confirmar isso após o deploy.
 
 - [ ] **Step 9: Commit**
 

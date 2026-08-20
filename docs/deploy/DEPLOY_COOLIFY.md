@@ -70,7 +70,7 @@ curl https://177.7.45.242:8000/api/config/status
 - **Testes**: /api/test/*
 
 ### Webhooks
-- **Bling**: /webhook/bling/pedido
+- **Bling**: /webhook/bling (re-registrar via POST /api/bling/webhook/registrar)
 - **Shopee**: /webhook/shopee/pedido
 
 ---

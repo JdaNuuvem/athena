@@ -518,7 +518,7 @@ from bling_erp import (
     listar_contatos, get_contato, listar_categorias, get_categoria,
     get_pedido_detalhe, listar_contas_pagar, listar_formas_pagamento,
     resumo_vendas, sincronizar_produtos,
-    listar_webhooks, criar_webhook, deletar_webhook,
+    listar_webhooks, criar_webhook, deletar_webhook, registrar_webhook,
     listar_notificacoes, confirmar_leitura_notificacao,
 )
 from core.vendas import sincronizar_pedidos_bling
@@ -728,6 +728,19 @@ def api_criar_webhook():
 @bling_bp.route("/webhooks/<int:id_webhook>", methods=["DELETE"])
 def api_deletar_webhook(id_webhook):
     return jsonify(deletar_webhook(id_webhook))
+
+
+@bling_bp.route("/webhook/registrar", methods=["POST"])
+def api_webhook_registrar():
+    """Re-registra o webhook de pedido do Bling apontando pra /webhook/bling.
+
+    Passo operacional pós-deploy (ver plano Task 6, Step 8): usa o default
+    inteligente de registrar_webhook(), que já resolve a URL certa e o
+    formato JSON esperado pelo Bling, sem exigir que o chamador monte o
+    payload manualmente (diferente de POST /api/bling/webhooks).
+    """
+    dados = request.get_json(silent=True) or {}
+    return jsonify(registrar_webhook(dados.get("tipo", "pedido"), dados.get("url")))
 
 
 @bling_bp.route("/notificacoes")
