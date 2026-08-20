@@ -458,38 +458,6 @@ def sincronizar_produtos() -> dict:
         log(AGENT, f"FATAL sincronizar_produtos: {e}\n{traceback.format_exc()}")
         return {"sincronizados": 0, "erro": str(e)}
 
-def sincronizar_pedidos(loja_id: int = None) -> dict:
-    try:
-        async def _go():
-            db = await get_db()
-            r = listar_pedidos()
-            dados = r.get("data", [])
-            if not dados:
-                return {"erro": r.get("error", "sem dados"), "total": 0}
-            total = 0
-            for p in dados:
-                try:
-                    if not p.get("dataEmissao"): continue
-                    data = p["dataEmissao"][:10]
-                    itens = p.get("itens", [])
-                    for item in itens:
-                        sku = item.get("codigo", "")
-                        qtd = int(item.get("quantidade", 1))
-                        preco = float(item.get("valorUnitario", 0))
-                        receita = float(item.get("valorTotal", 0))
-                        await db.execute("""
-                            INSERT INTO vendas (data, sku, marketplace, loja_id, quantidade, preco_venda, receita_bruta, taxa_marketplace_pct, taxa_marketplace_valor, frete, impostos)
-                            VALUES ($1, $2, 'bling', $3, $4, $5, $6, 0, 0, 0, 0)
-                        """, data, sku, loja_id, qtd, preco, receita)
-                        total += 1
-                except Exception as e:
-                    log(AGENT, f"Erro pedido: {e}")
-            return {"sincronizados": total}
-        return run_async(_go())
-    except Exception as e:
-        import traceback
-        log(AGENT, f"FATAL sincronizar_pedidos: {e}\n{traceback.format_exc()}")
-        return {"sincronizados": 0, "erro": str(e)}
 
 def status() -> dict:
     token = get_access_token()

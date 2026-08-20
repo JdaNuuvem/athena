@@ -697,8 +697,8 @@ def bling_pt_vendas_resumo():
 
 @app.route('/api/bling/vendas/sincronizar', methods=['POST'])
 def bling_pt_sync_vendas():
-    from bling_erp import sincronizar_pedidos
-    return jsonify(sincronizar_pedidos())
+    from core.vendas import sincronizar_pedidos_bling
+    return jsonify(sincronizar_pedidos_bling())
 
 @app.route('/api/bling/financeiro/contas-receber', methods=['GET'])
 def bling_pt_contas_receber():

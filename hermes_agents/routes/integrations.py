@@ -270,9 +270,10 @@ def bling_status():
 
 @integrations_bp.route("/api/bling/sync", methods=["POST"])
 def bling_sync():
-    from bling_erp import sincronizar_produtos, sincronizar_pedidos
+    from bling_erp import sincronizar_produtos
+    from core.vendas import sincronizar_pedidos_bling
     produtos = sincronizar_produtos()
-    pedidos = sincronizar_pedidos()
+    pedidos = sincronizar_pedidos_bling()
     return jsonify({"produtos": produtos, "pedidos": pedidos})
 
 
@@ -363,8 +364,8 @@ def bling_sync_products():
 
 @integrations_bp.route("/api/bling/sync/orders", methods=["POST"])
 def bling_sync_orders():
-    from bling_erp import sincronizar_pedidos
-    r = sincronizar_pedidos()
+    from core.vendas import sincronizar_pedidos_bling
+    r = sincronizar_pedidos_bling()
     return jsonify({"count": r.get("sincronizados", 0), "errors": [r["erro"]] if r.get("erro") else []})
 
 
