@@ -98,15 +98,26 @@ class TestBlingFlaskRoutes(unittest.TestCase):
 
 
 class TestBlingRotasRemovidas(unittest.TestCase):
-    """Confirma que as rotas duplicadas removidas nao respondem mais."""
+    """Confirma que as rotas duplicadas removidas nao respondem mais.
+
+    Registra bling_bp junto com integrations_bp e webhooks_bp (os blueprints
+    que continham as rotas antigas antes das Tasks 5 e 6) na mesma app de
+    teste. So assim um 404 comprova de verdade que a rota antiga sumiu --
+    testar so contra bling_bp nao provaria nada, pois essas rotas nunca
+    existiram la.
+    """
 
     @classmethod
     def setUpClass(cls):
         from flask import Flask
-        from routes.integrations import bling_bp
+        from routes.integrations import bling_bp, integrations_bp
+        from routes.webhooks import webhooks_bp, webhook_bp
         app = Flask(__name__)
         app.config["TESTING"] = True
         app.register_blueprint(bling_bp)
+        app.register_blueprint(integrations_bp)
+        app.register_blueprint(webhooks_bp)
+        app.register_blueprint(webhook_bp)
         cls.client = app.test_client()
 
     def test_rota_antiga_sync_products_nao_existe(self):
@@ -115,6 +126,10 @@ class TestBlingRotasRemovidas(unittest.TestCase):
 
     def test_rota_antiga_sync_orders_nao_existe(self):
         rv = self.client.post("/api/bling/sync/orders")
+        self.assertEqual(rv.status_code, 404)
+
+    def test_rota_antiga_webhook_pedido_nao_existe(self):
+        rv = self.client.post("/webhook/bling/pedido")
         self.assertEqual(rv.status_code, 404)
 
     def test_rota_nova_produtos_sincronizar_existe(self):
