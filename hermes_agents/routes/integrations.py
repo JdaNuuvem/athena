@@ -523,6 +523,7 @@ from bling_erp import (
     sincronizar_canais_bling,
 )
 from core.vendas import sincronizar_pedidos_bling
+from core.financeiro import sincronizar_plano_contas_bling
 
 bling_bp = Blueprint("bling_api", __name__, url_prefix="/api/bling")
 
@@ -669,6 +670,22 @@ def api_canais():
 @bling_bp.route("/canais/sincronizar", methods=["POST"])
 def api_sincronizar_canais():
     return jsonify(sincronizar_canais_bling())
+
+@bling_bp.route("/plano-contas")
+def api_plano_contas():
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch("SELECT id, codigo, nome, tipo, natureza, conta_pai_id, bling_id FROM fin_plano_contas ORDER BY codigo")
+        return [dict(r) for r in rows]
+    try:
+        return jsonify(run_async(_go()))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@bling_bp.route("/plano-contas/sincronizar", methods=["POST"])
+def api_sincronizar_plano_contas():
+    return jsonify(sincronizar_plano_contas_bling())
 
 @bling_bp.route("/vendas/<int:id_pedido>")
 def api_pedido_detalhe(id_pedido):
