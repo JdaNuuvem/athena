@@ -226,7 +226,14 @@ export default function DashboardPage() {
         return (
           <section className="instrument p-4">
             <h2 className="text-[10px] uppercase tracking-[0.12em] mb-3" style={{ color: "var(--ink-500)" }}>Top produtos</h2>
-            <ResponsiveContainer width="100%" height={dadosGrafico.length * 36 + 20}>
+            {/* key forca o Recharts a desmontar/remontar o grafico inteiro
+                quando o CONJUNTO de produtos muda (troca de loja/aba) — sem
+                isso, a lib as vezes deixa ticks do eixo Y da renderizacao
+                anterior sobrepostos aos novos durante a transicao animada
+                (achado real: nomes de produto aparecendo empilhados uns
+                sobre os outros ao trocar de loja). isAnimationActive
+                desligado no Bar pelo mesmo motivo — clareza > animacao aqui. */}
+            <ResponsiveContainer key={dadosGrafico.map((d) => d.rotulo).join("|")} width="100%" height={dadosGrafico.length * 36 + 20}>
               <BarChart data={dadosGrafico} layout="vertical" margin={{ left: 8, right: 16 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--panel-border)" horizontal={false} />
                 <XAxis type="number" stroke="var(--ink-700)" tick={{ fontSize: 10, fill: "var(--ink-700)" }} tickFormatter={(v) => fmtBRL(v)} />
@@ -236,10 +243,11 @@ export default function DashboardPage() {
                   stroke="var(--ink-700)"
                   tick={{ fontSize: 10, fill: "var(--ink-700)" }}
                   width={160}
+                  interval={0}
                   tickFormatter={(rotulo) => (rotulo.length > 22 ? `${rotulo.slice(0, 21)}…` : rotulo)}
                 />
                 <Tooltip content={<ChartTooltip />} />
-                <Bar dataKey="valor" radius={[0, 3, 3, 0]} barSize={18}>
+                <Bar dataKey="valor" radius={[0, 3, 3, 0]} barSize={18} isAnimationActive={false}>
                   {dadosGrafico.map((e, i) => <Cell key={i} fill={margemColor(e.margem)} />)}
                 </Bar>
               </BarChart>
