@@ -1,6 +1,4 @@
-from datetime import date, timedelta
 from flask import Blueprint, request, jsonify
-from core import get_db, run_async
 
 webhooks_bp = Blueprint("webhooks", __name__)
 
@@ -15,43 +13,10 @@ def whatsapp_webhook():
     return jsonify({"processed": True, "resultado": resultado})
 
 
-@webhooks_bp.route("/webhook/bling/pedido", methods=["POST"])
-def bling_pedido_webhook():
-    from bling_erp import webhook_bling_pedido
-    return jsonify(webhook_bling_pedido(request.json))
-
-
 @webhooks_bp.route("/webhook/shopee/pedido", methods=["POST"])
 def shopee_pedido_webhook():
     from shopee import webhook_shopee_pedido
     return jsonify(webhook_shopee_pedido(request.json))
-
-
-# Bling webhook with DB persistence (replaces the duplicate route from old athena_bridge)
-@webhooks_bp.route("/webhook/bling/pedido/v2", methods=["POST"])
-def bling_pedido_webhook_v2():
-    async def _go():
-        try:
-            db = await get_db()
-            payload = request.json or {}
-            pedido = payload.get("pedido", payload)
-            for item in pedido.get("itens", []):
-                sku = item.get("codigo", "")
-                qtd = int(item.get("quantidade", 1))
-                preco = float(item.get("valorUnitario", 0))
-                await db.execute(
-                    "INSERT INTO vendas (data, sku, marketplace, quantidade, preco_venda, receita_bruta) VALUES ($1,$2,'bling',$3,$4,$5)",
-                    date.today(), sku, qtd, preco, preco * qtd)
-            from ag_04_planejador import adicionar_pedido_producao
-            for item in pedido.get("itens", []):
-                adicionar_pedido_producao(
-                    sku=item.get("codigo", ""), quantidade=int(item.get("quantidade", 1)),
-                    prazo=date.today() + timedelta(days=3), prioridade=5,
-                    cliente_id=pedido.get("contato", {}).get("nome", ""))
-            return {"success": True, "itens": len(pedido.get("itens", []))}
-        except Exception as e:
-            return {"error": str(e)}
-    return jsonify(run_async(_go()))
 
 
 # ── Bling Webhook Receiver (Task 4) ──

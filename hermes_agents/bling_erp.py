@@ -467,37 +467,8 @@ def status() -> dict:
         "auth_url": get_auth_url() if not token else "",
     }
 
-def webhook_bling_pedido(payload: dict, loja_id: int = None) -> dict:
-    from datetime import date, timedelta
-    async def _go():
-        db = await get_db()
-        pedido = payload.get("pedido", payload)
-        itens = pedido.get("itens", [])
-        for item in itens:
-            sku = item.get("codigo", "")
-            qtd = int(item.get("quantidade", 1))
-            preco = float(item.get("valorUnitario", 0))
-            await db.execute(
-                "INSERT INTO vendas (data, sku, marketplace, loja_id, quantidade, preco_venda, receita_bruta) VALUES ($1,$2,'bling',$3,$4,$5,$6)",
-                date.today(), sku, loja_id, qtd, preco, preco * qtd)
-        try:
-            from ag_04_planejador import adicionar_pedido_producao
-            for item in itens:
-                adicionar_pedido_producao(
-                    sku=item.get("codigo", ""), quantidade=int(item.get("quantidade", 1)),
-                    prazo=date.today() + timedelta(days=3), prioridade=5,
-                    cliente_id=pedido.get("contato", {}).get("nome", ""))
-        except Exception as e:
-            log(AGENT, f"Erro ao enfileirar produção: {e}")
-        return {"success": True, "itens": len(itens)}
-    try:
-        return run_async(_go())
-    except Exception as e:
-        return {"error": str(e)}
-
-
 def registrar_webhook(tipo: str = "pedido", url: str = None) -> dict:
-    webhook_url = url or f"https://{BLING_DOMAIN}/webhook/bling/pedido"
+    webhook_url = url or f"https://{BLING_DOMAIN}/webhook/bling"
     return _request("webhooks", {
         "webhook": {"url": webhook_url, "evento": tipo, "metodo": "POST", "formato": "JSON"}
     }, method="POST")
