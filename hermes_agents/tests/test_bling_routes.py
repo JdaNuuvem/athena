@@ -16,7 +16,7 @@ fake_conn.__aenter__ = AsyncMock(return_value=fake_conn)
 fake_conn.__aexit__ = AsyncMock(return_value=None)
 fake_pool.acquire.return_value = fake_conn
 
-patcher = patch("asyncpg.create_pool", return_value=fake_pool)
+patcher = patch("asyncpg.create_pool", new_callable=AsyncMock, return_value=fake_pool)
 patcher.start()
 
 from routes.integrations import bling_bp
@@ -81,6 +81,61 @@ class TestBlingFlaskRoutes(unittest.TestCase):
         self.assertEqual(rv.status_code, 200)
         data = json.loads(rv.data)
         self.assertIn("bling", data)
+
+    def test_vendas_sincronizar_route_calls_ssot_function(self):
+        with patch("routes.integrations.sincronizar_pedidos_bling", return_value={"sync": 3, "erros": []}) as mock_sync:
+            rv = self.client.post("/api/bling/vendas/sincronizar", json={"pagina": 2, "limite": 50})
+            self.assertEqual(rv.status_code, 200)
+            data = json.loads(rv.data)
+            self.assertEqual(data["sync"], 3)
+            mock_sync.assert_called_once_with(pagina=2, limite=50)
+
+    def test_produtos_agrupados_usa_hierarquia_bling_erp(self):
+        with patch("routes.integrations.listar_produtos_agrupados", return_value={"grupos": [], "avulsos": []}) as mock_fn:
+            rv = self.client.get("/api/bling/produtos/agrupados")
+            self.assertEqual(rv.status_code, 200)
+            mock_fn.assert_called_once()
+
+
+class TestBlingRotasRemovidas(unittest.TestCase):
+    """Confirma que as rotas duplicadas removidas nao respondem mais.
+
+    Registra bling_bp junto com integrations_bp e webhooks_bp (os blueprints
+    que continham as rotas antigas antes das Tasks 5 e 6) na mesma app de
+    teste. So assim um 404 comprova de verdade que a rota antiga sumiu --
+    testar so contra bling_bp nao provaria nada, pois essas rotas nunca
+    existiram la.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from flask import Flask
+        from routes.integrations import bling_bp, integrations_bp
+        from routes.webhooks import webhooks_bp, webhook_bp
+        app = Flask(__name__)
+        app.config["TESTING"] = True
+        app.register_blueprint(bling_bp)
+        app.register_blueprint(integrations_bp)
+        app.register_blueprint(webhooks_bp)
+        app.register_blueprint(webhook_bp)
+        cls.client = app.test_client()
+
+    def test_rota_antiga_sync_products_nao_existe(self):
+        rv = self.client.post("/api/bling/sync/products")
+        self.assertEqual(rv.status_code, 404)
+
+    def test_rota_antiga_sync_orders_nao_existe(self):
+        rv = self.client.post("/api/bling/sync/orders")
+        self.assertEqual(rv.status_code, 404)
+
+    def test_rota_antiga_webhook_pedido_nao_existe(self):
+        rv = self.client.post("/webhook/bling/pedido")
+        self.assertEqual(rv.status_code, 404)
+
+    def test_rota_nova_produtos_sincronizar_existe(self):
+        with patch("routes.integrations.sincronizar_produtos", return_value={"sincronizados": 0, "erros": []}):
+            rv = self.client.post("/api/bling/produtos/sincronizar")
+            self.assertEqual(rv.status_code, 200)
 
 
 if __name__ == "__main__":

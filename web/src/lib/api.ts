@@ -249,25 +249,7 @@ export const api = {
     request<{ total_clientes: number; total_pedidos: number; faturamento_total: number; ticket_medio_geral: number }>("/api/agent/ag_06_telegram/stats"),
 
   // Bling
-  blingStatus: () => request<{ autenticado: boolean; client_id_setado: boolean; auth_url: string }>("/api/bling/status"),
-  blingSync: () => request<{ produtos: { sincronizados: number; erro?: string }; pedidos: { sincronizados: number; erro?: string } }>("/api/bling/sync", { method: "POST" }),
-  blingSyncProducts: () => request<{ count: number; errors: string[] }>("/api/bling/sync/products", { method: "POST" }),
-  blingSyncOrders: () => request<{ count: number; errors: string[] }>("/api/bling/sync/orders", { method: "POST" }),
-  blingSyncInvoices: () => request<{ count: number; errors: string[] }>("/api/bling/sync/invoices", { method: "POST" }),
-  blingSyncReceivables: () => request<{ count: number; errors: string[] }>("/api/bling/sync/receivables", { method: "POST" }),
-  blingProducts: () => request<BlingProduct[]>("/api/bling/products"),
-  blingOrders: () => request<BlingOrder[]>("/api/bling/orders"),
-  blingInvoices: () => request<BlingInvoice[]>("/api/bling/invoices"),
-  blingReceivables: () => request<BlingReceivable[]>("/api/bling/receivables"),
-  blingConfig: () => request<BlingConfig>("/api/bling/config"),
-  blingSetConfig: (data: Record<string, unknown>) => request<{ success: boolean }>("/api/bling/config", { method: "PUT", body: JSON.stringify(data) }),
-  blingTest: () => request<{ success: boolean; message: string }>("/api/bling/test", { method: "POST" }),
-  blingAuthUrl: () => request<{ auth_url: string; autenticado: boolean }>("/api/bling/auth"),
-  blingRegisterWebhook: (tipo?: string, url?: string) =>
-    request<Record<string, unknown>>("/api/bling/webhook/registrar", {
-      method: "POST",
-      body: JSON.stringify({ tipo: tipo || "pedido", url }),
-    }),
+  blingSyncProducts: () => request<{ sincronizados: number; pais_resolvidos: number; erros: string[] }>("/api/bling/produtos/sincronizar", { method: "POST" }),
 
   // Shopee (multiloja)
   // Roda em background no servidor (catalogos grandes estouram o timeout do

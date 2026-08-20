@@ -242,253 +242,6 @@ def shopee_sync_orders():
         return jsonify({"count": 0, "errors": [str(e)]})
 
 
-# --- Bling ERP v3 ---
-
-@integrations_bp.route("/api/bling/auth", methods=["GET"])
-def bling_auth_url():
-    from bling_erp import get_auth_url, status
-    return jsonify({"auth_url": get_auth_url(), **status()})
-
-
-@integrations_bp.route("/api/bling/oauth/callback", methods=["GET"])
-def bling_oauth_callback():
-    from bling_erp import exchange_code
-    code = request.args.get("code", "")
-    if not code:
-        return jsonify({"error": "No code provided"}), 400
-    resultado = exchange_code(code)
-    if resultado.get("success"):
-        return '<html><body><h2>✅ Bling conectado!</h2><p>Pode fechar esta janela e voltar ao dashboard.</p><script>setTimeout(()=>{window.close()},2000)</script></body></html>'
-    return jsonify({"error": "Falha na autenticação", "detalhe": resultado}), 400
-
-
-@integrations_bp.route("/api/bling/status", methods=["GET"])
-def bling_status():
-    from bling_erp import status
-    return jsonify(status())
-
-
-@integrations_bp.route("/api/bling/sync", methods=["POST"])
-def bling_sync():
-    from bling_erp import sincronizar_produtos, sincronizar_pedidos
-    produtos = sincronizar_produtos()
-    pedidos = sincronizar_pedidos()
-    return jsonify({"produtos": produtos, "pedidos": pedidos})
-
-
-@integrations_bp.route("/api/bling/webhook/registrar", methods=["POST"])
-def bling_webhook_registrar():
-    from bling_erp import registrar_webhook
-    data = request.json or {}
-    return jsonify(registrar_webhook(data.get("tipo", "pedido"), data.get("url")))
-
-
-@integrations_bp.route("/api/bling/config", methods=["GET"])
-def bling_config_get():
-    from bling_erp import status
-    s = status()
-    return jsonify({
-        "api_key": s.get("autenticado", False) and "configurado" or "",
-        "sandbox": False, "auto_sync": False, "sync_interval_minutes": 30,
-        "sync_products": True, "sync_orders": True, "sync_invoices": False,
-        "sync_receivables": False, "sync_stock": False,
-        "auth_url": s.get("auth_url", ""), "autenticado": s.get("autenticado", False),
-    })
-
-
-@integrations_bp.route("/api/bling/config", methods=["PUT"])
-def bling_config_put():
-    from core.config import set_config
-    data = request.json or {}
-    if data.get("api_key"):
-        set_config("bling", "api_key", data["api_key"])
-    return jsonify({"success": True})
-
-
-@integrations_bp.route("/api/bling/test", methods=["POST"])
-def bling_test():
-    from bling_erp import status
-    s = status()
-    return jsonify({
-        "success": s.get("autenticado", False),
-        "message": "Conectado" if s.get("autenticado") else "Não autenticado",
-    })
-
-
-@integrations_bp.route("/api/bling/products", methods=["GET"])
-def bling_products():
-    from bling_erp import listar_produtos
-    r = listar_produtos()
-    dados = r.get("data", [])
-    return jsonify([{
-        "id": p.get("id", 0), "codigo": p.get("codigo", ""),
-        "descricao": p.get("descricao", ""),
-        "preco": float(p.get("preco", 0) or 0),
-        "estoque_atual": int(p.get("estoqueAtual", 0) or 0),
-        "estoque_minimo": int(p.get("estoqueMinimo", 0) or 0),
-        "situacao": p.get("situacao", "Ativo"),
-    } for p in dados])
-
-
-@integrations_bp.route("/api/bling/orders", methods=["GET"])
-def bling_orders():
-    from bling_erp import listar_pedidos
-    r = listar_pedidos()
-    dados = r.get("data", [])
-    return jsonify([{
-        "id": p.get("id", 0), "numero": str(p.get("numero", "")),
-        "data": p.get("dataEmissao", ""),
-        "total_venda": float(p.get("totalVenda", 0) or 0),
-        "situacao": p.get("situacao", ""),
-        "contato_nome": p.get("contato", {}).get("nome", ""),
-        "imported_at": "",
-    } for p in dados])
-
-
-@integrations_bp.route("/api/bling/sync/products", methods=["POST"])
-def bling_sync_products():
-    try:
-        from bling_erp import sincronizar_produtos
-        r = sincronizar_produtos()
-        return jsonify({"count": r.get("sincronizados", 0), "errors": [r["erro"]] if r.get("erro") else []})
-    except Exception as e:
-        # ponytail: mandava traceback.format_exc() pro cliente — stack trace
-        # completo (caminhos de arquivo, estrutura interna) vazado em toda
-        # falha de sync. Loga no servidor, devolve so' a mensagem.
-        import traceback
-        from core import log
-        log("Bling Sync", f"Erro em sync/products: {traceback.format_exc()}")
-        return jsonify({"count": 0, "errors": [str(e)]}), 500
-
-
-@integrations_bp.route("/api/bling/sync/orders", methods=["POST"])
-def bling_sync_orders():
-    from bling_erp import sincronizar_pedidos
-    r = sincronizar_pedidos()
-    return jsonify({"count": r.get("sincronizados", 0), "errors": [r["erro"]] if r.get("erro") else []})
-
-
-@integrations_bp.route("/api/bling/invoices", methods=["GET"])
-def bling_invoices():
-    from bling_erp import listar_notas_fiscais
-    r = listar_notas_fiscais()
-    dados = r.get("data", [])
-    return jsonify([{
-        "id": nf.get("id", 0),
-        "numero": str(nf.get("numero", "")),
-        "serie": str(nf.get("serie", "")),
-        "data_emissao": nf.get("dataEmissao", ""),
-        "valor_nota": float(nf.get("valorNota", 0) or 0),
-        "situacao": nf.get("situacao", ""),
-        "cliente_nome": (nf.get("contato") or {}).get("nome", ""),
-        "imported_at": nf.get("dataEmissao", ""),
-    } for nf in dados])
-
-
-@integrations_bp.route("/api/bling/receivables", methods=["GET"])
-def bling_receivables():
-    from bling_erp import listar_contas_receber
-    r = listar_contas_receber()
-    dados = r.get("data", [])
-    return jsonify([{
-        "id": cr.get("id", 0),
-        "descricao": cr.get("descricao", ""),
-        "valor": float(cr.get("valor", 0) or 0),
-        "data_vencimento": cr.get("dataVencimento", ""),
-        "situacao": cr.get("situacao", ""),
-    } for cr in dados])
-
-
-@integrations_bp.route("/api/bling/sync/invoices", methods=["POST"])
-def bling_sync_invoices():
-    from bling_erp import listar_notas_fiscais
-    r = listar_notas_fiscais()
-    dados = r.get("data", [])
-    if r.get("error"):
-        return jsonify({"count": 0, "errors": [r["error"]]})
-    return jsonify({"count": len(dados), "errors": []})
-
-
-@integrations_bp.route("/api/bling/sync/receivables", methods=["POST"])
-def bling_sync_receivables():
-    from bling_erp import listar_contas_receber
-    r = listar_contas_receber()
-    dados = r.get("data", [])
-    if r.get("error"):
-        return jsonify({"count": 0, "errors": [r["error"]]})
-    return jsonify({"count": len(dados), "errors": []})
-
-
-@integrations_bp.route("/api/bling/sync/contacts", methods=["POST"])
-def bling_sync_contacts():
-    from core.entidades import sincronizar_contatos_bling
-    r = sincronizar_contatos_bling()
-    if r.get("error"): return jsonify({"count": 0, "errors": [r["error"]]})
-    return jsonify({"count": r.get("sync", 0), "errors": []})
-
-
-@integrations_bp.route("/api/bling/contacts", methods=["GET"])
-def bling_contacts():
-    import json
-    async def _go():
-        from core import get_db
-        db = await get_db()
-        rows = await db.fetch("SELECT id, nome, tipo, documento, email, telefone, status FROM cad_clientes ORDER BY id DESC LIMIT 200")
-        return [dict(r) for r in rows]
-    try:
-        from core import run_async
-        data = run_async(_go())
-        return jsonify(data)
-    except: return jsonify([])
-
-
-@integrations_bp.route("/api/bling/sync/categories", methods=["POST"])
-def bling_sync_categories():
-    from bling_erp import listar_categorias, get_access_token, get_auth_url
-    token = get_access_token()
-    if not token: return jsonify({"count": 0, "errors": ["Bling nao autenticado"]})
-    r = listar_categorias()
-    if r.get("error"): return jsonify({"count": 0, "errors": [r["error"]]})
-    dados = r.get("data", [])
-    async def _go():
-        from core import get_db
-        db = await get_db()
-        total = 0
-        for cat in dados:
-            try:
-                cid = cat.get("id")
-                nome = cat.get("descricao", "")
-                if cid and nome:
-                    await db.execute("""INSERT INTO bling_categorias (bling_id, nome)
-                        VALUES ($1,$2) ON CONFLICT (bling_id) DO UPDATE SET nome=$2""", cid, nome)
-                    total += 1
-            except: pass
-        return total
-    try:
-        from core import run_async
-        count = run_async(_go())
-        return jsonify({"count": count, "errors": []})
-    except: return jsonify({"count": len(dados), "errors": []})
-
-
-@integrations_bp.route("/api/bling/categories", methods=["GET"])
-def bling_categories():
-    import json
-    async def _go():
-        from core import get_db
-        db = await get_db()
-        await db.execute("""CREATE TABLE IF NOT EXISTS bling_categorias (
-            id SERIAL PRIMARY KEY, bling_id BIGINT UNIQUE, nome VARCHAR(200),
-            created_at TIMESTAMP DEFAULT NOW())""")
-        rows = await db.fetch("SELECT id, bling_id, nome FROM bling_categorias ORDER BY nome")
-        return [dict(r) for r in rows]
-    try:
-        from core import run_async
-        data = run_async(_go())
-        return jsonify(data)
-    except: return jsonify([])
-
-
 # --- Entidades SSOT: Vincular Clientes / Migrar Fornecedores ---
 
 @integrations_bp.route("/api/integracoes/vincular-clientes", methods=["POST"])
@@ -669,7 +422,8 @@ def faturar_venda(id_pedido):
 @integrations_bp.route("/api/integracoes/migrar-tudo", methods=["POST"])
 def migrar_tudo():
     """Orquestra todas as migracoes Bling → SSOT em paralelo."""
-    from bling_erp import sincronizar_produtos, sincronizar_pedidos
+    from bling_erp import sincronizar_produtos
+    from core.vendas import sincronizar_pedidos_bling
     from core.entidades import vincular_cliente_por_documento, migrar_fornecedores_compras
     from core.fiscal import sincronizar_contas_receber_bling, sincronizar_contas_pagar_bling
     import concurrent.futures
@@ -690,7 +444,7 @@ def migrar_tudo():
     # Produtos
     resultados["produtos"] = seguro(sincronizar_produtos, "produtos")
     # Vendas
-    resultados["vendas"] = seguro(lambda: sincronizar_pedidos(pagina=1, limite=100), "vendas")
+    resultados["vendas"] = seguro(lambda: sincronizar_pedidos_bling(pagina=1, limite=100), "vendas")
     # Clientes
     r_c = seguro(vincular_cliente_por_documento, "clientes", "vendas_pedidos", 0)
     r_f = seguro(vincular_cliente_por_documento, "clientes_fiscal", "fiscal_notas_fiscais", 0)
@@ -763,10 +517,11 @@ from bling_erp import (
     get_nfe_detail, get_nfe_xml,
     listar_contatos, get_contato, listar_categorias, get_categoria,
     get_pedido_detalhe, listar_contas_pagar, listar_formas_pagamento,
-    resumo_vendas, sincronizar_produtos, sincronizar_pedidos,
-    listar_webhooks, criar_webhook, deletar_webhook,
+    resumo_vendas, sincronizar_produtos,
+    listar_webhooks, criar_webhook, deletar_webhook, registrar_webhook,
     listar_notificacoes, confirmar_leitura_notificacao,
 )
+from core.vendas import sincronizar_pedidos_bling
 
 bling_bp = Blueprint("bling_api", __name__, url_prefix="/api/bling")
 
@@ -864,10 +619,9 @@ def api_pedidos():
 @bling_bp.route("/vendas/sincronizar", methods=["POST"])
 def api_sincronizar_pedidos():
     dados = request.get_json(silent=True) or {}
-    return jsonify(sincronizar_pedidos(
-        loja_id=dados.get("loja_id"),
+    return jsonify(sincronizar_pedidos_bling(
         pagina=dados.get("pagina", 1),
-        limite=dados.get("limite", 100)
+        limite=dados.get("limite", 100),
     ))
 
 
@@ -974,6 +728,19 @@ def api_criar_webhook():
 @bling_bp.route("/webhooks/<int:id_webhook>", methods=["DELETE"])
 def api_deletar_webhook(id_webhook):
     return jsonify(deletar_webhook(id_webhook))
+
+
+@bling_bp.route("/webhook/registrar", methods=["POST"])
+def api_webhook_registrar():
+    """Re-registra o webhook de pedido do Bling apontando pra /webhook/bling.
+
+    Passo operacional pós-deploy (ver plano Task 6, Step 8): usa o default
+    inteligente de registrar_webhook(), que já resolve a URL certa e o
+    formato JSON esperado pelo Bling, sem exigir que o chamador monte o
+    payload manualmente (diferente de POST /api/bling/webhooks).
+    """
+    dados = request.get_json(silent=True) or {}
+    return jsonify(registrar_webhook(dados.get("tipo", "pedido"), dados.get("url")))
 
 
 @bling_bp.route("/notificacoes")

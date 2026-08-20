@@ -44,6 +44,11 @@ class TestBlingAPI(unittest.TestCase):
 class TestBlingWebhooks(unittest.TestCase):
     def test_hmac_valida(self): self.skipTest("requer env var BLING_WEBHOOK_SECRET no container")
     def test_hmac_invalida(self): self.assertFalse(bling.validar_assinatura_webhook(b"x","bad"))
+    @patch("bling_erp._request", return_value={"data": {"id": 1}})
+    def test_registrar_webhook_default_aponta_para_endpoint_com_hmac(self, mock_request):
+        bling.registrar_webhook(tipo="pedido")
+        payload = mock_request.call_args[0][1]
+        self.assertEqual(payload["webhook"]["url"], f"https://{bling.BLING_DOMAIN}/webhook/bling")
 
 class TestBlingSync(unittest.TestCase):
     def setUp(self): bling._TOKEN["access"]="mock"

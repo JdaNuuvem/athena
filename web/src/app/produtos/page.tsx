@@ -157,10 +157,9 @@ export default function ProdutosPage() {
     setSyncing(true);
     setError(null);
     try {
-      const r = await api.blingSyncProducts() as any;
+      const r = await api.blingSyncProducts();
       if (r.erros && r.erros.length > 0) setError(r.erros.join("; "));
       else if (r.sincronizados !== undefined) setError(`Sincronizados: ${r.sincronizados} produtos`);
-      else if (r.erro) setError(r.erro);
       load(busca, 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao sincronizar com Bling");
