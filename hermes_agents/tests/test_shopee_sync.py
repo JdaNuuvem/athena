@@ -361,6 +361,28 @@ class TestListarProdutosSincronizados(unittest.TestCase):
         query = fake_db.fetch.call_args.args[0]
         self.assertIn("c.preco_custo", query)
 
+    @patch("shopee_sync.get_shopee_config")
+    @patch("shopee_sync.get_db")
+    def test_qtd_vendida_so_conta_venda_do_canal_shopee(self, mock_get_db, mock_cfg):
+        """Achado real: "Vendidos (90d)" na aba Anuncios Shopee de /estoque
+        mostrava numeros absurdos (ex: 11.000) pra loja virtual. Causa: a
+        subquery lateral que soma qtd_vendida filtrava so' por vp.loja_id,
+        sem checar vp.marketplace='shopee' — pedidos i9Logic (fisica) sao
+        gravados SEM marketplace (core/i9logic_vendas.py::_gravar_pedido
+        nao inclui essa coluna no INSERT) e, quando a loja fisica e a loja
+        virtual compartilham o mesmo loja_id (vinculo fisica/virtual), toda
+        venda fisica daquele SKU nos ultimos 90 dias entrava na soma de um
+        anuncio Shopee."""
+        mock_cfg.return_value = {"shop_id": "1782908877"}
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = []
+        mock_get_db.return_value = fake_db
+
+        shopee_sync.listar_produtos_sincronizados(7)
+
+        query = fake_db.fetch.call_args.args[0]
+        self.assertIn("vp.marketplace = 'shopee'", query)
+
 
 class TestSyncPedidosShopee(unittest.TestCase):
     """sync_pedidos_shopee grava pedido completo (cabecalho + itens) na tabela

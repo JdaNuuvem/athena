@@ -554,7 +554,7 @@ def listar_produtos_sincronizados(loja_id: int, dias: int = 90) -> list:
                 SELECT SUM(vi.quantidade) AS qtd_vendida
                 FROM vendas_itens vi
                 JOIN vendas_pedidos vp ON vp.id = vi.pedido_id
-                WHERE vi.sku = a.sku AND vp.loja_id = $2 AND vp.status != 'cancelado'
+                WHERE vi.sku = a.sku AND vp.loja_id = $2 AND vp.marketplace = 'shopee' AND vp.status != 'cancelado'
                   AND vp.data >= CURRENT_DATE - $3::int
             ) vendas ON TRUE
             WHERE a.marketplace = 'shopee' AND a.shop_id = $1
