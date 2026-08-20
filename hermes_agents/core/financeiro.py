@@ -333,6 +333,57 @@ def fluxo_caixa_resumo(dias=30) -> dict:
     try: return run_async(_go())
     except Exception as e: return {"resumo": {}, "diario": []}
 
+# ── Sync Bling ──
+
+def sincronizar_plano_contas_bling(pagina: int = 1, limite: int = 100) -> dict:
+    """Sync de contas contabeis do Bling -> fin_plano_contas (upsert por bling_id,
+    preserva o plano de contas seed ja existente)."""
+    from bling_erp import listar_contas_contabeis, get_access_token, get_auth_url
+    token = get_access_token()
+    if not token:
+        return {"error": "Bling nao autenticado", "auth_url": get_auth_url()}
+    r = listar_contas_contabeis(pagina, limite)
+    if r.get("error"):
+        return r
+    dados = r.get("data", [])
+    if not dados:
+        return {"sync": 0, "message": "sem dados"}
+
+    async def _go():
+        db = await get_db()
+        exists = await db.fetchval(
+            "SELECT column_name FROM information_schema.columns WHERE table_name='fin_plano_contas' AND column_name='bling_id'")
+        if not exists:
+            await db.execute("ALTER TABLE fin_plano_contas ADD COLUMN IF NOT EXISTS bling_id BIGINT")
+        total = 0
+        for conta in dados:
+            try:
+                bling_id = conta.get("id")
+                if not bling_id:
+                    continue
+                nome = conta.get("descricao", "")
+                tipo_raw = conta.get("tipo", "")
+                natureza = "devedora" if tipo_raw == "D" else "credora"
+                existing = await db.fetchval("SELECT id FROM fin_plano_contas WHERE bling_id = $1", bling_id)
+                if existing:
+                    await db.execute(
+                        "UPDATE fin_plano_contas SET nome=$1, natureza=$2 WHERE bling_id=$3",
+                        nome, natureza, bling_id)
+                else:
+                    await db.execute(
+                        "INSERT INTO fin_plano_contas (codigo, nome, tipo, natureza, bling_id) VALUES ($1,$2,$3,$4,$5)",
+                        f"bling-{bling_id}", nome, "analitica", natureza, bling_id)
+                total += 1
+            except Exception as e:
+                log(AGENT, f"Erro ao sincronizar conta contabil {conta.get('id')}: {e}")
+        return total
+
+    try:
+        total = run_async(_go())
+        return {"sync": total}
+    except Exception as e:
+        return {"error": str(e)}
+
 def dre_resumo(mes: str = None) -> dict:
     m = mes or f"{hoje()[:7]}"
     async def _go():

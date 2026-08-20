@@ -22,4 +22,22 @@ class TestBlingFinanceiro(unittest.TestCase):
         r=b.listar_contas_pagar()
         self.assertIn("data",r)
 
+    def test_sincronizar_plano_contas_bling_faz_upsert_por_bling_id(self):
+        fake_db = AsyncMock()
+        fake_db.fetchval.side_effect = [None, None]  # 1a chamada: checa coluna; 2a: checa conta existente
+        with patch("bling_erp.get_access_token", return_value="tok"), \
+             patch("core.financeiro.get_db", new=AsyncMock(return_value=fake_db)), \
+             patch("bling_erp.listar_contas_contabeis", return_value={"data": [
+                 {"id": 999, "descricao": "Receita de Vendas Online", "tipo": "R"},
+             ]}):
+            resultado = fin.sincronizar_plano_contas_bling()
+        self.assertEqual(resultado["sync"], 1)
+        sqls_executados = [c.args[0] for c in fake_db.execute.call_args_list]
+        self.assertTrue(any("ALTER TABLE fin_plano_contas ADD COLUMN" in s for s in sqls_executados))
+        self.assertTrue(any("INSERT INTO fin_plano_contas" in s for s in sqls_executados))
+        # migracao de coluna nunca pode apagar/truncar o seed de 11 linhas ja
+        # existente em fin_plano_contas — ADD COLUMN IF NOT EXISTS e' a unica
+        # operacao de schema permitida contra essa tabela no sync.
+        self.assertFalse(any("DROP" in s.upper() or "TRUNCATE" in s.upper() or "DELETE FROM fin_plano_contas" in s.upper() for s in sqls_executados))
+
 if __name__=="__main__":unittest.main(verbosity=2)
