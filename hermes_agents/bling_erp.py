@@ -469,6 +469,24 @@ def sincronizar_produtos() -> dict:
         return {"sincronizados": 0, "erro": str(e)}
 
 
+async def ensure_bling_canais_table(db):
+    """CREATE TABLE IF NOT EXISTS de bling_canais — usado tanto pelo sync
+    (POST /canais/sincronizar) quanto pela leitura (GET /canais).
+
+    ponytail: bling_canais so' era criada dentro de sincronizar_canais_bling(),
+    nunca no boot da app. Em instalacao nova, ou banco que nunca rodou o sync
+    de canais, GET /api/bling/canais explodia com "relation bling_canais does
+    not exist" (UndefinedTable -> 500). bling_erp.py nao tem um padrao de
+    _ensure_tables() centralizado rodando no boot (diferente de core/financeiro.py),
+    entao a rota GET chama esta funcao sob demanda antes do SELECT — mais simples
+    e igualmente correto, e devolve lista vazia em vez de 500 quando ainda nao
+    rodou nenhum sync."""
+    await db.execute("""CREATE TABLE IF NOT EXISTS bling_canais (
+        id SERIAL PRIMARY KEY, bling_id BIGINT UNIQUE, nome VARCHAR(200),
+        situacao VARCHAR(20), created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW())""")
+
+
 def sincronizar_canais_bling(pagina: int = 1, limite: int = 100) -> dict:
     """Sync de lojas/canais de venda cadastrados dentro do Bling (conceito interno
     do Bling — ex. 'Loja Virtual', 'Balcão' — distinto da tabela `lojas` do Athena,
@@ -485,10 +503,7 @@ def sincronizar_canais_bling(pagina: int = 1, limite: int = 100) -> dict:
 
     async def _go():
         db = await get_db()
-        await db.execute("""CREATE TABLE IF NOT EXISTS bling_canais (
-            id SERIAL PRIMARY KEY, bling_id BIGINT UNIQUE, nome VARCHAR(200),
-            situacao VARCHAR(20), created_at TIMESTAMP DEFAULT NOW(),
-            updated_at TIMESTAMP DEFAULT NOW())""")
+        await ensure_bling_canais_table(db)
         total = 0
         for canal in dados:
             try:

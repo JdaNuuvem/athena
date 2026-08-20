@@ -169,6 +169,22 @@ def _ensure_tables():
             try: await db.execute(f"ALTER TABLE {_tabela} ADD COLUMN IF NOT EXISTS origem VARCHAR(30) DEFAULT 'manual'")
             except Exception: pass
 
+        # ponytail: mesmo bug do bloco acima, agora em fin_plano_contas —
+        # sincronizar_plano_contas_bling() fazia o ALTER TABLE ADD COLUMN
+        # bling_id sob demanda (so' na primeira chamada do POST /sincronizar),
+        # entao GET /api/bling/plano-contas explodia com "column bling_id
+        # does not exist" (UndefinedColumn -> 500) em qualquer banco que ja
+        # tinha fin_plano_contas criada antes dessa coluna existir e que
+        # nunca rodou o sync manualmente. Garantido aqui, sempre, no boot.
+        try: await db.execute("ALTER TABLE fin_plano_contas ADD COLUMN IF NOT EXISTS bling_id BIGINT")
+        except Exception: pass
+        # indice unico parcial (bling_id pode ser NULL nas 11 linhas de seed)
+        # pra sync duplo concorrente nao criar linhas duplicadas — a protecao
+        # SELECT-then-branch em sincronizar_plano_contas_bling() nao e' atomica.
+        try:
+            await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_fin_plano_contas_bling_id ON fin_plano_contas(bling_id) WHERE bling_id IS NOT NULL")
+        except Exception: pass
+
         # ponytail: fin_dre tinha seed de demonstracao aqui (Receita de Vendas
         # 150000, Salarios -35000, Aluguel -5000, Marketing -8000, etc) —
         # numero ficticio que aparecia como se fosse despesa/receita real na
@@ -351,10 +367,9 @@ def sincronizar_plano_contas_bling(pagina: int = 1, limite: int = 100) -> dict:
 
     async def _go():
         db = await get_db()
-        exists = await db.fetchval(
-            "SELECT column_name FROM information_schema.columns WHERE table_name='fin_plano_contas' AND column_name='bling_id'")
-        if not exists:
-            await db.execute("ALTER TABLE fin_plano_contas ADD COLUMN IF NOT EXISTS bling_id BIGINT")
+        # coluna bling_id + indice unico parcial ja sao garantidos no boot
+        # por _ensure_tables() — ver comentario la' (mesmo padrao usado pra
+        # bling_id em fin_contas_receber/fin_contas_pagar).
         total = 0
         for conta in dados:
             try:

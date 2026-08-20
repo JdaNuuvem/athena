@@ -520,7 +520,7 @@ from bling_erp import (
     resumo_vendas, sincronizar_produtos,
     listar_webhooks, criar_webhook, deletar_webhook, registrar_webhook,
     listar_notificacoes, confirmar_leitura_notificacao,
-    sincronizar_canais_bling,
+    sincronizar_canais_bling, ensure_bling_canais_table,
 )
 from core.vendas import sincronizar_pedidos_bling
 from core.financeiro import sincronizar_plano_contas_bling
@@ -659,6 +659,11 @@ def api_categoria_detalhe(id_categoria):
 def api_canais():
     async def _go():
         db = await get_db()
+        # tabela so' e' criada no primeiro sync (POST /canais/sincronizar) —
+        # sem isso, instalacao nova / banco que nunca sincronizou canais
+        # explode com "relation bling_canais does not exist" (500). Garante
+        # aqui, sob demanda, e devolve lista vazia nesse caso.
+        await ensure_bling_canais_table(db)
         rows = await db.fetch("SELECT id, bling_id, nome, situacao FROM bling_canais ORDER BY nome")
         return [dict(r) for r in rows]
     try:
