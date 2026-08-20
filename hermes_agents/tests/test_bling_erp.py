@@ -40,6 +40,15 @@ class TestBlingAPI(unittest.TestCase):
     def test_sem_token(self, m): bling._TOKEN["access"]=""; self.assertIn("error",bling._request("p"))
     @patch("bling_erp.requests.request")
     def test_timeout(self, m): import requests as r; m.side_effect=r.exceptions.Timeout(); self.assertIn("error",bling._request("p"))
+    def test_request_envia_corpo_em_put(self):
+        fake_response = MagicMock()
+        fake_response.status_code = 200
+        fake_response.json.return_value = {"data": {}}
+        with patch("bling_erp.get_access_token", return_value="tok"), \
+             patch("bling_erp.requests.request", return_value=fake_response) as mock_request:
+            bling._request("produtos/1", {"nome": "X"}, method="PUT")
+            _, kwargs = mock_request.call_args
+            self.assertEqual(kwargs["json"], {"nome": "X"})
 
 class TestBlingWebhooks(unittest.TestCase):
     def test_hmac_valida(self): self.skipTest("requer env var BLING_WEBHOOK_SECRET no container")
@@ -205,6 +214,31 @@ class TestSincronizarCanaisBling(unittest.TestCase):
         sqls_executados = [c.args[0] for c in fake_db.execute.call_args_list]
         self.assertTrue(any("CREATE TABLE IF NOT EXISTS bling_canais" in s for s in sqls_executados))
         self.assertTrue(any("INSERT INTO bling_canais" in s for s in sqls_executados))
+
+
+class TestSituacoes(unittest.TestCase):
+    """CRUD de Situacoes (status customizados de pedido/NF)."""
+    def setUp(self): bling._TOKEN["access"] = "mock"
+
+    @patch("bling_erp._request", return_value={"data": []})
+    def test_listar_situacoes_chama_endpoint_correto(self, mock_request):
+        bling.listar_situacoes(pagina=1, limite=100)
+        mock_request.assert_called_once_with("situacoes", {"pagina": 1, "limite": 100})
+
+    @patch("bling_erp._request", return_value={"data": {"id": 1}})
+    def test_criar_situacao_chama_endpoint_correto(self, mock_request):
+        bling.criar_situacao({"nome": "Aguardando Pagamento", "cor": "FFA500"})
+        mock_request.assert_called_once_with("situacoes", {"nome": "Aguardando Pagamento", "cor": "FFA500"}, method="POST")
+
+    @patch("bling_erp._request", return_value={"data": {}})
+    def test_atualizar_situacao_chama_endpoint_correto(self, mock_request):
+        bling.atualizar_situacao(42, {"nome": "Pago"})
+        mock_request.assert_called_once_with("situacoes/42", {"nome": "Pago"}, method="PUT")
+
+    @patch("bling_erp._request", return_value={})
+    def test_deletar_situacao_chama_endpoint_correto(self, mock_request):
+        bling.deletar_situacao(42)
+        mock_request.assert_called_once_with("situacoes/42", method="DELETE")
 
 
 if __name__=="__main__": unittest.main(verbosity=2)

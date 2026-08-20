@@ -113,13 +113,13 @@ def _request(endpoint: str, params: dict = None, method: str = "GET") -> dict:
     url = f"{BASE_URL}/{endpoint}"
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json", "Accept": "application/json"}
     try:
-        r = requests.request(method, url, headers=headers, json=params if method == "POST" else None,
+        r = requests.request(method, url, headers=headers, json=params if method in ("POST", "PUT") else None,
                              params=params if method == "GET" else None, timeout=30)
         if r.status_code == 401:
             refresh_access_token()
             token = get_access_token()
             headers["Authorization"] = f"Bearer {token}"
-            r = requests.request(method, url, headers=headers, json=params if method == "POST" else None,
+            r = requests.request(method, url, headers=headers, json=params if method in ("POST", "PUT") else None,
                                  params=params if method == "GET" else None, timeout=30)
         r.raise_for_status()
         return r.json()
@@ -170,6 +170,23 @@ def listar_categorias(pagina: int = 1, limite: int = 100) -> dict:
 
 def get_categoria(id_categoria: int) -> dict:
     return _request(f"categorias/produtos/{id_categoria}")
+
+# ── Situações (status customizados de pedido/NF) ──
+
+def listar_situacoes(pagina: int = 1, limite: int = 100) -> dict:
+    return _request("situacoes", {"pagina": pagina, "limite": limite})
+
+def criar_situacao(dados: dict) -> dict:
+    """Cria situacao customizada no Bling via POST /situacoes. dados deve conter nome, cor, etc."""
+    return _request("situacoes", dados, method="POST")
+
+def atualizar_situacao(id_situacao: int, dados: dict) -> dict:
+    """Atualiza situacao existente via PUT /situacoes/{id}."""
+    return _request(f"situacoes/{id_situacao}", dados, method="PUT")
+
+def deletar_situacao(id_situacao: int) -> dict:
+    """Deleta situacao via DELETE /situacoes/{id}."""
+    return _request(f"situacoes/{id_situacao}", method="DELETE")
 
 # ── Lojas / Canais de Venda ──
 
