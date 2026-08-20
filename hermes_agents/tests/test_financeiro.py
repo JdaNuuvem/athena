@@ -23,8 +23,12 @@ class TestBlingFinanceiro(unittest.TestCase):
         self.assertIn("data",r)
 
     def test_sincronizar_plano_contas_bling_faz_upsert_por_bling_id(self):
+        # coluna bling_id + indice unico parcial agora sao garantidos no boot
+        # por _ensure_tables() (ver test_financeiro_ensure_tables_cria_coluna_
+        # bling_id_e_indice_plano_contas abaixo) — sincronizar_plano_contas_bling
+        # so' faz o upsert em si, entao so' precisa mockar o SELECT de "existing".
         fake_db = AsyncMock()
-        fake_db.fetchval.side_effect = [None, None]  # 1a chamada: checa coluna; 2a: checa conta existente
+        fake_db.fetchval.side_effect = [None]  # checa conta existente
         with patch("bling_erp.get_access_token", return_value="tok"), \
              patch("core.financeiro.get_db", new=AsyncMock(return_value=fake_db)), \
              patch("bling_erp.listar_contas_contabeis", return_value={"data": [
@@ -33,11 +37,29 @@ class TestBlingFinanceiro(unittest.TestCase):
             resultado = fin.sincronizar_plano_contas_bling()
         self.assertEqual(resultado["sync"], 1)
         sqls_executados = [c.args[0] for c in fake_db.execute.call_args_list]
-        self.assertTrue(any("ALTER TABLE fin_plano_contas ADD COLUMN" in s for s in sqls_executados))
         self.assertTrue(any("INSERT INTO fin_plano_contas" in s for s in sqls_executados))
         # migracao de coluna nunca pode apagar/truncar o seed de 11 linhas ja
         # existente em fin_plano_contas — ADD COLUMN IF NOT EXISTS e' a unica
         # operacao de schema permitida contra essa tabela no sync.
         self.assertFalse(any("DROP" in s.upper() or "TRUNCATE" in s.upper() or "DELETE FROM fin_plano_contas" in s.upper() for s in sqls_executados))
+
+    def test_ensure_tables_cria_coluna_bling_id_e_indice_plano_contas(self):
+        # Achado #1 da revisao final: GET /api/bling/plano-contas selecionava
+        # a coluna bling_id sem ela nunca ter sido garantida no boot (so' era
+        # criada dentro de sincronizar_plano_contas_bling(), sob demanda) —
+        # em qualquer banco que ja tinha fin_plano_contas, o primeiro GET
+        # antes do primeiro sync manual explodia com UndefinedColumn -> 500.
+        fake_db = AsyncMock()
+        fake_db.fetchval.return_value = 0
+        with patch("core.financeiro.get_db", new=AsyncMock(return_value=fake_db)):
+            fin._ensure_tables()
+        sqls_executados = [c.args[0] for c in fake_db.execute.call_args_list]
+        self.assertTrue(any(
+            "ALTER TABLE fin_plano_contas ADD COLUMN IF NOT EXISTS bling_id" in s
+            for s in sqls_executados))
+        self.assertTrue(any(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_fin_plano_contas_bling_id" in s
+            and "fin_plano_contas(bling_id) WHERE bling_id IS NOT NULL" in s
+            for s in sqls_executados))
 
 if __name__=="__main__":unittest.main(verbosity=2)

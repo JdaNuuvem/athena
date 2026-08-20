@@ -105,8 +105,12 @@ class TestBlingFlaskRoutes(unittest.TestCase):
             mock_sync.assert_called_once()
 
     def test_canais_listar_route(self):
+        # Achado #2 da revisao final: antes da correcao, bling_canais so' era
+        # criada dentro do sync (POST /canais/sincronizar) -- sem sync previo
+        # a rota GET explodia com "relation does not exist" (500). Agora a
+        # rota garante a tabela sob demanda, entao so' 200 e' aceitavel.
         rv = self.client.get("/api/bling/canais")
-        self.assertIn(rv.status_code, [200, 500])
+        self.assertEqual(rv.status_code, 200)
 
     def test_plano_contas_sincronizar_route(self):
         with patch("routes.integrations.sincronizar_plano_contas_bling", return_value={"sync": 5}) as mock_sync:
@@ -117,8 +121,14 @@ class TestBlingFlaskRoutes(unittest.TestCase):
             mock_sync.assert_called_once()
 
     def test_plano_contas_listar_route(self):
+        # Achado #1 da revisao final: antes da correcao, a coluna bling_id de
+        # fin_plano_contas so' era criada dentro do sync (POST
+        # /plano-contas/sincronizar) -- sem sync previo o SELECT explodia com
+        # "column bling_id does not exist" (500). Agora a coluna e' garantida
+        # no boot por core.financeiro._ensure_tables(), entao so' 200 e'
+        # aceitavel.
         rv = self.client.get("/api/bling/plano-contas")
-        self.assertIn(rv.status_code, [200, 500])
+        self.assertEqual(rv.status_code, 200)
 
 
 class TestBlingRotasRemovidas(unittest.TestCase):
