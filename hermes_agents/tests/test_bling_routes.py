@@ -90,6 +90,12 @@ class TestBlingFlaskRoutes(unittest.TestCase):
             self.assertEqual(data["sync"], 3)
             mock_sync.assert_called_once_with(pagina=2, limite=50)
 
+    def test_produtos_agrupados_usa_hierarquia_bling_erp(self):
+        with patch("routes.integrations.listar_produtos_agrupados", return_value={"grupos": [], "avulsos": []}) as mock_fn:
+            rv = self.client.get("/api/bling/produtos/agrupados")
+            self.assertEqual(rv.status_code, 200)
+            mock_fn.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
