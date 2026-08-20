@@ -240,6 +240,20 @@ class TestSituacoes(unittest.TestCase):
         bling.deletar_situacao(42)
         mock_request.assert_called_once_with("situacoes/42", method="DELETE")
 
+    def test_sincronizar_situacoes_bling_cria_tabela_e_faz_upsert(self):
+        fake_db = AsyncMock()
+        fake_db.fetchval.return_value = None
+        with patch("bling_erp.get_access_token", return_value="tok"), \
+             patch("bling_erp.get_db", new=AsyncMock(return_value=fake_db)), \
+             patch("bling_erp.listar_situacoes", return_value={"data": [
+                 {"id": 777, "nome": "Aguardando Pagamento", "cor": "FFA500", "modulo": "pedidos"},
+             ]}):
+            resultado = bling.sincronizar_situacoes_bling()
+        self.assertEqual(resultado["sync"], 1)
+        sqls_executados = [c.args[0] for c in fake_db.execute.call_args_list]
+        self.assertTrue(any("CREATE TABLE IF NOT EXISTS bling_situacoes" in s for s in sqls_executados))
+        self.assertTrue(any("INSERT INTO bling_situacoes" in s for s in sqls_executados))
+
 
 if __name__=="__main__": unittest.main(verbosity=2)
 

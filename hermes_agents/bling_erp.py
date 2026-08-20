@@ -550,6 +550,55 @@ def sincronizar_canais_bling(pagina: int = 1, limite: int = 100) -> dict:
         return {"error": str(e)}
 
 
+def sincronizar_situacoes_bling(pagina: int = 1, limite: int = 100) -> dict:
+    """Sync de situacoes (status customizados) cadastradas no Bling, usadas como
+    filtro/referencia nas telas de Pedidos de Venda, Pedidos de Compra e Notas Fiscais."""
+    token = get_access_token()
+    if not token:
+        return {"error": "Bling nao autenticado", "auth_url": get_auth_url()}
+    r = listar_situacoes(pagina, limite)
+    if r.get("error"):
+        return r
+    dados = r.get("data", [])
+    if not dados:
+        return {"sync": 0, "message": "sem dados"}
+
+    async def _go():
+        db = await get_db()
+        await db.execute("""CREATE TABLE IF NOT EXISTS bling_situacoes (
+            id SERIAL PRIMARY KEY, bling_id BIGINT UNIQUE, nome VARCHAR(200),
+            cor VARCHAR(20), modulo VARCHAR(50), created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW())""")
+        total = 0
+        for situacao in dados:
+            try:
+                bling_id = situacao.get("id")
+                if not bling_id:
+                    continue
+                nome = situacao.get("nome", "")
+                cor = situacao.get("cor", "")
+                modulo = situacao.get("modulo", "")
+                existing = await db.fetchval("SELECT id FROM bling_situacoes WHERE bling_id = $1", bling_id)
+                if existing:
+                    await db.execute(
+                        "UPDATE bling_situacoes SET nome=$1, cor=$2, modulo=$3, updated_at=NOW() WHERE bling_id=$4",
+                        nome, cor, modulo, bling_id)
+                else:
+                    await db.execute(
+                        "INSERT INTO bling_situacoes (bling_id, nome, cor, modulo) VALUES ($1,$2,$3,$4)",
+                        bling_id, nome, cor, modulo)
+                total += 1
+            except Exception as e:
+                log(AGENT, f"Erro ao sincronizar situacao {situacao.get('id')}: {e}")
+        return total
+
+    try:
+        total = run_async(_go())
+        return {"sync": total}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 def status() -> dict:
     token = get_access_token()
     return {
