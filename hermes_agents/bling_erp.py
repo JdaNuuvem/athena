@@ -469,6 +469,55 @@ def sincronizar_produtos() -> dict:
         return {"sincronizados": 0, "erro": str(e)}
 
 
+def sincronizar_canais_bling(pagina: int = 1, limite: int = 100) -> dict:
+    """Sync de lojas/canais de venda cadastrados dentro do Bling (conceito interno
+    do Bling — ex. 'Loja Virtual', 'Balcão' — distinto da tabela `lojas` do Athena,
+    que ja' mapeia depositos fisicos via lojas.bling_id)."""
+    token = get_access_token()
+    if not token:
+        return {"error": "Bling nao autenticado", "auth_url": get_auth_url()}
+    r = listar_lojas(pagina, limite)
+    if r.get("error"):
+        return r
+    dados = r.get("data", [])
+    if not dados:
+        return {"sync": 0, "message": "sem dados"}
+
+    async def _go():
+        db = await get_db()
+        await db.execute("""CREATE TABLE IF NOT EXISTS bling_canais (
+            id SERIAL PRIMARY KEY, bling_id BIGINT UNIQUE, nome VARCHAR(200),
+            situacao VARCHAR(20), created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW())""")
+        total = 0
+        for canal in dados:
+            try:
+                bling_id = canal.get("id")
+                if not bling_id:
+                    continue
+                nome = canal.get("descricao", "")
+                situacao = str(canal.get("situacao", ""))
+                existing = await db.fetchval("SELECT id FROM bling_canais WHERE bling_id = $1", bling_id)
+                if existing:
+                    await db.execute(
+                        "UPDATE bling_canais SET nome=$1, situacao=$2, updated_at=NOW() WHERE bling_id=$3",
+                        nome, situacao, bling_id)
+                else:
+                    await db.execute(
+                        "INSERT INTO bling_canais (bling_id, nome, situacao) VALUES ($1,$2,$3)",
+                        bling_id, nome, situacao)
+                total += 1
+            except Exception as e:
+                log(AGENT, f"Erro ao sincronizar canal {canal.get('id')}: {e}")
+        return total
+
+    try:
+        total = run_async(_go())
+        return {"sync": total}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 def status() -> dict:
     token = get_access_token()
     return {

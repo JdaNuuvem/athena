@@ -187,6 +187,26 @@ class TestListarContasContabeis(unittest.TestCase):
         self.assertEqual(r["data"][0]["nome"], "1.1.01 - Caixa")
 
 
+class TestSincronizarCanaisBling(unittest.TestCase):
+    """Sync de canais de venda do Bling (tabela bling_canais)."""
+    def setUp(self): bling._TOKEN["access"] = "mock"
+
+    def test_sincronizar_canais_bling_cria_tabela_e_faz_upsert(self):
+        fake_db = AsyncMock()
+        fake_db.fetchval.return_value = None  # nenhum canal existente ainda
+        with patch("bling_erp.get_access_token", return_value="tok"), \
+             patch("bling_erp.get_db", new=AsyncMock(return_value=fake_db)), \
+             patch("bling_erp.listar_lojas", return_value={"data": [
+                 {"id": 111, "descricao": "Loja Virtual", "situacao": "A"},
+             ]}):
+            resultado = bling.sincronizar_canais_bling()
+        self.assertEqual(resultado["sync"], 1)
+        # confirma que criou a tabela e fez INSERT (nao UPDATE, ja que fetchval retornou None)
+        sqls_executados = [c.args[0] for c in fake_db.execute.call_args_list]
+        self.assertTrue(any("CREATE TABLE IF NOT EXISTS bling_canais" in s for s in sqls_executados))
+        self.assertTrue(any("INSERT INTO bling_canais" in s for s in sqls_executados))
+
+
 if __name__=="__main__": unittest.main(verbosity=2)
 
 patcher.stop()
