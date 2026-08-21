@@ -638,6 +638,90 @@ def sincronizar_uma_nota_fiscal(bling_id: int, resumo_fallback: dict = None) -> 
     except Exception as e:
         return {"error": str(e)}
 
+def _sincronizar_notas_bling_por_tipo(listar_fn, detalhe_fn, tipo_documento: str,
+                                      pagina: int = 1, limite: int = 100, pular: int = 0) -> dict:
+    """Motor compartilhado dos syncs de nota fiscal por tipo de documento
+    (NFC-e, NFS-e). Mesmo esqueleto de paginacao em lotes de
+    sincronizar_notas_fiscais_bling — incluindo o cap de
+    MAX_DETALHES_POR_CHAMADA que evita o timeout de 100s do proxy Cloudflare
+    — gravando em fiscal_notas_fiscais com o tipo_documento informado.
+    Fatorado em vez de copiado pra cada tipo: qualquer divergencia entre as
+    copias viraria dado fiscal inconsistente entre modelos de nota."""
+    MAX_PAGINAS = 50
+    MAX_DETALHES_POR_CHAMADA = 50
+    notas_resumo = []
+    erros = []
+    pag = pagina
+    mais_paginas = False
+    for _ in range(MAX_PAGINAS):
+        r = listar_fn(pag, limite)
+        dados = r.get("data", [])
+        if not dados or r.get("error"):
+            if r.get("error"): erros.append(f"pag {pag}: {r['error']}")
+            break
+        notas_resumo.extend(dados)
+        if len(dados) < limite:
+            break
+        pag += 1
+    else:
+        mais_paginas = True
+    if not notas_resumo:
+        return {"sync": 0, "message": "sem dados", "erros": erros}
+
+    lote = notas_resumo[pular:pular + MAX_DETALHES_POR_CHAMADA]
+    proximo_pular = pular + len(lote)
+    mais_notas = proximo_pular < len(notas_resumo) or mais_paginas
+
+    async def _go():
+        db = await get_db()
+        total = 0
+        for nf_resumo in lote:
+            bling_id = nf_resumo.get("id")
+            if not bling_id:
+                continue
+            detalhe = None
+            for attempt in range(3):
+                r_detalhe = detalhe_fn(bling_id)
+                if not r_detalhe.get("error"):
+                    detalhe = r_detalhe.get("data", {})
+                    break
+                if r_detalhe.get("status_code") == 429:
+                    time.sleep(2 ** attempt)
+                    continue
+                erros.append(f"nota {bling_id}: {r_detalhe['error']}")
+                break
+            if not detalhe:
+                detalhe = nf_resumo  # fallback: usa ao menos o resumo da listagem
+            try:
+                await _upsert_nota_fiscal(db, bling_id, detalhe, tipo_documento=tipo_documento)
+                total += 1
+            except Exception as e:
+                log(AGENT, f"Erro sync {tipo_documento.upper()} {nf_resumo.get('numero')}: {e}")
+        return {"sync": total, "erros": erros, "mais_paginas": mais_paginas,
+                "mais_notas": mais_notas, "proximo_pular": proximo_pular if mais_notas else 0,
+                "total_notas": len(notas_resumo)}
+    try:
+        return run_async(_go())
+    except Exception as e:
+        log(AGENT, f"Erro sincronizar notas {tipo_documento}: {e}")
+        return {"error": str(e), "sync": 0}
+
+def sincronizar_nfce_bling(pagina: int = 1, limite: int = 100, pular: int = 0) -> dict:
+    """Sync de NFC-e (nota de consumidor, venda presencial) → fiscal_notas_fiscais
+    com tipo_documento='nfce'."""
+    from bling_erp import listar_nfce, get_nfce_detalhe, get_access_token, get_auth_url
+    token = get_access_token()
+    if not token: return {"error": "Bling nao autenticado", "auth_url": get_auth_url()}
+    return _sincronizar_notas_bling_por_tipo(listar_nfce, get_nfce_detalhe, "nfce", pagina, limite, pular)
+
+def sincronizar_nfse_bling(pagina: int = 1, limite: int = 100, pular: int = 0) -> dict:
+    """Sync de NFS-e (nota de servico) → fiscal_notas_fiscais com
+    tipo_documento='nfse'."""
+    from bling_erp import listar_nfse, get_nfse_detalhe, get_access_token, get_auth_url
+    token = get_access_token()
+    if not token: return {"error": "Bling nao autenticado", "auth_url": get_auth_url()}
+    return _sincronizar_notas_bling_por_tipo(listar_nfse, get_nfse_detalhe, "nfse", pagina, limite, pular)
+
 def sincronizar_contas_receber_bling(pagina: int = 1, limite: int = 100) -> dict:
     """Sync contas a receber do Bling → fin_contas_receber (tabela unificada SSOT)."""
     from bling_erp import listar_contas_receber as bling_cr, get_access_token, get_auth_url

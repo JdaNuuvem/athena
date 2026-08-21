@@ -227,4 +227,86 @@ class TestUpsertNotaFiscalTipoDocumento(unittest.TestCase):
         q_upd, args_upd = self._update_call(db_upd)
         self.assertEqual(max(int(n) for n in re.findall(r"\$(\d+)", q_upd)), len(args_upd))
 
+class TestSincronizarNfceNfseBling(unittest.TestCase):
+    """NFC-e e NFS-e reaproveitam fiscal_notas_fiscais + _upsert_nota_fiscal,
+    trocando so' o wrapper de API Bling e o tipo_documento gravado."""
+    def setUp(self):
+        import core.fiscal as fiscal
+        self.fiscal = fiscal
+
+    def _tipo_gravado(self, db):
+        q, args = next(c for c in db.fetchvals if "INSERT INTO fiscal_notas_fiscais" in c[0])
+        return args[-1]
+
+    @patch("bling_erp.get_access_token", return_value="")
+    def test_nfce_sem_token(self, mt):
+        r = self.fiscal.sincronizar_nfce_bling()
+        self.assertIn("error", r)
+
+    @patch("bling_erp.get_access_token", return_value="tok")
+    @patch("bling_erp.listar_nfce", return_value={"data": []})
+    def test_nfce_sem_notas(self, ml, mt):
+        r = self.fiscal.sincronizar_nfce_bling()
+        self.assertEqual(r["sync"], 0)
+
+    @patch("bling_erp.get_access_token", return_value="tok")
+    @patch("bling_erp.listar_nfce", return_value={"data": [{"id": 111}]})
+    @patch("bling_erp.get_nfce_detalhe", return_value={"data": _NFE_DETALHE_MOCK})
+    def test_sincronizar_nfce_bling_grava_tipo_documento_nfce(self, mdet, ml, mt):
+        db = _FakeDBNotas(existing_id=None)
+        async def fake_get_db(): return db
+        with patch.object(self.fiscal, "get_db", fake_get_db):
+            r = self.fiscal.sincronizar_nfce_bling()
+        self.assertEqual(r["sync"], 1)
+        self.assertEqual(self._tipo_gravado(db), "nfce")
+
+    @patch("bling_erp.get_access_token", return_value="tok")
+    @patch("bling_erp.listar_nfse", return_value={"data": [{"id": 222}]})
+    @patch("bling_erp.get_nfse_detalhe", return_value={"data": _NFE_DETALHE_MOCK})
+    def test_sincronizar_nfse_bling_grava_tipo_documento_nfse(self, mdet, ml, mt):
+        db = _FakeDBNotas(existing_id=None)
+        async def fake_get_db(): return db
+        with patch.object(self.fiscal, "get_db", fake_get_db):
+            r = self.fiscal.sincronizar_nfse_bling()
+        self.assertEqual(r["sync"], 1)
+        self.assertEqual(self._tipo_gravado(db), "nfse")
+
+    @patch("bling_erp.get_access_token", return_value="tok")
+    @patch("bling_erp.listar_nfce", return_value={"data": [{"id": 111}]})
+    @patch("bling_erp.get_nfce_detalhe", return_value={"error": "falhou"})
+    def test_nfce_fallback_para_resumo_quando_detalhe_falha(self, mdet, ml, mt):
+        db = _FakeDBNotas(existing_id=None)
+        async def fake_get_db(): return db
+        with patch.object(self.fiscal, "get_db", fake_get_db):
+            r = self.fiscal.sincronizar_nfce_bling()
+        self.assertEqual(r["sync"], 1)
+        self.assertTrue(any("111" in e for e in r["erros"]))
+
+    @patch("bling_erp.get_access_token", return_value="tok")
+    @patch("bling_erp.listar_nfce", return_value={"data": [{"id": i} for i in range(1, 61)]})
+    @patch("bling_erp.get_nfce_detalhe", return_value={"data": _NFE_DETALHE_MOCK})
+    def test_nfce_processa_em_lote_com_continuacao(self, mdet, ml, mt):
+        """Mesmo cap de 50 por chamada do sync de NF-e (timeout de 100s do proxy)."""
+        db = _FakeDBNotas(existing_id=None)
+        async def fake_get_db(): return db
+        with patch.object(self.fiscal, "get_db", fake_get_db):
+            r1 = self.fiscal.sincronizar_nfce_bling()
+        self.assertEqual(r1["sync"], 50)
+        self.assertTrue(r1["mais_notas"])
+        self.assertEqual(r1["proximo_pular"], 50)
+        self.assertEqual(r1["total_notas"], 60)
+        with patch.object(self.fiscal, "get_db", fake_get_db):
+            r2 = self.fiscal.sincronizar_nfce_bling(pular=50)
+        self.assertEqual(r2["sync"], 10)
+        self.assertFalse(r2["mais_notas"])
+
+    @patch("bling_erp.get_access_token", return_value="tok")
+    @patch("bling_erp.listar_nfse", return_value={"data": [{"id": 222}]})
+    def test_nfse_erro_fora_do_loop_nao_propaga(self, ml, mt):
+        async def fake_get_db(): raise RuntimeError("conexao recusada")
+        with patch.object(self.fiscal, "get_db", fake_get_db):
+            r = self.fiscal.sincronizar_nfse_bling()
+        self.assertIn("error", r)
+        self.assertEqual(r["sync"], 0)
+
 if __name__=="__main__":unittest.main(verbosity=2)
