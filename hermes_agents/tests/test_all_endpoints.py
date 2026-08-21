@@ -453,13 +453,19 @@ class TestRHEndpoints(unittest.TestCase):
         self.client = app.test_client()
         self.headers = {"Authorization": f"Bearer {USER_TOKEN}"}
 
+    # 403 e' esperado: as rotas de RH levam @requer_permissao("rh.ver") e
+    # USER_TOKEN (user_id=1) nao tem role no RBAC mockado — fetchrow sempre
+    # retorna None, entao cai no fail-closed. Mesmo padrao dos testes
+    # _com_loja_id acima. Este arquivo e' smoke test de existencia de rota
+    # (200/500 = rota existe), nao de RBAC — quem cobre a autorizacao de RH
+    # de verdade e' tests/test_rh_seguranca.py.
     def test_dashboard(self):
         r = self.client.get("/api/rh/dashboard", headers=self.headers)
-        self.assertIn(r.status_code, [200, 500])
+        self.assertIn(r.status_code, [200, 403, 500])
 
     def test_list(self):
         r = self.client.get("/api/rh/funcionarios", headers=self.headers)
-        self.assertIn(r.status_code, [200, 500])
+        self.assertIn(r.status_code, [200, 403, 500])
 
 
 class TestCadastrosEndpoints(unittest.TestCase):
