@@ -1747,7 +1747,7 @@ export interface BlingCanal {
   id: number;
   nome: string;
   bling_id?: number | null;
-  tipo?: string | null;
+  situacao?: string | null;
 }
 
 export interface BlingNotaLocal {
