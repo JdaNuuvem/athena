@@ -40,6 +40,15 @@ def _ensure_tables():
         # o produto nao tem ainda.
         try: await db.execute("ALTER TABLE compras_pedidos ADD COLUMN IF NOT EXISTS loja_id INT")
         except Exception: pass
+        # ── Sync Bling: bling_id identifica o pedido de compra no Bling pra
+        # permitir upsert idempotente; idx unico parcial (WHERE bling_id IS
+        # NOT NULL) deixa pedidos manuais (bling_id NULL) livres de conflito.
+        try: await db.execute("ALTER TABLE compras_pedidos ADD COLUMN IF NOT EXISTS bling_id BIGINT")
+        except Exception: pass
+        try: await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_compras_pedidos_bling_id ON compras_pedidos (bling_id) WHERE bling_id IS NOT NULL")
+        except Exception: pass
+        try: await db.execute("ALTER TABLE compras_itens ADD COLUMN IF NOT EXISTS bling_item_id BIGINT")
+        except Exception: pass
         try:
             from core.lojas import LOJA_PRINCIPAL_ID
             if LOJA_PRINCIPAL_ID:
@@ -254,6 +263,101 @@ def confirmar_recebimento(id: int) -> dict:
         ao_receber_compra(id)
     except Exception as e: pass
     return r
+
+def sincronizar_pedidos_compra_bling(pagina: int = 1, limite: int = 100) -> dict:
+    """Sync de pedidos de compra do Bling -> compras_pedidos/compras_itens (upsert por
+    bling_id). Resolve fornecedor por documento em cad_fornecedores, criando se nao existir —
+    mesmo padrao de core.entidades.migrar_fornecedores_compras."""
+    from bling_erp import listar_pedidos_compra, get_pedido_compra_detalhe, get_access_token, get_auth_url
+    token = get_access_token()
+    if not token:
+        return {"error": "Bling nao autenticado", "auth_url": get_auth_url()}
+    r = listar_pedidos_compra(pagina, limite)
+    if r.get("error"):
+        return r
+    resumos = r.get("data", [])
+    if not resumos:
+        return {"sync": 0, "message": "sem dados"}
+
+    async def _go():
+        db = await get_db()
+        # coluna pode nao existir ainda (deploy antigo / boot que falhou) —
+        # garante idempotentemente antes de gravar, sem depender so' do
+        # _ensure_tables rodado no import do modulo.
+        col_exists = await db.fetchval(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'compras_pedidos' AND column_name = 'bling_id'")
+        if not col_exists:
+            try: await db.execute("ALTER TABLE compras_pedidos ADD COLUMN IF NOT EXISTS bling_id BIGINT")
+            except Exception: pass
+            try: await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_compras_pedidos_bling_id ON compras_pedidos (bling_id) WHERE bling_id IS NOT NULL")
+            except Exception: pass
+            try: await db.execute("ALTER TABLE compras_itens ADD COLUMN IF NOT EXISTS bling_item_id BIGINT")
+            except Exception: pass
+
+        total = 0
+        erros = []
+        for resumo in resumos:
+            bling_id = resumo.get("id")
+            if not bling_id:
+                continue
+            r_detalhe = get_pedido_compra_detalhe(bling_id)
+            if r_detalhe.get("error"):
+                erros.append(f"pedido {bling_id}: {r_detalhe['error']}")
+                continue
+            detalhe = r_detalhe.get("data", {})
+            try:
+                fornecedor = detalhe.get("fornecedor", {}) or {}
+                doc = (fornecedor.get("numeroDocumento") or "").replace(".", "").replace("/", "").replace("-", "").strip()
+                fornecedor_id = None
+                if doc:
+                    fornecedor_id = await db.fetchval(
+                        "SELECT id FROM cad_fornecedores WHERE REPLACE(REPLACE(REPLACE(documento,'.',''),'/',''),'-','') = $1 LIMIT 1", doc)
+                    if not fornecedor_id:
+                        fornecedor_id = await db.fetchval(
+                            "INSERT INTO cad_fornecedores (nome, tipo, documento, status) VALUES ($1,'PJ',$2,'ativo') RETURNING id",
+                            fornecedor.get("nome", ""), doc)
+
+                numero = str(detalhe.get("numero", ""))
+                valor_total = float(detalhe.get("total", 0) or 0)
+                situacao = (detalhe.get("situacao") or {}).get("nome", "")
+                data_emissao = (detalhe.get("data") or "")[:10] or None
+                data_prevista = (detalhe.get("dataPrevista") or "")[:10] or None
+
+                pedido_id = await db.fetchval("SELECT id FROM compras_pedidos WHERE bling_id = $1", bling_id)
+                if pedido_id:
+                    await db.execute("""UPDATE compras_pedidos SET
+                        numero=$1, fornecedor_id=$2, valor_total=$3, status=$4,
+                        data_emissao=$5::date, data_entrega_prevista=$6::date, updated_at=NOW()
+                        WHERE bling_id=$7""",
+                        numero, fornecedor_id, valor_total, situacao,
+                        data_emissao, data_prevista, bling_id)
+                else:
+                    await db.execute("""INSERT INTO compras_pedidos
+                        (numero, fornecedor_id, valor_total, status, data_emissao,
+                         data_entrega_prevista, bling_id)
+                        VALUES ($1,$2,$3,$4,$5::date,$6::date,$7)""",
+                        numero, fornecedor_id, valor_total, situacao,
+                        data_emissao, data_prevista, bling_id)
+                    pedido_id = await db.fetchval("SELECT id FROM compras_pedidos WHERE bling_id = $1", bling_id)
+
+                await db.execute("DELETE FROM compras_itens WHERE pedido_id = $1", pedido_id)
+                for item in detalhe.get("itens", []) or []:
+                    await db.execute("""INSERT INTO compras_itens
+                        (pedido_id, produto_codigo, descricao, quantidade, valor_unitario, valor_total)
+                        VALUES ($1,$2,$3,$4,$5,$6)""",
+                        pedido_id, item.get("codigo", ""), item.get("descricao", ""),
+                        float(item.get("quantidade", 0) or 0), float(item.get("valor", 0) or 0),
+                        float(item.get("quantidade", 0) or 0) * float(item.get("valor", 0) or 0))
+                total += 1
+            except Exception as e:
+                erros.append(f"pedido {bling_id}: {e}")
+                log(AGENT, f"Erro ao sincronizar pedido de compra {bling_id}: {e}")
+        return {"sync": total, "erros": erros}
+
+    try:
+        return run_async(_go())
+    except Exception as e:
+        return {"error": str(e)}
 
 def dashboard() -> dict:
     async def _go():
