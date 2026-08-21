@@ -152,6 +152,24 @@ def get_nfe_detail(id_nota: int) -> dict:
     return _request(f"nfe/{id_nota}")
 
 
+# ── NFC-e (nota de consumidor, venda presencial) ──
+
+def listar_nfce(pagina: int = 1, limite: int = 100) -> dict:
+    return _request("nfce", {"pagina": pagina, "limite": limite})
+
+def get_nfce_detalhe(id_nota: int) -> dict:
+    return _request(f"nfce/{id_nota}")
+
+
+# ── NFS-e (nota de servico) ──
+
+def listar_nfse(pagina: int = 1, limite: int = 100) -> dict:
+    return _request("nfse", {"pagina": pagina, "limite": limite})
+
+def get_nfse_detalhe(id_nota: int) -> dict:
+    return _request(f"nfse/{id_nota}")
+
+
 # ── Contatos (Clientes / Fornecedores) ──
 
 def listar_contatos(pagina: int = 1, limite: int = 100, tipo: str = "") -> dict:

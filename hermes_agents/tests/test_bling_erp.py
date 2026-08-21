@@ -275,6 +275,30 @@ class TestPedidosCompra(unittest.TestCase):
         mock_request.assert_called_once_with("pedidos/compras/123/receber", {}, method="POST")
 
 
+class TestNfceNfse(unittest.TestCase):
+    """Wrappers de API Bling para NFC-e (consumidor) e NFS-e (servico)."""
+    def setUp(self): bling._TOKEN["access"] = "mock"
+
+    @patch("bling_erp._request", return_value={"data": []})
+    def test_listar_nfce_chama_endpoint_correto(self, mock_request):
+        bling.listar_nfce(pagina=1, limite=100)
+        mock_request.assert_called_once_with("nfce", {"pagina": 1, "limite": 100})
+
+    @patch("bling_erp._request", return_value={"data": {}})
+    def test_get_nfce_detalhe_chama_endpoint_correto(self, mock_request):
+        bling.get_nfce_detalhe(321)
+        mock_request.assert_called_once_with("nfce/321")
+
+    @patch("bling_erp._request", return_value={"data": []})
+    def test_listar_nfse_chama_endpoint_correto(self, mock_request):
+        bling.listar_nfse(pagina=1, limite=100)
+        mock_request.assert_called_once_with("nfse", {"pagina": 1, "limite": 100})
+
+    @patch("bling_erp._request", return_value={"data": {}})
+    def test_get_nfse_detalhe_chama_endpoint_correto(self, mock_request):
+        bling.get_nfse_detalhe(654)
+        mock_request.assert_called_once_with("nfse/654")
+
 if __name__=="__main__": unittest.main(verbosity=2)
 
 patcher.stop()
