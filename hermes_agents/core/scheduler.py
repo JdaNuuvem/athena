@@ -202,15 +202,17 @@ def _sync_categorias():
     except Exception as e: pass
 
 # ponytail: jobs run every N seconds. Adjust intervals based on volume.
-# Bling desativado temporariamente (modulo nao usado no momento — ver core/lojas.py /
-# integracoes) — jobs abaixo comentados para nao consumir a API do Bling nem
-# competir por tempo de scheduler com os jobs Shopee.
-# add_job(_sync_pedidos, "bling-pedidos", 300)          # 5 min
+# Os jobs Bling ficaram comentados por um tempo porque o _worker rodava tudo
+# em sequencia numa thread so' e um sync Bling lento atrasava os jobs Shopee
+# (inclusive shopee-renovar-tokens, que precisa rodar a cada 15min). Com a
+# execucao isolada por job (ver _worker/_run_job acima), isso deixou de ser um
+# problema e eles voltaram — com os mesmos intervalos de antes.
+add_job(_sync_pedidos, "bling-pedidos", 300)           # 5 min
 add_job(_sync_pedidos_shopee, "shopee-pedidos", 300)   # 5 min
-# add_job(_sync_nf, "bling-nf", 600)                     # 10 min
+add_job(_sync_nf, "bling-nf", 600)                     # 10 min
 add_job(_sync_contatos, "bling-contatos", 1800)        # 30 min
-# add_job(_sync_cr_cp, "bling-cr-cp", 3600)              # 1 hour
-# add_job(_sync_categorias, "bling-categorias", 7200)     # 2 hours
+add_job(_sync_cr_cp, "bling-cr-cp", 3600)              # 1 hour
+add_job(_sync_categorias, "bling-categorias", 7200)    # 2 hours
 add_job(_persistir_rotacao_estoque, "estoque-rotacao", 86400)  # daily
 add_job(_reconciliar_loja_id, "estoque-reconciliar-loja-id", 3600)  # 1 hour
 add_job(_renovar_tokens_shopee, "shopee-renovar-tokens", 900)  # 15 min
