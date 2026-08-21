@@ -21,6 +21,10 @@ def _ensure_tables():
         )""")
         try: await db.execute("ALTER TABLE vendas_pedidos ADD COLUMN IF NOT EXISTS transportadora_nome VARCHAR(200)")
         except Exception as e: pass
+        # ambiente separa pedido sincronizado em homologacao do dado real de
+        # producao. DEFAULT 'producao' classifica retroativamente o que ja existe.
+        try: await db.execute("ALTER TABLE vendas_pedidos ADD COLUMN IF NOT EXISTS ambiente VARCHAR(15) DEFAULT 'producao'")
+        except Exception as e: pass
         try: await db.execute("ALTER TABLE vendas_pedidos ADD COLUMN IF NOT EXISTS shopee_order_sn VARCHAR(50)")
         except Exception as e: pass
         try: await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_vendas_pedidos_shopee_order_sn ON vendas_pedidos (shopee_order_sn) WHERE shopee_order_sn IS NOT NULL")
@@ -330,9 +334,10 @@ def sincronizar_pedidos_bling(pagina: int = 1, limite: int = 100) -> dict:
     """Sync completo: lista todas as paginas de pedidos e busca o DETALHE de cada um
     (GET /pedidos/vendas/{id}) para importar frete, vendedor, transportadora e parcelas —
     dados que a listagem (GET /pedidos/vendas) nao traz."""
-    from bling_erp import listar_pedidos as bling_pedidos, get_pedido_detalhe, get_access_token, get_auth_url
+    from bling_erp import listar_pedidos as bling_pedidos, get_pedido_detalhe, get_access_token, get_auth_url, get_ambiente
     token = get_access_token()
     if not token: return {"error": "Bling nao autenticado", "auth_url": get_auth_url()}
+    ambiente = get_ambiente()
 
     MAX_PAGINAS = 50  # limite de seguranca: evita loop/chamadas ilimitadas em contas com muitos pedidos
     pedidos_resumo = []
@@ -382,23 +387,26 @@ def sincronizar_pedidos_bling(pagina: int = 1, limite: int = 100) -> dict:
                     await db.execute("""UPDATE vendas_pedidos SET
                         cliente=$1, cliente_documento=$2, total=$3, desconto=$4, acrescimo=$5, frete=$6,
                         status=$7, data=$8::date, data_entrega=$9::date, vendedor=$10, transportadora_nome=$11,
-                        marketplace='bling', loja_id=$12, observacoes=$13, updated_at=NOW()
-                        WHERE bling_id=$14""",
+                        marketplace='bling', loja_id=$12, observacoes=$13, ambiente=$14, updated_at=NOW()
+                        WHERE bling_id=$15""",
                         campos["cliente"], campos["cliente_documento"], campos["total"], campos["desconto"],
                         campos["acrescimo"], campos["frete"], campos["status"], campos["data"], campos["data_entrega"],
-                        campos["vendedor"], campos["transportadora_nome"], campos["loja_id"], campos["observacoes"], bling_id)
+                        campos["vendedor"], campos["transportadora_nome"], campos["loja_id"], campos["observacoes"],
+                        ambiente, bling_id)
                     pid = existing
                     await db.execute("DELETE FROM vendas_itens WHERE pedido_id = $1", pid)
                     await db.execute("DELETE FROM vendas_pagamentos WHERE pedido_id = $1", pid)
                 else:
                     pid = await db.fetchval("""INSERT INTO vendas_pedidos
                         (cliente, cliente_documento, total, desconto, acrescimo, frete, status, data, data_entrega,
-                         vendedor, transportadora_nome, marketplace, origem, bling_id, bling_numero, loja_id, observacoes)
-                        VALUES ($1,$2,$3,$4,$5,$6,$7,$8::date,$9::date,$10,$11,'bling','bling',$12,$13,$14,$15)
+                         vendedor, transportadora_nome, marketplace, origem, bling_id, bling_numero, loja_id, observacoes,
+                         ambiente)
+                        VALUES ($1,$2,$3,$4,$5,$6,$7,$8::date,$9::date,$10,$11,'bling','bling',$12,$13,$14,$15,$16)
                         RETURNING id""",
                         campos["cliente"], campos["cliente_documento"], campos["total"], campos["desconto"],
                         campos["acrescimo"], campos["frete"], campos["status"], campos["data"], campos["data_entrega"],
-                        campos["vendedor"], campos["transportadora_nome"], bling_id, str(detalhe.get("numero", "")), campos["loja_id"], campos["observacoes"])
+                        campos["vendedor"], campos["transportadora_nome"], bling_id, str(detalhe.get("numero", "")),
+                        campos["loja_id"], campos["observacoes"], ambiente)
 
                 itens = detalhe.get("itens", []) or []
                 for idx, item in enumerate(itens, 1):

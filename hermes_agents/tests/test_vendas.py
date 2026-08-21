@@ -107,6 +107,34 @@ class TestSincronizarPedidosBling(unittest.TestCase):
         self.assertTrue(any("555" in e for e in r["erros"]))
 
 
+    @patch("bling_erp.get_access_token", return_value="tok")
+    @patch("bling_erp.get_ambiente", return_value="homologacao")
+    @patch("bling_erp.listar_pedidos", return_value={"data": [{"id": 555}]})
+    @patch("bling_erp.get_pedido_detalhe", return_value={"data": _PEDIDO_DETALHE_MOCK})
+    def test_cria_pedido_grava_ambiente_corrente(self, mdet, ml, mamb, mt):
+        db = _FakeDBPedidos(existing_id=None)
+        async def fake_get_db(): return db
+        with patch.object(vendas, "get_db", fake_get_db):
+            r = vendas.sincronizar_pedidos_bling()
+        self.assertEqual(r["sync"], 1)
+        insert = next(e for e in db.executed if "INSERT INTO vendas_pedidos" in e[0])
+        self.assertIn("homologacao", insert[1])
+
+    @patch("bling_erp.get_access_token", return_value="tok")
+    @patch("bling_erp.get_ambiente", return_value="homologacao")
+    @patch("bling_erp.listar_pedidos", return_value={"data": [{"id": 555}]})
+    @patch("bling_erp.get_pedido_detalhe", return_value={"data": _PEDIDO_DETALHE_MOCK})
+    def test_atualiza_pedido_grava_ambiente_e_mantem_bling_id_no_where(self, mdet, ml, mamb, mt):
+        db = _FakeDBPedidos(existing_id=33)
+        async def fake_get_db(): return db
+        with patch.object(vendas, "get_db", fake_get_db):
+            r = vendas.sincronizar_pedidos_bling()
+        self.assertEqual(r["sync"], 1)
+        q, args = next(e for e in db.executed if "UPDATE vendas_pedidos" in e[0])
+        self.assertEqual(args[-1], 555)             # WHERE bling_id continua ULTIMO
+        self.assertEqual(args[-2], "homologacao")   # ambiente imediatamente antes
+
+
 class _FakeDBPedidosShopee:
     """Fake DB pra sincronizar_pedidos_shopee — le' de shopee_pedidos_sincronizados
     (ja baixado localmente pelo sync da aba Pedidos) em vez de rechamar a API Shopee,

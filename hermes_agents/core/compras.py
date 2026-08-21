@@ -45,6 +45,10 @@ def _ensure_tables():
         # NOT NULL) deixa pedidos manuais (bling_id NULL) livres de conflito.
         try: await db.execute("ALTER TABLE compras_pedidos ADD COLUMN IF NOT EXISTS bling_id BIGINT")
         except Exception: pass
+        # ambiente separa pedido sincronizado em homologacao do dado real de
+        # producao. DEFAULT 'producao' classifica retroativamente o que ja existe.
+        try: await db.execute("ALTER TABLE compras_pedidos ADD COLUMN IF NOT EXISTS ambiente VARCHAR(15) DEFAULT 'producao'")
+        except Exception: pass
         try: await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_compras_pedidos_bling_id ON compras_pedidos (bling_id) WHERE bling_id IS NOT NULL")
         except Exception: pass
         try:
@@ -293,10 +297,11 @@ def sincronizar_pedidos_compra_bling(pagina: int = 1, limite: int = 100) -> dict
     Pagina de verdade num loop de seguranca (mesmo padrao de
     core.vendas.sincronizar_pedidos_bling) ate esgotar a listagem ou atingir MAX_PAGINAS."""
     import time
-    from bling_erp import listar_pedidos_compra, get_pedido_compra_detalhe, get_access_token, get_auth_url
+    from bling_erp import listar_pedidos_compra, get_pedido_compra_detalhe, get_access_token, get_auth_url, get_ambiente
     token = get_access_token()
     if not token:
         return {"error": "Bling nao autenticado", "auth_url": get_auth_url()}
+    ambiente = get_ambiente()
 
     MAX_PAGINAS = 50  # limite de seguranca: evita loop/chamadas ilimitadas em contas com muitos pedidos
     resumos = []
@@ -374,17 +379,18 @@ def sincronizar_pedidos_compra_bling(pagina: int = 1, limite: int = 100) -> dict
                 if pedido_id:
                     await db.execute("""UPDATE compras_pedidos SET
                         numero=$1, fornecedor_id=$2, valor_total=$3, status=$4,
-                        data_emissao=$5::date, data_entrega_prevista=$6::date, updated_at=NOW()
-                        WHERE bling_id=$7""",
+                        data_emissao=$5::date, data_entrega_prevista=$6::date,
+                        ambiente=$7, updated_at=NOW()
+                        WHERE bling_id=$8""",
                         numero, fornecedor_id, valor_total, situacao,
-                        data_emissao, data_prevista, bling_id)
+                        data_emissao, data_prevista, ambiente, bling_id)
                 else:
                     await db.execute("""INSERT INTO compras_pedidos
                         (numero, fornecedor_id, valor_total, status, data_emissao,
-                         data_entrega_prevista, bling_id)
-                        VALUES ($1,$2,$3,$4,$5::date,$6::date,$7)""",
+                         data_entrega_prevista, bling_id, ambiente)
+                        VALUES ($1,$2,$3,$4,$5::date,$6::date,$7,$8)""",
                         numero, fornecedor_id, valor_total, situacao,
-                        data_emissao, data_prevista, bling_id)
+                        data_emissao, data_prevista, bling_id, ambiente)
                     pedido_id = await db.fetchval("SELECT id FROM compras_pedidos WHERE bling_id = $1", bling_id)
 
                 await db.execute("DELETE FROM compras_itens WHERE pedido_id = $1", pedido_id)
