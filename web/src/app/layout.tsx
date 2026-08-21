@@ -43,6 +43,7 @@ const NAV_PERMS: Record<string, string> = {
   "/relatorios": "reports:view",
   "/agents": "agents:view",
   "/integracoes/bling": "integrations:view",
+  "/bling": "integrations:view",
   "/hermes": "agents:view",
   "/roles": "roles:view",
   "/lojas": "cadastros:view",
@@ -135,7 +136,16 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/automacoes", label: "Automações", icon: "automacoes" },
       { href: "/agents", label: "Agentes", icon: "agents" },
       { href: "/hermes", label: "Hermes", icon: "agents" },
-      { href: "/integracoes/bling", label: "Bling", icon: "bling" },
+      {
+        href: "/bling", label: "Bling", icon: "bling",
+        children: [
+          { href: "/bling", label: "Dashboard" },
+          { href: "/bling/produtos", label: "Produtos" },
+          { href: "/bling/pedidos-venda", label: "Pedidos de Venda" },
+          { href: "/bling/financeiro", label: "Financeiro" },
+          { href: "/bling/config", label: "Configurações" },
+        ],
+      },
     ],
   },
   {
