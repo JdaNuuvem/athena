@@ -49,7 +49,11 @@ def _ensure_tables():
         # producao. DEFAULT 'producao' classifica retroativamente o que ja existe.
         try: await db.execute("ALTER TABLE compras_pedidos ADD COLUMN IF NOT EXISTS ambiente VARCHAR(15) DEFAULT 'producao'")
         except Exception: pass
-        try: await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_compras_pedidos_bling_id ON compras_pedidos (bling_id) WHERE bling_id IS NOT NULL")
+        try: await db.execute("DROP INDEX IF EXISTS idx_compras_pedidos_bling_id")
+        except Exception: pass
+        # (bling_id, ambiente): o indice antigo era so' por bling_id, o que
+        # impedia o mesmo pedido coexistir em producao e homologacao.
+        try: await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_compras_pedidos_bling_ambiente ON compras_pedidos (bling_id, ambiente) WHERE bling_id IS NOT NULL")
         except Exception: pass
         try:
             from core.lojas import LOJA_PRINCIPAL_ID
@@ -333,7 +337,14 @@ def sincronizar_pedidos_compra_bling(pagina: int = 1, limite: int = 100) -> dict
         if not col_exists:
             try: await db.execute("ALTER TABLE compras_pedidos ADD COLUMN IF NOT EXISTS bling_id BIGINT")
             except Exception: pass
-            try: await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_compras_pedidos_bling_id ON compras_pedidos (bling_id) WHERE bling_id IS NOT NULL")
+            # ambiente entra no indice composto abaixo — sem ela, o CREATE falha
+            try: await db.execute("ALTER TABLE compras_pedidos ADD COLUMN IF NOT EXISTS ambiente VARCHAR(15) DEFAULT 'producao'")
+            except Exception: pass
+            try: await db.execute("DROP INDEX IF EXISTS idx_compras_pedidos_bling_id")
+            except Exception: pass
+            # (bling_id, ambiente): o indice antigo era so' por bling_id, o que
+            # impedia o mesmo pedido coexistir em producao e homologacao.
+            try: await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_compras_pedidos_bling_ambiente ON compras_pedidos (bling_id, ambiente) WHERE bling_id IS NOT NULL")
             except Exception: pass
             try: await db.execute("ALTER TABLE compras_itens ADD COLUMN IF NOT EXISTS bling_item_id BIGINT")
             except Exception: pass
@@ -375,15 +386,17 @@ def sincronizar_pedidos_compra_bling(pagina: int = 1, limite: int = 100) -> dict
                 data_emissao = (detalhe.get("data") or "")[:10] or None
                 data_prevista = (detalhe.get("dataPrevista") or "")[:10] or None
 
-                pedido_id = await db.fetchval("SELECT id FROM compras_pedidos WHERE bling_id = $1", bling_id)
+                pedido_id = await db.fetchval(
+                    "SELECT id FROM compras_pedidos WHERE bling_id = $1 AND ambiente = $2",
+                    bling_id, ambiente)
                 if pedido_id:
                     await db.execute("""UPDATE compras_pedidos SET
                         numero=$1, fornecedor_id=$2, valor_total=$3, status=$4,
                         data_emissao=$5::date, data_entrega_prevista=$6::date,
                         ambiente=$7, updated_at=NOW()
-                        WHERE bling_id=$8""",
+                        WHERE id=$8""",
                         numero, fornecedor_id, valor_total, situacao,
-                        data_emissao, data_prevista, ambiente, bling_id)
+                        data_emissao, data_prevista, ambiente, pedido_id)
                 else:
                     await db.execute("""INSERT INTO compras_pedidos
                         (numero, fornecedor_id, valor_total, status, data_emissao,
@@ -391,7 +404,9 @@ def sincronizar_pedidos_compra_bling(pagina: int = 1, limite: int = 100) -> dict
                         VALUES ($1,$2,$3,$4,$5::date,$6::date,$7,$8)""",
                         numero, fornecedor_id, valor_total, situacao,
                         data_emissao, data_prevista, bling_id, ambiente)
-                    pedido_id = await db.fetchval("SELECT id FROM compras_pedidos WHERE bling_id = $1", bling_id)
+                    pedido_id = await db.fetchval(
+                    "SELECT id FROM compras_pedidos WHERE bling_id = $1 AND ambiente = $2",
+                    bling_id, ambiente)
 
                 await db.execute("DELETE FROM compras_itens WHERE pedido_id = $1", pedido_id)
                 for item in detalhe.get("itens", []) or []:

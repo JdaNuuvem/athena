@@ -447,7 +447,16 @@ async def _upsert_nota_fiscal(db, bling_id: int, detalhe: dict, tipo_documento: 
     silenciosamente a Apuracao pra qualquer nota que chegasse por webhook em
     vez do sync manual."""
     import json as _json
-    existing = await db.fetchval("SELECT id FROM fiscal_notas_fiscais WHERE bling_id = $1", bling_id)
+    # ponytail: identificava a nota SO' por bling_id. NF-e/NFC-e/NFS-e sao
+    # recursos distintos na API Bling (/nfe/{id}, /nfce/{id}, /nfse/{id}) com
+    # sequencias de id INDEPENDENTES — id 1234 existe nos tres. O sync de NFC-e
+    # achava a NF-e de mesmo bling_id e sobrescrevia numero/chave/impostos,
+    # remarcando o tipo. Mesmo problema entre ambientes (fase 5). A identidade
+    # real de uma nota e' (bling_id, tipo_documento, ambiente).
+    existing = await db.fetchval(
+        """SELECT id FROM fiscal_notas_fiscais
+           WHERE bling_id = $1 AND tipo_documento = $2 AND ambiente = $3""",
+        bling_id, tipo_documento, ambiente)
     campos = _mapear_nfe_detalhe(detalhe)
     raw = _json.dumps(detalhe, ensure_ascii=False)
     if existing:
@@ -461,7 +470,7 @@ async def _upsert_nota_fiscal(db, bling_id: int, detalhe: dict, tipo_documento: 
             valor_ii=$25, valor_ir=$26, valor_csll=$27, valor_inss=$28, valor_total_tributos=$29,
             xml_url=$30, danfe_url=$31, dados_brutos_bling=$32::jsonb, tipo_documento=$33,
             ambiente=$34, sincronizado_em=NOW()
-            WHERE bling_id=$35""",
+            WHERE id=$35""",
             campos["numero"], campos["chave_acesso"], campos["data_emissao"], campos["data_operacao"],
             campos["contato_nome"], campos["contato_documento"], campos["natureza_operacao"],
             campos["valor_nf"], campos["valor_produtos"], campos["valor_frete"], campos["status"],
@@ -469,7 +478,7 @@ async def _upsert_nota_fiscal(db, bling_id: int, detalhe: dict, tipo_documento: 
             campos["base_icms"], campos["valor_icms"], campos["base_icms_st"], campos["valor_icms_st"],
             campos["valor_ipi"], campos["valor_pis"], campos["valor_cofins"], campos["valor_iss"],
             campos["valor_ii"], campos["valor_ir"], campos["valor_csll"], campos["valor_inss"], campos["valor_total_tributos"],
-            campos["xml_url"], campos["danfe_url"], raw, tipo_documento, ambiente, bling_id)
+            campos["xml_url"], campos["danfe_url"], raw, tipo_documento, ambiente, existing)
         nota_id = existing
         await db.execute("DELETE FROM fiscal_nfe_itens WHERE nota_id = $1", nota_id)
     else:

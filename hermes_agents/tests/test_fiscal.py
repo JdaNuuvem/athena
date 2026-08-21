@@ -200,14 +200,16 @@ class TestUpsertNotaFiscalTipoDocumento(unittest.TestCase):
         self.run_async(self.fiscal._upsert_nota_fiscal(db, 998, _NFE_DETALHE_MOCK))
         self.assertIn("nfe", self._insert_call(db)[1])
 
-    def test_update_grava_tipo_documento_e_mantem_bling_id_no_where(self):
-        """No UPDATE o bling_id do WHERE tem que continuar sendo o ULTIMO
-        argumento posicional. Ordem da cauda: ..., tipo_documento, ambiente,
-        bling_id — cada parametro novo entra imediatamente antes do WHERE."""
+    def test_update_mira_a_linha_encontrada_e_nao_o_bling_id(self):
+        """O WHERE do UPDATE mira o id da linha ja localizada, nao o bling_id:
+        o mesmo bling_id pode existir em outro tipo_documento/ambiente, e
+        WHERE bling_id=$N atingiria todas essas linhas de uma vez.
+        Cauda dos argumentos: ..., tipo_documento, ambiente, id."""
         db = _FakeDBNotas(existing_id=55)
         self.run_async(self.fiscal._upsert_nota_fiscal(db, 777, _NFE_DETALHE_MOCK, tipo_documento="nfse"))
         q, args = self._update_call(db)
-        self.assertEqual(args[-1], 777)
+        self.assertIn("WHERE id=", " ".join(q.split()))
+        self.assertEqual(args[-1], 55)
         self.assertEqual(args[-2], "producao")
         self.assertEqual(args[-3], "nfse")
 
@@ -222,13 +224,14 @@ class TestUpsertNotaFiscalTipoDocumento(unittest.TestCase):
         self.run_async(self.fiscal._upsert_nota_fiscal(db, 996, _NFE_DETALHE_MOCK))
         self.assertIn("producao", self._insert_call(db)[1])
 
-    def test_update_com_ambiente_mantem_bling_id_no_where(self):
+    def test_update_com_ambiente_mira_a_linha_encontrada(self):
         db = _FakeDBNotas(existing_id=55)
         self.run_async(self.fiscal._upsert_nota_fiscal(
             db, 777, _NFE_DETALHE_MOCK, tipo_documento="nfse", ambiente="homologacao"))
         q, args = self._update_call(db)
-        self.assertEqual(args[-1], 777)            # WHERE bling_id continua ULTIMO
-        self.assertEqual(args[-2], "homologacao")  # ambiente entra imediatamente antes
+        self.assertIn("WHERE id=", " ".join(q.split()))
+        self.assertEqual(args[-1], 55)             # id da linha, nao o bling_id
+        self.assertEqual(args[-2], "homologacao")
         self.assertEqual(args[-3], "nfse")
 
     def test_contagem_de_placeholders_bate_com_argumentos(self):

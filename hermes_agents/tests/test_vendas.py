@@ -124,15 +124,19 @@ class TestSincronizarPedidosBling(unittest.TestCase):
     @patch("bling_erp.get_ambiente", return_value="homologacao")
     @patch("bling_erp.listar_pedidos", return_value={"data": [{"id": 555}]})
     @patch("bling_erp.get_pedido_detalhe", return_value={"data": _PEDIDO_DETALHE_MOCK})
-    def test_atualiza_pedido_grava_ambiente_e_mantem_bling_id_no_where(self, mdet, ml, mamb, mt):
+    def test_atualiza_pedido_grava_ambiente_e_mira_a_linha_encontrada(self, mdet, ml, mamb, mt):
+        """O WHERE mira o id da linha ja localizada: o mesmo bling_id pode
+        existir em producao e homologacao, e WHERE bling_id=$N atingiria as
+        duas de uma vez."""
         db = _FakeDBPedidos(existing_id=33)
         async def fake_get_db(): return db
         with patch.object(vendas, "get_db", fake_get_db):
             r = vendas.sincronizar_pedidos_bling()
         self.assertEqual(r["sync"], 1)
         q, args = next(e for e in db.executed if "UPDATE vendas_pedidos" in e[0])
-        self.assertEqual(args[-1], 555)             # WHERE bling_id continua ULTIMO
-        self.assertEqual(args[-2], "homologacao")   # ambiente imediatamente antes
+        self.assertIn("WHERE id=", " ".join(q.split()))
+        self.assertEqual(args[-1], 33)              # id da linha, nao o bling_id
+        self.assertEqual(args[-2], "homologacao")
 
 
 class _FakeDBPedidosShopee:

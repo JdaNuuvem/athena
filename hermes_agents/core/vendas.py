@@ -381,18 +381,20 @@ def sincronizar_pedidos_bling(pagina: int = 1, limite: int = 100) -> dict:
                 detalhe = ped_resumo  # fallback: usa ao menos o resumo da listagem
 
             try:
-                existing = await db.fetchval("SELECT id FROM vendas_pedidos WHERE bling_id = $1", bling_id)
+                existing = await db.fetchval(
+                    "SELECT id FROM vendas_pedidos WHERE bling_id = $1 AND ambiente = $2",
+                    bling_id, ambiente)
                 campos = _mapear_pedido_detalhe(detalhe)
                 if existing:
                     await db.execute("""UPDATE vendas_pedidos SET
                         cliente=$1, cliente_documento=$2, total=$3, desconto=$4, acrescimo=$5, frete=$6,
                         status=$7, data=$8::date, data_entrega=$9::date, vendedor=$10, transportadora_nome=$11,
                         marketplace='bling', loja_id=$12, observacoes=$13, ambiente=$14, updated_at=NOW()
-                        WHERE bling_id=$15""",
+                        WHERE id=$15""",
                         campos["cliente"], campos["cliente_documento"], campos["total"], campos["desconto"],
                         campos["acrescimo"], campos["frete"], campos["status"], campos["data"], campos["data_entrega"],
                         campos["vendedor"], campos["transportadora_nome"], campos["loja_id"], campos["observacoes"],
-                        ambiente, bling_id)
+                        ambiente, existing)
                     pid = existing
                     await db.execute("DELETE FROM vendas_itens WHERE pedido_id = $1", pid)
                     await db.execute("DELETE FROM vendas_pagamentos WHERE pedido_id = $1", pid)
