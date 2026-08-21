@@ -42,7 +42,6 @@ const NAV_PERMS: Record<string, string> = {
   "/automacoes": "automations:view",
   "/relatorios": "reports:view",
   "/agents": "agents:view",
-  "/integracoes/bling": "integrations:view",
   "/bling": "integrations:view",
   "/hermes": "agents:view",
   "/roles": "roles:view",
