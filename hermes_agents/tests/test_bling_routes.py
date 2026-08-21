@@ -278,7 +278,7 @@ class TestBlingFlaskRoutes(unittest.TestCase):
         self.assertEqual(rv.status_code, 200)
         q, args = fake_db.fetch.call_args.args[0], fake_db.fetch.call_args.args[1:]
         self.assertIn("tipo_documento = $1", q)
-        self.assertEqual(args, ("nfce",))
+        self.assertEqual(args, ("nfce", "producao"))
 
     def test_nfce_sincronizar_route_exige_permissao(self):
         rv = self.client.post("/api/bling/nfce/sincronizar")
@@ -303,6 +303,71 @@ class TestBlingFlaskRoutes(unittest.TestCase):
                 headers={"Authorization": f"Bearer {_TEST_TOKEN}"})
             self.assertEqual(rv.status_code, 200)
             mock_sync.assert_called_once()
+
+
+    def test_ambiente_get_route(self):
+        with patch("routes.integrations.get_ambiente", return_value="producao"):
+            rv = self.client.get("/api/bling/ambiente")
+        self.assertEqual(rv.status_code, 200)
+        data = json.loads(rv.data)
+        self.assertEqual(data["ambiente"], "producao")
+        self.assertIn("homologacao", data["ambientes"])
+
+    def test_ambiente_post_route_exige_permissao(self):
+        rv = self.client.post("/api/bling/ambiente", json={"ambiente": "homologacao"})
+        self.assertEqual(rv.status_code, 403)
+
+    def test_ambiente_post_route_troca(self):
+        with patch.dict(os.environ, {"ATHENA_TOKEN": _TEST_TOKEN}),              patch("routes.integrations.set_ambiente", return_value={"ambiente": "homologacao"}) as mock_set:
+            rv = self.client.post("/api/bling/ambiente", json={"ambiente": "homologacao"},
+                                  headers={"Authorization": f"Bearer {_TEST_TOKEN}"})
+        self.assertEqual(rv.status_code, 200)
+        mock_set.assert_called_once_with("homologacao")
+
+    def test_ambiente_post_route_invalido_devolve_400(self):
+        with patch.dict(os.environ, {"ATHENA_TOKEN": _TEST_TOKEN}),              patch("routes.integrations.set_ambiente", return_value={"error": "ambiente invalido"}):
+            rv = self.client.post("/api/bling/ambiente", json={"ambiente": "xpto"},
+                                  headers={"Authorization": f"Bearer {_TEST_TOKEN}"})
+        self.assertEqual(rv.status_code, 400)
+
+    def test_notas_filtra_producao_por_padrao(self):
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = []
+        with patch("routes.integrations.get_db", new=AsyncMock(return_value=fake_db)):
+            rv = self.client.get("/api/bling/notas")
+        self.assertEqual(rv.status_code, 200)
+        q, args = fake_db.fetch.call_args.args[0], fake_db.fetch.call_args.args[1:]
+        self.assertIn("ambiente = $1", q)
+        self.assertEqual(args, ("producao",))
+
+    def test_notas_ambiente_todos_desliga_o_filtro(self):
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = []
+        with patch("routes.integrations.get_db", new=AsyncMock(return_value=fake_db)):
+            rv = self.client.get("/api/bling/notas?ambiente=todos")
+        self.assertEqual(rv.status_code, 200)
+        self.assertNotIn("ambiente = ", fake_db.fetch.call_args.args[0])
+
+    def test_notas_tipo_e_ambiente_juntos(self):
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = []
+        with patch("routes.integrations.get_db", new=AsyncMock(return_value=fake_db)):
+            rv = self.client.get("/api/bling/notas?tipo=nfce&ambiente=homologacao")
+        self.assertEqual(rv.status_code, 200)
+        q, args = fake_db.fetch.call_args.args[0], fake_db.fetch.call_args.args[1:]
+        self.assertIn("tipo_documento = $1", q)
+        self.assertIn("ambiente = $2", q)
+        self.assertEqual(args, ("nfce", "homologacao"))
+
+    def test_pedidos_compra_filtra_producao_por_padrao(self):
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = []
+        with patch("routes.integrations.get_db", new=AsyncMock(return_value=fake_db)):
+            rv = self.client.get("/api/bling/pedidos-compra")
+        self.assertEqual(rv.status_code, 200)
+        q, args = fake_db.fetch.call_args.args[0], fake_db.fetch.call_args.args[1:]
+        self.assertIn("ambiente = $1", q)
+        self.assertEqual(args, ("producao",))
 
 
 class TestBlingRotasRemovidas(unittest.TestCase):

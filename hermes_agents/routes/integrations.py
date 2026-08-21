@@ -510,6 +510,7 @@ def test_whatsapp():
 
 from bling_erp import (
     status as bling_status_fn, get_auth_url, exchange_code,
+    get_ambiente, set_ambiente,
     listar_produtos, listar_produtos_agrupados, criar_produto, atualizar_produto, deletar_produto,
     atualizar_situacao_produtos,
     listar_depositos, obter_saldo_deposito, atualizar_estoque_deposito,
@@ -763,11 +764,18 @@ def api_deletar_situacao(id_situacao):
 
 @bling_bp.route("/pedidos-compra")
 def api_pedidos_compra():
+    ambiente = request.args.get("ambiente", "producao")
     async def _go():
         db = await get_db()
-        rows = await db.fetch("""SELECT id, numero, fornecedor_id, valor_total, status,
-            data_emissao, data_entrega_prevista, bling_id
-            FROM compras_pedidos WHERE bling_id IS NOT NULL ORDER BY data_emissao DESC""")
+        sql = """SELECT id, numero, fornecedor_id, valor_total, status,
+            data_emissao, data_entrega_prevista, bling_id, ambiente
+            FROM compras_pedidos WHERE bling_id IS NOT NULL"""
+        valores = []
+        if ambiente != "todos":
+            valores.append(ambiente)
+            sql += f" AND ambiente = ${len(valores)}"
+        sql += " ORDER BY data_emissao DESC"
+        rows = await db.fetch(sql, *valores)
         return [dict(r) for r in rows]
     try:
         return jsonify(run_async(_go()))
@@ -788,21 +796,47 @@ def api_receber_pedido_compra(id_pedido):
     return jsonify(marcar_pedido_compra_recebido(id_pedido))
 
 
+@bling_bp.route("/ambiente")
+def api_bling_ambiente():
+    from bling_erp import AMBIENTES, _base_url
+    return jsonify({"ambiente": get_ambiente(), "base_url": _base_url(),
+                    "ambientes": list(AMBIENTES)})
+
+
+@bling_bp.route("/ambiente", methods=["POST"])
+@requer_permissao("bling.sincronizar")
+def api_bling_set_ambiente():
+    dados = request.get_json(silent=True) or {}
+    r = set_ambiente(dados.get("ambiente", ""))
+    if r.get("error"):
+        return jsonify(r), 400
+    return jsonify(r)
+
+
 @bling_bp.route("/notas")
 def api_notas_locais():
-    """Le notas ja sincronizadas do banco local, opcionalmente filtrando por
-    tipo_documento (nfe/nfce/nfse). Distinta de /financeiro/notas-fiscais, que
-    proxya direto pra API Bling ao vivo (so' NF-e, sem tocar o banco local)."""
+    """Le notas ja sincronizadas do banco local, filtrando por tipo_documento
+    (nfe/nfce/nfse) e por ambiente (default: so' producao; 'todos' desliga o
+    filtro). Distinta de /financeiro/notas-fiscais, que proxya direto pra API
+    Bling ao vivo (so' NF-e, sem tocar o banco local)."""
     tipo = request.args.get("tipo", "")
+    ambiente = request.args.get("ambiente", "producao")
     async def _go():
         db = await get_db()
-        colunas = """SELECT id, numero, chave_acesso, tipo_documento, status,
+        sql = """SELECT id, numero, chave_acesso, tipo_documento, ambiente, status,
             data_emissao, valor_nf, contato_nome, bling_id
             FROM fiscal_notas_fiscais"""
+        condicoes, valores = [], []
         if tipo:
-            rows = await db.fetch(colunas + " WHERE tipo_documento = $1 ORDER BY data_emissao DESC LIMIT 200", tipo)
-        else:
-            rows = await db.fetch(colunas + " ORDER BY data_emissao DESC LIMIT 200")
+            valores.append(tipo)
+            condicoes.append(f"tipo_documento = ${len(valores)}")
+        if ambiente != "todos":
+            valores.append(ambiente)
+            condicoes.append(f"ambiente = ${len(valores)}")
+        if condicoes:
+            sql += " WHERE " + " AND ".join(condicoes)
+        sql += " ORDER BY data_emissao DESC LIMIT 200"
+        rows = await db.fetch(sql, *valores)
         return [dict(r) for r in rows]
     try:
         return jsonify(run_async(_go()))
