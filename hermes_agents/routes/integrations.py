@@ -788,6 +788,42 @@ def api_receber_pedido_compra(id_pedido):
     return jsonify(marcar_pedido_compra_recebido(id_pedido))
 
 
+@bling_bp.route("/notas")
+def api_notas_locais():
+    """Le notas ja sincronizadas do banco local, opcionalmente filtrando por
+    tipo_documento (nfe/nfce/nfse). Distinta de /financeiro/notas-fiscais, que
+    proxya direto pra API Bling ao vivo (so' NF-e, sem tocar o banco local)."""
+    tipo = request.args.get("tipo", "")
+    async def _go():
+        db = await get_db()
+        colunas = """SELECT id, numero, chave_acesso, tipo_documento, status,
+            data_emissao, valor_nf, contato_nome, bling_id
+            FROM fiscal_notas_fiscais"""
+        if tipo:
+            rows = await db.fetch(colunas + " WHERE tipo_documento = $1 ORDER BY data_emissao DESC LIMIT 200", tipo)
+        else:
+            rows = await db.fetch(colunas + " ORDER BY data_emissao DESC LIMIT 200")
+        return [dict(r) for r in rows]
+    try:
+        return jsonify(run_async(_go()))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@bling_bp.route("/nfce/sincronizar", methods=["POST"])
+@requer_permissao("financeiro.ver")
+def api_sincronizar_nfce():
+    from core.fiscal import sincronizar_nfce_bling
+    return jsonify(sincronizar_nfce_bling())
+
+
+@bling_bp.route("/nfse/sincronizar", methods=["POST"])
+@requer_permissao("financeiro.ver")
+def api_sincronizar_nfse():
+    from core.fiscal import sincronizar_nfse_bling
+    return jsonify(sincronizar_nfse_bling())
+
+
 @bling_bp.route("/plano-contas")
 def api_plano_contas():
     async def _go():

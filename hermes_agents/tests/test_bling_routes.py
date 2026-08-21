@@ -266,6 +266,44 @@ class TestBlingFlaskRoutes(unittest.TestCase):
             self.assertEqual(rv.status_code, 200)
             mock_receber.assert_called_once_with(555)
 
+    def test_notas_listar_route_sem_filtro(self):
+        rv = self.client.get("/api/bling/notas")
+        self.assertEqual(rv.status_code, 200)
+
+    def test_notas_listar_route_com_filtro_tipo(self):
+        fake_db = AsyncMock()
+        fake_db.fetch.return_value = []
+        with patch("routes.integrations.get_db", new=AsyncMock(return_value=fake_db)):
+            rv = self.client.get("/api/bling/notas?tipo=nfce")
+        self.assertEqual(rv.status_code, 200)
+        q, args = fake_db.fetch.call_args.args[0], fake_db.fetch.call_args.args[1:]
+        self.assertIn("tipo_documento = $1", q)
+        self.assertEqual(args, ("nfce",))
+
+    def test_nfce_sincronizar_route_exige_permissao(self):
+        rv = self.client.post("/api/bling/nfce/sincronizar")
+        self.assertEqual(rv.status_code, 403)
+
+    def test_nfce_sincronizar_route(self):
+        with patch.dict(os.environ, {"ATHENA_TOKEN": _TEST_TOKEN}),              patch("core.fiscal.sincronizar_nfce_bling", return_value={"sync": 1}) as mock_sync:
+            rv = self.client.post(
+                "/api/bling/nfce/sincronizar",
+                headers={"Authorization": f"Bearer {_TEST_TOKEN}"})
+            self.assertEqual(rv.status_code, 200)
+            mock_sync.assert_called_once()
+
+    def test_nfse_sincronizar_route_exige_permissao(self):
+        rv = self.client.post("/api/bling/nfse/sincronizar")
+        self.assertEqual(rv.status_code, 403)
+
+    def test_nfse_sincronizar_route(self):
+        with patch.dict(os.environ, {"ATHENA_TOKEN": _TEST_TOKEN}),              patch("core.fiscal.sincronizar_nfse_bling", return_value={"sync": 1}) as mock_sync:
+            rv = self.client.post(
+                "/api/bling/nfse/sincronizar",
+                headers={"Authorization": f"Bearer {_TEST_TOKEN}"})
+            self.assertEqual(rv.status_code, 200)
+            mock_sync.assert_called_once()
+
 
 class TestBlingRotasRemovidas(unittest.TestCase):
     """Confirma que as rotas duplicadas removidas nao respondem mais.
