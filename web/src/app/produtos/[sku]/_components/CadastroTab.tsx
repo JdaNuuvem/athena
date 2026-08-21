@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { api } from "@/lib/api";
+import { api, atualizarBlingProduto } from "@/lib/api";
 import Icon from "@/app/_components/Icon";
 import SelectComCriacao from "./SelectComCriacao";
 
@@ -83,9 +83,10 @@ export default function CadastroTab({ produto, sku, onUpdate }: { produto: Recor
       // 2. Push to Bling (two-way sync)
       if (idBling) {
         try {
-          await fetch("/api/bling/produtos/" + idBling, {
-            method: "PUT", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ descricao: form.descricao, preco: form.preco }),
+          // via api.ts: fetch cru aqui nao mandava Authorization, entao a rota
+          // ficava a merce do que o backend exigisse de RBAC.
+          await atualizarBlingProduto(Number(idBling), {
+            descricao: form.descricao, preco: form.preco,
           });
         } catch (e) { setMsg("Salvo localmente. Erro ao sincronizar com Bling."); setMsgErro(true); setSaving(false); return; }
       }
