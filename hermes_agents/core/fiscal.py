@@ -73,6 +73,11 @@ def _ensure_tables():
         # notas ja' sincronizadas, sem UPDATE manual.
         try: await db.execute("ALTER TABLE fiscal_notas_fiscais ADD COLUMN IF NOT EXISTS tipo_documento VARCHAR(10) DEFAULT 'nfe'")
         except Exception as e: pass
+        # ambiente separa dado sincronizado em homologacao do dado real de
+        # producao dentro da mesma tabela. DEFAULT 'producao' classifica
+        # retroativamente tudo que ja existe, sem UPDATE manual.
+        try: await db.execute("ALTER TABLE fiscal_notas_fiscais ADD COLUMN IF NOT EXISTS ambiente VARCHAR(15) DEFAULT 'producao'")
+        except Exception as e: pass
         await db.execute("""CREATE TABLE IF NOT EXISTS fiscal_nfe_itens (
             id SERIAL PRIMARY KEY, nota_id INT REFERENCES fiscal_notas_fiscais(id),
             numero_item INT DEFAULT 1, codigo VARCHAR(50), descricao VARCHAR(200),
@@ -430,7 +435,7 @@ def _mapear_nfe_detalhe(nf: dict) -> dict:
         "modelo": str(nf.get("modelo", "55")),
     }
 
-async def _upsert_nota_fiscal(db, bling_id: int, detalhe: dict, tipo_documento: str = "nfe") -> int:
+async def _upsert_nota_fiscal(db, bling_id: int, detalhe: dict, tipo_documento: str = "nfe", ambiente: str = "producao") -> int:
     """Upsert de uma nota fiscal + seus itens, dado o payload de DETALHE do
     Bling ja' obtido (GET /nfe/{id}). Compartilhado entre o sync manual em
     massa (sincronizar_notas_fiscais_bling) e sincronizar_uma_nota_fiscal
@@ -455,8 +460,8 @@ async def _upsert_nota_fiscal(db, bling_id: int, detalhe: dict, tipo_documento: 
             valor_ipi=$21, valor_pis=$22, valor_cofins=$23, valor_iss=$24,
             valor_ii=$25, valor_ir=$26, valor_csll=$27, valor_inss=$28, valor_total_tributos=$29,
             xml_url=$30, danfe_url=$31, dados_brutos_bling=$32::jsonb, tipo_documento=$33,
-            sincronizado_em=NOW()
-            WHERE bling_id=$34""",
+            ambiente=$34, sincronizado_em=NOW()
+            WHERE bling_id=$35""",
             campos["numero"], campos["chave_acesso"], campos["data_emissao"], campos["data_operacao"],
             campos["contato_nome"], campos["contato_documento"], campos["natureza_operacao"],
             campos["valor_nf"], campos["valor_produtos"], campos["valor_frete"], campos["status"],
@@ -464,7 +469,7 @@ async def _upsert_nota_fiscal(db, bling_id: int, detalhe: dict, tipo_documento: 
             campos["base_icms"], campos["valor_icms"], campos["base_icms_st"], campos["valor_icms_st"],
             campos["valor_ipi"], campos["valor_pis"], campos["valor_cofins"], campos["valor_iss"],
             campos["valor_ii"], campos["valor_ir"], campos["valor_csll"], campos["valor_inss"], campos["valor_total_tributos"],
-            campos["xml_url"], campos["danfe_url"], raw, tipo_documento, bling_id)
+            campos["xml_url"], campos["danfe_url"], raw, tipo_documento, ambiente, bling_id)
         nota_id = existing
         await db.execute("DELETE FROM fiscal_nfe_itens WHERE nota_id = $1", nota_id)
     else:
@@ -474,9 +479,9 @@ async def _upsert_nota_fiscal(db, bling_id: int, detalhe: dict, tipo_documento: 
              valor_nf, valor_produtos, valor_frete, valor_seguro, valor_desconto, valor_outros,
              base_icms, valor_icms, base_icms_st, valor_icms_st, valor_ipi, valor_pis, valor_cofins,
              valor_iss, valor_ii, valor_ir, valor_csll, valor_inss, valor_total_tributos,
-             status, loja_id, xml_url, danfe_url, dados_brutos_bling, bling_id, tipo_documento, sincronizado_em)
+             status, loja_id, xml_url, danfe_url, dados_brutos_bling, bling_id, tipo_documento, ambiente, sincronizado_em)
             VALUES ($1,$2,$3,$4,$5::date,$6::date,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
-                    $20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34::jsonb,$35,$36,NOW())
+                    $20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34::jsonb,$35,$36,$37,NOW())
             RETURNING id""",
             campos["numero"], campos["modelo"], campos["chave_acesso"], campos["tipo"],
             campos["data_emissao"], campos["data_operacao"], campos["natureza_operacao"], campos["cfop"],
@@ -486,7 +491,7 @@ async def _upsert_nota_fiscal(db, bling_id: int, detalhe: dict, tipo_documento: 
             campos["valor_ipi"], campos["valor_pis"], campos["valor_cofins"], campos["valor_iss"],
             campos["valor_ii"], campos["valor_ir"], campos["valor_csll"], campos["valor_inss"],
             campos["valor_total_tributos"], campos["status"], campos["loja_id"],
-            campos["xml_url"], campos["danfe_url"], raw, bling_id, tipo_documento)
+            campos["xml_url"], campos["danfe_url"], raw, bling_id, tipo_documento, ambiente)
 
     itens = detalhe.get("itens", []) or []
     for idx, item in enumerate(itens, 1):
@@ -537,7 +542,7 @@ def sincronizar_notas_fiscais_bling(pagina: int = 1, limite: int = 100, pular: i
     Confirmado ao vivo. Agora cada chamada processa so' MAX_DETALHES_POR_CHAMADA
     notas (a listagem em si e' rapida, refeita a cada chamada); quando sobra
     mais, devolve mais_notas=True + proximo_pular pro chamador continuar."""
-    from bling_erp import listar_notas_fiscais as bling_nfe, get_nfe_completa, get_access_token, get_auth_url
+    from bling_erp import listar_notas_fiscais as bling_nfe, get_nfe_completa, get_access_token, get_auth_url, get_ambiente
     token = get_access_token()
     if not token: return {"error": "Bling nao autenticado", "auth_url": get_auth_url()}
 
@@ -565,6 +570,7 @@ def sincronizar_notas_fiscais_bling(pagina: int = 1, limite: int = 100, pular: i
     lote = notas_resumo[pular:pular + MAX_DETALHES_POR_CHAMADA]
     proximo_pular = pular + len(lote)
     mais_notas = proximo_pular < len(notas_resumo) or mais_paginas
+    ambiente = get_ambiente()
 
     async def _go():
         db = await get_db()
@@ -588,7 +594,7 @@ def sincronizar_notas_fiscais_bling(pagina: int = 1, limite: int = 100, pular: i
                 detalhe = nf_resumo  # fallback: usa ao menos o resumo da listagem
 
             try:
-                await _upsert_nota_fiscal(db, bling_id, detalhe)
+                await _upsert_nota_fiscal(db, bling_id, detalhe, ambiente=ambiente)
                 total += 1
             except Exception as e:
                 log(AGENT, f"Erro sync NF {nf_resumo.get('numero')}: {e}")
@@ -618,7 +624,8 @@ def sincronizar_uma_nota_fiscal(bling_id: int, resumo_fallback: dict = None) -> 
     responder ao Bling rapido; se a busca falhar (rede, rate limit), cai no
     fallback com os dados basicos que ja vieram no proprio payload do
     webhook (mesmo comportamento de antes dessa correcao — nunca fica pior)."""
-    from bling_erp import get_nfe_completa, get_access_token
+    from bling_erp import get_nfe_completa, get_access_token, get_ambiente
+    ambiente = get_ambiente()
     token = get_access_token()
     detalhe = None
     if token:
@@ -631,7 +638,7 @@ def sincronizar_uma_nota_fiscal(bling_id: int, resumo_fallback: dict = None) -> 
         detalhe = resumo_fallback
     async def _go():
         db = await get_db()
-        nota_id = await _upsert_nota_fiscal(db, bling_id, detalhe)
+        nota_id = await _upsert_nota_fiscal(db, bling_id, detalhe, ambiente=ambiente)
         return {"nota_id": nota_id}
     try:
         return run_async(_go())
@@ -639,7 +646,8 @@ def sincronizar_uma_nota_fiscal(bling_id: int, resumo_fallback: dict = None) -> 
         return {"error": str(e)}
 
 def _sincronizar_notas_bling_por_tipo(listar_fn, detalhe_fn, tipo_documento: str,
-                                      pagina: int = 1, limite: int = 100, pular: int = 0) -> dict:
+                                      pagina: int = 1, limite: int = 100, pular: int = 0,
+                                      ambiente: str = "producao") -> dict:
     """Motor compartilhado dos syncs de nota fiscal por tipo de documento
     (NFC-e, NFS-e). Mesmo esqueleto de paginacao em lotes de
     sincronizar_notas_fiscais_bling — incluindo o cap de
@@ -693,7 +701,7 @@ def _sincronizar_notas_bling_por_tipo(listar_fn, detalhe_fn, tipo_documento: str
             if not detalhe:
                 detalhe = nf_resumo  # fallback: usa ao menos o resumo da listagem
             try:
-                await _upsert_nota_fiscal(db, bling_id, detalhe, tipo_documento=tipo_documento)
+                await _upsert_nota_fiscal(db, bling_id, detalhe, tipo_documento=tipo_documento, ambiente=ambiente)
                 total += 1
             except Exception as e:
                 log(AGENT, f"Erro sync {tipo_documento.upper()} {nf_resumo.get('numero')}: {e}")
@@ -709,18 +717,20 @@ def _sincronizar_notas_bling_por_tipo(listar_fn, detalhe_fn, tipo_documento: str
 def sincronizar_nfce_bling(pagina: int = 1, limite: int = 100, pular: int = 0) -> dict:
     """Sync de NFC-e (nota de consumidor, venda presencial) → fiscal_notas_fiscais
     com tipo_documento='nfce'."""
-    from bling_erp import listar_nfce, get_nfce_detalhe, get_access_token, get_auth_url
+    from bling_erp import listar_nfce, get_nfce_detalhe, get_access_token, get_auth_url, get_ambiente
     token = get_access_token()
     if not token: return {"error": "Bling nao autenticado", "auth_url": get_auth_url()}
-    return _sincronizar_notas_bling_por_tipo(listar_nfce, get_nfce_detalhe, "nfce", pagina, limite, pular)
+    return _sincronizar_notas_bling_por_tipo(listar_nfce, get_nfce_detalhe, "nfce",
+                                             pagina, limite, pular, get_ambiente())
 
 def sincronizar_nfse_bling(pagina: int = 1, limite: int = 100, pular: int = 0) -> dict:
     """Sync de NFS-e (nota de servico) → fiscal_notas_fiscais com
     tipo_documento='nfse'."""
-    from bling_erp import listar_nfse, get_nfse_detalhe, get_access_token, get_auth_url
+    from bling_erp import listar_nfse, get_nfse_detalhe, get_access_token, get_auth_url, get_ambiente
     token = get_access_token()
     if not token: return {"error": "Bling nao autenticado", "auth_url": get_auth_url()}
-    return _sincronizar_notas_bling_por_tipo(listar_nfse, get_nfse_detalhe, "nfse", pagina, limite, pular)
+    return _sincronizar_notas_bling_por_tipo(listar_nfse, get_nfse_detalhe, "nfse",
+                                             pagina, limite, pular, get_ambiente())
 
 def sincronizar_contas_receber_bling(pagina: int = 1, limite: int = 100) -> dict:
     """Sync contas a receber do Bling → fin_contas_receber (tabela unificada SSOT)."""

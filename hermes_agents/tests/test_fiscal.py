@@ -202,12 +202,34 @@ class TestUpsertNotaFiscalTipoDocumento(unittest.TestCase):
 
     def test_update_grava_tipo_documento_e_mantem_bling_id_no_where(self):
         """No UPDATE o bling_id do WHERE tem que continuar sendo o ULTIMO
-        argumento posicional — tipo_documento entra imediatamente ANTES dele."""
+        argumento posicional. Ordem da cauda: ..., tipo_documento, ambiente,
+        bling_id — cada parametro novo entra imediatamente antes do WHERE."""
         db = _FakeDBNotas(existing_id=55)
         self.run_async(self.fiscal._upsert_nota_fiscal(db, 777, _NFE_DETALHE_MOCK, tipo_documento="nfse"))
         q, args = self._update_call(db)
         self.assertEqual(args[-1], 777)
-        self.assertEqual(args[-2], "nfse")
+        self.assertEqual(args[-2], "producao")
+        self.assertEqual(args[-3], "nfse")
+
+    def test_upsert_grava_ambiente_quando_informado(self):
+        db = _FakeDBNotas(existing_id=None)
+        self.run_async(self.fiscal._upsert_nota_fiscal(
+            db, 997, _NFE_DETALHE_MOCK, tipo_documento="nfce", ambiente="homologacao"))
+        self.assertIn("homologacao", self._insert_call(db)[1])
+
+    def test_upsert_default_de_ambiente_e_producao(self):
+        db = _FakeDBNotas(existing_id=None)
+        self.run_async(self.fiscal._upsert_nota_fiscal(db, 996, _NFE_DETALHE_MOCK))
+        self.assertIn("producao", self._insert_call(db)[1])
+
+    def test_update_com_ambiente_mantem_bling_id_no_where(self):
+        db = _FakeDBNotas(existing_id=55)
+        self.run_async(self.fiscal._upsert_nota_fiscal(
+            db, 777, _NFE_DETALHE_MOCK, tipo_documento="nfse", ambiente="homologacao"))
+        q, args = self._update_call(db)
+        self.assertEqual(args[-1], 777)            # WHERE bling_id continua ULTIMO
+        self.assertEqual(args[-2], "homologacao")  # ambiente entra imediatamente antes
+        self.assertEqual(args[-3], "nfse")
 
     def test_contagem_de_placeholders_bate_com_argumentos(self):
         """Guarda contra o erro classico desta funcao: adicionar coluna e esquecer
@@ -235,8 +257,9 @@ class TestSincronizarNfceNfseBling(unittest.TestCase):
         self.fiscal = fiscal
 
     def _tipo_gravado(self, db):
+        # cauda do INSERT: ..., bling_id, tipo_documento, ambiente
         q, args = next(c for c in db.fetchvals if "INSERT INTO fiscal_notas_fiscais" in c[0])
-        return args[-1]
+        return args[-2]
 
     @patch("bling_erp.get_access_token", return_value="")
     def test_nfce_sem_token(self, mt):
@@ -308,5 +331,63 @@ class TestSincronizarNfceNfseBling(unittest.TestCase):
             r = self.fiscal.sincronizar_nfse_bling()
         self.assertIn("error", r)
         self.assertEqual(r["sync"], 0)
+
+class TestSyncNotasPropagaAmbiente(unittest.TestCase):
+    """O ambiente corrente do Bling tem que chegar ate' a coluna, senao dado de
+    homologacao entra classificado como producao."""
+    def setUp(self):
+        import core.fiscal as fiscal
+        self.fiscal = fiscal
+
+    def _ambiente_gravado(self, db):
+        q, args = next(c for c in db.fetchvals if "INSERT INTO fiscal_notas_fiscais" in c[0])
+        return args[-1]
+
+    @patch("bling_erp.get_access_token", return_value="tok")
+    @patch("bling_erp.get_ambiente", return_value="homologacao")
+    @patch("bling_erp.listar_nfce", return_value={"data": [{"id": 111}]})
+    @patch("bling_erp.get_nfce_detalhe", return_value={"data": _NFE_DETALHE_MOCK})
+    def test_sync_nfce_grava_ambiente_corrente(self, mdet, ml, mamb, mt):
+        db = _FakeDBNotas(existing_id=None)
+        async def fake_get_db(): return db
+        with patch.object(self.fiscal, "get_db", fake_get_db):
+            r = self.fiscal.sincronizar_nfce_bling()
+        self.assertEqual(r["sync"], 1)
+        self.assertEqual(self._ambiente_gravado(db), "homologacao")
+
+    @patch("bling_erp.get_access_token", return_value="tok")
+    @patch("bling_erp.get_ambiente", return_value="homologacao")
+    @patch("bling_erp.listar_nfse", return_value={"data": [{"id": 222}]})
+    @patch("bling_erp.get_nfse_detalhe", return_value={"data": _NFE_DETALHE_MOCK})
+    def test_sync_nfse_grava_ambiente_corrente(self, mdet, ml, mamb, mt):
+        db = _FakeDBNotas(existing_id=None)
+        async def fake_get_db(): return db
+        with patch.object(self.fiscal, "get_db", fake_get_db):
+            r = self.fiscal.sincronizar_nfse_bling()
+        self.assertEqual(r["sync"], 1)
+        self.assertEqual(self._ambiente_gravado(db), "homologacao")
+
+    @patch("bling_erp.get_access_token", return_value="tok")
+    @patch("bling_erp.get_ambiente", return_value="producao")
+    @patch("bling_erp.listar_notas_fiscais", return_value={"data": [{"id": 777}]})
+    @patch("bling_erp.get_nfe_completa", return_value={"data": _NFE_DETALHE_MOCK})
+    def test_sync_nfe_em_producao_grava_producao(self, mdet, ml, mamb, mt):
+        db = _FakeDBNotas(existing_id=None)
+        async def fake_get_db(): return db
+        with patch.object(self.fiscal, "get_db", fake_get_db):
+            r = self.fiscal.sincronizar_notas_fiscais_bling()
+        self.assertEqual(r["sync"], 1)
+        self.assertEqual(self._ambiente_gravado(db), "producao")
+
+    @patch("bling_erp.get_access_token", return_value="tok")
+    @patch("bling_erp.get_ambiente", return_value="homologacao")
+    @patch("bling_erp.get_nfe_completa", return_value={"data": _NFE_DETALHE_MOCK})
+    def test_sync_de_uma_nota_webhook_grava_ambiente_corrente(self, mdet, mamb, mt):
+        db = _FakeDBNotas(existing_id=None)
+        async def fake_get_db(): return db
+        with patch.object(self.fiscal, "get_db", fake_get_db):
+            r = self.fiscal.sincronizar_uma_nota_fiscal(777)
+        self.assertEqual(r["nota_id"], 99)
+        self.assertEqual(self._ambiente_gravado(db), "homologacao")
 
 if __name__=="__main__":unittest.main(verbosity=2)
