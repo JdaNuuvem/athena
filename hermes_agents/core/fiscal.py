@@ -68,6 +68,11 @@ def _ensure_tables():
         )""")
         try: await db.execute("ALTER TABLE fiscal_notas_fiscais ADD COLUMN IF NOT EXISTS dados_brutos_bling JSONB")
         except Exception as e: pass
+        # tipo_documento separa NF-e / NFC-e (consumidor) / NFS-e (servico) dentro
+        # da mesma tabela. DEFAULT 'nfe' ja' classifica retroativamente todas as
+        # notas ja' sincronizadas, sem UPDATE manual.
+        try: await db.execute("ALTER TABLE fiscal_notas_fiscais ADD COLUMN IF NOT EXISTS tipo_documento VARCHAR(10) DEFAULT 'nfe'")
+        except Exception as e: pass
         await db.execute("""CREATE TABLE IF NOT EXISTS fiscal_nfe_itens (
             id SERIAL PRIMARY KEY, nota_id INT REFERENCES fiscal_notas_fiscais(id),
             numero_item INT DEFAULT 1, codigo VARCHAR(50), descricao VARCHAR(200),
@@ -425,7 +430,7 @@ def _mapear_nfe_detalhe(nf: dict) -> dict:
         "modelo": str(nf.get("modelo", "55")),
     }
 
-async def _upsert_nota_fiscal(db, bling_id: int, detalhe: dict) -> int:
+async def _upsert_nota_fiscal(db, bling_id: int, detalhe: dict, tipo_documento: str = "nfe") -> int:
     """Upsert de uma nota fiscal + seus itens, dado o payload de DETALHE do
     Bling ja' obtido (GET /nfe/{id}). Compartilhado entre o sync manual em
     massa (sincronizar_notas_fiscais_bling) e sincronizar_uma_nota_fiscal
@@ -449,8 +454,9 @@ async def _upsert_nota_fiscal(db, bling_id: int, detalhe: dict) -> int:
             base_icms=$17, valor_icms=$18, base_icms_st=$19, valor_icms_st=$20,
             valor_ipi=$21, valor_pis=$22, valor_cofins=$23, valor_iss=$24,
             valor_ii=$25, valor_ir=$26, valor_csll=$27, valor_inss=$28, valor_total_tributos=$29,
-            xml_url=$30, danfe_url=$31, dados_brutos_bling=$32::jsonb, sincronizado_em=NOW()
-            WHERE bling_id=$33""",
+            xml_url=$30, danfe_url=$31, dados_brutos_bling=$32::jsonb, tipo_documento=$33,
+            sincronizado_em=NOW()
+            WHERE bling_id=$34""",
             campos["numero"], campos["chave_acesso"], campos["data_emissao"], campos["data_operacao"],
             campos["contato_nome"], campos["contato_documento"], campos["natureza_operacao"],
             campos["valor_nf"], campos["valor_produtos"], campos["valor_frete"], campos["status"],
@@ -458,7 +464,7 @@ async def _upsert_nota_fiscal(db, bling_id: int, detalhe: dict) -> int:
             campos["base_icms"], campos["valor_icms"], campos["base_icms_st"], campos["valor_icms_st"],
             campos["valor_ipi"], campos["valor_pis"], campos["valor_cofins"], campos["valor_iss"],
             campos["valor_ii"], campos["valor_ir"], campos["valor_csll"], campos["valor_inss"], campos["valor_total_tributos"],
-            campos["xml_url"], campos["danfe_url"], raw, bling_id)
+            campos["xml_url"], campos["danfe_url"], raw, tipo_documento, bling_id)
         nota_id = existing
         await db.execute("DELETE FROM fiscal_nfe_itens WHERE nota_id = $1", nota_id)
     else:
@@ -468,9 +474,9 @@ async def _upsert_nota_fiscal(db, bling_id: int, detalhe: dict) -> int:
              valor_nf, valor_produtos, valor_frete, valor_seguro, valor_desconto, valor_outros,
              base_icms, valor_icms, base_icms_st, valor_icms_st, valor_ipi, valor_pis, valor_cofins,
              valor_iss, valor_ii, valor_ir, valor_csll, valor_inss, valor_total_tributos,
-             status, loja_id, xml_url, danfe_url, dados_brutos_bling, bling_id, sincronizado_em)
+             status, loja_id, xml_url, danfe_url, dados_brutos_bling, bling_id, tipo_documento, sincronizado_em)
             VALUES ($1,$2,$3,$4,$5::date,$6::date,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
-                    $20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34::jsonb,$35,NOW())
+                    $20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34::jsonb,$35,$36,NOW())
             RETURNING id""",
             campos["numero"], campos["modelo"], campos["chave_acesso"], campos["tipo"],
             campos["data_emissao"], campos["data_operacao"], campos["natureza_operacao"], campos["cfop"],
@@ -480,7 +486,7 @@ async def _upsert_nota_fiscal(db, bling_id: int, detalhe: dict) -> int:
             campos["valor_ipi"], campos["valor_pis"], campos["valor_cofins"], campos["valor_iss"],
             campos["valor_ii"], campos["valor_ir"], campos["valor_csll"], campos["valor_inss"],
             campos["valor_total_tributos"], campos["status"], campos["loja_id"],
-            campos["xml_url"], campos["danfe_url"], raw, bling_id)
+            campos["xml_url"], campos["danfe_url"], raw, bling_id, tipo_documento)
 
     itens = detalhe.get("itens", []) or []
     for idx, item in enumerate(itens, 1):

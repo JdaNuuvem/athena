@@ -36,9 +36,11 @@ class _FakeDBNotas:
     def __init__(self, existing_id=None):
         self.existing_id = existing_id
         self.executed = []
+        self.fetchvals = []
         self.deleted_itens_nota_id = None
 
     async def fetchval(self, q, *a):
+        self.fetchvals.append((q, a))
         if "SELECT id FROM fiscal_notas_fiscais" in q:
             return self.existing_id
         if "INSERT INTO fiscal_notas_fiscais" in q:
@@ -171,5 +173,58 @@ class TestSincronizarNotasFiscaisBling(unittest.TestCase):
         self.assertFalse(r2["mais_notas"])
         self.assertEqual(r2["proximo_pular"], 0)
 
+
+class TestUpsertNotaFiscalTipoDocumento(unittest.TestCase):
+    """tipo_documento distingue NF-e / NFC-e / NFS-e dentro da MESMA tabela
+    fiscal_notas_fiscais. O parametro e' o ULTIMO da assinatura e tem default
+    'nfe' — nenhum caller existente muda de comportamento."""
+    def setUp(self):
+        import core.fiscal as fiscal
+        from core import run_async
+        self.fiscal = fiscal
+        self.run_async = run_async
+
+    def _insert_call(self, db):
+        return next(c for c in db.fetchvals if "INSERT INTO fiscal_notas_fiscais" in c[0])
+
+    def _update_call(self, db):
+        return next(c for c in db.executed if "UPDATE fiscal_notas_fiscais" in c[0])
+
+    def test_upsert_grava_tipo_documento_nfce_quando_informado(self):
+        db = _FakeDBNotas(existing_id=None)
+        self.run_async(self.fiscal._upsert_nota_fiscal(db, 999, _NFE_DETALHE_MOCK, tipo_documento="nfce"))
+        self.assertIn("nfce", self._insert_call(db)[1])
+
+    def test_upsert_default_continua_nfe_sem_passar_tipo_documento(self):
+        db = _FakeDBNotas(existing_id=None)
+        self.run_async(self.fiscal._upsert_nota_fiscal(db, 998, _NFE_DETALHE_MOCK))
+        self.assertIn("nfe", self._insert_call(db)[1])
+
+    def test_update_grava_tipo_documento_e_mantem_bling_id_no_where(self):
+        """No UPDATE o bling_id do WHERE tem que continuar sendo o ULTIMO
+        argumento posicional — tipo_documento entra imediatamente ANTES dele."""
+        db = _FakeDBNotas(existing_id=55)
+        self.run_async(self.fiscal._upsert_nota_fiscal(db, 777, _NFE_DETALHE_MOCK, tipo_documento="nfse"))
+        q, args = self._update_call(db)
+        self.assertEqual(args[-1], 777)
+        self.assertEqual(args[-2], "nfse")
+
+    def test_contagem_de_placeholders_bate_com_argumentos(self):
+        """Guarda contra o erro classico desta funcao: adicionar coluna e esquecer
+        de adicionar o argumento (ou vice-versa) desalinha TODOS os campos fiscais
+        seguintes sem erro de sintaxe — so' dado errado silencioso."""
+        import re
+        db_ins = _FakeDBNotas(existing_id=None)
+        self.run_async(self.fiscal._upsert_nota_fiscal(db_ins, 999, _NFE_DETALHE_MOCK))
+        q_ins, args_ins = self._insert_call(db_ins)
+        self.assertEqual(max(int(n) for n in re.findall(r"\$(\d+)", q_ins)), len(args_ins))
+        colunas = q_ins.split("(", 1)[1].split(")", 1)[0]
+        # -1: sincronizado_em usa NOW(), nao placeholder
+        self.assertEqual(len([c for c in colunas.split(",") if c.strip()]) - 1, len(args_ins))
+
+        db_upd = _FakeDBNotas(existing_id=55)
+        self.run_async(self.fiscal._upsert_nota_fiscal(db_upd, 777, _NFE_DETALHE_MOCK))
+        q_upd, args_upd = self._update_call(db_upd)
+        self.assertEqual(max(int(n) for n in re.findall(r"\$(\d+)", q_upd)), len(args_upd))
 
 if __name__=="__main__":unittest.main(verbosity=2)
