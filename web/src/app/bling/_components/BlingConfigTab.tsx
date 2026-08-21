@@ -14,6 +14,8 @@ import {
   listarBlingNotificacoes,
   listarBlingEventos,
   confirmarLeituraNotificacao,
+  getBlingAmbiente,
+  setBlingAmbiente,
   BlingWebhook,
 } from "@/lib/api";
 
@@ -26,6 +28,9 @@ export default function BlingConfigTab() {
   const [sucesso, setSucesso] = useState<string | null>(null);
   const [eventos, setEventos] = useState<string[]>([]);
   const [showWebhookForm, setShowWebhookForm] = useState(false);
+  const [ambiente, setAmbiente] = useState<string>("producao");
+  const [baseUrl, setBaseUrl] = useState<string>("");
+  const [trocandoAmbiente, setTrocandoAmbiente] = useState(false);
   const [novoEvento, setNovoEvento] = useState("");
   const [novaUrl, setNovaUrl] = useState("");
 
@@ -33,16 +38,19 @@ export default function BlingConfigTab() {
     try {
       setLoading(true);
       setErro(null);
-      const [s, w, n, e] = await Promise.all([
+      const [s, w, n, e, amb] = await Promise.all([
         getBlingStatus(),
         listarBlingWebhooks(),
         listarBlingNotificacoes(),
         listarBlingEventos(),
+        getBlingAmbiente(),
       ]);
       setStatus(s);
       setWebhooks((w.data || []) as BlingWebhook[]);
       setNotificacoes((n.data || []) as unknown[]);
       setEventos(e.eventos || []);
+      setAmbiente(amb.ambiente || "producao");
+      setBaseUrl(amb.base_url || "");
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao carregar configurações");
     } finally {
@@ -51,6 +59,31 @@ export default function BlingConfigTab() {
   }, []);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  const handleTrocarAmbiente = async (novo: string) => {
+    if (novo === ambiente) return;
+    const confirmar = window.confirm(
+      novo === "homologacao"
+        ? "Trocar para HOMOLOGACAO? Os dados sincronizados a partir de agora ficam marcados como homologacao e somem das telas de producao."
+        : "Voltar para PRODUCAO? Os syncs voltam a gravar dados reais."
+    );
+    if (!confirmar) return;
+    try {
+      setTrocandoAmbiente(true);
+      setErro(null);
+      const r = await setBlingAmbiente(novo);
+      if (r.error) {
+        setErro(r.error);
+        return;
+      }
+      setSucesso(`Ambiente alterado para ${novo}. Reautentique no Bling se necessário.`);
+      await carregar();
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro ao trocar ambiente");
+    } finally {
+      setTrocandoAmbiente(false);
+    }
+  };
 
   const handleAuth = async () => {
     try {
@@ -93,6 +126,41 @@ export default function BlingConfigTab() {
     <div className="space-y-6">
       <Alert message={erro} type="error" />
       <Alert message={sucesso} type="success" />
+
+      <section>
+        <h3 className="text-sm font-semibold text-neutral-200 mb-3">Ambiente</h3>
+        <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-4 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-xs text-neutral-400">
+              Em homologação, tudo que for sincronizado fica marcado como{" "}
+              <code className="text-neutral-300">homologacao</code> e não aparece nas telas de
+              produção.
+            </p>
+            <div className="flex gap-1 bg-neutral-750 rounded-lg p-1 shrink-0">
+              {["producao", "homologacao"].map((amb) => (
+                <button
+                  key={amb}
+                  onClick={() => handleTrocarAmbiente(amb)}
+                  disabled={trocandoAmbiente}
+                  className={`px-3 py-1.5 text-xs rounded-md transition-colors disabled:opacity-50 ${
+                    ambiente === amb
+                      ? "bg-indigo-600 text-white"
+                      : "text-neutral-400 hover:text-neutral-200"
+                  }`}
+                >
+                  {amb === "producao" ? "Produção" : "Homologação"}
+                </button>
+              ))}
+            </div>
+          </div>
+          {ambiente === "homologacao" && baseUrl.includes("www.bling.com.br") && (
+            <p className="text-xs text-amber-400">
+              Nenhum host de homologação configurado — as chamadas continuam indo para a API de
+              produção ({baseUrl}). Só os dados gravados ficam separados.
+            </p>
+          )}
+        </div>
+      </section>
 
       <section>
         <h3 className="text-sm font-semibold text-neutral-200 mb-3">Conexão OAuth2</h3>
