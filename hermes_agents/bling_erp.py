@@ -238,6 +238,19 @@ def buscar_pedido_por_numero_loja(numero_loja: str, max_paginas: int = 50) -> di
             return None
     return None
 
+# ── Pedidos de Compra ──
+
+def listar_pedidos_compra(pagina: int = 1, limite: int = 100) -> dict:
+    return _request("pedidos/compras", {"pagina": pagina, "limite": limite})
+
+def get_pedido_compra_detalhe(id_pedido: int) -> dict:
+    """Retorna detalhes completos do pedido de compra: itens, fornecedor, condicoes."""
+    return _request(f"pedidos/compras/{id_pedido}")
+
+def marcar_pedido_compra_recebido(id_pedido: int) -> dict:
+    """Marca o pedido de compra como recebido no Bling via POST /pedidos/compras/{id}/receber."""
+    return _request(f"pedidos/compras/{id_pedido}/receber", {}, method="POST")
+
 # ── NF-e Completa ──
 
 def get_nfe_completa(id_nota: int) -> dict:

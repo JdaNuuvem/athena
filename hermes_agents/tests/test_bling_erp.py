@@ -255,6 +255,26 @@ class TestSituacoes(unittest.TestCase):
         self.assertTrue(any("INSERT INTO bling_situacoes" in s for s in sqls_executados))
 
 
+class TestPedidosCompra(unittest.TestCase):
+    """Wrappers de API Bling para pedidos de compra."""
+    def setUp(self): bling._TOKEN["access"] = "mock"
+
+    @patch("bling_erp._request", return_value={"data": []})
+    def test_listar_pedidos_compra_chama_endpoint_correto(self, mock_request):
+        bling.listar_pedidos_compra(pagina=2, limite=50)
+        mock_request.assert_called_once_with("pedidos/compras", {"pagina": 2, "limite": 50})
+
+    @patch("bling_erp._request", return_value={"data": {}})
+    def test_get_pedido_compra_detalhe_chama_endpoint_correto(self, mock_request):
+        bling.get_pedido_compra_detalhe(123)
+        mock_request.assert_called_once_with("pedidos/compras/123")
+
+    @patch("bling_erp._request", return_value={"data": {}})
+    def test_marcar_pedido_compra_recebido_chama_endpoint_correto(self, mock_request):
+        bling.marcar_pedido_compra_recebido(123)
+        mock_request.assert_called_once_with("pedidos/compras/123/receber", {}, method="POST")
+
+
 if __name__=="__main__": unittest.main(verbosity=2)
 
 patcher.stop()
