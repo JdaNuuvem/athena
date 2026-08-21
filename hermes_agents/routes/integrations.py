@@ -700,18 +700,64 @@ def api_sincronizar_situacoes():
 @bling_bp.route("/situacoes", methods=["POST"])
 def api_criar_situacao():
     dados = request.get_json(silent=True) or {}
-    return jsonify(criar_situacao(dados))
+
+    async def _go():
+        resultado = criar_situacao(dados)
+        # Achado #1 da revisao final: GET /situacoes le' so' do cache local
+        # (tabela bling_situacoes), diferente de GET /produtos que le' ao vivo
+        # da API Bling -- sem atualizar o cache aqui, a situacao recem-criada
+        # ficava invisivel ate' alguem rodar /situacoes/sincronizar na mao.
+        if not resultado.get("error"):
+            bling_id = (resultado.get("data") or {}).get("id")
+            if bling_id:
+                db = await get_db()
+                await ensure_bling_situacoes_table(db)
+                await db.execute(
+                    "INSERT INTO bling_situacoes (bling_id, nome, cor, modulo) VALUES ($1,$2,$3,$4) "
+                    "ON CONFLICT (bling_id) DO UPDATE SET nome=$2, cor=$3, modulo=$4, updated_at=NOW()",
+                    bling_id, dados.get("nome", ""), dados.get("cor", ""), dados.get("modulo", ""))
+        return resultado
+
+    return jsonify(run_async(_go()))
 
 
 @bling_bp.route("/situacoes/<int:id_situacao>", methods=["PUT"])
 def api_atualizar_situacao(id_situacao):
     dados = request.get_json(silent=True) or {}
-    return jsonify(atualizar_situacao(id_situacao, dados))
+
+    async def _go():
+        resultado = atualizar_situacao(id_situacao, dados)
+        if not resultado.get("error"):
+            db = await get_db()
+            await ensure_bling_situacoes_table(db)
+            # so' atualiza os campos que vieram no corpo da requisicao,
+            # preservando o valor atual do cache pros que nao vieram.
+            campos, valores = [], []
+            for i, campo in enumerate(("nome", "cor", "modulo"), start=1):
+                if campo in dados:
+                    campos.append(f"{campo}=${i}")
+                    valores.append(dados[campo])
+            if campos:
+                set_clause = ", ".join(campos) + ", updated_at=NOW()"
+                await db.execute(
+                    f"UPDATE bling_situacoes SET {set_clause} WHERE bling_id=${len(valores) + 1}",
+                    *valores, id_situacao)
+        return resultado
+
+    return jsonify(run_async(_go()))
 
 
 @bling_bp.route("/situacoes/<int:id_situacao>", methods=["DELETE"])
 def api_deletar_situacao(id_situacao):
-    return jsonify(deletar_situacao(id_situacao))
+    async def _go():
+        resultado = deletar_situacao(id_situacao)
+        if not resultado.get("error"):
+            db = await get_db()
+            await ensure_bling_situacoes_table(db)
+            await db.execute("DELETE FROM bling_situacoes WHERE bling_id=$1", id_situacao)
+        return resultado
+
+    return jsonify(run_async(_go()))
 
 
 @bling_bp.route("/plano-contas")

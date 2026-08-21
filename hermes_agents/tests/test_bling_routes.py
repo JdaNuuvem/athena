@@ -131,8 +131,15 @@ class TestBlingFlaskRoutes(unittest.TestCase):
         self.assertEqual(rv.status_code, 200)
 
     def test_situacoes_listar_route(self):
-        rv = self.client.get("/api/bling/situacoes")
-        self.assertEqual(rv.status_code, 200)
+        # Achado #2 da revisao final: so' checar status_code == 200 nao prova
+        # que a tabela e' garantida -- o mock global de asyncpg faz qualquer
+        # fetch retornar [] de qualquer forma, entao o teste passaria mesmo
+        # se ensure_bling_situacoes_table fosse removida da rota. Confirma de
+        # verdade que ela e' chamada.
+        with patch("routes.integrations.ensure_bling_situacoes_table", new=AsyncMock()) as mock_ensure:
+            rv = self.client.get("/api/bling/situacoes")
+            self.assertEqual(rv.status_code, 200)
+            mock_ensure.assert_called_once()
 
     def test_situacoes_sincronizar_route(self):
         with patch("routes.integrations.sincronizar_situacoes_bling", return_value={"sync": 3}) as mock_sync:
@@ -157,6 +164,70 @@ class TestBlingFlaskRoutes(unittest.TestCase):
             rv = self.client.delete("/api/bling/situacoes/42")
             self.assertEqual(rv.status_code, 200)
             mock_deletar.assert_called_once_with(42)
+
+    def test_situacoes_criar_route_atualiza_cache_local(self):
+        # Achado #1 da revisao final: criar uma situacao nova ficava invisivel
+        # em GET /situacoes ate' alguem rodar /situacoes/sincronizar na mao.
+        # Confirma que o INSERT no cache local acontece apos sucesso.
+        fake_db = AsyncMock()
+        with patch("routes.integrations.criar_situacao", return_value={"data": {"id": 99}}), \
+             patch("routes.integrations.get_db", new=AsyncMock(return_value=fake_db)), \
+             patch("routes.integrations.ensure_bling_situacoes_table", new=AsyncMock()) as mock_ensure:
+            rv = self.client.post("/api/bling/situacoes", json={"nome": "Em Análise", "cor": "0000FF"})
+            self.assertEqual(rv.status_code, 200)
+            mock_ensure.assert_called_once()
+            fake_db.execute.assert_called_once()
+            sql, args = fake_db.execute.call_args[0][0], fake_db.execute.call_args[0][1:]
+            self.assertIn("INSERT INTO bling_situacoes", sql)
+            self.assertEqual(args, (99, "Em Análise", "0000FF", ""))
+
+    def test_situacoes_criar_route_nao_toca_cache_se_bling_der_erro(self):
+        fake_db = AsyncMock()
+        with patch("routes.integrations.criar_situacao", return_value={"error": "falhou"}), \
+             patch("routes.integrations.get_db", new=AsyncMock(return_value=fake_db)):
+            rv = self.client.post("/api/bling/situacoes", json={"nome": "X"})
+            self.assertEqual(rv.status_code, 200)
+            fake_db.execute.assert_not_called()
+
+    def test_situacoes_atualizar_route_atualiza_cache_local(self):
+        fake_db = AsyncMock()
+        with patch("routes.integrations.atualizar_situacao", return_value={"data": {}}), \
+             patch("routes.integrations.get_db", new=AsyncMock(return_value=fake_db)), \
+             patch("routes.integrations.ensure_bling_situacoes_table", new=AsyncMock()) as mock_ensure:
+            rv = self.client.put("/api/bling/situacoes/42", json={"nome": "Pago"})
+            self.assertEqual(rv.status_code, 200)
+            mock_ensure.assert_called_once()
+            fake_db.execute.assert_called_once()
+            sql, args = fake_db.execute.call_args[0][0], fake_db.execute.call_args[0][1:]
+            self.assertIn("UPDATE bling_situacoes", sql)
+            self.assertIn("nome=$1", sql)
+            self.assertEqual(args, ("Pago", 42))
+
+    def test_situacoes_atualizar_route_nao_toca_cache_se_bling_der_erro(self):
+        fake_db = AsyncMock()
+        with patch("routes.integrations.atualizar_situacao", return_value={"error": "falhou"}), \
+             patch("routes.integrations.get_db", new=AsyncMock(return_value=fake_db)):
+            rv = self.client.put("/api/bling/situacoes/42", json={"nome": "Pago"})
+            self.assertEqual(rv.status_code, 200)
+            fake_db.execute.assert_not_called()
+
+    def test_situacoes_deletar_route_remove_do_cache_local(self):
+        fake_db = AsyncMock()
+        with patch("routes.integrations.deletar_situacao", return_value={}), \
+             patch("routes.integrations.get_db", new=AsyncMock(return_value=fake_db)), \
+             patch("routes.integrations.ensure_bling_situacoes_table", new=AsyncMock()) as mock_ensure:
+            rv = self.client.delete("/api/bling/situacoes/42")
+            self.assertEqual(rv.status_code, 200)
+            mock_ensure.assert_called_once()
+            fake_db.execute.assert_called_once_with("DELETE FROM bling_situacoes WHERE bling_id=$1", 42)
+
+    def test_situacoes_deletar_route_nao_toca_cache_se_bling_der_erro(self):
+        fake_db = AsyncMock()
+        with patch("routes.integrations.deletar_situacao", return_value={"error": "falhou"}), \
+             patch("routes.integrations.get_db", new=AsyncMock(return_value=fake_db)):
+            rv = self.client.delete("/api/bling/situacoes/42")
+            self.assertEqual(rv.status_code, 200)
+            fake_db.execute.assert_not_called()
 
 
 class TestBlingRotasRemovidas(unittest.TestCase):
