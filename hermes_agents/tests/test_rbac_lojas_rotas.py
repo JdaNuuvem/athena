@@ -113,7 +113,16 @@ class TestVendasListagemComRestricao(unittest.TestCase):
             r = self.client.get("/api/vendas/pedidos", headers=self.headers)
         self.assertEqual(r.status_code, 200)
         mock_lp.assert_called_once_with([3])
-        self.assertEqual(r.get_json()["data"], [{"id": 1, "loja_id": 3}])
+        # ponytail: aqui havia assertEqual contra o dict exato do mock. A rota
+        # passou a enriquecer pedidos com item_principal/total_itens
+        # (enriquecer_item_principal, commit ee8e600), entao a igualdade
+        # byte-a-byte quebrou — sem que o RBAC por loja tivesse regredido.
+        # O que este teste precisa provar e' que os dados vieram de
+        # listar_pedidos_por_loja; campos derivados a mais sao legitimos.
+        dados = r.get_json()["data"]
+        self.assertEqual(len(dados), 1)
+        self.assertEqual(dados[0]["id"], 1)
+        self.assertEqual(dados[0]["loja_id"], 3)
 
 
 if __name__ == "__main__":
