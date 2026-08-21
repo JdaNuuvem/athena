@@ -16,13 +16,19 @@ function GearIcon() {
   );
 }
 
-// Submenu lista apenas as rotas que ja existem. A fase 6b acrescenta as
-// proprias entradas quando criar as paginas — link pra rota inexistente da 404.
+// Ordem espelha a do spec do modulo. Toda entrada aqui precisa ter um
+// diretorio com page.tsx em web/src/app/bling/ — link pra rota inexistente
+// vira 404 silencioso na navegacao.
 const SUBMENU: Array<{ href: string; label: string; icon?: string }> = [
   { href: "/bling", label: "Dashboard", icon: "dashboard" },
   { href: "/bling/produtos", label: "Produtos", icon: "produtos" },
   { href: "/bling/pedidos-venda", label: "Pedidos de Venda", icon: "vendas" },
+  { href: "/bling/pedidos-compra", label: "Pedidos de Compra", icon: "compras" },
+  { href: "/bling/situacoes", label: "Situações", icon: "check" },
+  { href: "/bling/canais", label: "Lojas/Canais", icon: "globe" },
   { href: "/bling/financeiro", label: "Financeiro", icon: "financeiro" },
+  { href: "/bling/notas", label: "Notas Fiscais", icon: "fiscal" },
+  { href: "/bling/plano-contas", label: "Contas Contábeis", icon: "bi" },
   { href: "/bling/config", label: "Configurações" },
 ];
 
