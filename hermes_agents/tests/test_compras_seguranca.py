@@ -75,7 +75,17 @@ class TestComprasAprovarRBAC(unittest.TestCase):
 class TestComprasCRUDExigePermissao(unittest.TestCase):
     """CRUD generico de compras (create/update/delete) antes nao checava
     nenhuma permissao — qualquer usuario autenticado podia criar, editar ou
-    excluir fornecedores, pedidos, cotacoes etc."""
+    excluir solicitacoes, pedidos, cotacoes etc.
+
+    ponytail: estes testes usavam a tabela "fornecedores", que saiu de
+    core.compras.TABLES no commit d2586f0 (reforma do modulo Compras,
+    2026-08-07) quando fornecedores migrou pro modulo Cadastros. O handler
+    passou a responder 404 "Tabela invalida" ANTES de chegar no
+    @requer_permissao, entao os 5 testes viam 404 no lugar de 403/200 e
+    falhavam desde entao — sem que o RBAC estivesse quebrado. Agora usam
+    "solicitacoes" (tabela que segue em TABLES), voltando a exercitar o que
+    se propoem. O CRUD de fornecedores hoje vive em /api/cadastros e tem
+    cobertura propria em tests/test_cadastros_seguranca.py."""
 
     def setUp(self):
         self._env_patch = patch.dict(os.environ, {"ATHENA_TOKEN": _TEST_TOKEN})
@@ -93,7 +103,7 @@ class TestComprasCRUDExigePermissao(unittest.TestCase):
         headers = {"Authorization": f"Bearer {token}"}
         with patch("core.rbac.get_permissoes_por_usuario", return_value=["pdv.operar"]), \
              patch("core.compras.create") as mock_create:
-            r = self.client.post("/api/compras/fornecedores", json={"nome": "X"}, headers=headers)
+            r = self.client.post("/api/compras/solicitacoes", json={"nome": "X"}, headers=headers)
         self.assertEqual(r.status_code, 403)
         mock_create.assert_not_called()
 
@@ -102,7 +112,7 @@ class TestComprasCRUDExigePermissao(unittest.TestCase):
         headers = {"Authorization": f"Bearer {token}"}
         with patch("core.rbac.get_permissoes_por_usuario", return_value=["compras.criar"]), \
              patch("core.compras.create", return_value={"id": 1}) as mock_create:
-            r = self.client.post("/api/compras/fornecedores", json={"nome": "X"}, headers=headers)
+            r = self.client.post("/api/compras/solicitacoes", json={"nome": "X"}, headers=headers)
         self.assertEqual(r.status_code, 200)
         mock_create.assert_called_once()
 
@@ -111,7 +121,7 @@ class TestComprasCRUDExigePermissao(unittest.TestCase):
         headers = {"Authorization": f"Bearer {token}"}
         with patch("core.rbac.get_permissoes_por_usuario", return_value=["compras.criar"]), \
              patch("core.compras.update") as mock_update:
-            r = self.client.put("/api/compras/fornecedores/1", json={"nome": "Y"}, headers=headers)
+            r = self.client.put("/api/compras/solicitacoes/1", json={"nome": "Y"}, headers=headers)
         self.assertEqual(r.status_code, 403)
         mock_update.assert_not_called()
 
@@ -120,7 +130,7 @@ class TestComprasCRUDExigePermissao(unittest.TestCase):
         headers = {"Authorization": f"Bearer {token}"}
         with patch("core.rbac.get_permissoes_por_usuario", return_value=["compras.criar", "compras.editar"]), \
              patch("core.compras.delete") as mock_delete:
-            r = self.client.delete("/api/compras/fornecedores/1", headers=headers)
+            r = self.client.delete("/api/compras/solicitacoes/1", headers=headers)
         self.assertEqual(r.status_code, 403)
         mock_delete.assert_not_called()
 
@@ -130,7 +140,7 @@ class TestComprasCRUDExigePermissao(unittest.TestCase):
         with patch("core.rbac.get_permissoes_por_usuario", return_value=["compras.excluir"]), \
              patch("core.compras.get", return_value={"id": 1, "nome": "X"}), \
              patch("core.compras.delete", return_value={"success": True}) as mock_delete:
-            r = self.client.delete("/api/compras/fornecedores/1", headers=headers)
+            r = self.client.delete("/api/compras/solicitacoes/1", headers=headers)
         self.assertEqual(r.status_code, 200)
         mock_delete.assert_called_once()
 
