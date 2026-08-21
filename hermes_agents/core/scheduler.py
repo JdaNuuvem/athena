@@ -7,19 +7,44 @@ AGENT = "Scheduler"
 JOBS = []
 
 def add_job(fn, name: str, interval_seconds: int):
-    JOBS.append({"fn": fn, "name": name, "interval": interval_seconds, "last_run": 0.0})
+    JOBS.append({"fn": fn, "name": name, "interval": interval_seconds,
+                 "last_run": 0.0, "running": False})
+
+def _deve_rodar(job: dict, now: float) -> bool:
+    """Um job so' e' disparado se o intervalo venceu E a execucao anterior ja'
+    terminou. A segunda condicao importa porque last_run e' marcado no INICIO
+    da execucao: sem ela, um sync que demore mais que o proprio intervalo seria
+    disparado de novo em paralelo consigo mesmo, multiplicando chamadas a API."""
+    if job.get("running"):
+        return False
+    return now - job["last_run"] >= job["interval"]
+
+def _run_job(job: dict):
+    """Corpo executado na thread do job. Libera a trava no finally — se um sync
+    estourar excecao e a trava ficar presa, aquele job nunca mais roda ate' o
+    processo reiniciar."""
+    try:
+        job["fn"]()
+    except Exception as e:
+        log(AGENT, f"Job '{job['name']}' error: {e}")
+    finally:
+        job["running"] = False
 
 def _worker():
+    # ponytail: antes isso chamava job["fn"]() direto no loop, em sequencia.
+    # Um job lento atrasava todos os outros — inclusive shopee-renovar-tokens,
+    # que roda a cada 15min pra renovar token que expira em 30min. Foi
+    # exatamente por isso que os jobs Bling foram comentados em vez de
+    # consertados. Agora cada job sai numa thread propria e o loop segue.
     while True:
         now = time.time()
         for job in JOBS:
-            if now - job["last_run"] < job["interval"]:
+            if not _deve_rodar(job, now):
                 continue
             job["last_run"] = now
-            try:
-                job["fn"]()
-            except Exception as e:
-                log(AGENT, f"Job '{job['name']}' error: {e}")
+            job["running"] = True
+            threading.Thread(target=_run_job, args=(job,), daemon=True,
+                             name=f"job-{job['name']}").start()
         # sleep in chunks so shutdown is responsive
         for _ in range(10):
             time.sleep(1)
