@@ -47,8 +47,6 @@ def _ensure_tables():
         except Exception: pass
         try: await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_compras_pedidos_bling_id ON compras_pedidos (bling_id) WHERE bling_id IS NOT NULL")
         except Exception: pass
-        try: await db.execute("ALTER TABLE compras_itens ADD COLUMN IF NOT EXISTS bling_item_id BIGINT")
-        except Exception: pass
         try:
             from core.lojas import LOJA_PRINCIPAL_ID
             if LOJA_PRINCIPAL_ID:
@@ -62,6 +60,11 @@ def _ensure_tables():
             unidade VARCHAR(10) DEFAULT 'UN', valor_unitario DECIMAL(12,2) DEFAULT 0, valor_total DECIMAL(12,2) DEFAULT 0,
             created_at TIMESTAMP DEFAULT NOW()
         )""")
+        # bling_item_id precisa vir DEPOIS do CREATE TABLE acima: em banco novo
+        # (fresh install), compras_itens ainda nao existe quando este bloco roda —
+        # o ALTER falhava silenciosamente (except: pass) e a coluna nunca era criada.
+        try: await db.execute("ALTER TABLE compras_itens ADD COLUMN IF NOT EXISTS bling_item_id BIGINT")
+        except Exception: pass
         await db.execute("""CREATE TABLE IF NOT EXISTS compras_recebimentos (
             id SERIAL PRIMARY KEY, pedido_id INT REFERENCES compras_pedidos(id),
             numero VARCHAR(30), data_recebimento DATE DEFAULT CURRENT_DATE,
@@ -264,20 +267,56 @@ def confirmar_recebimento(id: int) -> dict:
     except Exception as e: pass
     return r
 
+def _mapear_situacao_compra(situacao_bling: dict) -> str:
+    """Mapeia situacao.nome/situacao.valor do Bling (texto livre, ex: "Em andamento",
+    "Cancelado") pro vocabulario interno controlado ja usado por compras_pedidos.status
+    ('emitido', 'enviado', 'confirmado', 'cancelado').
+
+    Sem esse mapeamento o texto cru do Bling era gravado direto na coluna: alem de nunca
+    bater com os valores minusculos que core/relatorios.py e core/bi.py comparam
+    (status != 'cancelado'), fazia core.relatorios.fluxo_caixa somar TODO pedido de compra
+    sincronizado (inclusive cancelado) como saida de caixa.
+
+    Mapeamento minimo e seguro: qualquer situacao cujo nome contenha "cancel"
+    (case-insensitive) vira 'cancelado'; qualquer outra cai no valor neutro 'emitido'
+    ja existente no vocabulario controlado, em vez do texto cru do Bling."""
+    nome = (situacao_bling or {}).get("nome", "") or ""
+    if "cancel" in nome.lower():
+        return "cancelado"
+    return "emitido"
+
 def sincronizar_pedidos_compra_bling(pagina: int = 1, limite: int = 100) -> dict:
     """Sync de pedidos de compra do Bling -> compras_pedidos/compras_itens (upsert por
     bling_id). Resolve fornecedor por documento em cad_fornecedores, criando se nao existir —
-    mesmo padrao de core.entidades.migrar_fornecedores_compras."""
+    mesmo padrao de core.entidades.migrar_fornecedores_compras.
+
+    Pagina de verdade num loop de seguranca (mesmo padrao de
+    core.vendas.sincronizar_pedidos_bling) ate esgotar a listagem ou atingir MAX_PAGINAS."""
+    import time
     from bling_erp import listar_pedidos_compra, get_pedido_compra_detalhe, get_access_token, get_auth_url
     token = get_access_token()
     if not token:
         return {"error": "Bling nao autenticado", "auth_url": get_auth_url()}
-    r = listar_pedidos_compra(pagina, limite)
-    if r.get("error"):
-        return r
-    resumos = r.get("data", [])
+
+    MAX_PAGINAS = 50  # limite de seguranca: evita loop/chamadas ilimitadas em contas com muitos pedidos
+    resumos = []
+    erros_paginacao = []
+    pag = pagina
+    mais_paginas = False
+    for _ in range(MAX_PAGINAS):
+        r = listar_pedidos_compra(pag, limite)
+        dados = r.get("data", [])
+        if not dados or r.get("error"):
+            if r.get("error"): erros_paginacao.append(f"pag {pag}: {r['error']}")
+            break
+        resumos.extend(dados)
+        if len(dados) < limite:
+            break
+        pag += 1
+    else:
+        mais_paginas = True  # atingiu MAX_PAGINAS sem esgotar a listagem — rode de novo para continuar
     if not resumos:
-        return {"sync": 0, "message": "sem dados"}
+        return {"sync": 0, "message": "sem dados", "erros": erros_paginacao}
 
     async def _go():
         db = await get_db()
@@ -295,16 +334,24 @@ def sincronizar_pedidos_compra_bling(pagina: int = 1, limite: int = 100) -> dict
             except Exception: pass
 
         total = 0
-        erros = []
+        erros = list(erros_paginacao)
         for resumo in resumos:
             bling_id = resumo.get("id")
             if not bling_id:
                 continue
-            r_detalhe = get_pedido_compra_detalhe(bling_id)
-            if r_detalhe.get("error"):
+            detalhe = None
+            for attempt in range(3):
+                r_detalhe = get_pedido_compra_detalhe(bling_id)
+                if not r_detalhe.get("error"):
+                    detalhe = r_detalhe.get("data", {})
+                    break
+                if r_detalhe.get("status_code") == 429:
+                    time.sleep(2 ** attempt)
+                    continue
                 erros.append(f"pedido {bling_id}: {r_detalhe['error']}")
+                break
+            if detalhe is None:
                 continue
-            detalhe = r_detalhe.get("data", {})
             try:
                 fornecedor = detalhe.get("fornecedor", {}) or {}
                 doc = (fornecedor.get("numeroDocumento") or "").replace(".", "").replace("/", "").replace("-", "").strip()
@@ -319,7 +366,7 @@ def sincronizar_pedidos_compra_bling(pagina: int = 1, limite: int = 100) -> dict
 
                 numero = str(detalhe.get("numero", ""))
                 valor_total = float(detalhe.get("total", 0) or 0)
-                situacao = (detalhe.get("situacao") or {}).get("nome", "")
+                situacao = _mapear_situacao_compra(detalhe.get("situacao") or {})
                 data_emissao = (detalhe.get("data") or "")[:10] or None
                 data_prevista = (detalhe.get("dataPrevista") or "")[:10] or None
 
@@ -352,7 +399,7 @@ def sincronizar_pedidos_compra_bling(pagina: int = 1, limite: int = 100) -> dict
             except Exception as e:
                 erros.append(f"pedido {bling_id}: {e}")
                 log(AGENT, f"Erro ao sincronizar pedido de compra {bling_id}: {e}")
-        return {"sync": total, "erros": erros}
+        return {"sync": total, "erros": erros, "mais_paginas": mais_paginas}
 
     try:
         return run_async(_go())

@@ -5,6 +5,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from unittest.mock import patch, MagicMock, AsyncMock, PropertyMock
 import unittest
 
+_TEST_TOKEN = "test-master-token-32-bytes-long!!"
+
 # Mock asyncpg before importing Flask
 fake_pool = AsyncMock()
 fake_conn = AsyncMock()
@@ -233,15 +235,34 @@ class TestBlingFlaskRoutes(unittest.TestCase):
         rv = self.client.get("/api/bling/pedidos-compra")
         self.assertEqual(rv.status_code, 200)
 
+    def test_pedidos_compra_sincronizar_route_exige_permissao(self):
+        # Achado #2 da revisao final: rota de escrita sem RBAC — sem token,
+        # a rota agora nega em vez de sincronizar.
+        rv = self.client.post("/api/bling/pedidos-compra/sincronizar")
+        self.assertEqual(rv.status_code, 403)
+
     def test_pedidos_compra_sincronizar_route(self):
-        with patch("routes.integrations.sincronizar_pedidos_compra_bling", return_value={"sync": 2}) as mock_sync:
-            rv = self.client.post("/api/bling/pedidos-compra/sincronizar")
+        # import de core.compras.sincronizar_pedidos_compra_bling agora e' local
+        # (dentro do handler, achado #1 da revisao final) — patch precisa mirar
+        # no modulo de origem, nao mais em routes.integrations.
+        with patch.dict(os.environ, {"ATHENA_TOKEN": _TEST_TOKEN}), \
+             patch("core.compras.sincronizar_pedidos_compra_bling", return_value={"sync": 2}) as mock_sync:
+            rv = self.client.post(
+                "/api/bling/pedidos-compra/sincronizar",
+                headers={"Authorization": f"Bearer {_TEST_TOKEN}"})
             self.assertEqual(rv.status_code, 200)
             mock_sync.assert_called_once()
 
+    def test_pedidos_compra_receber_route_exige_permissao(self):
+        rv = self.client.post("/api/bling/pedidos-compra/555/receber")
+        self.assertEqual(rv.status_code, 403)
+
     def test_pedidos_compra_receber_route(self):
-        with patch("routes.integrations.marcar_pedido_compra_recebido", return_value={"data": {}}) as mock_receber:
-            rv = self.client.post("/api/bling/pedidos-compra/555/receber")
+        with patch.dict(os.environ, {"ATHENA_TOKEN": _TEST_TOKEN}), \
+             patch("routes.integrations.marcar_pedido_compra_recebido", return_value={"data": {}}) as mock_receber:
+            rv = self.client.post(
+                "/api/bling/pedidos-compra/555/receber",
+                headers={"Authorization": f"Bearer {_TEST_TOKEN}"})
             self.assertEqual(rv.status_code, 200)
             mock_receber.assert_called_once_with(555)
 

@@ -527,7 +527,6 @@ from bling_erp import (
 )
 from core.vendas import sincronizar_pedidos_bling
 from core.financeiro import sincronizar_plano_contas_bling
-from core.compras import sincronizar_pedidos_compra_bling
 
 bling_bp = Blueprint("bling_api", __name__, url_prefix="/api/bling")
 
@@ -777,11 +776,14 @@ def api_pedidos_compra():
 
 
 @bling_bp.route("/pedidos-compra/sincronizar", methods=["POST"])
+@requer_permissao("compras.editar")
 def api_sincronizar_pedidos_compra():
+    from core.compras import sincronizar_pedidos_compra_bling
     return jsonify(sincronizar_pedidos_compra_bling())
 
 
 @bling_bp.route("/pedidos-compra/<int:id_pedido>/receber", methods=["POST"])
+@requer_permissao("compras.editar")
 def api_receber_pedido_compra(id_pedido):
     return jsonify(marcar_pedido_compra_recebido(id_pedido))
 

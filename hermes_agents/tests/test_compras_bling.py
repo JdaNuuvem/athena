@@ -21,6 +21,35 @@ _patcher.start()
 from core import compras as core_compras
 
 
+class TestMapearSituacaoCompra(unittest.TestCase):
+    """Achado CRITICO da revisao final: status cru do Bling ('Em andamento',
+    'Cancelado', ...) era gravado direto em compras_pedidos.status, o que
+    corrompia core.relatorios.fluxo_caixa (soma tudo, sem filtrar cancelado)
+    e as comparacoes case-sensitive de core.bi/core.relatorios
+    (status != 'cancelado', minusculo). _mapear_situacao_compra traduz pro
+    vocabulario interno controlado antes do INSERT/UPDATE."""
+
+    def test_situacao_com_cancel_no_nome_vira_cancelado(self):
+        self.assertEqual(
+            core_compras._mapear_situacao_compra({"valor": 10, "nome": "Cancelado"}), "cancelado")
+
+    def test_situacao_cancel_case_insensitive(self):
+        self.assertEqual(
+            core_compras._mapear_situacao_compra({"valor": 10, "nome": "cancelada pelo fornecedor"}), "cancelado")
+        self.assertEqual(
+            core_compras._mapear_situacao_compra({"valor": 10, "nome": "CANCELADO"}), "cancelado")
+
+    def test_situacao_qualquer_outra_cai_no_valor_neutro(self):
+        self.assertEqual(
+            core_compras._mapear_situacao_compra({"valor": 6, "nome": "Em andamento"}), "emitido")
+        self.assertEqual(
+            core_compras._mapear_situacao_compra({"valor": 1, "nome": "Em aberto"}), "emitido")
+
+    def test_situacao_vazia_ou_ausente_cai_no_valor_neutro(self):
+        self.assertEqual(core_compras._mapear_situacao_compra({}), "emitido")
+        self.assertEqual(core_compras._mapear_situacao_compra(None), "emitido")
+
+
 class TestSincronizarPedidosCompraBling(unittest.TestCase):
     def test_resolve_fornecedor_existente_por_documento_e_faz_upsert(self):
         fake_db = AsyncMock()
@@ -51,6 +80,33 @@ class TestSincronizarPedidosCompraBling(unittest.TestCase):
         self.assertTrue(any("ALTER TABLE compras_pedidos ADD COLUMN" in s for s in sqls_executados))
         self.assertTrue(any("INSERT INTO compras_pedidos" in s for s in sqls_executados))
         self.assertTrue(any("INSERT INTO compras_itens" in s for s in sqls_executados))
+        # Achado CRITICO: status gravado deve ser o valor mapeado ('emitido'), nunca o
+        # texto cru do Bling ('Em andamento').
+        insert_pedido_call = next(
+            c for c in fake_db.execute.call_args_list if "INSERT INTO compras_pedidos" in c.args[0])
+        self.assertIn("emitido", insert_pedido_call.args)
+        self.assertNotIn("Em andamento", insert_pedido_call.args)
+
+    def test_situacao_cancelada_no_bling_grava_status_cancelado(self):
+        fake_db = AsyncMock()
+        fake_db.fetchval.side_effect = [None, None, None, 43]
+        fake_db.fetchrow.return_value = None
+        with patch("bling_erp.get_access_token", return_value="tok"), \
+             patch("core.compras.get_db", new=AsyncMock(return_value=fake_db)), \
+             patch("bling_erp.get_pedido_compra_detalhe", return_value={"data": {
+                 "id": 556, "numero": "PC-002", "total": 500.0,
+                 "situacao": {"valor": 12, "nome": "Cancelado"},
+                 "data": "2026-08-20", "dataPrevista": "2026-08-27",
+                 "fornecedor": {"nome": "Fornecedor ABC", "numeroDocumento": ""},
+                 "itens": [],
+             }}), \
+             patch("bling_erp.listar_pedidos_compra", return_value={"data": [{"id": 556}]}):
+            resultado = core_compras.sincronizar_pedidos_compra_bling()
+        self.assertEqual(resultado["sync"], 1)
+        insert_pedido_call = next(
+            c for c in fake_db.execute.call_args_list if "INSERT INTO compras_pedidos" in c.args[0])
+        self.assertIn("cancelado", insert_pedido_call.args)
+        self.assertNotIn("Cancelado", insert_pedido_call.args)
 
 
 if __name__ == "__main__":
