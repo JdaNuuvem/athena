@@ -25,20 +25,62 @@ BASE_URL = "https://www.bling.com.br/Api/v3"
 
 _TOKEN = {"access": "", "refresh": ""}
 
+# ── Ambiente (producao / homologacao) ──
+# ponytail: a API Bling v3 nao publica host de sandbox (a Shopee publica — ver
+# shopee/auth.py::BASE_URL_SANDBOX). Por isso o host de homologacao vem de
+# config e, sem config, cai de volta em producao: ligar o toggle isola os DADOS
+# (coluna `ambiente` nas tabelas sincronizadas) mesmo quando ainda nao existe
+# host separado pra apontar. Apontar pra host inventado quebraria o modulo
+# inteiro em silencio.
+AMBIENTES = ("producao", "homologacao")
+
+def get_ambiente() -> str:
+    amb = (os.environ.get("BLING_AMBIENTE") or "").strip().lower()
+    if amb not in AMBIENTES:
+        try: amb = (get_config("bling", "ambiente") or "").strip().lower()
+        except Exception: amb = ""
+    return amb if amb in AMBIENTES else "producao"
+
+def set_ambiente(ambiente: str) -> dict:
+    amb = (ambiente or "").strip().lower()
+    if amb not in AMBIENTES:
+        return {"error": f"ambiente invalido: {ambiente!r} (use 'producao' ou 'homologacao')"}
+    set_config("bling", "ambiente", amb)
+    # o cache em memoria e' do ambiente anterior — deixar vazar daria 401 em
+    # loop (token de um ambiente contra a base do outro).
+    _TOKEN["access"] = ""
+    _TOKEN["refresh"] = ""
+    return {"ambiente": amb}
+
+def _base_url() -> str:
+    if get_ambiente() == "homologacao":
+        url = os.environ.get("BLING_BASE_URL_HOMOLOGACAO") or ""
+        if not url:
+            try: url = get_config("bling", "base_url_homologacao") or ""
+            except Exception: url = ""
+        url = url.strip().rstrip("/")
+        if url: return url
+    return BASE_URL
+
+def _chave_token(nome: str) -> str:
+    """Chaves de config de token sao sufixadas fora de producao, pra que
+    autenticar em homologacao nao sobrescreva o token de producao."""
+    return nome if get_ambiente() == "producao" else f"{nome}_homologacao"
+
 def get_access_token() -> str:
     t = os.environ.get("BLING_ACCESS_TOKEN", "")
     if t: return t
     t = _TOKEN["access"]
     if t: return t
     try:
-        t = get_config("bling", "access_token") or ""
+        t = get_config("bling", _chave_token("access_token")) or ""
         if t: _TOKEN["access"] = t
     except: pass
     return t
 
 def set_access_token(token: str):
     _TOKEN["access"] = token
-    try: set_config("bling", "access_token", token)
+    try: set_config("bling", _chave_token("access_token"), token)
     except: pass
 
 def get_refresh_token() -> str:
@@ -47,14 +89,14 @@ def get_refresh_token() -> str:
     t = _TOKEN["refresh"]
     if t: return t
     try:
-        t = get_config("bling", "refresh_token") or ""
+        t = get_config("bling", _chave_token("refresh_token")) or ""
         if t: _TOKEN["refresh"] = t
     except: pass
     return t
 
 def set_refresh_token(token: str):
     _TOKEN["refresh"] = token
-    try: set_config("bling", "refresh_token", token)
+    try: set_config("bling", _chave_token("refresh_token"), token)
     except: pass
 
 def get_auth_url() -> str:
@@ -64,14 +106,14 @@ def get_auth_url() -> str:
         "redirect_uri": REDIRECT_URI,
         "state": os.urandom(16).hex(),
     })
-    return f"{BASE_URL}/oauth/authorize?{params}"
+    return f"{_base_url()}/oauth/authorize?{params}"
 
 def exchange_code(code: str) -> dict:
     try:
         cid = _client_id()
         csecret = _client_secret()
         auth = requests.auth._basic_auth_str(cid, csecret)
-        r = requests.post(f"{BASE_URL}/oauth/token", json={
+        r = requests.post(f"{_base_url()}/oauth/token", json={
             "grant_type": "authorization_code",
             "code": code,
             "redirect_uri": REDIRECT_URI,
@@ -93,7 +135,7 @@ def refresh_access_token() -> dict:
         cid = _client_id()
         csecret = _client_secret()
         auth = requests.auth._basic_auth_str(cid, csecret)
-        r = requests.post(f"{BASE_URL}/oauth/token", json={
+        r = requests.post(f"{_base_url()}/oauth/token", json={
             "grant_type": "refresh_token",
             "refresh_token": rt,
         }, headers={"Authorization": auth}, timeout=30)
@@ -110,7 +152,7 @@ def _request(endpoint: str, params: dict = None, method: str = "GET") -> dict:
     token = get_access_token()
     if not token:
         return {"error": "Bling não autenticado. Visite /api/bling/auth para autorizar."}
-    url = f"{BASE_URL}/{endpoint}"
+    url = f"{_base_url()}/{endpoint}"
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json", "Accept": "application/json"}
     try:
         r = requests.request(method, url, headers=headers, json=params if method in ("POST", "PUT") else None,
@@ -645,6 +687,8 @@ def status() -> dict:
         "client_id_setado": bool(_client_id()),
         "autenticado": bool(token),
         "auth_url": get_auth_url() if not token else "",
+        "ambiente": get_ambiente(),
+        "base_url": _base_url(),
     }
 
 def registrar_webhook(tipo: str = "pedido", url: str = None) -> dict:

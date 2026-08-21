@@ -299,6 +299,83 @@ class TestNfceNfse(unittest.TestCase):
         bling.get_nfse_detalhe(654)
         mock_request.assert_called_once_with("nfse/654")
 
+class TestAmbienteBling(unittest.TestCase):
+    """Toggle producao/homologacao: default seguro, base URL nunca hardcoded,
+    tokens segregados por ambiente."""
+
+    def setUp(self):
+        os.environ.pop("BLING_AMBIENTE", None)
+        os.environ.pop("BLING_BASE_URL_HOMOLOGACAO", None)
+
+    def test_ambiente_default_e_producao(self):
+        with patch("bling_erp.get_config", return_value=""):
+            self.assertEqual(bling.get_ambiente(), "producao")
+
+    def test_ambiente_invalido_cai_para_producao(self):
+        with patch("bling_erp.get_config", return_value="qualquer-coisa"):
+            self.assertEqual(bling.get_ambiente(), "producao")
+
+    def test_ambiente_le_da_config(self):
+        with patch("bling_erp.get_config", return_value="homologacao"):
+            self.assertEqual(bling.get_ambiente(), "homologacao")
+
+    def test_ambiente_le_do_env_com_prioridade(self):
+        os.environ["BLING_AMBIENTE"] = "homologacao"
+        try:
+            with patch("bling_erp.get_config", return_value="producao"):
+                self.assertEqual(bling.get_ambiente(), "homologacao")
+        finally:
+            os.environ.pop("BLING_AMBIENTE", None)
+
+    def test_set_ambiente_persiste_e_limpa_cache_de_token(self):
+        bling._TOKEN["access"] = "token-de-producao"
+        bling._TOKEN["refresh"] = "refresh-de-producao"
+        with patch("bling_erp.set_config") as mock_set:
+            r = bling.set_ambiente("homologacao")
+        self.assertEqual(r["ambiente"], "homologacao")
+        mock_set.assert_called_once_with("bling", "ambiente", "homologacao")
+        # cache do ambiente anterior nao pode vazar pro novo ambiente
+        self.assertEqual(bling._TOKEN["access"], "")
+        self.assertEqual(bling._TOKEN["refresh"], "")
+
+    def test_set_ambiente_invalido_nao_persiste(self):
+        with patch("bling_erp.set_config") as mock_set:
+            r = bling.set_ambiente("xpto")
+        self.assertIn("error", r)
+        mock_set.assert_not_called()
+
+    def test_base_url_em_producao_e_a_constante(self):
+        with patch("bling_erp.get_ambiente", return_value="producao"):
+            self.assertEqual(bling._base_url(), bling.BASE_URL)
+
+    def test_base_url_em_homologacao_sem_host_configurado_cai_em_producao(self):
+        """Bling v3 nao publica host de sandbox. Sem config, homologacao isola
+        os DADOS mas continua falando com a API real — nunca aponta pra host
+        inventado."""
+        with patch("bling_erp.get_ambiente", return_value="homologacao"),              patch("bling_erp.get_config", return_value=""):
+            self.assertEqual(bling._base_url(), bling.BASE_URL)
+
+    def test_base_url_em_homologacao_usa_host_configurado_sem_barra_final(self):
+        with patch("bling_erp.get_ambiente", return_value="homologacao"),              patch("bling_erp.get_config", return_value="https://sandbox.bling.test/Api/v3/"):
+            self.assertEqual(bling._base_url(), "https://sandbox.bling.test/Api/v3")
+
+    def test_chave_de_token_e_sufixada_em_homologacao(self):
+        """Autenticar em homologacao nao pode sobrescrever o token de producao."""
+        with patch("bling_erp.get_ambiente", return_value="homologacao"),              patch("bling_erp.set_config") as mock_set:
+            bling.set_access_token("tok-homologacao")
+        mock_set.assert_called_once_with("bling", "access_token_homologacao", "tok-homologacao")
+
+    def test_chave_de_token_em_producao_continua_sem_sufixo(self):
+        with patch("bling_erp.get_ambiente", return_value="producao"),              patch("bling_erp.set_config") as mock_set:
+            bling.set_refresh_token("refresh-producao")
+        mock_set.assert_called_once_with("bling", "refresh_token", "refresh-producao")
+
+    def test_status_expoe_ambiente_e_base_url(self):
+        with patch("bling_erp.get_ambiente", return_value="homologacao"):
+            s = bling.status()
+        self.assertEqual(s["ambiente"], "homologacao")
+        self.assertIn("base_url", s)
+
 if __name__=="__main__": unittest.main(verbosity=2)
 
 patcher.stop()
