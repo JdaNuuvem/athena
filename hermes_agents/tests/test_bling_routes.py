@@ -35,6 +35,12 @@ class TestBlingFlaskRoutes(unittest.TestCase):
         app.register_blueprint(bling_bp)
         cls.client = app.test_client()
 
+    def _auth(self):
+        """Rotas de escrita do Bling exigem RBAC; o token master passa pelo
+        bypass administrativo de core.rbac."""
+        os.environ["ATHENA_TOKEN"] = _TEST_TOKEN
+        return {"Authorization": f"Bearer {_TEST_TOKEN}"}
+
     def test_status_route(self):
         rv = self.client.get("/api/bling/status")
         self.assertEqual(rv.status_code, 200)
@@ -100,7 +106,7 @@ class TestBlingFlaskRoutes(unittest.TestCase):
 
     def test_canais_sincronizar_route(self):
         with patch("routes.integrations.sincronizar_canais_bling", return_value={"sync": 2}) as mock_sync:
-            rv = self.client.post("/api/bling/canais/sincronizar")
+            rv = self.client.post("/api/bling/canais/sincronizar", headers=self._auth())
             self.assertEqual(rv.status_code, 200)
             data = json.loads(rv.data)
             self.assertEqual(data["sync"], 2)
@@ -116,7 +122,7 @@ class TestBlingFlaskRoutes(unittest.TestCase):
 
     def test_plano_contas_sincronizar_route(self):
         with patch("routes.integrations.sincronizar_plano_contas_bling", return_value={"sync": 5}) as mock_sync:
-            rv = self.client.post("/api/bling/plano-contas/sincronizar")
+            rv = self.client.post("/api/bling/plano-contas/sincronizar", headers=self._auth())
             self.assertEqual(rv.status_code, 200)
             data = json.loads(rv.data)
             self.assertEqual(data["sync"], 5)
@@ -145,25 +151,25 @@ class TestBlingFlaskRoutes(unittest.TestCase):
 
     def test_situacoes_sincronizar_route(self):
         with patch("routes.integrations.sincronizar_situacoes_bling", return_value={"sync": 3}) as mock_sync:
-            rv = self.client.post("/api/bling/situacoes/sincronizar")
+            rv = self.client.post("/api/bling/situacoes/sincronizar", headers=self._auth())
             self.assertEqual(rv.status_code, 200)
             mock_sync.assert_called_once()
 
     def test_situacoes_criar_route(self):
         with patch("routes.integrations.criar_situacao", return_value={"data": {"id": 99}}) as mock_criar:
-            rv = self.client.post("/api/bling/situacoes", json={"nome": "Em Análise", "cor": "0000FF"})
+            rv = self.client.post("/api/bling/situacoes", json={"nome": "Em Análise", "cor": "0000FF"}, headers=self._auth())
             self.assertEqual(rv.status_code, 200)
             mock_criar.assert_called_once_with({"nome": "Em Análise", "cor": "0000FF"})
 
     def test_situacoes_atualizar_route(self):
         with patch("routes.integrations.atualizar_situacao", return_value={"data": {}}) as mock_atualizar:
-            rv = self.client.put("/api/bling/situacoes/42", json={"nome": "Pago"})
+            rv = self.client.put("/api/bling/situacoes/42", json={"nome": "Pago"}, headers=self._auth())
             self.assertEqual(rv.status_code, 200)
             mock_atualizar.assert_called_once_with(42, {"nome": "Pago"})
 
     def test_situacoes_deletar_route(self):
         with patch("routes.integrations.deletar_situacao", return_value={}) as mock_deletar:
-            rv = self.client.delete("/api/bling/situacoes/42")
+            rv = self.client.delete("/api/bling/situacoes/42", headers=self._auth())
             self.assertEqual(rv.status_code, 200)
             mock_deletar.assert_called_once_with(42)
 
@@ -175,7 +181,7 @@ class TestBlingFlaskRoutes(unittest.TestCase):
         with patch("routes.integrations.criar_situacao", return_value={"data": {"id": 99}}), \
              patch("routes.integrations.get_db", new=AsyncMock(return_value=fake_db)), \
              patch("routes.integrations.ensure_bling_situacoes_table", new=AsyncMock()) as mock_ensure:
-            rv = self.client.post("/api/bling/situacoes", json={"nome": "Em Análise", "cor": "0000FF"})
+            rv = self.client.post("/api/bling/situacoes", json={"nome": "Em Análise", "cor": "0000FF"}, headers=self._auth())
             self.assertEqual(rv.status_code, 200)
             mock_ensure.assert_called_once()
             fake_db.execute.assert_called_once()
@@ -187,7 +193,7 @@ class TestBlingFlaskRoutes(unittest.TestCase):
         fake_db = AsyncMock()
         with patch("routes.integrations.criar_situacao", return_value={"error": "falhou"}), \
              patch("routes.integrations.get_db", new=AsyncMock(return_value=fake_db)):
-            rv = self.client.post("/api/bling/situacoes", json={"nome": "X"})
+            rv = self.client.post("/api/bling/situacoes", json={"nome": "X"}, headers=self._auth())
             self.assertEqual(rv.status_code, 200)
             fake_db.execute.assert_not_called()
 
@@ -196,7 +202,7 @@ class TestBlingFlaskRoutes(unittest.TestCase):
         with patch("routes.integrations.atualizar_situacao", return_value={"data": {}}), \
              patch("routes.integrations.get_db", new=AsyncMock(return_value=fake_db)), \
              patch("routes.integrations.ensure_bling_situacoes_table", new=AsyncMock()) as mock_ensure:
-            rv = self.client.put("/api/bling/situacoes/42", json={"nome": "Pago"})
+            rv = self.client.put("/api/bling/situacoes/42", json={"nome": "Pago"}, headers=self._auth())
             self.assertEqual(rv.status_code, 200)
             mock_ensure.assert_called_once()
             fake_db.execute.assert_called_once()
@@ -209,7 +215,7 @@ class TestBlingFlaskRoutes(unittest.TestCase):
         fake_db = AsyncMock()
         with patch("routes.integrations.atualizar_situacao", return_value={"error": "falhou"}), \
              patch("routes.integrations.get_db", new=AsyncMock(return_value=fake_db)):
-            rv = self.client.put("/api/bling/situacoes/42", json={"nome": "Pago"})
+            rv = self.client.put("/api/bling/situacoes/42", json={"nome": "Pago"}, headers=self._auth())
             self.assertEqual(rv.status_code, 200)
             fake_db.execute.assert_not_called()
 
@@ -218,7 +224,7 @@ class TestBlingFlaskRoutes(unittest.TestCase):
         with patch("routes.integrations.deletar_situacao", return_value={}), \
              patch("routes.integrations.get_db", new=AsyncMock(return_value=fake_db)), \
              patch("routes.integrations.ensure_bling_situacoes_table", new=AsyncMock()) as mock_ensure:
-            rv = self.client.delete("/api/bling/situacoes/42")
+            rv = self.client.delete("/api/bling/situacoes/42", headers=self._auth())
             self.assertEqual(rv.status_code, 200)
             mock_ensure.assert_called_once()
             fake_db.execute.assert_called_once_with("DELETE FROM bling_situacoes WHERE bling_id=$1", 42)
@@ -227,7 +233,7 @@ class TestBlingFlaskRoutes(unittest.TestCase):
         fake_db = AsyncMock()
         with patch("routes.integrations.deletar_situacao", return_value={"error": "falhou"}), \
              patch("routes.integrations.get_db", new=AsyncMock(return_value=fake_db)):
-            rv = self.client.delete("/api/bling/situacoes/42")
+            rv = self.client.delete("/api/bling/situacoes/42", headers=self._auth())
             self.assertEqual(rv.status_code, 200)
             fake_db.execute.assert_not_called()
 
@@ -368,6 +374,39 @@ class TestBlingFlaskRoutes(unittest.TestCase):
         q, args = fake_db.fetch.call_args.args[0], fake_db.fetch.call_args.args[1:]
         self.assertIn("ambiente = $1", q)
         self.assertEqual(args, ("producao",))
+
+
+    # ── RBAC das rotas de escrita das fases 2 e 3 ──
+    # Auditoria (2026-08-21): estas 6 rotas nasceram sem @requer_permissao,
+    # enquanto as irmas das fases 4a/4b/5 (pedidos-compra, nfce, nfse,
+    # ambiente) tinham. O middleware global de athena_bridge so' checa
+    # AUTENTICACAO — qualquer usuario logado passava. Como o CRUD de situacoes
+    # propaga a operacao pro Bling real, um Operador de PDV podia apagar
+    # situacoes do ERP em producao.
+
+    def test_situacoes_criar_exige_permissao(self):
+        rv = self.client.post("/api/bling/situacoes", json={"nome": "X"})
+        self.assertEqual(rv.status_code, 403)
+
+    def test_situacoes_atualizar_exige_permissao(self):
+        rv = self.client.put("/api/bling/situacoes/42", json={"nome": "X"})
+        self.assertEqual(rv.status_code, 403)
+
+    def test_situacoes_deletar_exige_permissao(self):
+        rv = self.client.delete("/api/bling/situacoes/42")
+        self.assertEqual(rv.status_code, 403)
+
+    def test_situacoes_sincronizar_exige_permissao(self):
+        rv = self.client.post("/api/bling/situacoes/sincronizar")
+        self.assertEqual(rv.status_code, 403)
+
+    def test_canais_sincronizar_exige_permissao(self):
+        rv = self.client.post("/api/bling/canais/sincronizar")
+        self.assertEqual(rv.status_code, 403)
+
+    def test_plano_contas_sincronizar_exige_permissao(self):
+        rv = self.client.post("/api/bling/plano-contas/sincronizar")
+        self.assertEqual(rv.status_code, 403)
 
 
 class TestBlingRotasRemovidas(unittest.TestCase):

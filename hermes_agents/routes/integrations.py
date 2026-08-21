@@ -677,6 +677,7 @@ def api_canais():
 
 
 @bling_bp.route("/canais/sincronizar", methods=["POST"])
+@requer_permissao("bling.sincronizar")
 def api_sincronizar_canais():
     return jsonify(sincronizar_canais_bling())
 
@@ -695,11 +696,13 @@ def api_situacoes():
 
 
 @bling_bp.route("/situacoes/sincronizar", methods=["POST"])
+@requer_permissao("bling.sincronizar")
 def api_sincronizar_situacoes():
     return jsonify(sincronizar_situacoes_bling())
 
 
 @bling_bp.route("/situacoes", methods=["POST"])
+@requer_permissao("bling.sincronizar")
 def api_criar_situacao():
     dados = request.get_json(silent=True) or {}
 
@@ -724,6 +727,7 @@ def api_criar_situacao():
 
 
 @bling_bp.route("/situacoes/<int:id_situacao>", methods=["PUT"])
+@requer_permissao("bling.sincronizar")
 def api_atualizar_situacao(id_situacao):
     dados = request.get_json(silent=True) or {}
 
@@ -750,6 +754,7 @@ def api_atualizar_situacao(id_situacao):
 
 
 @bling_bp.route("/situacoes/<int:id_situacao>", methods=["DELETE"])
+@requer_permissao("bling.sincronizar")
 def api_deletar_situacao(id_situacao):
     async def _go():
         resultado = deletar_situacao(id_situacao)
@@ -871,6 +876,7 @@ def api_plano_contas():
 
 
 @bling_bp.route("/plano-contas/sincronizar", methods=["POST"])
+@requer_permissao("financeiro.ver")
 def api_sincronizar_plano_contas():
     return jsonify(sincronizar_plano_contas_bling())
 
