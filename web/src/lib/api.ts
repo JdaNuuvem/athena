@@ -1716,6 +1716,163 @@ export async function listarBlingContasPagar(
   );
 }
 
+export interface BlingAmbienteInfo {
+  ambiente: string;
+  base_url: string;
+  ambientes: string[];
+  error?: string;
+}
+
+export interface BlingPedidoCompraLocal {
+  id: number;
+  numero: string;
+  fornecedor_id: number | null;
+  valor_total: number;
+  status: string;
+  data_emissao: string | null;
+  data_entrega_prevista: string | null;
+  bling_id: number | null;
+  ambiente: string;
+}
+
+export interface BlingSituacao {
+  id: number;
+  bling_id?: number | null;
+  nome: string;
+  cor?: string | null;
+  modulo?: string | null;
+}
+
+export interface BlingCanal {
+  id: number;
+  nome: string;
+  bling_id?: number | null;
+  tipo?: string | null;
+}
+
+export interface BlingNotaLocal {
+  id: number;
+  numero: string;
+  chave_acesso: string | null;
+  tipo_documento: string;
+  ambiente: string;
+  status: string;
+  data_emissao: string | null;
+  valor_nf: number;
+  contato_nome: string | null;
+  bling_id: number | null;
+}
+
+export interface BlingContaContabil {
+  id: number;
+  codigo: string;
+  nome: string;
+  tipo: string | null;
+  natureza: string | null;
+  conta_pai_id: number | null;
+  bling_id: number | null;
+}
+
+// -- Bling: modulo novo (fase 6) --
+
+// As rotas de leitura local devolvem array puro no sucesso e {error} no erro.
+// Normaliza pra {data, error} pra que as telas tenham um contrato so.
+async function blingLista<T>(path: string): Promise<{ data: T[]; error?: string }> {
+  const r = await blingFetch<T[] | { error?: string; data?: T[] }>(path);
+  if (Array.isArray(r)) return { data: r };
+  return { data: r?.data || [], error: r?.error };
+}
+
+export async function getBlingAmbiente(): Promise<BlingAmbienteInfo> {
+  return blingFetch<BlingAmbienteInfo>("/api/bling/ambiente");
+}
+
+export async function setBlingAmbiente(
+  ambiente: string
+): Promise<{ ambiente?: string; error?: string }> {
+  return blingFetch("/api/bling/ambiente", {
+    method: "POST",
+    body: JSON.stringify({ ambiente }),
+  });
+}
+
+export async function listarBlingPedidosCompra(ambiente = "producao") {
+  return blingLista<BlingPedidoCompraLocal>(
+    `/api/bling/pedidos-compra?ambiente=${encodeURIComponent(ambiente)}`
+  );
+}
+
+export async function sincronizarBlingPedidosCompra(): Promise<{
+  sync?: number;
+  erros?: string[];
+  error?: string;
+}> {
+  return blingFetch("/api/bling/pedidos-compra/sincronizar", { method: "POST" });
+}
+
+export async function receberBlingPedidoCompra(id: number): Promise<{ error?: string }> {
+  return blingFetch(`/api/bling/pedidos-compra/${id}/receber`, { method: "POST" });
+}
+
+export async function listarBlingSituacoes() {
+  return blingLista<BlingSituacao>("/api/bling/situacoes");
+}
+
+export async function criarBlingSituacao(
+  dados: Partial<BlingSituacao>
+): Promise<{ error?: string }> {
+  return blingFetch("/api/bling/situacoes", { method: "POST", body: JSON.stringify(dados) });
+}
+
+export async function atualizarBlingSituacao(
+  id: number,
+  dados: Partial<BlingSituacao>
+): Promise<{ error?: string }> {
+  return blingFetch(`/api/bling/situacoes/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(dados),
+  });
+}
+
+export async function deletarBlingSituacao(id: number): Promise<{ error?: string }> {
+  return blingFetch(`/api/bling/situacoes/${id}`, { method: "DELETE" });
+}
+
+export async function sincronizarBlingSituacoes(): Promise<{ sync?: number; error?: string }> {
+  return blingFetch("/api/bling/situacoes/sincronizar", { method: "POST" });
+}
+
+export async function listarBlingCanais() {
+  return blingLista<BlingCanal>("/api/bling/canais");
+}
+
+export async function sincronizarBlingCanais(): Promise<{ sync?: number; error?: string }> {
+  return blingFetch("/api/bling/canais/sincronizar", { method: "POST" });
+}
+
+export async function listarBlingNotasLocais(tipo = "", ambiente = "producao") {
+  const q = new URLSearchParams();
+  if (tipo) q.set("tipo", tipo);
+  if (ambiente) q.set("ambiente", ambiente);
+  return blingLista<BlingNotaLocal>(`/api/bling/notas?${q.toString()}`);
+}
+
+export async function sincronizarBlingNfce(): Promise<{ sync?: number; error?: string }> {
+  return blingFetch("/api/bling/nfce/sincronizar", { method: "POST" });
+}
+
+export async function sincronizarBlingNfse(): Promise<{ sync?: number; error?: string }> {
+  return blingFetch("/api/bling/nfse/sincronizar", { method: "POST" });
+}
+
+export async function listarBlingPlanoContas() {
+  return blingLista<BlingContaContabil>("/api/bling/plano-contas");
+}
+
+export async function sincronizarBlingPlanoContas(): Promise<{ sync?: number; error?: string }> {
+  return blingFetch("/api/bling/plano-contas/sincronizar", { method: "POST" });
+}
+
 // ── NFe Download ──
 
 export function baixarNFeXML(idNota: number): void {
