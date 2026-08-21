@@ -523,9 +523,11 @@ from bling_erp import (
     sincronizar_canais_bling, ensure_bling_canais_table,
     sincronizar_situacoes_bling, ensure_bling_situacoes_table,
     criar_situacao, atualizar_situacao, deletar_situacao,
+    marcar_pedido_compra_recebido,
 )
 from core.vendas import sincronizar_pedidos_bling
 from core.financeiro import sincronizar_plano_contas_bling
+from core.compras import sincronizar_pedidos_compra_bling
 
 bling_bp = Blueprint("bling_api", __name__, url_prefix="/api/bling")
 
@@ -758,6 +760,30 @@ def api_deletar_situacao(id_situacao):
         return resultado
 
     return jsonify(run_async(_go()))
+
+
+@bling_bp.route("/pedidos-compra")
+def api_pedidos_compra():
+    async def _go():
+        db = await get_db()
+        rows = await db.fetch("""SELECT id, numero, fornecedor_id, valor_total, status,
+            data_emissao, data_entrega_prevista, bling_id
+            FROM compras_pedidos WHERE bling_id IS NOT NULL ORDER BY data_emissao DESC""")
+        return [dict(r) for r in rows]
+    try:
+        return jsonify(run_async(_go()))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@bling_bp.route("/pedidos-compra/sincronizar", methods=["POST"])
+def api_sincronizar_pedidos_compra():
+    return jsonify(sincronizar_pedidos_compra_bling())
+
+
+@bling_bp.route("/pedidos-compra/<int:id_pedido>/receber", methods=["POST"])
+def api_receber_pedido_compra(id_pedido):
+    return jsonify(marcar_pedido_compra_recebido(id_pedido))
 
 
 @bling_bp.route("/plano-contas")

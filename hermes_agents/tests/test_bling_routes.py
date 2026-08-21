@@ -229,6 +229,22 @@ class TestBlingFlaskRoutes(unittest.TestCase):
             self.assertEqual(rv.status_code, 200)
             fake_db.execute.assert_not_called()
 
+    def test_pedidos_compra_listar_route(self):
+        rv = self.client.get("/api/bling/pedidos-compra")
+        self.assertEqual(rv.status_code, 200)
+
+    def test_pedidos_compra_sincronizar_route(self):
+        with patch("routes.integrations.sincronizar_pedidos_compra_bling", return_value={"sync": 2}) as mock_sync:
+            rv = self.client.post("/api/bling/pedidos-compra/sincronizar")
+            self.assertEqual(rv.status_code, 200)
+            mock_sync.assert_called_once()
+
+    def test_pedidos_compra_receber_route(self):
+        with patch("routes.integrations.marcar_pedido_compra_recebido", return_value={"data": {}}) as mock_receber:
+            rv = self.client.post("/api/bling/pedidos-compra/555/receber")
+            self.assertEqual(rv.status_code, 200)
+            mock_receber.assert_called_once_with(555)
+
 
 class TestBlingRotasRemovidas(unittest.TestCase):
     """Confirma que as rotas duplicadas removidas nao respondem mais.
