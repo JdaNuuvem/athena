@@ -36,7 +36,7 @@ export default function CRMPage() {
       const d = await r.json();
       if (d.error) {
         setBlingStatus("Erro: " + d.error);
-        if (d.auth_url) setBlingStatus(status => status + " — Autorize em /integracoes/bling");
+        if (d.auth_url) setBlingStatus(status => status + " — Autorize em /bling/config");
       } else {
         setBlingCounts(d);
         setBlingStatus("Importacao concluida!");

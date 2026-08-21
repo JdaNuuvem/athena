@@ -5,7 +5,7 @@ import Link from "next/link";
 import { api, type Integration } from "@/lib/api";
 
 const INTEGRATION_LINKS: Record<string, string> = {
-  bling: "/integracoes/bling",
+  bling: "/bling",
   shopee: "/integracoes/shopee",
   hermes: "/integracoes/hermes",
   "shopee-ads": "/integracoes/shopee-ads",

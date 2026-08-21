@@ -20,7 +20,7 @@ const STATUS_OPCOES = [
   { value: "inativa", label: "Inativa" },
 ];
 const LINK_GERENCIAMENTO: Record<string, string> = {
-  bling: "/integracoes/bling",
+  bling: "/bling",
   shopee: "/integracoes/shopee",
 };
 

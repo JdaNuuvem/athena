@@ -47,7 +47,7 @@ export default function ConfigPage() {
         <h2 className="text-sm font-semibold text-neutral-300">Integracoes</h2>
         <p className="text-xs text-neutral-500">Configure as integracoes com marketplaces e ERPs nas paginas especificas:</p>
         <div className="flex gap-2 flex-wrap">
-          <a href="/integracoes/bling" className="text-xs text-indigo-400 hover:text-indigo-300 bg-neutral-800 px-3 py-1.5 rounded-lg">Bling</a>
+          <a href="/bling/config" className="text-xs text-indigo-400 hover:text-indigo-300 bg-neutral-800 px-3 py-1.5 rounded-lg">Bling</a>
           <a href="/integracoes/shopee" className="text-xs text-indigo-400 hover:text-indigo-300 bg-neutral-800 px-3 py-1.5 rounded-lg">Shopee</a>
           <a href="/lojas" className="text-xs text-indigo-400 hover:text-indigo-300 bg-neutral-800 px-3 py-1.5 rounded-lg">Lojas</a>
         </div>
