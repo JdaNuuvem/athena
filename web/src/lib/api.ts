@@ -1476,86 +1476,99 @@ export interface BlingProdutosResponse {
   error?: string;
 }
 
-// ── Bling API Methods (standalone, usam fetch direto) ──
+// -- Bling: fetch autenticado com contrato tolerante --
+// As rotas Bling protegidas por RBAC (POST /ambiente, /nfce/sincronizar,
+// /pedidos-compra/sincronizar, CRUD de situacoes) respondem 403 sem o header
+// Authorization -- e todas as chamadas Bling deste arquivo usavam fetch cru,
+// sem token. Nao da pra reaproveitar request<T>() aqui porque ele LANCA em
+// resposta nao-ok, enquanto os componentes Bling checam `if (r.error)`;
+// trocar isso quebraria as telas em silencio. Entao: mesmo header e mesmo
+// tratamento de 401 do request(), contrato de retorno preservado.
+async function blingFetch<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const method = options?.method || "GET";
+  if (method !== "GET" && method !== "HEAD") headers["Content-Type"] = "application/json";
+  try {
+    const res = await fetch(`${API_BASE}${path}`, { ...options, headers, credentials: "include" });
+    if (res.status === 401) handleUnauthorized();
+    const ct = res.headers.get("content-type") || "";
+    if (!ct.includes("application/json")) {
+      return { data: [], error: `resposta nao-JSON (HTTP ${res.status})` } as T;
+    }
+    const body = await res.json().catch(() => null);
+    if (!res.ok) {
+      return {
+        data: [],
+        ...(body || {}),
+        error: body?.error || body?.erro || `HTTP ${res.status}`,
+      } as T;
+    }
+    return body as T;
+  } catch (e) {
+    return { data: [], error: e instanceof Error ? e.message : "falha de rede" } as T;
+  }
+}
+
+// -- Bling API Methods --
 
 export async function getBlingStatus(): Promise<BlingStatus> {
-  const res = await fetch("/api/bling/status");
-  return res.json();
+  return blingFetch<BlingStatus>("/api/bling/status");
 }
 
 export async function getBlingAuthUrl(): Promise<{ url: string }> {
-  const res = await fetch("/api/bling/auth");
-  return res.json();
+  return blingFetch<{ url: string }>("/api/bling/auth");
 }
 
 export async function listarBlingProdutos(
   pagina = 1,
   limite = 100
 ): Promise<BlingProdutosResponse> {
-  const res = await fetch(`/api/bling/produtos?pagina=${pagina}&limite=${limite}`);
-  if (!res.ok) return { data: [], error: `HTTP ${res.status}` };
-  const ct = res.headers.get("content-type") || "";
-  if (!ct.includes("application/json")) return { data: [], error: "resposta nao-JSON" };
-  return res.json();
+  return blingFetch<BlingProdutosResponse>(`/api/bling/produtos?pagina=${pagina}&limite=${limite}`);
 }
 
 export async function criarBlingProduto(
   dados: Record<string, unknown>
 ): Promise<{ data?: BlingProduto; error?: string }> {
-  const res = await fetch("/api/bling/produtos", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(dados),
-  });
-  return res.json();
+  return blingFetch("/api/bling/produtos", { method: "POST", body: JSON.stringify(dados) });
 }
 
 export async function atualizarBlingProduto(
   id: number,
   dados: Record<string, unknown>
 ): Promise<{ data?: BlingProduto; error?: string }> {
-  const res = await fetch(`/api/bling/produtos/${id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(dados),
-  });
-  return res.json();
+  return blingFetch(`/api/bling/produtos/${id}`, { method: "PUT", body: JSON.stringify(dados) });
 }
 
 export async function deletarBlingProduto(
   id: number
 ): Promise<{ success?: boolean; error?: string }> {
-  const res = await fetch(`/api/bling/produtos/${id}`, { method: "DELETE" });
-  return res.json();
+  return blingFetch(`/api/bling/produtos/${id}`, { method: "DELETE" });
 }
 
 export async function atualizarSituacaoProdutos(
   ids: number[],
   situacao: string
 ): Promise<{ success?: boolean; error?: string }> {
-  const res = await fetch("/api/bling/produtos/situacoes", {
+  return blingFetch("/api/bling/produtos/situacoes", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ids, situacao }),
   });
-  return res.json();
 }
 
 export async function sincronizarBlingProdutos(): Promise<{
   sincronizados?: number;
   erro?: string;
 }> {
-  const res = await fetch("/api/bling/produtos/sincronizar", { method: "POST" });
-  return res.json();
+  return blingFetch("/api/bling/produtos/sincronizar", { method: "POST" });
 }
 
 export async function listarBlingDepositos(
   pagina = 1,
   limite = 100
 ): Promise<{ data: BlingDeposito[] }> {
-  const res = await fetch(`/api/bling/depositos?pagina=${pagina}&limite=${limite}`);
-  if (!res.ok) return { data: [] };
-  return res.json().catch(() => ({ data: [] }));
+  return blingFetch<{ data: BlingDeposito[] }>(`/api/bling/depositos?pagina=${pagina}&limite=${limite}`);
 }
 
 export interface DepositoKpi {
@@ -1578,8 +1591,9 @@ export async function obterSaldoDeposito(
   const params = new URLSearchParams();
   idsProdutos?.forEach((id) => params.append("idsProdutos[]", String(id)));
   const query = params.toString();
-  const res = await fetch(`/api/bling/estoque/${idDeposito}${query ? "?" + query : ""}`);
-  return res.json();
+  return blingFetch<{ data: BlingEstoqueSaldo[] }>(
+    `/api/bling/estoque/${idDeposito}${query ? "?" + query : ""}`
+  );
 }
 
 export async function atualizarEstoqueDeposito(dados: {
@@ -1589,123 +1603,117 @@ export async function atualizarEstoqueDeposito(dados: {
   quantidade: number;
   preco?: number;
 }): Promise<{ success?: boolean; error?: string }> {
-  const res = await fetch("/api/bling/estoque", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(dados),
-  });
-  return res.json();
+  return blingFetch("/api/bling/estoque", { method: "PUT", body: JSON.stringify(dados) });
 }
 
 export async function listarBlingPedidos(
   pagina = 1,
   limite = 100
 ): Promise<{ data: unknown[]; error?: string }> {
-  const res = await fetch(`/api/bling/vendas?pagina=${pagina}&limite=${limite}`);
-  return res.json();
+  return blingFetch<{ data: unknown[]; error?: string }>(
+    `/api/bling/vendas?pagina=${pagina}&limite=${limite}`
+  );
 }
 
 export async function sincronizarBlingPedidos(): Promise<{
   sincronizados?: number;
   erro?: string;
 }> {
-  const res = await fetch("/api/bling/vendas/sincronizar", { method: "POST" });
-  return res.json();
+  return blingFetch("/api/bling/vendas/sincronizar", { method: "POST" });
 }
 
-export async function resumoVendasBling(
-  dias = 30
-): Promise<BlingResumoVendas> {
-  const res = await fetch(`/api/bling/vendas/resumo?dias=${dias}`);
-  return res.json();
+export async function resumoVendasBling(dias = 30): Promise<BlingResumoVendas> {
+  return blingFetch<BlingResumoVendas>(`/api/bling/vendas/resumo?dias=${dias}`);
 }
 
 export async function listarContasReceber(
   pagina = 1,
   limite = 100
 ): Promise<{ data: unknown[]; error?: string }> {
-  const res = await fetch(`/api/bling/financeiro/contas-receber?pagina=${pagina}&limite=${limite}`);
-  return res.json();
+  return blingFetch<{ data: unknown[]; error?: string }>(
+    `/api/bling/financeiro/contas-receber?pagina=${pagina}&limite=${limite}`
+  );
 }
 
 export async function listarNotasFiscais(
   pagina = 1,
   limite = 100
 ): Promise<{ data: unknown[]; error?: string }> {
-  const res = await fetch(`/api/bling/financeiro/notas-fiscais?pagina=${pagina}&limite=${limite}`);
-  return res.json();
+  return blingFetch<{ data: unknown[]; error?: string }>(
+    `/api/bling/financeiro/notas-fiscais?pagina=${pagina}&limite=${limite}`
+  );
 }
 
 export async function listarBlingWebhooks(
   pagina = 1,
   limite = 100
 ): Promise<{ data: BlingWebhook[] }> {
-  const res = await fetch(`/api/bling/webhooks?pagina=${pagina}&limite=${limite}`);
-  return res.json();
+  return blingFetch<{ data: BlingWebhook[] }>(`/api/bling/webhooks?pagina=${pagina}&limite=${limite}`);
 }
 
 export async function criarBlingWebhook(
   evento: string,
   url: string
 ): Promise<{ data?: BlingWebhook; error?: string }> {
-  const res = await fetch("/api/bling/webhooks", {
+  return blingFetch("/api/bling/webhooks", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ evento, url }),
   });
-  return res.json();
 }
 
 export async function deletarBlingWebhook(
   id: number
 ): Promise<{ success?: boolean; error?: string }> {
-  const res = await fetch(`/api/bling/webhooks/${id}`, { method: "DELETE" });
-  return res.json();
+  return blingFetch(`/api/bling/webhooks/${id}`, { method: "DELETE" });
 }
 
 export async function listarBlingEventos(): Promise<{ total: number; eventos: string[] }> {
-  const res = await fetch("/webhook/bling/eventos");
-  return res.json();
+  return blingFetch<{ total: number; eventos: string[] }>("/webhook/bling/eventos");
 }
 
 export async function listarBlingNotificacoes(
   pagina = 1,
   limite = 100
 ): Promise<{ data: unknown[] }> {
-  const res = await fetch(`/api/bling/notificacoes?pagina=${pagina}&limite=${limite}`);
-  return res.json();
+  return blingFetch<{ data: unknown[] }>(`/api/bling/notificacoes?pagina=${pagina}&limite=${limite}`);
 }
 
 export async function confirmarLeituraNotificacao(
   id: number
 ): Promise<{ success?: boolean; error?: string }> {
-  const res = await fetch(`/api/bling/notificacoes/${id}`, {
-    method: "PATCH",
-  });
-  return res.json();
+  return blingFetch(`/api/bling/notificacoes/${id}`, { method: "PATCH" });
 }
 
-
-export async function listarBlingContatos(pagina = 1, limite = 100, tipo = ""): Promise<{ data: unknown[] }> {
+export async function listarBlingContatos(
+  pagina = 1,
+  limite = 100,
+  tipo = ""
+): Promise<{ data: unknown[] }> {
   const params = new URLSearchParams({ pagina: String(pagina), limite: String(limite) });
   if (tipo) params.set("tipo", tipo);
-  const res = await fetch("/api/bling/contatos?" + params);
-  return res.json();
+  return blingFetch<{ data: unknown[] }>("/api/bling/contatos?" + params);
 }
 
-export async function listarBlingCategorias(pagina = 1, limite = 100): Promise<{ data: unknown[] }> {
-  const res = await fetch("/api/bling/categorias?pagina=" + pagina + "&limite=" + limite);
-  return res.json();
+export async function listarBlingCategorias(
+  pagina = 1,
+  limite = 100
+): Promise<{ data: unknown[] }> {
+  return blingFetch<{ data: unknown[] }>(
+    "/api/bling/categorias?pagina=" + pagina + "&limite=" + limite
+  );
 }
 
 export async function getBlingPedidoDetalhe(id: number): Promise<{ data: unknown }> {
-  const res = await fetch("/api/bling/vendas/" + id);
-  return res.json();
+  return blingFetch<{ data: unknown }>("/api/bling/vendas/" + id);
 }
 
-export async function listarBlingContasPagar(pagina = 1, limite = 100): Promise<{ data: unknown[] }> {
-  const res = await fetch("/api/bling/financeiro/contas-pagar?pagina=" + pagina + "&limite=" + limite);
-  return res.json();
+export async function listarBlingContasPagar(
+  pagina = 1,
+  limite = 100
+): Promise<{ data: unknown[] }> {
+  return blingFetch<{ data: unknown[] }>(
+    "/api/bling/financeiro/contas-pagar?pagina=" + pagina + "&limite=" + limite
+  );
 }
 
 // ── NFe Download ──
